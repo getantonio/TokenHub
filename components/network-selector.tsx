@@ -5,6 +5,7 @@ import { useChainId, useConfig, useConnect } from 'wagmi';
 import { injected } from 'wagmi/connectors';
 import { NETWORKS_WITH_COSTS } from '@/app/providers';
 import { ChevronDown, Info, ArrowRight } from 'lucide-react';
+import { hardhat } from 'viem/chains';
 
 export function NetworkSelector() {
   const [isOpen, setIsOpen] = useState(false);
@@ -75,6 +76,35 @@ export function NetworkSelector() {
       }, 1000);
     }
   }, [connectAsync, isSwitching, isPending]);
+
+  const LOCAL_TESTNET_INFO = {
+    name: "Local Testnet",
+    warning: "⚠️ For testing only. Transactions are not real.",
+    setup: "Run 'npm run local-testnet' to start local network"
+  };
+
+  const handleLocalTestnet = async () => {
+    try {
+      const response = await fetch('http://127.0.0.1:8545', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'eth_blockNumber',
+          params: [],
+          id: 1
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Local testnet not running');
+      }
+
+      await handleNetworkSwitch(hardhat.id);
+    } catch (error) {
+      setError(`Local testnet not available. ${LOCAL_TESTNET_INFO.setup}`);
+    }
+  };
 
   return (
     <div className="relative">

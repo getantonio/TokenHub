@@ -1,7 +1,7 @@
 'use client';
 
 import { WagmiProvider, createConfig, http } from 'wagmi';
-import { mainnet, sepolia, arbitrum, optimism, polygon, bsc } from 'wagmi/chains';
+import { mainnet, sepolia, arbitrum, optimism, polygon, bsc, hardhat } from 'wagmi/chains';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { type ReactNode } from 'react';
 import { injected } from 'wagmi/connectors';
@@ -55,7 +55,15 @@ const NETWORK_COSTS = {
       vestingDeployment: '0',
       total: '0'
     }
-  }
+  },
+  [hardhat.id]: {
+    name: 'Local Testnet',
+    costs: {
+      tokenDeployment: '0',
+      vestingDeployment: '0',
+      total: '0'
+    }
+  },
 };
 
 // Define supported networks
@@ -66,6 +74,7 @@ export const SUPPORTED_NETWORKS = [
   polygon,
   bsc,
   sepolia,
+  hardhat,
 ] as const;
 
 // Add costs to networks for UI
@@ -86,6 +95,7 @@ const config = createConfig({
     [optimism.id]: http(),
     [polygon.id]: http(),
     [bsc.id]: http(),
+    [hardhat.id]: http('http://127.0.0.1:8545'),
   },
 });
 

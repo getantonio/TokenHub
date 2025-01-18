@@ -10,7 +10,9 @@
     "test": "jest --watch",
     "test:watch": "jest --watch",
     "test:ci": "jest --ci",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "local-testnet": "ts-node scripts/start-local-testnet.ts",
+    "dev:local": "concurrently \"npm run local-testnet\" \"npm run dev\""
   },
   "dependencies": {
     "@openzeppelin/contracts": "^4.9.0",
