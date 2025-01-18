@@ -10,15 +10,12 @@ export const formatNumber = (num: number): string => {
   return num.toString();
 };
 
-export const validateTokenConfig = (config: TokenConfig): string[] => {
+export function validateTokenConfig(config: TokenConfig): string[] {
   const errors: string[] = [];
 
   // Basic validation
   if (!config.name) errors.push('Token name is required');
   if (!config.symbol) errors.push('Token symbol is required');
-  if (config.symbol && config.symbol.length > 6) errors.push('Symbol should be 6 characters or less');
-
-  // Tokenomics validation
   if (!config.totalSupply) errors.push('Total supply is required');
   if (!config.initialPrice) errors.push('Initial price is required');
 
@@ -27,19 +24,30 @@ export const validateTokenConfig = (config: TokenConfig): string[] => {
     config.presaleAllocation + 
     config.liquidityAllocation + 
     config.teamAllocation + 
-    config.marketingAllocation;
-  
+    config.marketingAllocation +
+    config.developerAllocation;
+
   if (totalAllocation !== 100) {
-    errors.push('Total token allocation must equal 100%');
+    errors.push(`Total token allocation must equal 100% (currently ${totalAllocation}%)`);
+  }
+
+  // Team allocation validation for mainnet
+  if (config.teamAllocation < 7) {
+    errors.push('Team allocation must be at least 7% (5% team + 2% platform fee)');
+  }
+
+  // Developer allocation validation
+  if (config.developerAllocation < 5) {
+    errors.push('Developer allocation should be at least 5%');
   }
 
   // Vesting validation
-  if (config.vestingSchedule.team.duration < config.vestingSchedule.team.cliff) {
-    errors.push('Team vesting duration must be greater than cliff period');
+  if (config.vestingSchedule.team.duration < 6) {
+    errors.push('Team vesting duration should be at least 6 months');
   }
 
   return errors;
-};
+}
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
