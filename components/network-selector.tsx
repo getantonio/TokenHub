@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useChainId, useConfig, useConnect } from 'wagmi';
 import { injected } from 'wagmi/connectors';
 import { NETWORKS_WITH_COSTS } from '@/app/providers';
@@ -12,6 +12,8 @@ export function NetworkSelector() {
   const chainId = useChainId();
   const { connectAsync } = useConnect();
   const [isSwitching, setIsSwitching] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, setIsPending] = useState(false);
 
   const [currentNetwork, setCurrentNetwork] = useState(() => {
     return NETWORKS_WITH_COSTS.find(n => n.name === 'Sepolia (Testnet)');
@@ -21,43 +23,81 @@ export function NetworkSelector() {
     const network = NETWORKS_WITH_COSTS.find(n => n.id === chainId);
     if (network) {
       setCurrentNetwork(network);
+      setError(null);
     }
   }, [chainId]);
 
   const isTestnet = currentNetwork?.name.toLowerCase().includes('sepolia');
   const mainnetVersion = NETWORKS_WITH_COSTS.find(n => n.name === 'Ethereum');
 
-  const handleNetworkSwitch = async (networkId: number) => {
+  const handleNetworkSwitch = useCallback(async (networkId: number) => {
+    if (isSwitching || isPending) {
+      setError('A network switch is already in progress. Please wait.');
+      return;
+    }
+
     try {
       setIsSwitching(true);
+      setIsPending(true);
+      setError(null);
+
+      if (!window.ethereum) {
+        throw new Error('Please install MetaMask or another Web3 wallet');
+      }
+
+      const targetNetwork = NETWORKS_WITH_COSTS.find(n => n.id === networkId);
+      if (!targetNetwork) {
+        throw new Error('Unsupported network');
+      }
+
       await connectAsync({
         chainId: networkId,
         connector: injected(),
       });
-    } catch (error) {
-      console.error('Failed to switch network:', error);
+
+    } catch (error: any) {
+      if (error?.code === 4902) {
+        setError('Network not added to MetaMask. Please add it first.');
+      } else if (error?.code === -32002) {
+        setError('A MetaMask request is pending. Please check your wallet.');
+      } else if (error?.message) {
+        setError(error.message);
+      } else {
+        setError('Failed to switch network. Please try again.');
+      }
+      console.error('Network switch error:', error);
     } finally {
-      setIsSwitching(false);
-      setIsOpen(false);
-      setShowInfo(false);
+      setTimeout(() => {
+        setIsSwitching(false);
+        setIsPending(false);
+        setIsOpen(false);
+        setShowInfo(false);
+      }, 1000);
     }
-  };
+  }, [connectAsync, isSwitching, isPending]);
 
   return (
     <div className="relative">
       <div className="flex items-center gap-2">
         <button
           onClick={() => setIsOpen(!isOpen)}
-          disabled={isSwitching}
-          className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg border border-gray-700 text-sm font-medium"
+          disabled={isSwitching || isPending}
+          className={`flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg border border-gray-700 text-sm font-medium
+            ${(isSwitching || isPending) ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
-          {currentNetwork ? (
-            <>
-              <span>{currentNetwork.name}</span>
-              <span className="text-xs text-gray-400">(${currentNetwork.costs.total})</span>
-            </>
+          {isSwitching ? (
+            <span>Switching...</span>
           ) : (
-            <span>Select Network</span>
+            <>
+              {currentNetwork ? (
+                <>
+                  <span>{currentNetwork.name}</span>
+                  <span className="text-xs text-gray-400">(${currentNetwork.costs.total})</span>
+                </>
+              ) : (
+                <span>Select Network</span>
+              )}
+            </>
           )}
           <ChevronDown className="w-4 h-4" />
         </button>
@@ -69,6 +109,12 @@ export function NetworkSelector() {
           <Info className="w-4 h-4" />
         </button>
       </div>
+
+      {error && (
+        <div className="absolute top-full left-0 mt-2 p-2 bg-red-900/50 text-red-200 text-sm rounded-lg border border-red-700 z-50">
+          {error}
+        </div>
+      )}
 
       {showInfo && (
         <div className="absolute top-full right-0 mt-2 w-[500px] p-4 bg-gray-800 rounded-lg border border-gray-700 shadow-lg z-50">
@@ -121,13 +167,13 @@ export function NetworkSelector() {
         </div>
       )}
 
-      {isOpen && (
+      {isOpen && !isSwitching && !isPending && (
         <div className="absolute top-full mt-2 w-64 py-1 bg-gray-800 rounded-lg border border-gray-700 shadow-lg z-50">
           {NETWORKS_WITH_COSTS.map((network) => (
             <button
               key={network.id}
               onClick={() => handleNetworkSwitch(network.id)}
-              disabled={isSwitching || network.id === chainId}
+              disabled={network.id === chainId}
               className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-700 flex items-center justify-between ${
                 network.id === chainId ? 'bg-blue-600' : ''
               }`}

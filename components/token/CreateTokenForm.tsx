@@ -22,6 +22,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { parseEther, parseUnits } from 'viem';
 import { BrowserProvider } from 'ethers';
 import { formatEther } from 'ethers';
+import { TokenTester } from './TokenTester';
 
 export const CreateTokenForm = () => {
   const [currentStep, setCurrentStep] = useState(1);
@@ -615,11 +616,14 @@ export const CreateTokenForm = () => {
         </CardContent>
       </Card>
 
-      <TokenPreview 
-        config={config}
-        isValid={isValid}
-        validationErrors={validationErrors}
-      />
+      <div className="space-y-4">
+        <TokenPreview 
+          config={config}
+          isValid={isValid}
+          validationErrors={validationErrors}
+        />
+        <TokenTester config={config} />
+      </div>
     </div>
   );
 }; 

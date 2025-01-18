@@ -36,3 +36,10 @@ next-env.d.ts
 # IDE
 .idea/
 .vscode/ 
+
+# hardhat
+cache/
+artifacts/
+typechain-types/
+coverage/
+coverage.json 
