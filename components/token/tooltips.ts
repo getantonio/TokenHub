@@ -37,4 +37,26 @@ Example Distribution:
 • Liquidity: 30% - For trading on DEX
 • Team: 10% - Vested over time
 • Marketing: 10% - For growth`,
+};
+
+export const networkTooltips = {
+  ethereum: {
+    title: "Ethereum Mainnet",
+    requirements: "Requires ETH for gas fees (0.5 ETH recommended)",
+    warning: "High gas fees, best for final deployment",
+    faucet: null
+  },
+  polygon: {
+    title: "Polygon Network",
+    requirements: "Requires MATIC for gas fees (5 MATIC recommended)",
+    warning: "Ensure you have MATIC tokens, not just ETH",
+    faucet: "https://faucet.polygon.technology/"
+  },
+  sepolia: {
+    title: "Sepolia Testnet",
+    requirements: "Requires Sepolia ETH (0.1 ETH recommended)",
+    warning: "Test network only - tokens have no real value",
+    faucet: "https://sepoliafaucet.com/"
+  },
+  // ... add other networks
 }; 

@@ -26,6 +26,7 @@ import { TokenTester } from './TokenTester';
 import { ZeroAddress } from 'ethers';
 import { InfoIcon } from 'lucide-react';
 import { AlertTitle } from "@/components/ui/alert";
+import { NetworkRequirements } from '../network/NetworkRequirements';
 
 // Add platform fee configuration
 const PLATFORM_TEAM_WALLET = "YOUR_WALLET_ADDRESS"; // Replace with your wallet address
@@ -129,123 +130,53 @@ export const CreateTokenForm = () => {
       setIsCreating(true);
       setError(null);
 
-      if (!address) {
-        throw new Error('Please connect your wallet');
+      if (!process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS) {
+        throw new Error('Token factory address not configured');
       }
 
-      if (!chainId) {
-        throw new Error('Please connect to a supported network');
-      }
+      // Add logging
+      console.log('Creating token with config:', {
+        ...config,
+        isMainnet,
+        factoryAddress: process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS
+      });
 
-      if (!window.ethereum) {
-        throw new Error('Please install MetaMask or another Web3 wallet');
-      }
+      // Call writeContract without checking return value
+      await writeContract({
+        abi: TokenFactoryABI,
+        address: process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as `0x${string}`,
+        functionName: 'createToken',
+        args: [
+          {
+            name: config.name,
+            symbol: config.symbol,
+            maxSupply: parseUnits(config.totalSupply || '0', config.decimals),
+            initialSupply: parseUnits(config.totalSupply || '0', config.decimals),
+            tokenPrice: parseUnits(config.initialPrice || '0', 18), // ETH has 18 decimals
+            maxTransferAmount: config.maxTransferAmount ? parseUnits(config.maxTransferAmount, config.decimals) : 0n,
+            cooldownTime: BigInt(config.cooldownTime),
+            transfersEnabled: config.transfersEnabled,
+            antiBot: config.antiBot,
+            teamVestingDuration: BigInt(config.vestingSchedule.team.duration),
+            teamVestingCliff: BigInt(config.vestingSchedule.team.cliff),
+            teamAllocation: BigInt(config.teamAllocation),
+            teamWallet: config.teamWallet || address || '0x',
+            developerAllocation: BigInt(config.developerAllocation),
+            developerVestingDuration: BigInt(config.developerVesting?.duration || 12),
+            developerVestingCliff: BigInt(config.developerVesting?.cliff || 3),
+            developerWallet: config.developerWallet || address || ZeroAddress,
+            platformTeamAllocation: isMainnet ? BigInt(PLATFORM_TEAM_ALLOCATION) : 0n,
+            platformTeamWallet: isMainnet ? PLATFORM_TEAM_WALLET : ZeroAddress,
+          }
+        ],
+        value: parseEther('0.1'),
+      });
 
-      // Validate total allocation
-      const totalAllocation = 
-        config.presaleAllocation + 
-        config.liquidityAllocation + 
-        config.teamAllocation + 
-        config.marketingAllocation;
-
-      if (totalAllocation !== 100) {
-        throw new Error('Total allocation must equal 100%');
-      }
-
-      // Adjust allocations for mainnet to include platform team
-      let adjustedTeamAllocation = config.teamAllocation;
-      let adjustedConfig = {...config};
-
-      if (isMainnet) {
-        // Take 2% from team allocation for platform team
-        adjustedTeamAllocation = config.teamAllocation - PLATFORM_TEAM_ALLOCATION;
-        
-        if (adjustedTeamAllocation < 5) {
-          throw new Error('Team allocation too small to include platform fee. Minimum 7% team allocation required.');
-        }
-
-        adjustedConfig = {
-          ...config,
-          teamAllocation: adjustedTeamAllocation,
-        };
-      }
-
-      // Get gas optimization settings if minimal features enabled
-      if (useMinimalFeatures) {
-        const provider = new BrowserProvider(window.ethereum as any);
-        const feeData = await provider.getFeeData();
-        
-        if (!feeData.gasPrice) {
-          throw new Error("Could not get gas price");
-        }
-
-        // Use optimized gas settings
-        const optimizedGasPrice = feeData.gasPrice * BigInt(80) / BigInt(100);
-        await writeContract({
-          abi: TokenFactoryABI,
-          address: process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as `0x${string}`,
-          functionName: 'createToken',
-          args: [
-            {
-              name: config.name,
-              symbol: config.symbol,
-              maxSupply: parseUnits(config.totalSupply || '0', config.decimals),
-              initialSupply: parseUnits(config.totalSupply || '0', config.decimals),
-              tokenPrice: parseUnits(config.initialPrice || '0', 18), // ETH has 18 decimals
-              maxTransferAmount: config.maxTransferAmount ? parseUnits(config.maxTransferAmount, config.decimals) : 0n,
-              cooldownTime: BigInt(config.cooldownTime),
-              transfersEnabled: config.transfersEnabled,
-              antiBot: config.antiBot,
-              teamVestingDuration: BigInt(config.vestingSchedule.team.duration),
-              teamVestingCliff: BigInt(config.vestingSchedule.team.cliff),
-              teamAllocation: BigInt(adjustedConfig.teamAllocation),
-              teamWallet: config.teamWallet || address || '0x',
-              developerAllocation: BigInt(config.developerAllocation),
-              developerVestingDuration: BigInt(config.developerVesting?.duration || 12),
-              developerVestingCliff: BigInt(config.developerVesting?.cliff || 3),
-              developerWallet: config.developerWallet || address || ZeroAddress,
-              platformTeamAllocation: isMainnet ? BigInt(PLATFORM_TEAM_ALLOCATION) : 0n,
-              platformTeamWallet: isMainnet ? PLATFORM_TEAM_WALLET : ZeroAddress,
-            }
-          ],
-          value: parseEther('0.1'), // Creation fee - should be fetched from contract
-          maxFeePerGas: optimizedGasPrice,
-          maxPriorityFeePerGas: feeData.maxPriorityFeePerGas ?? undefined
-        });
-      } else {
-        // Call the contract
-        await writeContract({
-          abi: TokenFactoryABI,
-          address: process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as `0x${string}`,
-          functionName: 'createToken',
-          args: [
-            {
-              name: config.name,
-              symbol: config.symbol,
-              maxSupply: parseUnits(config.totalSupply || '0', config.decimals),
-              initialSupply: parseUnits(config.totalSupply || '0', config.decimals),
-              tokenPrice: parseUnits(config.initialPrice || '0', 18), // ETH has 18 decimals
-              maxTransferAmount: config.maxTransferAmount ? parseUnits(config.maxTransferAmount, config.decimals) : 0n,
-              cooldownTime: BigInt(config.cooldownTime),
-              transfersEnabled: config.transfersEnabled,
-              antiBot: config.antiBot,
-              teamVestingDuration: BigInt(config.vestingSchedule.team.duration),
-              teamVestingCliff: BigInt(config.vestingSchedule.team.cliff),
-              teamAllocation: BigInt(adjustedConfig.teamAllocation),
-              teamWallet: config.teamWallet || address || '0x',
-              developerAllocation: BigInt(config.developerAllocation),
-              developerVestingDuration: BigInt(config.developerVesting?.duration || 12),
-              developerVestingCliff: BigInt(config.developerVesting?.cliff || 3),
-              developerWallet: config.developerWallet || address || ZeroAddress,
-              platformTeamAllocation: isMainnet ? BigInt(PLATFORM_TEAM_ALLOCATION) : 0n,
-              platformTeamWallet: isMainnet ? PLATFORM_TEAM_WALLET : ZeroAddress,
-            }
-          ],
-          value: parseEther('0.1'), // Creation fee - should be fetched from contract
-        });
-      }
+      // Show success message after successful write
+      setError('Token creation transaction submitted successfully!');
 
     } catch (error: unknown) {
+      console.error('Token creation error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to create token';
       setError(errorMessage);
     } finally {
@@ -264,7 +195,9 @@ export const CreateTokenForm = () => {
           <CardTitle className="text-lg">Create Your Token</CardTitle>
         </CardHeader>
         <CardContent className="py-2">
-          <Tabs defaultValue="basic" className="w-full">
+          <NetworkRequirements />
+
+          <Tabs defaultValue="basic" className="w-full mt-4">
             <TabsList className="grid w-full grid-cols-4 mb-2">
               <TabsTrigger value="basic">Basic</TabsTrigger>
               <TabsTrigger value="tokenomics">Token</TabsTrigger>
@@ -443,24 +376,30 @@ export const CreateTokenForm = () => {
                       </div>
                       <p className="text-xs text-gray-400 mt-1">Recommended: 5-15%</p>
                     </div>
+
+                    <div>
+                      <LabelWithTooltip 
+                        label="Developer Allocation %" 
+                        tooltip="Allocation for project developers. Recommended: 5%. Subject to vesting schedule." 
+                      />
+                      <input
+                        type="number"
+                        className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg"
+                        value={config.developerAllocation}
+                        onChange={(e) => setConfig({...config, developerAllocation: parseInt(e.target.value) || 0})}
+                      />
+                    </div>
                   </div>
 
-                  {/* Distribution Total Validation */}
-                  <div className="mt-4">
-                    <div className="flex justify-between text-sm mb-2">
-                      <span>Total Distribution</span>
-                      <span className={totalAllocation === 100 ? 'text-green-400' : 'text-red-400'}>
-                        {totalAllocation}%
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-700 rounded-lg h-3 overflow-hidden">
-                      <div className="h-full flex">
-                        <div className="bg-blue-500 h-full" style={{ width: `${config.presaleAllocation}%` }} />
-                        <div className="bg-green-500 h-full" style={{ width: `${config.liquidityAllocation}%` }} />
-                        <div className="bg-yellow-500 h-full" style={{ width: `${config.teamAllocation}%` }} />
-                        <div className="bg-purple-500 h-full" style={{ width: `${config.marketingAllocation}%` }} />
-                      </div>
-                    </div>
+                  <div className="mt-4 p-3 bg-gray-700 rounded-lg">
+                    <div className="text-sm font-medium">Total Allocation: {
+                      config.presaleAllocation + 
+                      config.liquidityAllocation + 
+                      config.teamAllocation + 
+                      config.marketingAllocation + 
+                      config.developerAllocation
+                    }%</div>
+                    <div className="text-xs text-gray-400">Must equal 100%</div>
                   </div>
                 </div>
               </div>

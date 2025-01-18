@@ -46,4 +46,13 @@ export interface TokenConfig {
     duration: number;
     cliff: number;
   };
+}
+
+// Add SecurityRisk type
+export interface SecurityRisk {
+  severity: 'HIGH' | 'MEDIUM' | 'LOW';
+  message: string;
+  impact: string;
+  mitigation: string;
+  details: string[];
 } 

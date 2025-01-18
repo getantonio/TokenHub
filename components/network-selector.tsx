@@ -57,7 +57,9 @@ export function NetworkSelector() {
       });
 
     } catch (error: any) {
-      if (error?.code === 4902) {
+      if (error?.code === 4001 || error?.message?.includes('User rejected')) {
+        setError('Network switch cancelled by user. Please try again.');
+      } else if (error?.code === 4902) {
         setError('Network not added to MetaMask. Please add it first.');
       } else if (error?.code === -32002) {
         setError('A MetaMask request is pending. Please check your wallet.');
@@ -85,6 +87,8 @@ export function NetworkSelector() {
 
   const handleLocalTestnet = async () => {
     try {
+      console.log('Attempting to connect to local testnet...');
+      
       const response = await fetch('http://127.0.0.1:8545', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -100,8 +104,12 @@ export function NetworkSelector() {
         throw new Error('Local testnet not running');
       }
 
+      const data = await response.json();
+      console.log('Local testnet response:', data);
+
       await handleNetworkSwitch(hardhat.id);
     } catch (error) {
+      console.error('Local testnet error:', error);
       setError(`Local testnet not available. ${LOCAL_TESTNET_INFO.setup}`);
     }
   };

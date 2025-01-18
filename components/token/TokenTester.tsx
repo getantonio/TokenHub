@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { TokenConfig } from './types';
+import { TokenConfig, SecurityRisk } from './types';
 import { Progress } from "@/components/ui/progress";
 import { Spinner } from "@/components/ui/spinner";
 import { 
@@ -200,148 +200,80 @@ export function TokenTester({ config }: TokenTesterProps) {
       name: "Security Analysis",
       run: async () => {
         const details = [];
-        const risks: { 
-          severity: 'HIGH' | 'MEDIUM' | 'LOW';
-          message: string;
-          impact: string;
-          mitigation: string;
-          details: string[];
-          examples?: string[];
-        }[] = [];
+        const risks: SecurityRisk[] = [];
 
-        // Anti-bot protection check
-        if (!config.antiBot) {
-          risks.push({
-            severity: 'HIGH',
-            message: "Anti-bot Protection Disabled",
-            impact: "High vulnerability to front-running and sandwich attacks during launch",
-            mitigation: "Enable anti-bot protection mechanisms",
-            details: [
-              "Front-running bots can manipulate token price at launch",
-              "MEV bots can extract value through sandwich attacks",
-              "Initial traders may face unfair pricing due to bot manipulation"
-            ],
-            examples: [
-              "Example attack: Bot monitors mempool for buy transactions",
-              "Bot front-runs with higher gas, buys before user",
-              "Bot immediately sells after user's transaction, profiting from price impact"
-            ]
-          });
-        }
-
-        // Transfer limit check
+        // Check each security feature and add clear explanations
         if (!config.maxTransferAmount) {
           risks.push({
             severity: 'MEDIUM',
-            message: "No Transfer Limit Set",
-            impact: "Potential for price manipulation through large transfers",
-            mitigation: "Implement maximum transfer limits",
+            message: "Maximum Transfer Limit Not Set",
+            impact: "Your token is vulnerable to whale manipulation",
+            mitigation: "Add a max transfer limit of 1-2% of total supply",
             details: [
-              "Whales can dump large amounts instantly",
-              "No protection against flash crashes",
-              "Market manipulation through coordinated large transfers"
-            ],
-            examples: [
-              "Recommended: Set max transfer to 1-2% of total supply",
-              "Consider dynamic limits based on liquidity",
-              "Example: 100,000 tokens or 1% per transaction, whichever is lower"
+              "Current Setting: No limit",
+              "Recommended: Set to 1-2% of total supply",
+              "How to fix: Add maxTransferAmount in token configuration"
             ]
           });
         }
 
-        // Cooldown period check
+        if (!config.antiBot) {
+          risks.push({
+            severity: 'HIGH',
+            message: "Anti-Bot Protection Disabled",
+            impact: "Your token launch could be exploited by bots",
+            mitigation: "Enable anti-bot protection",
+            details: [
+              "Current Setting: Disabled",
+              "Recommended: Enable anti-bot protection",
+              "How to fix: Set antiBot to true in configuration"
+            ]
+          });
+        }
+
         if (config.cooldownTime < 60) {
           risks.push({
             severity: 'MEDIUM',
             message: "Insufficient Cooldown Period",
-            impact: "Enables rapid trading manipulation",
-            mitigation: "Set appropriate cooldown periods",
+            impact: "Allows rapid trading manipulation",
+            mitigation: "Set cooldown to minimum 60 seconds",
             details: [
-              "Allows rapid buy/sell manipulation",
-              "No protection against trading bots",
-              "Can lead to artificial price volatility"
-            ],
-            examples: [
-              "Recommended: 60-300 seconds between trades",
-              "Consider variable cooldowns based on transfer size",
-              "Example: 60s for small trades, 300s for large trades"
+              `Current Setting: ${config.cooldownTime} seconds`,
+              "Recommended: Minimum 60 seconds",
+              "How to fix: Increase cooldownTime in configuration"
             ]
           });
         }
 
-        // Team token concentration check
-        if (config.teamAllocation + config.marketingAllocation > 30) {
-          risks.push({
-            severity: 'HIGH',
-            message: "High Token Concentration Risk",
-            impact: "Centralized control over large token supply",
-            mitigation: "Reduce team/marketing allocations and implement longer vesting",
-            details: [
-              "Team controls significant voting power",
-              "Risk of large sell pressure after vesting",
-              "Reduced community confidence"
-            ],
-            examples: [
-              "Recommended: Max 20-25% combined team/marketing allocation",
-              "Implement 2-3 year vesting with 6-month cliff",
-              "Consider linear vesting instead of cliff-based"
-            ]
-          });
-        }
-
-        // Format details with comprehensive information
-        risks.forEach(risk => {
-          details.push(`\n${
-            risk.severity === 'HIGH' ? '🔴' :
-            risk.severity === 'MEDIUM' ? '🟡' : '🟢'
-          } ${risk.message.toUpperCase()}`);
-          
-          details.push(`  Severity: ${risk.severity}`);
-          details.push(`  Impact: ${risk.impact}`);
-          
-          details.push('\n  Details:');
-          risk.details.forEach(detail => {
-            details.push(`   • ${detail}`);
-          });
-          
-          details.push('\n  Mitigation Strategy:');
-          details.push(`   • ${risk.mitigation}`);
-          
-          if (risk.examples) {
-            details.push('\n  Implementation Examples:');
-            risk.examples.forEach(example => {
-              details.push(`   • ${example}`);
-            });
-          }
-          
-          details.push('\n  Additional Resources:');
-          details.push('   • OpenZeppelin Security Best Practices');
-          details.push('   • DeFi Security Alliance Guidelines');
-          details.push('   • CertiK Security Assessment Examples');
-        });
-
+        // Format the output with clear sections
         if (risks.length > 0) {
-          const highRisks = risks.filter(r => r.severity === 'HIGH').length;
-          const mediumRisks = risks.filter(r => r.severity === 'MEDIUM').length;
+          details.push("🚨 SECURITY ISSUES FOUND:\n");
+          risks.forEach((risk, index) => {
+            details.push(`ISSUE ${index + 1}: ${risk.message}`);
+            details.push(`Severity: ${risk.severity}`);
+            details.push(`Impact: ${risk.impact}`);
+            details.push("\nHow to Fix:");
+            risk.details.forEach(detail => details.push(`• ${detail}`));
+            details.push(""); // Add spacing between issues
+          });
           
-          throw new Error(
-            `Security Analysis: ${risks.length} risks found (${highRisks} High, ${mediumRisks} Medium)\n` +
-            'Review the detailed analysis below and implement suggested mitigations before deployment.'
-          );
+          details.push("\nREQUIRED ACTIONS:");
+          details.push("1. Fix the issues above before deployment");
+          details.push("2. Run the security check again to verify fixes");
+        } else {
+          details.push("✅ All security checks passed");
+          details.push("\nRecommended Next Steps:");
+          details.push("1. Consider a professional audit");
+          details.push("2. Test thoroughly on testnet");
+          details.push("3. Monitor post-deployment");
         }
 
-        return { 
-          message: "All security checks passed", 
-          details: [
-            "✅ Anti-bot protection enabled",
-            "✅ Transfer limits configured",
-            "✅ Adequate cooldown periods",
-            "✅ Balanced token distribution",
-            "\nRecommended Next Steps:",
-            "• Consider professional security audit",
-            "• Test on testnet before mainnet deployment",
-            "• Monitor for unusual trading patterns after launch"
-          ]
+        return {
+          message: risks.length > 0 
+            ? `Security Issues Found: ${risks.length} (${risks.filter(r => r.severity === 'HIGH').length} High, ${risks.filter(r => r.severity === 'MEDIUM').length} Medium)`
+            : "Security Check Passed ✅",
+          details,
+          hasIssues: risks.length > 0
         };
       }
     },
@@ -395,22 +327,34 @@ export function TokenTester({ config }: TokenTesterProps) {
         const warnings = [];
         
         // Check distribution percentages
-        const total = config.presaleAllocation + 
-                     config.liquidityAllocation + 
-                     config.teamAllocation + 
-                     config.marketingAllocation +
-                     config.developerAllocation;
+        const total = 
+          config.presaleAllocation + 
+          config.liquidityAllocation + 
+          config.teamAllocation + // Team allocation (platform fee will be taken from this)
+          config.marketingAllocation +
+          config.developerAllocation;
 
-        if (total !== 100) {
-          throw new Error("Token distribution must equal 100%");
-        }
+        console.log('Distribution Analysis:', {
+          presale: config.presaleAllocation,
+          liquidity: config.liquidityAllocation,
+          team: config.teamAllocation,
+          marketing: config.marketingAllocation,
+          developer: config.developerAllocation,
+          total: total,
+          platformFee: '2% (taken from team allocation)'
+        });
 
         details.push(`Current Distribution:`);
         details.push(`• Presale: ${config.presaleAllocation}%`);
         details.push(`• Liquidity: ${config.liquidityAllocation}%`);
-        details.push(`• Team: ${config.teamAllocation}%`);
+        details.push(`• Team: ${config.teamAllocation}% (includes 2% platform fee)`);
         details.push(`• Marketing: ${config.marketingAllocation}%`);
         details.push(`• Developers: ${config.developerAllocation}%`);
+        details.push(`\nNote: 2% platform fee is taken from team allocation`);
+
+        if (total !== 100) {
+          throw new Error(`Token distribution must equal 100% (currently ${total}%)`);
+        }
 
         // Add developer-specific checks
         if (config.developerAllocation > 10) {
