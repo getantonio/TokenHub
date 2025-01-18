@@ -205,35 +205,119 @@ export function TokenTester({ config }: TokenTesterProps) {
           message: string;
           impact: string;
           mitigation: string;
+          details: string[];
+          examples?: string[];
         }[] = [];
 
-        // Enhanced security checks with detailed explanations
+        // Anti-bot protection check
         if (!config.antiBot) {
           risks.push({
             severity: 'HIGH',
-            message: "Anti-bot protection disabled",
-            impact: "Vulnerable to front-running and sandwich attacks during launch",
-            mitigation: "Enable anti-bot protection to prevent automated trading exploitation"
+            message: "Anti-bot Protection Disabled",
+            impact: "High vulnerability to front-running and sandwich attacks during launch",
+            mitigation: "Enable anti-bot protection mechanisms",
+            details: [
+              "Front-running bots can manipulate token price at launch",
+              "MEV bots can extract value through sandwich attacks",
+              "Initial traders may face unfair pricing due to bot manipulation"
+            ],
+            examples: [
+              "Example attack: Bot monitors mempool for buy transactions",
+              "Bot front-runs with higher gas, buys before user",
+              "Bot immediately sells after user's transaction, profiting from price impact"
+            ]
           });
         }
 
+        // Transfer limit check
         if (!config.maxTransferAmount) {
           risks.push({
             severity: 'MEDIUM',
-            message: "No transfer limit set",
-            impact: "Large holders can significantly impact price through large transfers",
-            mitigation: "Set a reasonable max transfer limit (e.g., 1% of total supply)"
+            message: "No Transfer Limit Set",
+            impact: "Potential for price manipulation through large transfers",
+            mitigation: "Implement maximum transfer limits",
+            details: [
+              "Whales can dump large amounts instantly",
+              "No protection against flash crashes",
+              "Market manipulation through coordinated large transfers"
+            ],
+            examples: [
+              "Recommended: Set max transfer to 1-2% of total supply",
+              "Consider dynamic limits based on liquidity",
+              "Example: 100,000 tokens or 1% per transaction, whichever is lower"
+            ]
+          });
+        }
+
+        // Cooldown period check
+        if (config.cooldownTime < 60) {
+          risks.push({
+            severity: 'MEDIUM',
+            message: "Insufficient Cooldown Period",
+            impact: "Enables rapid trading manipulation",
+            mitigation: "Set appropriate cooldown periods",
+            details: [
+              "Allows rapid buy/sell manipulation",
+              "No protection against trading bots",
+              "Can lead to artificial price volatility"
+            ],
+            examples: [
+              "Recommended: 60-300 seconds between trades",
+              "Consider variable cooldowns based on transfer size",
+              "Example: 60s for small trades, 300s for large trades"
+            ]
+          });
+        }
+
+        // Team token concentration check
+        if (config.teamAllocation + config.marketingAllocation > 30) {
+          risks.push({
+            severity: 'HIGH',
+            message: "High Token Concentration Risk",
+            impact: "Centralized control over large token supply",
+            mitigation: "Reduce team/marketing allocations and implement longer vesting",
+            details: [
+              "Team controls significant voting power",
+              "Risk of large sell pressure after vesting",
+              "Reduced community confidence"
+            ],
+            examples: [
+              "Recommended: Max 20-25% combined team/marketing allocation",
+              "Implement 2-3 year vesting with 6-month cliff",
+              "Consider linear vesting instead of cliff-based"
+            ]
           });
         }
 
         // Format details with comprehensive information
         risks.forEach(risk => {
-          details.push(`${
+          details.push(`\n${
             risk.severity === 'HIGH' ? '🔴' :
             risk.severity === 'MEDIUM' ? '🟡' : '🟢'
-          } ${risk.message}`);
+          } ${risk.message.toUpperCase()}`);
+          
+          details.push(`  Severity: ${risk.severity}`);
           details.push(`  Impact: ${risk.impact}`);
-          details.push(`  Recommendation: ${risk.mitigation}`);
+          
+          details.push('\n  Details:');
+          risk.details.forEach(detail => {
+            details.push(`   • ${detail}`);
+          });
+          
+          details.push('\n  Mitigation Strategy:');
+          details.push(`   • ${risk.mitigation}`);
+          
+          if (risk.examples) {
+            details.push('\n  Implementation Examples:');
+            risk.examples.forEach(example => {
+              details.push(`   • ${example}`);
+            });
+          }
+          
+          details.push('\n  Additional Resources:');
+          details.push('   • OpenZeppelin Security Best Practices');
+          details.push('   • DeFi Security Alliance Guidelines');
+          details.push('   • CertiK Security Assessment Examples');
         });
 
         if (risks.length > 0) {
@@ -241,14 +325,23 @@ export function TokenTester({ config }: TokenTesterProps) {
           const mediumRisks = risks.filter(r => r.severity === 'MEDIUM').length;
           
           throw new Error(
-            `Security risks found: ${risks.length} (${highRisks} High, ${mediumRisks} Medium)\n` +
-            'Review the details below and consider implementing the suggested mitigations.'
+            `Security Analysis: ${risks.length} risks found (${highRisks} High, ${mediumRisks} Medium)\n` +
+            'Review the detailed analysis below and implement suggested mitigations before deployment.'
           );
         }
 
         return { 
           message: "All security checks passed", 
-          details: ["✅ No security risks detected"]
+          details: [
+            "✅ Anti-bot protection enabled",
+            "✅ Transfer limits configured",
+            "✅ Adequate cooldown periods",
+            "✅ Balanced token distribution",
+            "\nRecommended Next Steps:",
+            "• Consider professional security audit",
+            "• Test on testnet before mainnet deployment",
+            "• Monitor for unusual trading patterns after launch"
+          ]
         };
       }
     },
@@ -305,7 +398,8 @@ export function TokenTester({ config }: TokenTesterProps) {
         const total = config.presaleAllocation + 
                      config.liquidityAllocation + 
                      config.teamAllocation + 
-                     config.marketingAllocation;
+                     config.marketingAllocation +
+                     config.developerAllocation;
 
         if (total !== 100) {
           throw new Error("Token distribution must equal 100%");
@@ -316,28 +410,30 @@ export function TokenTester({ config }: TokenTesterProps) {
         details.push(`• Liquidity: ${config.liquidityAllocation}%`);
         details.push(`• Team: ${config.teamAllocation}%`);
         details.push(`• Marketing: ${config.marketingAllocation}%`);
+        details.push(`• Developers: ${config.developerAllocation}%`);
 
-        // Detailed analysis with recommendations
-        if (config.liquidityAllocation < 30) {
+        // Add developer-specific checks
+        if (config.developerAllocation > 10) {
           warnings.push({
-            type: 'LIQUIDITY',
-            message: "Low liquidity allocation detected",
+            type: 'DEVELOPER',
+            message: "High developer allocation detected",
             details: [
-              "Recommended: Minimum 30% for initial liquidity",
-              "Impact: Lower liquidity can lead to higher price volatility",
-              "Suggestion: Consider increasing liquidity allocation to improve trading stability"
+              "Recommended: Maximum 5-10% for developer allocation",
+              "Impact: High developer allocation may concern investors",
+              "Suggestion: Consider reducing developer allocation or extending vesting period"
             ]
           });
         }
 
-        if (config.presaleAllocation < 40) {
+        // Check developer vesting
+        if (!config.developerVesting || config.developerVesting.duration < 12) {
           warnings.push({
-            type: 'PRESALE',
-            message: "Low public allocation detected",
+            type: 'VESTING',
+            message: "Short developer vesting period",
             details: [
-              "Recommended: Minimum 40% for public distribution",
-              "Impact: Limited public access can affect token adoption",
-              "Suggestion: Consider increasing presale allocation for better token distribution"
+              "Recommended: Minimum 12 months vesting for developers",
+              "Impact: Short vesting may indicate lack of long-term commitment",
+              "Suggestion: Implement longer vesting schedule with appropriate cliff"
             ]
           });
         }

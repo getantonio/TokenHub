@@ -15,6 +15,7 @@ export interface TokenConfig {
   liquidityAllocation: number;
   teamAllocation: number;
   marketingAllocation: number;
+  developerAllocation: number;
 
   // Security Settings
   maxTransferAmount: string;
@@ -36,4 +37,13 @@ export interface TokenConfig {
 
   // Team Wallet
   teamWallet: string;
+
+  // Developer Wallet
+  developerWallet?: string;
+
+  // Developer Vesting
+  developerVesting?: {
+    duration: number;
+    cliff: number;
+  };
 } 

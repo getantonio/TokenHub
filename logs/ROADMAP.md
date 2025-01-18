@@ -13,6 +13,8 @@
   - [x] Standard token creation template
   - [x] Customizable tokenomics parameters
   - [x] Security features and ownership management
+  - [x] Platform fee mechanism (2% mainnet allocation)
+  - [ ] Fee distribution system
 - [x] Develop Token Sale contract
   - [x] Multiple sale phases support
   - [ ] Vesting schedules
@@ -21,16 +23,26 @@
 - [ ] Implement token locking mechanism
 
 ## Phase 3: Token Listing Features 📋
+- [ ] Implement Membership System
+  - [ ] Free tier (Test token creation only)
+  - [ ] Pro tier (Mainnet deployment access)
+  - [ ] Enterprise tier (Custom features)
+- [ ] Add Payment Integration
+  - [ ] Subscription management
+  - [ ] Payment processing
+  - [ ] Invoice system
 - [ ] Create token listing form
   - [ ] Token details input
   - [ ] Sale parameters configuration
   - [ ] Marketing information
   - [ ] Social links
 - [ ] Add token verification system
+  - [ ] Platform fee verification
   - [ ] Contract verification
   - [ ] Team verification
   - [ ] Social verification
 - [ ] Implement listing fee system
+- [ ] Add platform fee analytics dashboard
 - [ ] Add admin dashboard for listings
 
 ## Phase 4: Token Sale Features 💰
@@ -48,9 +60,15 @@
   - [ ] Investment history
   - [ ] Token holdings
   - [ ] Vesting schedules
+  - [ ] Membership status
+  - [ ] Deployment credits
 - [ ] Add portfolio tracking
 - [ ] Implement notifications system
 - [ ] Add referral system
+- [ ] Add membership benefits
+  - [ ] Priority support
+  - [ ] Advanced analytics
+  - [ ] Custom branding options
 
 ## Phase 6: Security & Testing 🔒
 - [ ] Smart contract audits

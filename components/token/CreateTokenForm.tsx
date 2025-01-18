@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Tabs,
@@ -23,13 +23,33 @@ import { parseEther, parseUnits } from 'viem';
 import { BrowserProvider } from 'ethers';
 import { formatEther } from 'ethers';
 import { TokenTester } from './TokenTester';
+import { ZeroAddress } from 'ethers';
+import { InfoIcon } from 'lucide-react';
+import { AlertTitle } from "@/components/ui/alert";
+
+// Add platform fee configuration
+const PLATFORM_TEAM_WALLET = "YOUR_WALLET_ADDRESS"; // Replace with your wallet address
+const PLATFORM_TEAM_ALLOCATION = 2; // 2% of total supply for platform team
+
+// Add near the top with other tooltips
+const MAINNET_INFO = {
+  title: "Mainnet Deployment Fee",
+  description: "A 2% platform fee is applied to team allocation on mainnet deployments. This helps support ongoing platform development and maintenance.",
+};
 
 export const CreateTokenForm = () => {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const [currentStep, setCurrentStep] = useState(1);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { address } = useAccount();
   const chainId = useChainId();
+  const isMainnet = chainId === 1;
   const [useMinimalFeatures, setUseMinimalFeatures] = useState(false);
 
   const [config, setConfig] = useState<TokenConfig>({
@@ -40,10 +60,16 @@ export const CreateTokenForm = () => {
     totalSupply: '',
     decimals: 18,
     initialPrice: '',
-    presaleAllocation: 60,
+    presaleAllocation: 55,
     liquidityAllocation: 20,
     teamAllocation: 10,
     marketingAllocation: 10,
+    developerAllocation: 5,
+    developerVesting: {
+      duration: 12,
+      cliff: 3
+    },
+    developerWallet: '',
     maxTransferAmount: '',
     cooldownTime: 0,
     transfersEnabled: true,
@@ -126,6 +152,24 @@ export const CreateTokenForm = () => {
         throw new Error('Total allocation must equal 100%');
       }
 
+      // Adjust allocations for mainnet to include platform team
+      let adjustedTeamAllocation = config.teamAllocation;
+      let adjustedConfig = {...config};
+
+      if (isMainnet) {
+        // Take 2% from team allocation for platform team
+        adjustedTeamAllocation = config.teamAllocation - PLATFORM_TEAM_ALLOCATION;
+        
+        if (adjustedTeamAllocation < 5) {
+          throw new Error('Team allocation too small to include platform fee. Minimum 7% team allocation required.');
+        }
+
+        adjustedConfig = {
+          ...config,
+          teamAllocation: adjustedTeamAllocation,
+        };
+      }
+
       // Get gas optimization settings if minimal features enabled
       if (useMinimalFeatures) {
         const provider = new BrowserProvider(window.ethereum as any);
@@ -154,8 +198,14 @@ export const CreateTokenForm = () => {
               antiBot: config.antiBot,
               teamVestingDuration: BigInt(config.vestingSchedule.team.duration),
               teamVestingCliff: BigInt(config.vestingSchedule.team.cliff),
-              teamAllocation: BigInt(config.teamAllocation),
+              teamAllocation: BigInt(adjustedConfig.teamAllocation),
               teamWallet: config.teamWallet || address || '0x',
+              developerAllocation: BigInt(config.developerAllocation),
+              developerVestingDuration: BigInt(config.developerVesting?.duration || 12),
+              developerVestingCliff: BigInt(config.developerVesting?.cliff || 3),
+              developerWallet: config.developerWallet || address || ZeroAddress,
+              platformTeamAllocation: isMainnet ? BigInt(PLATFORM_TEAM_ALLOCATION) : 0n,
+              platformTeamWallet: isMainnet ? PLATFORM_TEAM_WALLET : ZeroAddress,
             }
           ],
           value: parseEther('0.1'), // Creation fee - should be fetched from contract
@@ -181,8 +231,14 @@ export const CreateTokenForm = () => {
               antiBot: config.antiBot,
               teamVestingDuration: BigInt(config.vestingSchedule.team.duration),
               teamVestingCliff: BigInt(config.vestingSchedule.team.cliff),
-              teamAllocation: BigInt(config.teamAllocation),
+              teamAllocation: BigInt(adjustedConfig.teamAllocation),
               teamWallet: config.teamWallet || address || '0x',
+              developerAllocation: BigInt(config.developerAllocation),
+              developerVestingDuration: BigInt(config.developerVesting?.duration || 12),
+              developerVestingCliff: BigInt(config.developerVesting?.cliff || 3),
+              developerWallet: config.developerWallet || address || ZeroAddress,
+              platformTeamAllocation: isMainnet ? BigInt(PLATFORM_TEAM_ALLOCATION) : 0n,
+              platformTeamWallet: isMainnet ? PLATFORM_TEAM_WALLET : ZeroAddress,
             }
           ],
           value: parseEther('0.1'), // Creation fee - should be fetched from contract
@@ -196,6 +252,10 @@ export const CreateTokenForm = () => {
       setIsCreating(false);
     }
   };
+
+  if (!mounted) {
+    return null; // Or a loading skeleton
+  }
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -613,6 +673,18 @@ export const CreateTokenForm = () => {
               <span className="text-sm">Use minimal features (lower gas cost)</span>
             </label>
           </div>
+
+          {isMainnet && (
+            <Alert className="mb-4">
+              <InfoIcon className="h-4 w-4" />
+              <AlertTitle>{MAINNET_INFO.title}</AlertTitle>
+              <AlertDescription>
+                {MAINNET_INFO.description}
+                <br />
+                Your team allocation will be adjusted from {config.teamAllocation}% to {config.teamAllocation - PLATFORM_TEAM_ALLOCATION}%
+              </AlertDescription>
+            </Alert>
+          )}
         </CardContent>
       </Card>
 
