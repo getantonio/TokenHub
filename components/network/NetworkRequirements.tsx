@@ -14,27 +14,27 @@ export function NetworkRequirements() {
 
   const requestTestEth = async () => {
     try {
-      const response = await fetch('http://127.0.0.1:8545', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'hardhat_setBalance',
-          params: [
-            address,
-            "0x56BC75E2D63100000", // 100 ETH
-          ],
-          id: 1
-        })
+      if (!address) return;
+      
+      // Create provider with proper ethers v6 syntax
+      const provider = new ethers.JsonRpcProvider('http://127.0.0.1:8545');
+      
+      // Get first account's private key from hardhat
+      const wallet = new ethers.Wallet(
+        // Default hardhat first private key
+        '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
+        provider
+      );
+      
+      const tx = await wallet.sendTransaction({
+        to: address,
+        value: ethers.parseEther("100.0")
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to request test ETH');
-      }
-
-      // Force balance refresh
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      window.location.reload();
+      await tx.wait();
+      
+      // Force UI update
+      setTimeout(() => window.location.reload(), 2000);
     } catch (error) {
       console.error('Error requesting test ETH:', error);
     }

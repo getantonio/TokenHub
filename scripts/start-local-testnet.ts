@@ -1,46 +1,37 @@
 import { ethers } from "hardhat";
 import { execSync } from "child_process";
-import { parseEther } from "ethers";
-import fs from "fs";
 
 async function main() {
+  console.log('Starting local testnet...');
+  
+  // Start hardhat node in background
+  const hardhatNode = execSync('npx hardhat node', { stdio: 'inherit' });
+
   try {
-    console.log('Deploying contracts to local testnet...');
+    console.log('Deploying contracts...');
     
-    // Deploy test contracts
+    // Deploy TokenFactory
     const TokenFactory = await ethers.getContractFactory("TokenFactory");
-    const tokenFactory = await TokenFactory.deploy(parseEther("0.1"));
-    await tokenFactory.waitForDeployment();
-
-    const address = await tokenFactory.getAddress();
-    console.log(`TokenFactory deployed to: ${address}`);
-
-    // Write address to .env.local
-    const envContent = `NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS="${address}"\n`;
-    fs.writeFileSync('.env.local', envContent, { flag: 'a' });
-    console.log('Updated .env.local with contract address');
+    const tokenFactory = await TokenFactory.deploy(ethers.parseEther("0.1"));
+    await tokenFactory.deployed();
+    
+    console.log(`TokenFactory deployed to: ${tokenFactory.address}`);
 
     // Fund test accounts
-    const accounts = await ethers.getSigners();
-    for (const account of accounts.slice(1, 5)) {
-      await ethers.provider.send("hardhat_setBalance", [
-        account.address,
-        "0x56BC75E2D63100000", // 100 ETH
-      ]);
+    const [deployer, ...testAccounts] = await ethers.getSigners();
+    
+    for (const account of testAccounts) {
+      await deployer.sendTransaction({
+        to: account.address,
+        value: ethers.parseEther("100.0")
+      });
+      console.log(`Funded ${account.address} with 100 ETH`);
     }
 
-    console.log('Test accounts funded');
   } catch (error) {
-    console.error('Local testnet setup error:', error);
+    console.error('Setup error:', error);
     process.exit(1);
   }
 }
 
-// Start local network
-console.log("Starting local testnet...");
-execSync("npx hardhat node", { stdio: "inherit" });
-
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-}); 
+main().catch(console.error); 

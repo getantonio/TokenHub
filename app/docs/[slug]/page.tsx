@@ -6,6 +6,7 @@ import { Metadata } from 'next';
 
 interface DocPageProps {
   params: { slug: string };
+  searchParams?: Record<string, string | string[] | undefined>;
 }
 
 export async function generateMetadata({ params }: DocPageProps): Promise<Metadata> {
@@ -14,7 +15,7 @@ export async function generateMetadata({ params }: DocPageProps): Promise<Metada
   }
 }
 
-export default async function DocPage({ params }: DocPageProps) {
+export default async function DocPage({ params, searchParams }: DocPageProps) {
   const { slug } = params;
   const filePath = path.join(process.cwd(), 'logs', 'docs', `${slug}.md`);
   
@@ -38,11 +39,15 @@ export default async function DocPage({ params }: DocPageProps) {
 
 export async function generateStaticParams() {
   const docsPath = path.join(process.cwd(), 'logs', 'docs');
-  const files = await fs.promises.readFile(docsPath);
-  
-  return files
-    .filter(file => file.endsWith('.md'))
-    .map(file => ({
-      slug: file.replace('.md', ''),
-    }));
+  try {
+    const files = await fs.promises.readdir(docsPath);
+    return files
+      .filter(file => file.endsWith('.md'))
+      .map(file => ({
+        slug: file.replace('.md', ''),
+      }));
+  } catch (error) {
+    console.error('Error reading docs directory:', error);
+    return [];
+  }
 } 

@@ -29,6 +29,8 @@ import { AlertTitle } from "@/components/ui/alert";
 import { NetworkRequirements } from '../network/NetworkRequirements';
 import { FEE_STRUCTURE_DOC_URL } from '@/lib/constants';
 import Link from 'next/link';
+import { DeploymentSimulator } from './DeploymentSimulator';
+import { TokenTracker } from './TokenTracker';
 
 // Add platform fee configuration
 const PLATFORM_TEAM_WALLET = "YOUR_WALLET_ADDRESS"; // Replace with your wallet address
@@ -128,24 +130,22 @@ export const CreateTokenForm = () => {
     );
   };
 
+  // Add state for tracking deployment
+  const [deployedToken, setDeployedToken] = useState<{
+    address?: string;
+    txHash?: string;
+  }>();
+
   const handleCreateToken = async () => {
     try {
       setIsCreating(true);
       setError(null);
 
-      if (!process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS) {
-        throw new Error('Token factory address not configured');
+      if (!writeContract) {
+        throw new Error('Contract write not available');
       }
 
-      // Add logging
-      console.log('Creating token with config:', {
-        ...config,
-        isMainnet,
-        factoryAddress: process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS
-      });
-
-      // Call writeContract without checking return value
-      await writeContract({
+      const tx = await writeContract({
         abi: TokenFactoryABI,
         address: process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as `0x${string}`,
         functionName: 'createToken',
@@ -175,13 +175,19 @@ export const CreateTokenForm = () => {
         value: parseEther('0.1'),
       });
 
-      // Show success message after successful write
-      setError('Token creation transaction submitted successfully!');
+      if (!tx?.hash) {
+        throw new Error('Transaction failed');
+      }
 
-    } catch (error: unknown) {
+      setDeployedToken({
+        txHash: tx.hash,
+        // Address will be set after confirmation
+      });
+
+      setError('Token creation transaction submitted successfully!');
+    } catch (error) {
       console.error('Token creation error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to create token';
-      setError(errorMessage);
+      setError(error instanceof Error ? error.message : 'Failed to create token');
     } finally {
       setIsCreating(false);
     }
@@ -641,7 +647,14 @@ export const CreateTokenForm = () => {
           isValid={isValid}
           validationErrors={validationErrors}
         />
+        <DeploymentSimulator config={config} />
         <TokenTester config={config} />
+        {deployedToken && (
+          <TokenTracker 
+            tokenAddress={deployedToken.address}
+            transactionHash={deployedToken.txHash}
+          />
+        )}
       </div>
     </div>
   );

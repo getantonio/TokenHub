@@ -1,0 +1,184 @@
+import { useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { TokenConfig } from './types';
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { InfoIcon, CheckCircle, XCircle } from 'lucide-react';
+import { useChainId, useEstimateGas, useSimulateContract } from 'wagmi';
+import { parseUnits, formatEther } from 'viem';
+import { NETWORKS_WITH_COSTS } from '@/app/providers';
+import { TokenFactoryABI } from '@/contracts/abis/TokenFactory';
+
+interface SimulationStep {
+  name: string;
+  status: 'pending' | 'success' | 'error' | 'waiting';
+  gasEstimate?: bigint;
+  error?: string;
+}
+
+interface DeploymentSimulatorProps {
+  config: TokenConfig;
+}
+
+export function DeploymentSimulator({ config }: DeploymentSimulatorProps) {
+  const chainId = useChainId();
+  const [steps, setSteps] = useState<SimulationStep[]>([
+    { name: 'Parameter Validation', status: 'waiting' },
+    { name: 'Contract Deployment', status: 'waiting' },
+    { name: 'Token Configuration', status: 'waiting' },
+    { name: 'Vesting Setup', status: 'waiting' }
+  ]);
+  const [totalGas, setTotalGas] = useState<bigint>(0n);
+  const [isSimulating, setIsSimulating] = useState(false);
+
+  const network = NETWORKS_WITH_COSTS.find(n => n.id === chainId);
+
+  const { data: simulationData } = useSimulateContract({
+    address: process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as `0x${string}`,
+    abi: TokenFactoryABI,
+    functionName: 'createToken',
+    args: [{
+      name: config.name,
+      symbol: config.symbol,
+      maxSupply: parseUnits(config.totalSupply || '0', config.decimals),
+      initialSupply: parseUnits(config.totalSupply || '0', config.decimals),
+      tokenPrice: parseUnits(config.initialPrice || '0', 18),
+      maxTransferAmount: config.maxTransferAmount ? parseUnits(config.maxTransferAmount, config.decimals) : 0n,
+      cooldownTime: BigInt(config.cooldownTime || 0),
+      transfersEnabled: config.transfersEnabled,
+      antiBot: config.antiBot,
+      teamVestingDuration: BigInt(config.vestingSchedule.team.duration),
+      teamVestingCliff: BigInt(config.vestingSchedule.team.cliff),
+      teamAllocation: BigInt(config.teamAllocation),
+      teamWallet: config.teamWallet || '0x',
+      developerAllocation: BigInt(config.developerAllocation),
+      developerVestingDuration: BigInt(config.developerVesting?.duration || 12),
+      developerVestingCliff: BigInt(config.developerVesting?.cliff || 3),
+      developerWallet: config.developerWallet || '0x',
+    }],
+    value: parseUnits('0.1', 18), // Creation fee
+  });
+
+  const runSimulation = async () => {
+    setIsSimulating(true);
+    let currentSteps = [...steps];
+    let totalGasUsed = 0n;
+
+    try {
+      // Step 1: Parameter Validation
+      currentSteps[0].status = 'pending';
+      setSteps([...currentSteps]);
+      await validateParameters();
+      currentSteps[0].status = 'success';
+      
+      // Step 2: Contract Deployment
+      currentSteps[1].status = 'pending';
+      setSteps([...currentSteps]);
+      const deploymentGas = await simulateDeployment();
+      currentSteps[1].status = 'success';
+      currentSteps[1].gasEstimate = deploymentGas;
+      totalGasUsed += deploymentGas;
+
+      // Step 3: Token Configuration
+      currentSteps[2].status = 'pending';
+      setSteps([...currentSteps]);
+      const configGas = await simulateConfiguration();
+      currentSteps[2].status = 'success';
+      currentSteps[2].gasEstimate = configGas;
+      totalGasUsed += configGas;
+
+      // Step 4: Vesting Setup
+      currentSteps[3].status = 'pending';
+      setSteps([...currentSteps]);
+      const vestingGas = await simulateVesting();
+      currentSteps[3].status = 'success';
+      currentSteps[3].gasEstimate = vestingGas;
+      totalGasUsed += vestingGas;
+
+      setTotalGas(totalGasUsed);
+    } catch (error) {
+      const currentStep = currentSteps.find(s => s.status === 'pending');
+      if (currentStep) {
+        currentStep.status = 'error';
+        currentStep.error = error instanceof Error ? error.message : 'Simulation failed';
+      }
+    } finally {
+      setIsSimulating(false);
+      setSteps(currentSteps);
+    }
+  };
+
+  const validateParameters = async () => {
+    // Implement parameter validation
+    await new Promise(resolve => setTimeout(resolve, 500));
+    // Throw error if validation fails
+  };
+
+  const simulateDeployment = async () => {
+    if (!simulationData) throw new Error('Simulation data not available');
+    return simulationData.request.gas || 0n;
+  };
+
+  const simulateConfiguration = async () => {
+    // Simulate token configuration
+    return 150000n; // Example gas estimate
+  };
+
+  const simulateVesting = async () => {
+    // Simulate vesting setup
+    return config.vestingSchedule.team.duration > 0 ? 200000n : 0n;
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center justify-between">
+          <span>Deployment Simulation</span>
+          {network && (
+            <span className="text-sm font-normal text-gray-400">
+              Network: {network.name}
+            </span>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          {steps.map((step, index) => (
+            <div key={index} className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {step.status === 'success' && <CheckCircle className="w-4 h-4 text-green-500" />}
+                {step.status === 'error' && <XCircle className="w-4 h-4 text-red-500" />}
+                {(step.status === 'pending' || step.status === 'waiting') && (
+                  <div className="w-4 h-4 rounded-full border-2 border-gray-500" />
+                )}
+                <span className={step.status === 'error' ? 'text-red-400' : ''}>{step.name}</span>
+              </div>
+              {step.gasEstimate && (
+                <span className="text-sm text-gray-400">
+                  {formatEther(step.gasEstimate)} ETH
+                </span>
+              )}
+            </div>
+          ))}
+
+          {totalGas > 0 && (
+            <Alert>
+              <InfoIcon className="h-4 w-4" />
+              <AlertDescription>
+                Estimated total gas: {formatEther(totalGas)} ETH
+                {network && ` (${network.costs.total} USD)`}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <button
+            onClick={runSimulation}
+            disabled={isSimulating}
+            className="w-full py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 disabled:cursor-not-allowed rounded-lg font-medium text-sm"
+          >
+            {isSimulating ? 'Simulating...' : 'Run Simulation'}
+          </button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+} 

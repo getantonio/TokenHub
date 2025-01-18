@@ -95,7 +95,18 @@ const config = createConfig({
     [optimism.id]: http(),
     [polygon.id]: http(),
     [bsc.id]: http(),
-    [hardhat.id]: http('http://127.0.0.1:8545'),
+    [hardhat.id]: http('http://127.0.0.1:8545', {
+      pollingInterval: 1000,
+      batch: { multicall: true },
+      chainParameters: {
+        name: 'Hardhat Local',
+        chainId: 31337,
+        ensAddress: null,
+      },
+      timeout: 30000,
+      retryCount: 3,
+      retryDelay: 1000,
+    }),
   },
 });
 

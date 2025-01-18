@@ -435,6 +435,28 @@ export function TokenTester({ config }: TokenTesterProps) {
     setIsRunning(false);
   };
 
+  const simulateDeployment = async () => {
+    try {
+      if (!window.ethereum) throw new Error('Web3 provider required');
+      
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      
+      // Skip ENS resolution
+      provider.getResolver = async () => null;
+      
+      // Rest of simulation logic
+      const gasEstimate = await provider.estimateGas({
+        to: null, // Contract deployment
+        data: '0x', // Contract bytecode would go here
+      });
+
+      return gasEstimate;
+    } catch (error) {
+      console.error('Deployment simulation error:', error);
+      throw error;
+    }
+  };
+
   return (
     <Card>
       <CardHeader>
