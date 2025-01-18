@@ -80,12 +80,12 @@ const config = createConfig({
     injected(),
   ],
   transports: {
+    [sepolia.id]: http(),
     [mainnet.id]: http(),
     [arbitrum.id]: http(),
     [optimism.id]: http(),
     [polygon.id]: http(),
     [bsc.id]: http(),
-    [sepolia.id]: http(),
   },
 });
 

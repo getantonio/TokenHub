@@ -35,7 +35,4 @@ next-env.d.ts
 
 # IDE
 .idea/
-.vscode/
-
-# Remove nested project
-/tokenHub/ 
+.vscode/ 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useChainId, useConfig, useConnect } from 'wagmi';
 import { injected } from 'wagmi/connectors';
 import { NETWORKS_WITH_COSTS } from '@/app/providers';
@@ -13,7 +13,17 @@ export function NetworkSelector() {
   const { connectAsync } = useConnect();
   const [isSwitching, setIsSwitching] = useState(false);
 
-  const currentNetwork = NETWORKS_WITH_COSTS.find(n => n.id === chainId);
+  const [currentNetwork, setCurrentNetwork] = useState(() => {
+    return NETWORKS_WITH_COSTS.find(n => n.name === 'Sepolia (Testnet)');
+  });
+
+  useEffect(() => {
+    const network = NETWORKS_WITH_COSTS.find(n => n.id === chainId);
+    if (network) {
+      setCurrentNetwork(network);
+    }
+  }, [chainId]);
+
   const isTestnet = currentNetwork?.name.toLowerCase().includes('sepolia');
   const mainnetVersion = NETWORKS_WITH_COSTS.find(n => n.name === 'Ethereum');
 

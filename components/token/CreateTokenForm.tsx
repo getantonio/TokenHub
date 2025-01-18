@@ -20,6 +20,8 @@ import TokenFactoryABI from '@/contracts/abis/TokenFactory.json';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
 import { parseEther, parseUnits } from 'viem';
+import { BrowserProvider } from 'ethers';
+import { formatEther } from 'ethers';
 
 export const CreateTokenForm = () => {
   const [currentStep, setCurrentStep] = useState(1);
@@ -27,6 +29,7 @@ export const CreateTokenForm = () => {
   const [error, setError] = useState<string | null>(null);
   const { address } = useAccount();
   const chainId = useChainId();
+  const [useMinimalFeatures, setUseMinimalFeatures] = useState(false);
 
   const [config, setConfig] = useState<TokenConfig>({
     name: '',
@@ -71,6 +74,29 @@ export const CreateTokenForm = () => {
   // Contract interaction setup
   const { writeContract, isPending } = useWriteContract();
 
+  // Add gas impact information
+  const gasImpactTooltips = {
+    antiBot: "Enabling anti-bot protection adds additional security but increases gas costs by ~15-20%",
+    vesting: "Vesting schedules increase deployment gas costs. Each vesting period adds ~5-10% to base gas costs",
+    maxTransfer: "Setting max transfer limits increases gas costs by ~5-10%",
+    cooldown: "Transaction cooldown features increase gas costs by ~8-12%",
+    decimals: "Lower decimals (e.g., 8 instead of 18) can slightly reduce gas costs for transfers",
+  };
+
+  // Add gas impact indicator component
+  const GasImpactIndicator = ({ impact }: { impact: 'high' | 'medium' | 'low' }) => {
+    const colors = {
+      high: 'text-red-400',
+      medium: 'text-yellow-400',
+      low: 'text-green-400'
+    };
+    return (
+      <span className={`ml-2 text-xs ${colors[impact]}`}>
+        Gas Impact: {impact.toUpperCase()}
+      </span>
+    );
+  };
+
   const handleCreateToken = async () => {
     try {
       setIsCreating(true);
@@ -84,6 +110,10 @@ export const CreateTokenForm = () => {
         throw new Error('Please connect to a supported network');
       }
 
+      if (!window.ethereum) {
+        throw new Error('Please install MetaMask or another Web3 wallet');
+      }
+
       // Validate total allocation
       const totalAllocation = 
         config.presaleAllocation + 
@@ -95,30 +125,68 @@ export const CreateTokenForm = () => {
         throw new Error('Total allocation must equal 100%');
       }
 
-      // Call the contract
-      await writeContract({
-        abi: TokenFactoryABI,
-        address: process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as `0x${string}`,
-        functionName: 'createToken',
-        args: [
-          {
-            name: config.name,
-            symbol: config.symbol,
-            maxSupply: parseUnits(config.totalSupply || '0', config.decimals),
-            initialSupply: parseUnits(config.totalSupply || '0', config.decimals),
-            tokenPrice: parseUnits(config.initialPrice || '0', 18), // ETH has 18 decimals
-            maxTransferAmount: config.maxTransferAmount ? parseUnits(config.maxTransferAmount, config.decimals) : 0n,
-            cooldownTime: BigInt(config.cooldownTime),
-            transfersEnabled: config.transfersEnabled,
-            antiBot: config.antiBot,
-            teamVestingDuration: BigInt(config.vestingSchedule.team.duration),
-            teamVestingCliff: BigInt(config.vestingSchedule.team.cliff),
-            teamAllocation: BigInt(config.teamAllocation),
-            teamWallet: config.teamWallet || address || '0x',
-          }
-        ],
-        value: parseEther('0.1'), // Creation fee - should be fetched from contract
-      });
+      // Get gas optimization settings if minimal features enabled
+      if (useMinimalFeatures) {
+        const provider = new BrowserProvider(window.ethereum as any);
+        const feeData = await provider.getFeeData();
+        
+        if (!feeData.gasPrice) {
+          throw new Error("Could not get gas price");
+        }
+
+        // Use optimized gas settings
+        const optimizedGasPrice = feeData.gasPrice * BigInt(80) / BigInt(100);
+        await writeContract({
+          abi: TokenFactoryABI,
+          address: process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as `0x${string}`,
+          functionName: 'createToken',
+          args: [
+            {
+              name: config.name,
+              symbol: config.symbol,
+              maxSupply: parseUnits(config.totalSupply || '0', config.decimals),
+              initialSupply: parseUnits(config.totalSupply || '0', config.decimals),
+              tokenPrice: parseUnits(config.initialPrice || '0', 18), // ETH has 18 decimals
+              maxTransferAmount: config.maxTransferAmount ? parseUnits(config.maxTransferAmount, config.decimals) : 0n,
+              cooldownTime: BigInt(config.cooldownTime),
+              transfersEnabled: config.transfersEnabled,
+              antiBot: config.antiBot,
+              teamVestingDuration: BigInt(config.vestingSchedule.team.duration),
+              teamVestingCliff: BigInt(config.vestingSchedule.team.cliff),
+              teamAllocation: BigInt(config.teamAllocation),
+              teamWallet: config.teamWallet || address || '0x',
+            }
+          ],
+          value: parseEther('0.1'), // Creation fee - should be fetched from contract
+          maxFeePerGas: optimizedGasPrice,
+          maxPriorityFeePerGas: feeData.maxPriorityFeePerGas ?? undefined
+        });
+      } else {
+        // Call the contract
+        await writeContract({
+          abi: TokenFactoryABI,
+          address: process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as `0x${string}`,
+          functionName: 'createToken',
+          args: [
+            {
+              name: config.name,
+              symbol: config.symbol,
+              maxSupply: parseUnits(config.totalSupply || '0', config.decimals),
+              initialSupply: parseUnits(config.totalSupply || '0', config.decimals),
+              tokenPrice: parseUnits(config.initialPrice || '0', 18), // ETH has 18 decimals
+              maxTransferAmount: config.maxTransferAmount ? parseUnits(config.maxTransferAmount, config.decimals) : 0n,
+              cooldownTime: BigInt(config.cooldownTime),
+              transfersEnabled: config.transfersEnabled,
+              antiBot: config.antiBot,
+              teamVestingDuration: BigInt(config.vestingSchedule.team.duration),
+              teamVestingCliff: BigInt(config.vestingSchedule.team.cliff),
+              teamAllocation: BigInt(config.teamAllocation),
+              teamWallet: config.teamWallet || address || '0x',
+            }
+          ],
+          value: parseEther('0.1'), // Creation fee - should be fetched from contract
+        });
+      }
 
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to create token';
@@ -532,6 +600,17 @@ export const CreateTokenForm = () => {
                 'Create Token'
               )}
             </button>
+          </div>
+
+          <div className="mt-4">
+            <label className="flex items-center space-x-2 mb-2">
+              <input
+                type="checkbox"
+                checked={useMinimalFeatures}
+                onChange={(e) => setUseMinimalFeatures(e.target.checked)}
+              />
+              <span className="text-sm">Use minimal features (lower gas cost)</span>
+            </label>
           </div>
         </CardContent>
       </Card>
