@@ -23,6 +23,10 @@ interface EthereumProvider extends provider {
   sendAsync: (payload: JsonRpcPayload, callback: (error: Error | null, result?: JsonRpcResponse) => void) => void;
 }
 
+interface Window {
+  ethereum?: any;
+}
+
 declare global {
   interface Window {
     ethereum?: EthereumProvider;
