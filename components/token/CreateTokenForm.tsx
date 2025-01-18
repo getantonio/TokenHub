@@ -27,6 +27,8 @@ import { ZeroAddress } from 'ethers';
 import { InfoIcon } from 'lucide-react';
 import { AlertTitle } from "@/components/ui/alert";
 import { NetworkRequirements } from '../network/NetworkRequirements';
+import { FEE_STRUCTURE_DOC_URL } from '@/lib/constants';
+import Link from 'next/link';
 
 // Add platform fee configuration
 const PLATFORM_TEAM_WALLET = "YOUR_WALLET_ADDRESS"; // Replace with your wallet address
@@ -88,7 +90,8 @@ export const CreateTokenForm = () => {
     config.presaleAllocation + 
     config.liquidityAllocation + 
     config.teamAllocation + 
-    config.marketingAllocation;
+    config.marketingAllocation +
+    config.developerAllocation;
 
   const validationErrors = validateTokenConfig(config);
   const isValid = validationErrors.length === 0;
@@ -257,149 +260,147 @@ export const CreateTokenForm = () => {
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <LabelWithTooltip label="Total Supply" tooltip={tooltips.totalSupply} />
+                    <LabelWithTooltip 
+                      label="Total Supply" 
+                      tooltip={tooltips.totalSupply} 
+                    />
                     <input
                       type="number"
                       className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg text-sm"
-                      placeholder="1000000"
+                      placeholder="e.g., 1000000"
                       value={config.totalSupply}
                       onChange={(e) => setConfig({...config, totalSupply: e.target.value})}
                     />
                   </div>
-
                   <div>
-                    <LabelWithTooltip label="Initial Price" tooltip={tooltips.initialPrice} />
-                    <div className="relative">
-                      <input
-                        type="number"
-                        className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg text-sm"
-                        placeholder="0.0001"
-                        value={config.initialPrice}
-                        onChange={(e) => setConfig({...config, initialPrice: e.target.value})}
-                      />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
-                        ETH
-                      </span>
-                    </div>
+                    <LabelWithTooltip 
+                      label="Initial Price (ETH)" 
+                      tooltip={tooltips.initialPrice} 
+                    />
+                    <input
+                      type="number"
+                      step="0.000000000000000001"
+                      className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg text-sm"
+                      placeholder="e.g., 0.001"
+                      value={config.initialPrice}
+                      onChange={(e) => setConfig({...config, initialPrice: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <LabelWithTooltip 
+                      label="Decimals" 
+                      tooltip="Number of decimal places for your token (default: 18)" 
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      max="18"
+                      className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg text-sm"
+                      value={config.decimals}
+                      onChange={(e) => setConfig({...config, decimals: Number(e.target.value)})}
+                    />
                   </div>
                 </div>
 
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <LabelWithTooltip 
-                      label="Token Distribution" 
-                      tooltip={tooltips.distribution}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <LabelWithTooltip label="Presale (%)" tooltip={tooltips.presaleAllocation} />
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg text-sm"
+                      value={config.presaleAllocation}
+                      onChange={(e) => setConfig({...config, presaleAllocation: Number(e.target.value)})}
                     />
                   </div>
+                  <div>
+                    <LabelWithTooltip label="Liquidity (%)" tooltip={tooltips.liquidityAllocation} />
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg text-sm"
+                      value={config.liquidityAllocation}
+                      onChange={(e) => setConfig({...config, liquidityAllocation: Number(e.target.value)})}
+                    />
+                  </div>
+                  <div>
+                    <LabelWithTooltip label="Team (%)" tooltip={tooltips.teamAllocation} />
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg text-sm"
+                      value={config.teamAllocation}
+                      onChange={(e) => setConfig({...config, teamAllocation: Number(e.target.value)})}
+                    />
+                  </div>
+                  <div>
+                    <LabelWithTooltip label="Marketing (%)" tooltip={tooltips.marketingAllocation} />
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg text-sm"
+                      value={config.marketingAllocation}
+                      onChange={(e) => setConfig({...config, marketingAllocation: Number(e.target.value)})}
+                    />
+                  </div>
+                  <div>
+                    <LabelWithTooltip 
+                      label="Developer (%)" 
+                      tooltip="Allocation for project developers. Recommended: 5%. Subject to vesting schedule." 
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg text-sm"
+                      value={config.developerAllocation}
+                      onChange={(e) => setConfig({...config, developerAllocation: Number(e.target.value)})}
+                    />
+                  </div>
+                </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <LabelWithTooltip 
-                        label="Presale (%)" 
-                        tooltip={tooltips.presaleAllocation}
-                      />
-                      <div className="relative">
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg text-sm"
-                          value={config.presaleAllocation}
-                          onChange={(e) => setConfig({...config, presaleAllocation: Number(e.target.value)})}
-                        />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
-                          %
-                        </span>
-                      </div>
-                      <p className="text-xs text-gray-400 mt-1">Recommended: 40-60%</p>
-                    </div>
-
-                    <div>
-                      <LabelWithTooltip 
-                        label="Liquidity (%)" 
-                        tooltip={tooltips.liquidityAllocation}
-                      />
-                      <div className="relative">
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg text-sm"
-                          value={config.liquidityAllocation}
-                          onChange={(e) => setConfig({...config, liquidityAllocation: Number(e.target.value)})}
-                        />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
-                          %
-                        </span>
-                      </div>
-                      <p className="text-xs text-gray-400 mt-1">Recommended: 20-30%</p>
-                    </div>
-
-                    <div>
-                      <LabelWithTooltip 
-                        label="Team (%)" 
-                        tooltip={tooltips.teamAllocation}
-                      />
-                      <div className="relative">
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg text-sm"
-                          value={config.teamAllocation}
-                          onChange={(e) => setConfig({...config, teamAllocation: Number(e.target.value)})}
-                        />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
-                          %
-                        </span>
-                      </div>
-                      <p className="text-xs text-gray-400 mt-1">Recommended: 10-15%</p>
-                    </div>
-
-                    <div>
-                      <LabelWithTooltip 
-                        label="Marketing (%)" 
-                        tooltip={tooltips.marketingAllocation}
-                      />
-                      <div className="relative">
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg text-sm"
-                          value={config.marketingAllocation}
-                          onChange={(e) => setConfig({...config, marketingAllocation: Number(e.target.value)})}
-                        />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
-                          %
-                        </span>
-                      </div>
-                      <p className="text-xs text-gray-400 mt-1">Recommended: 5-15%</p>
-                    </div>
-
-                    <div>
-                      <LabelWithTooltip 
-                        label="Developer Allocation %" 
-                        tooltip="Allocation for project developers. Recommended: 5%. Subject to vesting schedule." 
-                      />
-                      <input
-                        type="number"
-                        className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg"
-                        value={config.developerAllocation}
-                        onChange={(e) => setConfig({...config, developerAllocation: parseInt(e.target.value) || 0})}
-                      />
+                <div className="mt-4">
+                  <div className="w-full bg-gray-700 rounded-lg h-3 overflow-hidden">
+                    <div className="h-full flex">
+                      <div className="bg-blue-500 h-full" style={{ width: `${config.presaleAllocation}%` }} />
+                      <div className="bg-green-500 h-full" style={{ width: `${config.liquidityAllocation}%` }} />
+                      <div className="bg-yellow-500 h-full" style={{ width: `${config.teamAllocation}%` }} />
+                      <div className="bg-purple-500 h-full" style={{ width: `${config.marketingAllocation}%` }} />
+                      <div className="bg-red-500 h-full" style={{ width: `${config.developerAllocation}%` }} />
                     </div>
                   </div>
 
-                  <div className="mt-4 p-3 bg-gray-700 rounded-lg">
-                    <div className="text-sm font-medium">Total Allocation: {
-                      config.presaleAllocation + 
-                      config.liquidityAllocation + 
-                      config.teamAllocation + 
-                      config.marketingAllocation + 
-                      config.developerAllocation
-                    }%</div>
-                    <div className="text-xs text-gray-400">Must equal 100%</div>
+                  <div className="mt-2">
+                    <div className="grid grid-cols-2 gap-2 text-xs mb-4">
+                      <div className="flex items-center">
+                        <div className="w-3 h-3 bg-blue-500 rounded mr-2"></div>
+                        <span>Presale ({config.presaleAllocation}%)</span>
+                      </div>
+                      <div className="flex items-center">
+                        <div className="w-3 h-3 bg-green-500 rounded mr-2"></div>
+                        <span>Liquidity ({config.liquidityAllocation}%)</span>
+                      </div>
+                      <div className="flex items-center">
+                        <div className="w-3 h-3 bg-yellow-500 rounded mr-2"></div>
+                        <span>Team ({config.teamAllocation}%)</span>
+                      </div>
+                      <div className="flex items-center">
+                        <div className="w-3 h-3 bg-purple-500 rounded mr-2"></div>
+                        <span>Marketing ({config.marketingAllocation}%)</span>
+                      </div>
+                      <div className="flex items-center">
+                        <div className="w-3 h-3 bg-red-500 rounded mr-2"></div>
+                        <span>Developers ({config.developerAllocation}%)</span>
+                      </div>
+                    </div>
+
+                    <div className="text-sm font-medium">
+                      Total: {totalAllocation}% {totalAllocation !== 100 && <span className="text-red-400">(Must equal 100%)</span>}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -624,6 +625,13 @@ export const CreateTokenForm = () => {
               </AlertDescription>
             </Alert>
           )}
+
+          <Link 
+            href={FEE_STRUCTURE_DOC_URL} 
+            className="text-blue-400 hover:underline"
+          >
+            View Fee Documentation
+          </Link>
         </CardContent>
       </Card>
 

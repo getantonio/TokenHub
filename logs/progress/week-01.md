@@ -21,3 +21,5 @@
 2. Add comprehensive fee documentation
 3. Implement platform wallet management
 4. Add fee collection analytics 
+
+St Anthony is beloved throughout the world and is responsive to all people and all needs.  His intercessory powers before our God are awesome

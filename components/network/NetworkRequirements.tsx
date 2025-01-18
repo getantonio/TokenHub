@@ -2,6 +2,8 @@ import { useAccount, useBalance, useChainId } from 'wagmi';
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { InfoIcon, AlertTriangle } from 'lucide-react';
 import { NETWORKS_WITH_COSTS } from '@/app/providers';
+import { Button } from "@/components/ui/button";
+import { ethers } from 'ethers';
 
 export function NetworkRequirements() {
   const chainId = useChainId();
@@ -9,6 +11,34 @@ export function NetworkRequirements() {
   const { data: balance } = useBalance({
     address,
   });
+
+  const requestTestEth = async () => {
+    try {
+      const response = await fetch('http://127.0.0.1:8545', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'hardhat_setBalance',
+          params: [
+            address,
+            "0x56BC75E2D63100000", // 100 ETH
+          ],
+          id: 1
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to request test ETH');
+      }
+
+      // Force balance refresh
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      window.location.reload();
+    } catch (error) {
+      console.error('Error requesting test ETH:', error);
+    }
+  };
 
   const getNetworkRequirements = () => {
     if (!chainId) return null;
@@ -55,7 +85,9 @@ export function NetworkRequirements() {
           minBalance: '0.1',
           gasEstimate: '0',
           warning: 'Local testnet - for development only',
-          name: 'Local Testnet'
+          name: 'Local Testnet',
+          isLocal: true,
+          faucetAvailable: true
         };
       default:
         return null;
@@ -85,13 +117,36 @@ export function NetworkRequirements() {
               </li>
             )}
           </ul>
+          {requirements.isLocal && (
+            <div className="mt-2">
+              <Button 
+                onClick={requestTestEth}
+                size="sm"
+                variant="outline"
+              >
+                Request Test ETH
+              </Button>
+              <p className="text-xs mt-1 text-gray-400">
+                Local testnet automatically funds accounts with test ETH
+              </p>
+            </div>
+          )}
         </AlertDescription>
       </Alert>
 
       {requirements.warning && (
         <Alert>
           <InfoIcon className="h-4 w-4" />
-          <AlertDescription>{requirements.warning}</AlertDescription>
+          <AlertDescription>
+            {requirements.warning}
+            {requirements.isLocal && (
+              <div className="mt-1 text-sm">
+                • Test accounts are automatically funded
+                • Network resets when stopped
+                • All transactions are free
+              </div>
+            )}
+          </AlertDescription>
         </Alert>
       )}
     </div>
