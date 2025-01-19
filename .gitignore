@@ -45,4 +45,27 @@ next-env.d.ts
 .Spotlight-V100
 .Trashes
 ehthumbs.db
-Thumbs.db 
+Thumbs.db
+
+# Firebase
+/.firebase
+firebase-debug.log
+.firebaserc
+
+# Hardhat
+/artifacts
+/cache
+/typechain
+/typechain-types
+
+# Coverage
+/coverage
+/coverage.json
+
+# Logs
+/logs
+*.log
+
+# Cache
+.cache
+.swc/ 

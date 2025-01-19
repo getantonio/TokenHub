@@ -113,6 +113,25 @@ interface ContractWriteConfig {
   value: bigint;
 }
 
+// Platform fee message component
+function PlatformFeeMessage() {
+  const chainId = useChainId();
+  const isMainnet = chainId === 1; // Ethereum mainnet
+
+  return (
+    <div className="mb-4 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+      <p className="text-yellow-400 text-sm">
+        2% Platform Fee Applied on Mainnet
+      </p>
+      {isMainnet && (
+        <div className="mt-2 text-sm text-blue-400 bg-blue-500/10 p-2 rounded border border-blue-500/20">
+          The platform fee (2% of total supply) will be allocated to: {PLATFORM_TEAM_WALLET}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function CreateTokenForm() {
   const [mounted, setMounted] = useState(false);
 
@@ -454,653 +473,602 @@ export function CreateTokenForm() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-4">
-      {/* Add fee info at the top */}
-      <Card className="bg-gray-800 border-gray-700">
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <InfoIcon className="h-4 w-4 text-blue-400" />
-              <span className="text-sm">Creation Fee:</span>
-            </div>
-            <div className="text-sm">
-              <span className="text-blue-400">{creationFee} ETH</span>
-              {ethPrice && <span className="text-gray-400 ml-2">(≈ $100)</span>}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {isAdmin && (
+    <div className="max-w-4xl mx-auto">
+      <PlatformFeeMessage />
+      <div className="max-w-3xl mx-auto space-y-4">
+        {/* Add fee info at the top */}
         <Card className="bg-gray-800 border-gray-700">
-          <CardHeader className="py-3 border-b border-gray-700">
-            <CardTitle className="text-lg">Admin Controls</CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 space-y-4">
-            <div className="space-y-3">
-              <h3 className="text-sm font-medium">Set Discounted Fee</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-xs">Address</label>
-                  <input
-                    type="text"
-                    value={discountAddress}
-                    onChange={(e) => setDiscountAddress(e.target.value)}
-                    className="w-full p-2 rounded bg-gray-700 text-white"
-                    placeholder="0x..."
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs">Fee Amount (ETH)</label>
-                  <input
-                    type="text"
-                    value={discountAmount}
-                    onChange={(e) => setDiscountAmount(e.target.value)}
-                    className="w-full p-2 rounded bg-gray-700 text-white"
-                    placeholder="0.05"
-                  />
-                </div>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <InfoIcon className="h-4 w-4 text-blue-400" />
+                <span className="text-sm">Creation Fee:</span>
               </div>
-              <button
-                onClick={handleSetDiscount}
-                disabled={isSubmitting || !discountAddress}
-                className="w-full py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 rounded-lg text-sm"
-              >
-                {isSubmitting ? 'Setting Discount...' : 'Set Discount'}
-              </button>
-              <p className="text-xs text-gray-400">
-                Set to 0 for free token creation, or any amount less than the standard fee ({formatEther(parseUnits('0.1', 18))} ETH)
-              </p>
+              <div className="text-sm">
+                <span className="text-blue-400">{creationFee} ETH</span>
+                {ethPrice && <span className="text-gray-400 ml-2">(≈ $100)</span>}
+              </div>
             </div>
           </CardContent>
         </Card>
-      )}
-      
-      <Tabs defaultValue="basic" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 mb-2">
-          <TabsTrigger value="basic">Basic Info</TabsTrigger>
-          <TabsTrigger value="advanced">Advanced</TabsTrigger>
-          <TabsTrigger value="test">Test & Deploy</TabsTrigger>
-        </TabsList>
 
-        <TabsContent value="basic">
+        {isAdmin && (
           <Card className="bg-gray-800 border-gray-700">
             <CardHeader className="py-3 border-b border-gray-700">
-              <CardTitle className="text-lg">Token Configuration</CardTitle>
+              <CardTitle className="text-lg">Admin Controls</CardTitle>
             </CardHeader>
             <CardContent className="p-4 space-y-4">
-              {/* Basic Info Fields */}
               <div className="space-y-3">
+                <h3 className="text-sm font-medium">Set Discounted Fee</h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <LabelWithTooltip label="Token Name" tooltip={tooltipTexts.name} />
+                    <label className="text-xs">Address</label>
                     <input
                       type="text"
-                      value={config.name}
-                      onChange={(e) => setConfig({ ...config, name: e.target.value })}
-                      className={inputClassName}
-                      placeholder="MyToken"
+                      value={discountAddress}
+                      onChange={(e) => setDiscountAddress(e.target.value)}
+                      className="w-full p-2 rounded bg-gray-700 text-white"
+                      placeholder="0x..."
                     />
                   </div>
                   <div className="space-y-2">
-                    <LabelWithTooltip label="Token Symbol" tooltip={tooltipTexts.symbol} />
+                    <label className="text-xs">Fee Amount (ETH)</label>
                     <input
                       type="text"
-                      value={config.symbol}
-                      onChange={(e) => setConfig({ ...config, symbol: e.target.value })}
-                      className={inputClassName}
-                      placeholder="MTK"
+                      value={discountAmount}
+                      onChange={(e) => setDiscountAmount(e.target.value)}
+                      className="w-full p-2 rounded bg-gray-700 text-white"
+                      placeholder="0.05"
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <LabelWithTooltip label="Total Supply" tooltip={tooltipTexts.totalSupply} />
-                    <input
-                      type="text"
-                      value={config.totalSupply}
-                      onChange={(e) => setConfig({ ...config, totalSupply: e.target.value })}
-                      className={inputClassName}
-                      placeholder="1000000"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <LabelWithTooltip label="Initial Price (ETH)" tooltip={tooltipTexts.initialPrice} />
-                    <input
-                      type="text"
-                      value={config.initialPrice}
-                      onChange={(e) => setConfig({ ...config, initialPrice: e.target.value })}
-                      className={inputClassName}
-                      placeholder="0.0001"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Token Distribution */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-medium">Token Distribution</h3>
-                  {isMainnet && (
-                    <div className="text-xs text-yellow-400 flex items-center gap-1">
-                      <InfoIcon className="h-3 w-3" />
-                      2% Platform Fee Applied
-                    </div>
-                  )}
-                </div>
-
-                {/* Platform Fee Notice */}
-                <div className="text-xs text-yellow-400 flex items-center gap-1 mb-2">
-                  <InfoIcon className="h-3 w-3" />
-                  2% Platform Fee Applied on Mainnet
-                </div>
-
-                <div className="flex gap-4">
-                  <div className="space-y-2 flex-1">
-                    <LabelWithTooltip 
-                      label="Presale %" 
-                      tooltip="Percentage of tokens available for initial public sale before trading begins" 
-                    />
-                    <input
-                      type="number"
-                      value={config.presaleAllocation}
-                      onChange={(e) => setConfig({ ...config, presaleAllocation: Number(e.target.value) })}
-                      className={inputClassName}
-                    />
-                  </div>
-                  <div className="space-y-2 flex-1">
-                    <LabelWithTooltip 
-                      label="Liquidity %" 
-                      tooltip="Percentage locked in trading pair to enable token trading" 
-                    />
-                    <input
-                      type="number"
-                      value={config.liquidityAllocation}
-                      onChange={(e) => setConfig({ ...config, liquidityAllocation: Number(e.target.value) })}
-                      className={inputClassName}
-                    />
-                  </div>
-                  <div className="space-y-2 flex-1">
-                    <LabelWithTooltip 
-                      label="Presale Duration" 
-                      tooltip="Duration of the presale period in days. After this period, unsold tokens remain locked and presale ends automatically." 
-                    />
-                    <input
-                      type="number"
-                      value={config.presaleDuration}
-                      onChange={(e) => setConfig({ ...config, presaleDuration: Math.max(1, Math.min(30, Number(e.target.value))) })}
-                      min="1"
-                      max="30"
-                      className={inputClassName}
-                      placeholder="7"
-                    />
-                    <p className="text-[10px] text-gray-400">1-30 days</p>
-                  </div>
-                </div>
-
-                {/* Presale Mechanism - Foldable */}
-                <div className="p-2 rounded bg-blue-900/20 border border-blue-800 text-xs">
-                  <div 
-                    className="flex items-center justify-between cursor-pointer"
-                    onClick={() => setIsPresaleMechanismExpanded(!isPresaleMechanismExpanded)}
-                  >
-                    <div className="flex items-center gap-2">
-                      <InfoIcon className="h-4 w-4 text-blue-400" />
-                      <span className="font-medium">Presale Mechanism</span>
-                    </div>
-                    {isPresaleMechanismExpanded ? (
-                      <ChevronUp className="h-3 w-3" />
-                    ) : (
-                      <ChevronDown className="h-3 w-3" />
-                    )}
-                  </div>
-                  {isPresaleMechanismExpanded && (
-                    <div className="mt-2 space-y-2 text-gray-300">
-                      <p>1. <strong>Initial Setup</strong>: {config.presaleAllocation}% of total supply ({config.totalSupply ? formatNumber(Number(config.totalSupply) * config.presaleAllocation / 100) : '0'} tokens) allocated for presale</p>
-                      <p>2. <strong>Fixed Price</strong>: {config.initialPrice || '0'} ETH per token</p>
-                      <p>3. <strong>Duration</strong>:</p>
-                      <ul className="list-disc list-inside pl-4 space-y-1">
-                        <li>Starts immediately after token creation</li>
-                        <li>Automatic countdown for {config.presaleDuration} days</li>
-                        <li>Ends when either:
-                          <ul className="list-[circle] list-inside pl-4 mt-1 text-gray-400">
-                            <li>All tokens are sold (hard cap reached)</li>
-                            <li>Timer reaches {config.presaleDuration} days</li>
-                            <li>Contract owner manually ends sale</li>
-                          </ul>
-                        </li>
-                      </ul>
-                      <p>4. <strong>Automatic Process</strong>:</p>
-                      <ul className="list-disc list-inside pl-4 space-y-1">
-                        <li>Investors send ETH to participate</li>
-                        <li>Tokens are distributed instantly upon payment</li>
-                        <li>Progress and time remaining tracked via smart contract</li>
-                      </ul>
-                      <p>5. <strong>After Presale</strong>:</p>
-                      <ul className="list-disc list-inside pl-4 space-y-1">
-                        <li>{config.liquidityAllocation}% of tokens automatically paired with ETH for liquidity</li>
-                        <li>Trading becomes enabled on DEX</li>
-                        <li>Any unsold tokens remain locked in the contract</li>
-                      </ul>
-                      <div className="mt-2 p-2 bg-yellow-900/20 border border-yellow-800 rounded">
-                        <p className="text-yellow-400 flex items-center gap-1">
-                          <InfoIcon className="h-3 w-3" />
-                          Important: Presale ends automatically after {config.presaleDuration} days or when all tokens are sold.
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex gap-4">
-                  <div className="space-y-2 flex-1">
-                    <LabelWithTooltip 
-                      label="Team %" 
-                      tooltip="Percentage allocated to the project team (minimum 2% for platform fee)" 
-                    />
-                    <input
-                      type="number"
-                      min="2"
-                      max="100"
-                      value={config.teamAllocation}
-                      onChange={(e) => setConfig({ ...config, teamAllocation: Number(e.target.value) })}
-                      className={inputClassName}
-                      placeholder="2"
-                    />
-                  </div>
-                  <div className="space-y-2 flex-1">
-                    <LabelWithTooltip 
-                      label="Marketing %" 
-                      tooltip="Percentage allocated for marketing and promotional activities" 
-                    />
-                    <input
-                      type="number"
-                      value={config.marketingAllocation}
-                      onChange={(e) => setConfig({ ...config, marketingAllocation: Number(e.target.value) })}
-                      className={inputClassName}
-                    />
-                  </div>
-                  <div className="space-y-2 flex-1">
-                    <LabelWithTooltip 
-                      label="Creator %" 
-                      tooltip="Percentage allocated to you (the token creator) for development and maintenance" 
-                    />
-                    <input
-                      type="number"
-                      value={config.developerAllocation}
-                      onChange={(e) => setConfig({ ...config, developerAllocation: Number(e.target.value) })}
-                      className={inputClassName}
-                    />
-                  </div>
-                </div>
-
-                {/* Platform Fee Info */}
-                {isMainnet && (
-                  <div className="mt-2 p-2 rounded bg-blue-900/20 border border-blue-800 text-xs">
-                    <div className="flex items-center gap-2">
-                      <InfoIcon className="h-4 w-4 text-blue-400" />
-                      <span>Platform Fee: 2% of total supply will be allocated to:</span>
-                    </div>
-                    <div className="mt-1 font-mono bg-gray-900/50 p-1 rounded">
-                      {PLATFORM_TEAM_WALLET}
-                    </div>
-                  </div>
-                )}
-
-                <div className="mt-4 p-2 rounded bg-gray-900/50 border border-gray-700">
-                  <h4 className="text-sm font-medium mb-2">Wallet Address Requirements:</h4>
-                  <ul className="text-xs space-y-1 text-gray-300">
-                    <li>• Presale - Handled automatically by the contract</li>
-                    <li>• Liquidity - Locked in the trading pair automatically</li>
-                    <li>• Team - Separate wallet recommended for team funds</li>
-                    <li>• Marketing - Separate wallet recommended for tracking expenses</li>
-                    <li>• Creator - Your development/maintenance wallet</li>
-                  </ul>
-                </div>
+                <button
+                  onClick={handleSetDiscount}
+                  disabled={isSubmitting || !discountAddress}
+                  className="w-full py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 rounded-lg text-sm"
+                >
+                  {isSubmitting ? 'Setting Discount...' : 'Set Discount'}
+                </button>
+                <p className="text-xs text-gray-400">
+                  Set to 0 for free token creation, or any amount less than the standard fee ({formatEther(parseUnits('0.1', 18))} ETH)
+                </p>
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
+        )}
+        
+        <Tabs defaultValue="basic" className="w-full">
+          <TabsList className="grid w-full grid-cols-3 mb-2">
+            <TabsTrigger value="basic">Basic Info</TabsTrigger>
+            <TabsTrigger value="advanced">Advanced</TabsTrigger>
+            <TabsTrigger value="test">Test & Deploy</TabsTrigger>
+          </TabsList>
 
-        <TabsContent value="advanced">
-          <Card className="bg-gray-800 border-gray-700">
-            <CardHeader className="py-3 border-b border-gray-700">
-              <CardTitle className="text-lg">Advanced Settings</CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 space-y-4">
-              {/* Vesting Configuration */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-medium">Vesting & Distribution</h3>
-                  <button
-                    onClick={() => setIsVestingModalOpen(true)}
-                    className="text-sm text-blue-400 hover:text-blue-300"
-                  >
-                    View Example
-                  </button>
-                </div>
-
-                {/* Team Wallet */}
-                <div className="space-y-2">
-                  <LabelWithTooltip 
-                    label="Team Wallet Address" 
-                    tooltip="Address that will receive the team allocation (founders, core team)" 
-                  />
-                  <input
-                    type="text"
-                    value={config.teamWallet}
-                    onChange={(e) => setConfig({ ...config, teamWallet: e.target.value })}
-                    className={inputClassName}
-                    placeholder="0x..."
-                  />
-                </div>
-
-                {/* Marketing Wallet */}
-                <div className="space-y-2">
-                  <LabelWithTooltip 
-                    label="Marketing Wallet Address" 
-                    tooltip="Address that will receive the marketing allocation" 
-                  />
-                  <input
-                    type="text"
-                    value={config.marketingWallet}
-                    onChange={(e) => setConfig({ ...config, marketingWallet: e.target.value })}
-                    className={inputClassName}
-                    placeholder="0x..."
-                  />
-                </div>
-
-                {/* Creator Wallet */}
-                <div className="space-y-2">
-                  <LabelWithTooltip 
-                    label="Creator Wallet Address" 
-                    tooltip="Your wallet address that will receive the creator allocation" 
-                  />
-                  <input
-                    type="text"
-                    value={config.developerWallet}
-                    onChange={(e) => setConfig({ ...config, developerWallet: e.target.value })}
-                    className={inputClassName}
-                    placeholder="0x..."
-                  />
-                </div>
-
-                {/* Vesting Schedules */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <LabelWithTooltip label="Team Vesting Duration (months)" tooltip={tooltipTexts.vestingDuration} />
-                    <input
-                      type="number"
-                      value={config.vestingSchedule.team.duration}
-                      onChange={(e) => setConfig({
-                        ...config,
-                        vestingSchedule: {
-                          ...config.vestingSchedule,
-                          team: { ...config.vestingSchedule.team, duration: Number(e.target.value) }
-                        }
-                      })}
-                      className={inputClassName}
-                    />
+          <TabsContent value="basic">
+            <Card className="bg-gray-800 border-gray-700">
+              <CardHeader className="py-3 border-b border-gray-700">
+                <CardTitle className="text-lg">Token Configuration</CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 space-y-4">
+                {/* Basic Info Fields */}
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <LabelWithTooltip label="Token Name" tooltip={tooltipTexts.name} />
+                      <input
+                        type="text"
+                        value={config.name}
+                        onChange={(e) => setConfig({ ...config, name: e.target.value })}
+                        className={inputClassName}
+                        placeholder="MyToken"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <LabelWithTooltip label="Token Symbol" tooltip={tooltipTexts.symbol} />
+                      <input
+                        type="text"
+                        value={config.symbol}
+                        onChange={(e) => setConfig({ ...config, symbol: e.target.value })}
+                        className={inputClassName}
+                        placeholder="MTK"
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <LabelWithTooltip label="Team Vesting Cliff (months)" tooltip={tooltipTexts.vestingCliff} />
-                    <input
-                      type="number"
-                      value={config.vestingSchedule.team.cliff}
-                      onChange={(e) => setConfig({
-                        ...config,
-                        vestingSchedule: {
-                          ...config.vestingSchedule,
-                          team: { ...config.vestingSchedule.team, cliff: Number(e.target.value) }
-                        }
-                      })}
-                      className={inputClassName}
-                    />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <LabelWithTooltip label="Total Supply" tooltip={tooltipTexts.totalSupply} />
+                      <input
+                        type="text"
+                        value={config.totalSupply}
+                        onChange={(e) => setConfig({ ...config, totalSupply: e.target.value })}
+                        className={inputClassName}
+                        placeholder="1000000"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <LabelWithTooltip label="Initial Price (ETH)" tooltip={tooltipTexts.initialPrice} />
+                      <input
+                        type="text"
+                        value={config.initialPrice}
+                        onChange={(e) => setConfig({ ...config, initialPrice: e.target.value })}
+                        className={inputClassName}
+                        placeholder="0.0001"
+                      />
+                    </div>
                   </div>
                 </div>
 
-                {/* Platform Fee Info */}
-                {isMainnet && (
-                  <div className="mt-2 p-2 rounded bg-blue-900/20 border border-blue-800 text-xs">
+                {/* Token Distribution */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-medium">Token Distribution</h3>
+                  </div>
+
+                  <div className="flex gap-4">
+                    <div className="space-y-2 flex-1">
+                      <LabelWithTooltip 
+                        label="Presale %" 
+                        tooltip="Percentage of tokens available for initial public sale before trading begins" 
+                      />
+                      <input
+                        type="number"
+                        value={config.presaleAllocation}
+                        onChange={(e) => setConfig({ ...config, presaleAllocation: Number(e.target.value) })}
+                        className={inputClassName}
+                      />
+                    </div>
+                    <div className="space-y-2 flex-1">
+                      <LabelWithTooltip 
+                        label="Liquidity %" 
+                        tooltip="Percentage locked in trading pair to enable token trading" 
+                      />
+                      <input
+                        type="number"
+                        value={config.liquidityAllocation}
+                        onChange={(e) => setConfig({ ...config, liquidityAllocation: Number(e.target.value) })}
+                        className={inputClassName}
+                      />
+                    </div>
+                    <div className="space-y-2 flex-1">
+                      <LabelWithTooltip 
+                        label="Presale Duration" 
+                        tooltip="Duration of the presale period in days. After this period, unsold tokens remain locked and presale ends automatically." 
+                      />
+                      <input
+                        type="number"
+                        value={config.presaleDuration}
+                        onChange={(e) => setConfig({ ...config, presaleDuration: Math.max(1, Math.min(30, Number(e.target.value))) })}
+                        min="1"
+                        max="30"
+                        className={inputClassName}
+                        placeholder="7"
+                      />
+                      <p className="text-[10px] text-gray-400">1-30 days</p>
+                    </div>
+                  </div>
+
+                  {/* Presale Mechanism - Foldable */}
+                  <div className="p-2 rounded bg-blue-900/20 border border-blue-800 text-xs">
                     <div 
                       className="flex items-center justify-between cursor-pointer"
-                      onClick={() => setIsPlatformFeeExpanded(!isPlatformFeeExpanded)}
+                      onClick={() => setIsPresaleMechanismExpanded(!isPresaleMechanismExpanded)}
                     >
                       <div className="flex items-center gap-2">
                         <InfoIcon className="h-4 w-4 text-blue-400" />
-                        <span>Platform Fee: 2% of total supply</span>
+                        <span className="font-medium">Presale Mechanism</span>
                       </div>
-                      {isPlatformFeeExpanded ? (
+                      {isPresaleMechanismExpanded ? (
                         <ChevronUp className="h-3 w-3" />
                       ) : (
                         <ChevronDown className="h-3 w-3" />
                       )}
                     </div>
-                    {isPlatformFeeExpanded && (
-                      <div className="mt-1 text-gray-400 space-y-1">
-                        <p>This fee is automatically allocated to the TokenHub platform:</p>
-                        <div className="font-mono bg-gray-900/50 p-1 rounded">
-                          {PLATFORM_TEAM_WALLET.slice(0, 8)}...{PLATFORM_TEAM_WALLET.slice(-6)}
+                    {isPresaleMechanismExpanded && (
+                      <div className="mt-2 space-y-2 text-gray-300">
+                        <p>1. <strong>Initial Setup</strong>: {config.presaleAllocation}% of total supply ({config.totalSupply ? formatNumber(Number(config.totalSupply) * config.presaleAllocation / 100) : '0'} tokens) allocated for presale</p>
+                        <p>2. <strong>Fixed Price</strong>: {config.initialPrice || '0'} ETH per token</p>
+                        <p>3. <strong>Duration</strong>:</p>
+                        <ul className="list-disc list-inside pl-4 space-y-1">
+                          <li>Starts immediately after token creation</li>
+                          <li>Automatic countdown for {config.presaleDuration} days</li>
+                          <li>Ends when either:
+                            <ul className="list-[circle] list-inside pl-4 mt-1 text-gray-400">
+                              <li>All tokens are sold (hard cap reached)</li>
+                              <li>Timer reaches {config.presaleDuration} days</li>
+                              <li>Contract owner manually ends sale</li>
+                            </ul>
+                          </li>
+                        </ul>
+                        <p>4. <strong>Automatic Process</strong>:</p>
+                        <ul className="list-disc list-inside pl-4 space-y-1">
+                          <li>Investors send ETH to participate</li>
+                          <li>Tokens are distributed instantly upon payment</li>
+                          <li>Progress and time remaining tracked via smart contract</li>
+                        </ul>
+                        <p>5. <strong>After Presale</strong>:</p>
+                        <ul className="list-disc list-inside pl-4 space-y-1">
+                          <li>{config.liquidityAllocation}% of tokens automatically paired with ETH for liquidity</li>
+                          <li>Trading becomes enabled on DEX</li>
+                          <li>Any unsold tokens remain locked in the contract</li>
+                        </ul>
+                        <div className="mt-2 p-2 bg-yellow-900/20 border border-yellow-800 rounded">
+                          <p className="text-yellow-400 flex items-center gap-1">
+                            <InfoIcon className="h-3 w-3" />
+                            Important: Presale ends automatically after {config.presaleDuration} days or when all tokens are sold.
+                          </p>
                         </div>
-                        <p>Fee is only applied on mainnet deployments.</p>
                       </div>
                     )}
                   </div>
-                )}
-              </div>
 
-              {/* Security Features */}
-              <div className="space-y-3">
-                <h3 className="text-sm font-medium">Security Features</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={config.antiBot}
-                        onChange={(e) => setConfig({ ...config, antiBot: e.target.checked })}
-                        className="rounded bg-gray-700"
+                  <div className="flex gap-4">
+                    <div className="space-y-2 flex-1">
+                      <LabelWithTooltip 
+                        label="Team %" 
+                        tooltip="Percentage allocated to the project team (minimum 2% for platform fee)" 
                       />
-                      <LabelWithTooltip label="Anti-Bot Protection" tooltip={tooltipTexts.antiBot} />
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
                       <input
-                        type="checkbox"
-                        checked={config.transfersEnabled}
-                        onChange={(e) => setConfig({ ...config, transfersEnabled: e.target.checked })}
-                        className="rounded bg-gray-700"
+                        type="number"
+                        min="2"
+                        max="100"
+                        value={config.teamAllocation}
+                        onChange={(e) => setConfig({ ...config, teamAllocation: Number(e.target.value) })}
+                        className={inputClassName}
+                        placeholder="2"
                       />
-                      <LabelWithTooltip label="Enable Transfers at Launch" tooltip={tooltipTexts.transfersEnabled} />
+                    </div>
+                    <div className="space-y-2 flex-1">
+                      <LabelWithTooltip 
+                        label="Marketing %" 
+                        tooltip="Percentage allocated for marketing and promotional activities" 
+                      />
+                      <input
+                        type="number"
+                        value={config.marketingAllocation}
+                        onChange={(e) => setConfig({ ...config, marketingAllocation: Number(e.target.value) })}
+                        className={inputClassName}
+                      />
+                    </div>
+                    <div className="space-y-2 flex-1">
+                      <LabelWithTooltip 
+                        label="Creator %" 
+                        tooltip="Percentage allocated to you (the token creator) for development and maintenance" 
+                      />
+                      <input
+                        type="number"
+                        value={config.developerAllocation}
+                        onChange={(e) => setConfig({ ...config, developerAllocation: Number(e.target.value) })}
+                        className={inputClassName}
+                      />
                     </div>
                   </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
 
-        <TabsContent value="test">
-          <div className="space-y-4">
-            <NetworkRequirements />
-            <TokenTester config={config} />
-            <DeploymentSimulator config={config} />
-          </div>
-        </TabsContent>
-      </Tabs>
-
-      {/* Token Preview */}
-      <TokenPreview
-        config={config}
-        isValid={isValid}
-        validationErrors={validationErrors}
-      />
-
-      {/* Create Button and Status */}
-      <div className="space-y-4">
-        <div>
-          <Button
-            onClick={handleCreateToken}
-            disabled={!isValid || isWriting || !address}
-            className="w-full bg-blue-600 hover:bg-blue-700 h-12 text-base"
-          >
-            <div className="flex items-center justify-center gap-2">
-              {isWriting && <Spinner className="h-5 w-5" />}
-              {isWriting ? 'Creating Token...' : 'Create Token'}
-            </div>
-          </Button>
-        </div>
-
-        {writeError && (
-          <Alert variant="destructive">
-            <AlertDescription>
-              {writeError.message}
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {deployedToken && (
-          <div className="space-y-4">
-            <Alert className="bg-green-900/20 border-green-800">
-              <div className="flex items-start gap-3">
-                <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
-                <div className="space-y-2">
-                  <h3 className="font-medium">Token Created Successfully! 🎉</h3>
-                  <div className="space-y-1 text-sm">
-                    <p>Your token has been created with the following details:</p>
-                    <div className="bg-black/20 p-2 rounded font-mono text-xs">
-                      <div className="flex items-center justify-between">
-                        <span>Token Address:</span>
-                        <div className="flex items-center gap-2">
-                          <code>{deployedToken.address}</code>
-                          <Copy 
-                            className="h-3 w-3 cursor-pointer hover:text-white" 
-                            onClick={() => navigator.clipboard.writeText(deployedToken.address)}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="mt-3">
-                      <p className="font-medium mb-1">Next Steps:</p>
-                      <ol className="list-decimal list-inside space-y-1 pl-2 text-gray-300">
-                        <li>Add token to MetaMask:
-                          <ul className="list-disc list-inside pl-4 mt-1 text-xs text-gray-400">
-                            <li>Open MetaMask</li>
-                            <li>Click "Import tokens"</li>
-                            <li>Paste the token address above</li>
-                            <li>Click "Add Custom Token"</li>
-                          </ul>
-                        </li>
-                        <li>View on{' '}
-                          <a 
-                            href={`${chainId === 11155111 ? 'https://sepolia.etherscan.io' : 'https://etherscan.io'}/address/${deployedToken.address}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-400 hover:text-blue-300"
-                          >
-                            Etherscan
-                          </a>
-                        </li>
-                        <li>Test token transfers and vesting schedules</li>
-                        <li>Deploy to mainnet when ready</li>
-                      </ol>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </Alert>
-
-            {/* Move Verify & Publish section to the end */}
-            <Card className="bg-gray-800 border-gray-700">
-              <CardHeader className="py-3 border-b border-gray-700">
-                <CardTitle className="text-lg flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <ExternalLink className="h-5 w-5" />
-                    Verify & Publish Contract
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setIsVerifyExpanded(!isVerifyExpanded);
-                    }}
-                    className="h-7"
-                  >
-                    {isVerifyExpanded ? 'Hide Details' : 'Show Details'}
-                  </Button>
-                </CardTitle>
-              </CardHeader>
-              {isVerifyExpanded && (
-                <CardContent className="p-4 space-y-3">
-                  <div className="text-sm">
-                    <p>Verify your contract on {chainId === 11155111 ? 'Sepolia' : 'Ethereum Mainnet'} Etherscan:</p>
-                    <ul className="list-disc list-inside mt-2 space-y-1 text-gray-300">
-                      <li>Make your contract source code public</li>
-                      <li>Enable direct interaction through Etherscan</li>
-                      <li>Build trust with your community</li>
+                  <div className="mt-4 p-2 rounded bg-gray-900/50 border border-gray-700">
+                    <h4 className="text-sm font-medium mb-2">Wallet Address Requirements:</h4>
+                    <ul className="text-xs space-y-1 text-gray-300">
+                      <li>• Presale - Handled automatically by the contract</li>
+                      <li>• Liquidity - Locked in the trading pair automatically</li>
+                      <li>• Team - Separate wallet recommended for team funds</li>
+                      <li>• Marketing - Separate wallet recommended for tracking expenses</li>
+                      <li>• Creator - Your development/maintenance wallet</li>
                     </ul>
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-                  <div className="space-y-2">
-                    <h4 className="text-sm font-medium">Steps to Verify:</h4>
-                    <ol className="list-decimal list-inside space-y-2 text-sm text-gray-300">
-                      <li>Get your personal Etherscan API key:
-                        <div className="ml-4 mt-1">
-                          <a 
-                            href={chainId === 11155111 ? "https://sepolia.etherscan.io/apis" : "https://etherscan.io/apis"}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-400 hover:text-blue-300 inline-flex items-center gap-1"
-                          >
-                            Create Your API Key
-                            <ExternalLink className="h-3 w-3" />
-                          </a>
-                        </div>
-                      </li>
-                      <li>Go to your contract on Etherscan:
-                        <div className="ml-4 mt-1">
-                          <a 
-                            href={`${chainId === 11155111 ? 'https://sepolia.etherscan.io' : 'https://etherscan.io'}/address/${deployedToken.address}#code`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-400 hover:text-blue-300 inline-flex items-center gap-1"
-                          >
-                            View Contract
-                            <ExternalLink className="h-3 w-3" />
-                          </a>
-                        </div>
-                      </li>
-                      <li>Click "Verify & Publish"</li>
-                      <li>Select Solidity (Single file)</li>
-                      <li>Choose compiler version 0.8.19</li>
-                      <li>Enable optimization (200 runs)</li>
-                      <li>Copy contract source code</li>
-                      <li>Submit for verification</li>
-                    </ol>
+          <TabsContent value="advanced">
+            <Card className="bg-gray-800 border-gray-700">
+              <CardHeader className="py-3 border-b border-gray-700">
+                <CardTitle className="text-lg">Advanced Settings</CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 space-y-4">
+                {/* Vesting Configuration */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-medium">Vesting & Distribution</h3>
+                    <button
+                      onClick={() => setIsVestingModalOpen(true)}
+                      className="text-sm text-blue-400 hover:text-blue-300"
+                    >
+                      View Example
+                    </button>
                   </div>
 
-                  <Alert variant="default" className="bg-blue-900/20 border-blue-800 mt-4">
-                    <AlertTitle className="flex items-center gap-2">
-                      <InfoIcon className="h-4 w-4" />
-                      Important
-                    </AlertTitle>
-                    <AlertDescription className="mt-2 text-sm">
-                      Keep your Etherscan API key private and never share it publicly.
-                    </AlertDescription>
-                  </Alert>
-                </CardContent>
-              )}
+                  {/* Team Wallet */}
+                  <div className="space-y-2">
+                    <LabelWithTooltip 
+                      label="Team Wallet Address" 
+                      tooltip="Address that will receive the team allocation (founders, core team)" 
+                    />
+                    <input
+                      type="text"
+                      value={config.teamWallet}
+                      onChange={(e) => setConfig({ ...config, teamWallet: e.target.value })}
+                      className={inputClassName}
+                      placeholder="0x..."
+                    />
+                  </div>
+
+                  {/* Marketing Wallet */}
+                  <div className="space-y-2">
+                    <LabelWithTooltip 
+                      label="Marketing Wallet Address" 
+                      tooltip="Address that will receive the marketing allocation" 
+                    />
+                    <input
+                      type="text"
+                      value={config.marketingWallet}
+                      onChange={(e) => setConfig({ ...config, marketingWallet: e.target.value })}
+                      className={inputClassName}
+                      placeholder="0x..."
+                    />
+                  </div>
+
+                  {/* Creator Wallet */}
+                  <div className="space-y-2">
+                    <LabelWithTooltip 
+                      label="Creator Wallet Address" 
+                      tooltip="Your wallet address that will receive the creator allocation" 
+                    />
+                    <input
+                      type="text"
+                      value={config.developerWallet}
+                      onChange={(e) => setConfig({ ...config, developerWallet: e.target.value })}
+                      className={inputClassName}
+                      placeholder="0x..."
+                    />
+                  </div>
+
+                  {/* Vesting Schedules */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <LabelWithTooltip label="Team Vesting Duration (months)" tooltip={tooltipTexts.vestingDuration} />
+                      <input
+                        type="number"
+                        value={config.vestingSchedule.team.duration}
+                        onChange={(e) => setConfig({
+                          ...config,
+                          vestingSchedule: {
+                            ...config.vestingSchedule,
+                            team: { ...config.vestingSchedule.team, duration: Number(e.target.value) }
+                          }
+                        })}
+                        className={inputClassName}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <LabelWithTooltip label="Team Vesting Cliff (months)" tooltip={tooltipTexts.vestingCliff} />
+                      <input
+                        type="number"
+                        value={config.vestingSchedule.team.cliff}
+                        onChange={(e) => setConfig({
+                          ...config,
+                          vestingSchedule: {
+                            ...config.vestingSchedule,
+                            team: { ...config.vestingSchedule.team, cliff: Number(e.target.value) }
+                          }
+                        })}
+                        className={inputClassName}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Security Features */}
+                <div className="space-y-3">
+                  <h3 className="text-sm font-medium">Security Features</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={config.antiBot}
+                          onChange={(e) => setConfig({ ...config, antiBot: e.target.checked })}
+                          className="rounded bg-gray-700"
+                        />
+                        <LabelWithTooltip label="Anti-Bot Protection" tooltip={tooltipTexts.antiBot} />
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={config.transfersEnabled}
+                          onChange={(e) => setConfig({ ...config, transfersEnabled: e.target.checked })}
+                          className="rounded bg-gray-700"
+                        />
+                        <LabelWithTooltip label="Enable Transfers at Launch" tooltip={tooltipTexts.transfersEnabled} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="test">
+            <div className="space-y-4">
+              <NetworkRequirements />
+              <TokenTester config={config} />
+              <DeploymentSimulator config={config} />
+            </div>
+          </TabsContent>
+        </Tabs>
+
+        {/* Token Preview */}
+        <TokenPreview
+          config={config}
+          isValid={isValid}
+          validationErrors={validationErrors}
+        />
+
+        {/* Create Button and Status */}
+        <div className="space-y-4">
+          <div>
+            <Button
+              onClick={handleCreateToken}
+              disabled={!isValid || isWriting || !address}
+              className="w-full bg-blue-600 hover:bg-blue-700 h-12 text-base"
+            >
+              <div className="flex items-center justify-center gap-2">
+                {isWriting && <Spinner className="h-5 w-5" />}
+                {isWriting ? 'Creating Token...' : 'Create Token'}
+              </div>
+            </Button>
           </div>
+
+          {writeError && (
+            <Alert variant="destructive">
+              <AlertDescription>
+                {writeError.message}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {deployedToken && (
+            <div className="space-y-4">
+              <Alert className="bg-green-900/20 border-green-800">
+                <div className="flex items-start gap-3">
+                  <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
+                  <div className="space-y-2">
+                    <h3 className="font-medium">Token Created Successfully! 🎉</h3>
+                    <div className="space-y-1 text-sm">
+                      <p>Your token has been created with the following details:</p>
+                      <div className="bg-black/20 p-2 rounded font-mono text-xs">
+                        <div className="flex items-center justify-between">
+                          <span>Token Address:</span>
+                          <div className="flex items-center gap-2">
+                            <code>{deployedToken.address}</code>
+                            <Copy 
+                              className="h-3 w-3 cursor-pointer hover:text-white" 
+                              onClick={() => navigator.clipboard.writeText(deployedToken.address)}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="mt-3">
+                        <p className="font-medium mb-1">Next Steps:</p>
+                        <ol className="list-decimal list-inside space-y-1 pl-2 text-gray-300">
+                          <li>Add token to MetaMask:
+                            <ul className="list-disc list-inside pl-4 mt-1 text-xs text-gray-400">
+                              <li>Open MetaMask</li>
+                              <li>Click "Import tokens"</li>
+                              <li>Paste the token address above</li>
+                              <li>Click "Add Custom Token"</li>
+                            </ul>
+                          </li>
+                          <li>View on{' '}
+                            <a 
+                              href={`${chainId === 11155111 ? 'https://sepolia.etherscan.io' : 'https://etherscan.io'}/address/${deployedToken.address}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-400 hover:text-blue-300"
+                            >
+                              Etherscan
+                            </a>
+                          </li>
+                          <li>Test token transfers and vesting schedules</li>
+                          <li>Deploy to mainnet when ready</li>
+                        </ol>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </Alert>
+
+              {/* Move Verify & Publish section to the end */}
+              <Card className="bg-gray-800 border-gray-700">
+                <CardHeader className="py-3 border-b border-gray-700">
+                  <CardTitle className="text-lg flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <ExternalLink className="h-5 w-5" />
+                      Verify & Publish Contract
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setIsVerifyExpanded(!isVerifyExpanded);
+                      }}
+                      className="h-7"
+                    >
+                      {isVerifyExpanded ? 'Hide Details' : 'Show Details'}
+                    </Button>
+                  </CardTitle>
+                </CardHeader>
+                {isVerifyExpanded && (
+                  <CardContent className="p-4 space-y-3">
+                    <div className="text-sm">
+                      <p>Verify your contract on {chainId === 11155111 ? 'Sepolia' : 'Ethereum Mainnet'} Etherscan:</p>
+                      <ul className="list-disc list-inside mt-2 space-y-1 text-gray-300">
+                        <li>Make your contract source code public</li>
+                        <li>Enable direct interaction through Etherscan</li>
+                        <li>Build trust with your community</li>
+                      </ul>
+                    </div>
+
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-medium">Steps to Verify:</h4>
+                      <ol className="list-decimal list-inside space-y-2 text-sm text-gray-300">
+                        <li>Get your personal Etherscan API key:
+                          <div className="ml-4 mt-1">
+                            <a 
+                              href={chainId === 11155111 ? "https://sepolia.etherscan.io/apis" : "https://etherscan.io/apis"}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-400 hover:text-blue-300 inline-flex items-center gap-1"
+                            >
+                              Create Your API Key
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          </div>
+                        </li>
+                        <li>Go to your contract on Etherscan:
+                          <div className="ml-4 mt-1">
+                            <a 
+                              href={`${chainId === 11155111 ? 'https://sepolia.etherscan.io' : 'https://etherscan.io'}/address/${deployedToken.address}#code`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-400 hover:text-blue-300 inline-flex items-center gap-1"
+                            >
+                              View Contract
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          </div>
+                        </li>
+                        <li>Click "Verify & Publish"</li>
+                        <li>Select Solidity (Single file)</li>
+                        <li>Choose compiler version 0.8.19</li>
+                        <li>Enable optimization (200 runs)</li>
+                        <li>Copy contract source code</li>
+                        <li>Submit for verification</li>
+                      </ol>
+                    </div>
+
+                    <Alert variant="default" className="bg-blue-900/20 border-blue-800 mt-4">
+                      <AlertTitle className="flex items-center gap-2">
+                        <InfoIcon className="h-4 w-4" />
+                        Important
+                      </AlertTitle>
+                      <AlertDescription className="mt-2 text-sm">
+                        Keep your Etherscan API key private and never share it publicly.
+                      </AlertDescription>
+                    </Alert>
+                  </CardContent>
+                )}
+              </Card>
+            </div>
+          )}
+        </div>
+
+        {/* Vesting Example Modal */}
+        {isVestingModalOpen && (
+          <VestingExampleModal onClose={() => setIsVestingModalOpen(false)} />
         )}
       </div>
-
-      {/* Vesting Example Modal */}
-      {isVestingModalOpen && (
-        <VestingExampleModal onClose={() => setIsVestingModalOpen(false)} />
-      )}
     </div>
   );
 } 

@@ -1,9 +1,10 @@
-require("@nomicfoundation/hardhat-ethers");
-require("@nomicfoundation/hardhat-toolbox");
-require("solidity-coverage");
-require("@nomiclabs/hardhat-etherscan");
+import "@nomicfoundation/hardhat-ethers";
+import "@nomicfoundation/hardhat-toolbox";
+import "solidity-coverage";
+import "@nomiclabs/hardhat-etherscan";
+import { HardhatUserConfig } from "hardhat/config";
 
-const config = {
+const config: HardhatUserConfig = {
   solidity: {
     version: "0.8.19",
     settings: {
@@ -42,4 +43,4 @@ const config = {
   },
 };
 
-module.exports = config; 
+export default config; 
