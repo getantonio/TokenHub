@@ -15,8 +15,14 @@ import { Tooltip } from '@/components/ui/tooltip';
 import { tooltips as tooltipTexts } from './tooltips';
 import { VestingExampleModal } from './VestingExampleModal';
 import { ethers } from 'ethers';
-import { useAccount, useChainId } from 'wagmi';
-import { useContractWrite, useWaitForTransaction } from '@wagmi/core';
+import { 
+  useAccount, 
+  useChainId,
+  usePublicClient,
+  useWriteContract,
+  useWatchPendingTransactions,
+} from 'wagmi';
+import { type Hash, type Address } from 'viem';
 import TokenFactoryABI from '@/contracts/abis/TokenFactory.json';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
@@ -80,6 +86,32 @@ interface TransactionReceipt {
   logs: TransactionLog[];
 }
 
+interface ContractWriteConfig {
+  address: Address;
+  abi: typeof TokenFactoryABI;
+  functionName: 'createToken';
+  args: [{
+    name: string;
+    symbol: string;
+    maxSupply: bigint;
+    initialSupply: bigint;
+    tokenPrice: bigint;
+    maxTransferAmount: bigint;
+    cooldownTime: bigint;
+    transfersEnabled: boolean;
+    antiBot: boolean;
+    teamVestingDuration: bigint;
+    teamVestingCliff: bigint;
+    teamAllocation: bigint;
+    teamWallet: string;
+    developerAllocation: bigint;
+    developerVestingDuration: bigint;
+    developerVestingCliff: bigint;
+    developerWallet: string;
+  }];
+  value: bigint;
+}
+
 export function CreateTokenForm() {
   const [mounted, setMounted] = useState(false);
 
@@ -89,12 +121,22 @@ export function CreateTokenForm() {
 
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isWriting, setIsWriting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [writeError, setWriteError] = useState<Error | null>(null);
+  const [deployedToken, setDeployedToken] = useState<DeployedToken | null>(null);
+  const [isVestingModalOpen, setIsVestingModalOpen] = useState(false);
+  const [isPlatformFeeExpanded, setIsPlatformFeeExpanded] = useState(false);
+  const [isPresaleMechanismExpanded, setIsPresaleMechanismExpanded] = useState(false);
+  const [isVerifyExpanded, setIsVerifyExpanded] = useState(false);
+
   const { address } = useAccount();
   const chainId = useChainId();
   const isMainnet = chainId === 1;
-  const [useMinimalFeatures, setUseMinimalFeatures] = useState(false);
   const publicClient = usePublicClient();
+  const { writeContract, data: txData } = useWriteContract();
+
+  const [useMinimalFeatures, setUseMinimalFeatures] = useState(false);
 
   const [config, setConfig] = useState<TokenConfig>({
     name: '',
@@ -133,10 +175,6 @@ export function CreateTokenForm() {
     presaleDuration: 7, // Default 7 days
   });
 
-  const [isVestingModalOpen, setIsVestingModalOpen] = useState(false);
-  const [isPlatformFeeExpanded, setIsPlatformFeeExpanded] = useState(false);
-  const [isPresaleMechanismExpanded, setIsPresaleMechanismExpanded] = useState(false);
-
   const totalAllocation = 
     config.presaleAllocation + 
     config.liquidityAllocation + 
@@ -159,29 +197,30 @@ export function CreateTokenForm() {
     </Tooltip>
   );
 
-  const { writeAsync: createToken, data: txData, isLoading: isWriting, error: writeError } = useContractWrite({
-    address: process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as `0x${string}`,
-    abi: TokenFactoryABI,
-    functionName: 'createToken' as const,
-    value: parseUnits('0.1', 18),
-  });
-
-  const { isLoading: isWaitingForTx, isSuccess } = useWaitForTransaction({
-    hash: txData?.hash,
-    onSuccess(data: TransactionReceipt) {
-      const tokenCreatedEvent = data.logs.find(log => 
-        log.topics[0] === ethers.id("TokenCreated(address,address,string,string)")
-      );
-      if (tokenCreatedEvent) {
-        const tokenAddress = `0x${tokenCreatedEvent.topics[1].slice(26)}`;
-        setDeployedToken({ address: tokenAddress });
+  // Watch for transaction confirmation
+  useWatchPendingTransactions({
+    onTransactions: (transactions) => {
+      if (txData && transactions.includes(txData as Hash)) {
+        // Transaction confirmed
+        if (publicClient) {
+          publicClient.getTransactionReceipt({ hash: txData as Hash }).then((receipt) => {
+            const tokenCreatedEvent = receipt.logs.find(log => 
+              log.topics[0] === ethers.id("TokenCreated(address,address,string,string)")
+            );
+            if (tokenCreatedEvent?.topics[1]) {
+              const tokenAddress = `0x${tokenCreatedEvent.topics[1].slice(26)}`;
+              setDeployedToken({ address: tokenAddress });
+              setIsWriting(false);
+            }
+          }).catch(err => {
+            console.error('Receipt error:', err);
+            setWriteError(err as Error);
+            setIsWriting(false);
+          });
+        }
       }
     }
   });
-
-  const isCreating = isSubmitting || isWriting || isWaitingForTx;
-
-  const [deployedToken, setDeployedToken] = useState<DeployedToken>();
 
   const handleCreateToken = async () => {
     if (!address) {
@@ -191,33 +230,39 @@ export function CreateTokenForm() {
 
     try {
       setIsSubmitting(true);
-      if (createToken) {
-        await createToken({
-          args: [{
-            name: config.name,
-            symbol: config.symbol,
-            maxSupply: parseUnits(config.totalSupply || '0', config.decimals),
-            initialSupply: parseUnits(config.totalSupply || '0', config.decimals),
-            tokenPrice: parseUnits(config.initialPrice || '0', 18),
-            maxTransferAmount: config.maxTransferAmount ? parseUnits(config.maxTransferAmount, config.decimals) : 0n,
-            cooldownTime: BigInt(config.cooldownTime || 0),
-            transfersEnabled: config.transfersEnabled,
-            antiBot: config.antiBot,
-            teamVestingDuration: BigInt(config.vestingSchedule.team.duration),
-            teamVestingCliff: BigInt(config.vestingSchedule.team.cliff),
-            teamAllocation: BigInt(config.teamAllocation),
-            teamWallet: config.teamWallet || address,
-            developerAllocation: BigInt(config.developerAllocation),
-            developerVestingDuration: BigInt(config.developerVesting?.duration || 12),
-            developerVestingCliff: BigInt(config.developerVesting?.cliff || 3),
-            developerWallet: config.developerWallet || address,
-          }]
-        });
-      }
+      setIsWriting(true);
+      setWriteError(null);
+      await writeContract({
+        abi: TokenFactoryABI,
+        address: process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as Address,
+        functionName: 'createToken',
+        args: [{
+          name: config.name,
+          symbol: config.symbol,
+          maxSupply: parseUnits(config.totalSupply || '0', config.decimals),
+          initialSupply: parseUnits(config.totalSupply || '0', config.decimals),
+          tokenPrice: parseUnits(config.initialPrice || '0', 18),
+          maxTransferAmount: config.maxTransferAmount ? parseUnits(config.maxTransferAmount, config.decimals) : 0n,
+          cooldownTime: BigInt(config.cooldownTime || 0),
+          transfersEnabled: config.transfersEnabled,
+          antiBot: config.antiBot,
+          teamVestingDuration: BigInt(config.vestingSchedule.team.duration),
+          teamVestingCliff: BigInt(config.vestingSchedule.team.cliff),
+          teamAllocation: BigInt(config.teamAllocation),
+          teamWallet: config.teamWallet || address,
+          developerAllocation: BigInt(config.developerAllocation),
+          developerVestingDuration: BigInt(config.developerVesting?.duration || 12),
+          developerVestingCliff: BigInt(config.developerVesting?.cliff || 3),
+          developerWallet: config.developerWallet || address,
+        }],
+        value: parseUnits('0.1', 18),
+      });
     } catch (err) {
       console.error('Token creation error:', err);
+      setWriteError(err as Error);
       setError('Failed to create token. Please try again.');
     } finally {
+      setIsWriting(false);
       setIsSubmitting(false);
     }
   };
@@ -666,122 +711,6 @@ export function CreateTokenForm() {
             <NetworkRequirements />
             <TokenTester config={config} />
             <DeploymentSimulator config={config} />
-            
-            {/* Verify & Publish Section */}
-            <Card className="bg-gray-800 border-gray-700">
-              <CardHeader className="py-3 border-b border-gray-700">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <ExternalLink className="h-5 w-5" />
-                  Verify & Publish Contract
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 space-y-3">
-                <div className="text-sm">
-                  <div className="flex items-center justify-between">
-                    <p>After deployment, verify your contract on {chainId === 11155111 ? 'Sepolia' : 'Ethereum Mainnet'} Etherscan:</p>
-                    {chainId !== 11155111 && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={handleSwitchToSepolia}
-                        className="text-xs h-7"
-                      >
-                        Switch to Sepolia
-                      </Button>
-                    )}
-                  </div>
-                  <ul className="list-disc list-inside mt-2 space-y-1 text-gray-300">
-                    <li>Make your contract source code public</li>
-                    <li>Enable direct interaction through Etherscan</li>
-                    <li>Build trust with your community</li>
-                  </ul>
-                </div>
-
-                <div className="space-y-2">
-                  <h4 className="text-sm font-medium">Steps to Verify:</h4>
-                  <ol className="list-decimal list-inside space-y-2 text-sm text-gray-300">
-                    <li>Wait for contract deployment to be confirmed</li>
-                    <li>Get your personal Etherscan API key:
-                      <div className="ml-4 mt-1">
-                        <a 
-                          href={chainId === 11155111 ? "https://sepolia.etherscan.io/apis" : "https://etherscan.io/apis"}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-400 hover:text-blue-300 inline-flex items-center gap-1"
-                        >
-                          Create Your API Key
-                          <ExternalLink className="h-3 w-3" />
-                        </a>
-                        <div className="text-xs text-gray-400 mt-1 space-y-1">
-                          <p>Each creator needs their own API key:</p>
-                          <ul className="list-disc list-inside pl-2">
-                            <li>Sign up for a free Etherscan account</li>
-                            <li>Create your personal API key</li>
-                            <li>Use this key for all your contract verifications</li>
-                          </ul>
-                          <p className="text-yellow-400 mt-2">Note: Keep your API key private and never share it</p>
-                        </div>
-                      </div>
-                    </li>
-                    <li>Go to Etherscan:
-                      {chainId === 11155111 ? (
-                        <div className="ml-4 mt-1">
-                          <a 
-                            href="https://sepolia.etherscan.io" 
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-400 hover:text-blue-300 inline-flex items-center gap-1"
-                          >
-                            Sepolia Etherscan
-                            <ExternalLink className="h-3 w-3" />
-                          </a>
-                          <p className="text-xs text-gray-400 mt-1">Use Sepolia Etherscan for testnet deployments</p>
-                        </div>
-                      ) : (
-                        <div className="ml-4 mt-1">
-                          <a 
-                            href="https://etherscan.io" 
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-400 hover:text-blue-300 inline-flex items-center gap-1"
-                          >
-                            Ethereum Mainnet Etherscan
-                            <ExternalLink className="h-3 w-3" />
-                          </a>
-                          <p className="text-xs text-gray-400 mt-1">Use Mainnet Etherscan for production deployments</p>
-                        </div>
-                      )}
-                    </li>
-                    <li>Click on "Verify Contract" in the contract page</li>
-                    <li>Enter your Etherscan API key when prompted</li>
-                    <li>Select Solidity (Single file) as compiler type</li>
-                    <li>Choose compiler version 0.8.19</li>
-                    <li>Enable optimization (200 runs)</li>
-                    <li>Copy contract source code from GitHub</li>
-                    <li>Verify and publish</li>
-                  </ol>
-                </div>
-
-                <Alert variant="default" className="bg-blue-900/20 border-blue-800 mt-4">
-                  <AlertTitle className="flex items-center gap-2">
-                    <InfoIcon className="h-4 w-4" />
-                    Important Notes
-                  </AlertTitle>
-                  <AlertDescription className="mt-2 text-sm space-y-2">
-                    <p>
-                      {chainId === 11155111 ? (
-                        <>You're currently on Sepolia testnet - perfect for testing your token before mainnet deployment.</>
-                      ) : (
-                        <>You're currently on mainnet. For testing, switch to Sepolia testnet using the button above.</>
-                      )}
-                    </p>
-                    <p className="text-yellow-400">
-                      Make sure to keep your Etherscan API key private and never share it publicly.
-                    </p>
-                  </AlertDescription>
-                </Alert>
-              </CardContent>
-            </Card>
           </div>
         </TabsContent>
       </Tabs>
@@ -798,68 +727,156 @@ export function CreateTokenForm() {
         <div>
           <Button
             onClick={handleCreateToken}
-            disabled={!isValid || isCreating || isWaitingForTx || !address}
+            disabled={!isValid || isWriting || !address}
             className="w-full bg-blue-600 hover:bg-blue-700 h-12 text-base"
           >
             <div className="flex items-center justify-center gap-2">
-              {(isCreating || isWaitingForTx) && <Spinner className="h-5 w-5" />}
-              {isCreating ? 'Creating Token...' : 
-               isWaitingForTx ? 'Confirming Transaction...' : 
-               'Create Token'}
+              {isWriting && <Spinner className="h-5 w-5" />}
+              {isWriting ? 'Creating Token...' : 'Create Token'}
             </div>
           </Button>
         </div>
 
-        {isSuccess && deployedToken && (
-          <Alert className="bg-green-900/20 border-green-800">
-            <div className="flex items-start gap-3">
-              <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
-              <div className="space-y-2">
-                <h3 className="font-medium">Token Created Successfully! 🎉</h3>
-                <div className="space-y-1 text-sm">
-                  <p>Your token has been created with the following details:</p>
-                  <div className="bg-black/20 p-2 rounded font-mono text-xs">
-                    <div className="flex items-center justify-between">
-                      <span>Token Address:</span>
-                      <div className="flex items-center gap-2">
-                        <code>{deployedToken.address}</code>
-                        <Copy 
-                          className="h-3 w-3 cursor-pointer hover:text-white" 
-                          onClick={() => navigator.clipboard.writeText(deployedToken.address)}
-                        />
+        {writeError && (
+          <Alert variant="destructive">
+            <AlertDescription>
+              {writeError.message}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {deployedToken && (
+          <div className="space-y-4">
+            <Alert className="bg-green-900/20 border-green-800">
+              <div className="flex items-start gap-3">
+                <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
+                <div className="space-y-2">
+                  <h3 className="font-medium">Token Created Successfully! 🎉</h3>
+                  <div className="space-y-1 text-sm">
+                    <p>Your token has been created with the following details:</p>
+                    <div className="bg-black/20 p-2 rounded font-mono text-xs">
+                      <div className="flex items-center justify-between">
+                        <span>Token Address:</span>
+                        <div className="flex items-center gap-2">
+                          <code>{deployedToken.address}</code>
+                          <Copy 
+                            className="h-3 w-3 cursor-pointer hover:text-white" 
+                            onClick={() => navigator.clipboard.writeText(deployedToken.address)}
+                          />
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  
-                  <div className="mt-3">
-                    <p className="font-medium mb-1">Next Steps:</p>
-                    <ol className="list-decimal list-inside space-y-1 pl-2 text-gray-300">
-                      <li>Add token to MetaMask:
-                        <ul className="list-disc list-inside pl-4 mt-1 text-xs text-gray-400">
-                          <li>Open MetaMask</li>
-                          <li>Click "Import tokens"</li>
-                          <li>Paste the token address above</li>
-                          <li>Click "Add Custom Token"</li>
-                        </ul>
-                      </li>
-                      <li>View on{' '}
-                        <a 
-                          href={`${chainId === 11155111 ? 'https://sepolia.etherscan.io' : 'https://etherscan.io'}/tx/${txData?.hash}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-400 hover:text-blue-300"
-                        >
-                          Etherscan
-                        </a>
-                      </li>
-                      <li>Test token transfers and vesting schedules</li>
-                      <li>Deploy to mainnet when ready</li>
-                    </ol>
+                    
+                    <div className="mt-3">
+                      <p className="font-medium mb-1">Next Steps:</p>
+                      <ol className="list-decimal list-inside space-y-1 pl-2 text-gray-300">
+                        <li>Add token to MetaMask:
+                          <ul className="list-disc list-inside pl-4 mt-1 text-xs text-gray-400">
+                            <li>Open MetaMask</li>
+                            <li>Click "Import tokens"</li>
+                            <li>Paste the token address above</li>
+                            <li>Click "Add Custom Token"</li>
+                          </ul>
+                        </li>
+                        <li>View on{' '}
+                          <a 
+                            href={`${chainId === 11155111 ? 'https://sepolia.etherscan.io' : 'https://etherscan.io'}/address/${deployedToken.address}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-400 hover:text-blue-300"
+                          >
+                            Etherscan
+                          </a>
+                        </li>
+                        <li>Test token transfers and vesting schedules</li>
+                        <li>Deploy to mainnet when ready</li>
+                      </ol>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          </Alert>
+            </Alert>
+
+            {/* Verify & Publish Section - Only shown after successful creation */}
+            <Card className="bg-gray-800 border-gray-700">
+              <CardHeader className="py-3 border-b border-gray-700">
+                <CardTitle className="text-lg flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ExternalLink className="h-5 w-5" />
+                    Verify & Publish Contract
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setIsVerifyExpanded(!isVerifyExpanded)}
+                    className="h-7"
+                  >
+                    {isVerifyExpanded ? 'Hide Details' : 'Show Details'}
+                  </Button>
+                </CardTitle>
+              </CardHeader>
+              {isVerifyExpanded && (
+                <CardContent className="p-4 space-y-3">
+                  <div className="text-sm">
+                    <p>Verify your contract on {chainId === 11155111 ? 'Sepolia' : 'Ethereum Mainnet'} Etherscan:</p>
+                    <ul className="list-disc list-inside mt-2 space-y-1 text-gray-300">
+                      <li>Make your contract source code public</li>
+                      <li>Enable direct interaction through Etherscan</li>
+                      <li>Build trust with your community</li>
+                    </ul>
+                  </div>
+
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-medium">Steps to Verify:</h4>
+                    <ol className="list-decimal list-inside space-y-2 text-sm text-gray-300">
+                      <li>Get your personal Etherscan API key:
+                        <div className="ml-4 mt-1">
+                          <a 
+                            href={chainId === 11155111 ? "https://sepolia.etherscan.io/apis" : "https://etherscan.io/apis"}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-400 hover:text-blue-300 inline-flex items-center gap-1"
+                          >
+                            Create Your API Key
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        </div>
+                      </li>
+                      <li>Go to your contract on Etherscan:
+                        <div className="ml-4 mt-1">
+                          <a 
+                            href={`${chainId === 11155111 ? 'https://sepolia.etherscan.io' : 'https://etherscan.io'}/address/${deployedToken.address}#code`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-400 hover:text-blue-300 inline-flex items-center gap-1"
+                          >
+                            View Contract
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        </div>
+                      </li>
+                      <li>Click "Verify & Publish"</li>
+                      <li>Select Solidity (Single file)</li>
+                      <li>Choose compiler version 0.8.19</li>
+                      <li>Enable optimization (200 runs)</li>
+                      <li>Copy contract source code</li>
+                      <li>Submit for verification</li>
+                    </ol>
+                  </div>
+
+                  <Alert variant="default" className="bg-blue-900/20 border-blue-800 mt-4">
+                    <AlertTitle className="flex items-center gap-2">
+                      <InfoIcon className="h-4 w-4" />
+                      Important
+                    </AlertTitle>
+                    <AlertDescription className="mt-2 text-sm">
+                      Keep your Etherscan API key private and never share it publicly.
+                    </AlertDescription>
+                  </Alert>
+                </CardContent>
+              )}
+            </Card>
+          </div>
         )}
       </div>
 
