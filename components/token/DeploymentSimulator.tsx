@@ -77,11 +77,13 @@ export function DeploymentSimulator({ config }: DeploymentSimulatorProps) {
         setIsEstimating(true);
         setError(null);
 
-        // Add delay to prevent rapid re-estimation during network changes
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Base gas costs per network
+        const networkGasCosts = {
+          1: 1000000n, // Mainnet
+          11155111: 500000n, // Sepolia
+        };
 
-        // Mock gas estimation based on features
-        const baseGas = 500000n;
+        const baseGas = networkGasCosts[chainId as keyof typeof networkGasCosts] || 500000n;
         const antiBot = config.antiBot ? 100000n : 0n;
         const vesting = (config.vestingSchedule?.team?.duration || 0) > 0 ? 150000n : 0n;
         const maxTransfer = config.maxTransferAmount ? 80000n : 0n;
@@ -90,13 +92,15 @@ export function DeploymentSimulator({ config }: DeploymentSimulatorProps) {
         const totalGas = baseGas + antiBot + vesting + maxTransfer + cooldown;
         
         if (mounted) {
-          setEstimatedGas(formatEther(totalGas * 50000000000n)); // Assuming 50 gwei gas price
+          // Use network-specific gas price
+          const gasPrice = chainId === 1 ? 50000000000n : 2500000000n; // 50 gwei mainnet, 2.5 gwei testnet
+          setEstimatedGas(formatEther(totalGas * gasPrice));
           setError(null);
         }
-      } catch (err) {
+      } catch (err: any) {
         if (mounted) {
           console.error('Gas estimation error:', err);
-          setError('Failed to estimate gas. Please try again after network stabilizes.');
+          setError(err?.message || 'Failed to estimate gas');
           setEstimatedGas(null);
         }
       } finally {

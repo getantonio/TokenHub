@@ -232,35 +232,57 @@ export function CreateTokenForm() {
       setIsSubmitting(true);
       setIsWriting(true);
       setWriteError(null);
-      await writeContract({
+      setError(null);
+
+      // Prepare contract parameters
+      const params = {
+        name: config.name,
+        symbol: config.symbol,
+        maxSupply: parseUnits(config.totalSupply || '0', config.decimals),
+        initialSupply: parseUnits(config.totalSupply || '0', config.decimals),
+        tokenPrice: parseUnits(config.initialPrice || '0', 18),
+        maxTransferAmount: config.maxTransferAmount ? parseUnits(config.maxTransferAmount, config.decimals) : 0n,
+        cooldownTime: BigInt(config.cooldownTime || 0),
+        transfersEnabled: config.transfersEnabled,
+        antiBot: config.antiBot,
+        teamVestingDuration: BigInt(config.vestingSchedule.team.duration),
+        teamVestingCliff: BigInt(config.vestingSchedule.team.cliff),
+        teamAllocation: BigInt(config.teamAllocation),
+        teamWallet: config.teamWallet || address,
+        developerAllocation: BigInt(config.developerAllocation),
+        developerVestingDuration: BigInt(config.developerVesting?.duration || 12),
+        developerVestingCliff: BigInt(config.developerVesting?.cliff || 3),
+        developerWallet: config.developerWallet || address,
+      };
+
+      // Write contract
+      const { hash } = await writeContract({
         abi: TokenFactoryABI,
-        address: process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as Address,
+        address: process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as `0x${string}`,
         functionName: 'createToken',
-        args: [{
-          name: config.name,
-          symbol: config.symbol,
-          maxSupply: parseUnits(config.totalSupply || '0', config.decimals),
-          initialSupply: parseUnits(config.totalSupply || '0', config.decimals),
-          tokenPrice: parseUnits(config.initialPrice || '0', 18),
-          maxTransferAmount: config.maxTransferAmount ? parseUnits(config.maxTransferAmount, config.decimals) : 0n,
-          cooldownTime: BigInt(config.cooldownTime || 0),
-          transfersEnabled: config.transfersEnabled,
-          antiBot: config.antiBot,
-          teamVestingDuration: BigInt(config.vestingSchedule.team.duration),
-          teamVestingCliff: BigInt(config.vestingSchedule.team.cliff),
-          teamAllocation: BigInt(config.teamAllocation),
-          teamWallet: config.teamWallet || address,
-          developerAllocation: BigInt(config.developerAllocation),
-          developerVestingDuration: BigInt(config.developerVesting?.duration || 12),
-          developerVestingCliff: BigInt(config.developerVesting?.cliff || 3),
-          developerWallet: config.developerWallet || address,
-        }],
+        args: [params],
         value: parseUnits('0.1', 18),
       });
-    } catch (err) {
+
+      // Wait for transaction confirmation
+      if (publicClient) {
+        const receipt = await publicClient.waitForTransactionReceipt({ hash });
+        
+        // Find TokenCreated event
+        const tokenCreatedEvent = receipt.logs.find(log => 
+          log.topics[0] === ethers.id("TokenCreated(address,address,string,string)")
+        );
+
+        if (tokenCreatedEvent?.topics[1]) {
+          const tokenAddress = `0x${tokenCreatedEvent.topics[1].slice(26)}`;
+          setDeployedToken({ address: tokenAddress });
+        }
+      }
+
+    } catch (err: any) {
       console.error('Token creation error:', err);
-      setWriteError(err as Error);
-      setError('Failed to create token. Please try again.');
+      setWriteError(err);
+      setError(err.message || 'Failed to create token. Please try again.');
     } finally {
       setIsWriting(false);
       setIsSubmitting(false);
@@ -797,7 +819,7 @@ export function CreateTokenForm() {
               </div>
             </Alert>
 
-            {/* Verify & Publish Section - Only shown after successful creation */}
+            {/* Move Verify & Publish section to the end */}
             <Card className="bg-gray-800 border-gray-700">
               <CardHeader className="py-3 border-b border-gray-700">
                 <CardTitle className="text-lg flex items-center justify-between">
