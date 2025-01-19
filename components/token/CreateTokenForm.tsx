@@ -26,11 +26,6 @@ import { TokenTester } from './TokenTester';
 import { ZeroAddress } from 'ethers';
 import { InfoIcon } from 'lucide-react';
 import { AlertTitle } from "@/components/ui/alert";
-import { NetworkRequirements } from '../network/NetworkRequirements';
-import { FEE_STRUCTURE_DOC_URL } from '@/lib/constants';
-import Link from 'next/link';
-import { DeploymentSimulator } from './DeploymentSimulator';
-import { TokenTracker } from './TokenTracker';
 
 // Add platform fee configuration
 const PLATFORM_TEAM_WALLET = "YOUR_WALLET_ADDRESS"; // Replace with your wallet address
@@ -92,8 +87,7 @@ export const CreateTokenForm = () => {
     config.presaleAllocation + 
     config.liquidityAllocation + 
     config.teamAllocation + 
-    config.marketingAllocation +
-    config.developerAllocation;
+    config.marketingAllocation;
 
   const validationErrors = validateTokenConfig(config);
   const isValid = validationErrors.length === 0;
@@ -105,7 +99,7 @@ export const CreateTokenForm = () => {
   );
 
   // Contract interaction setup
-  const { writeContract } = useWriteContract();
+  const { writeContract, isPending } = useWriteContract();
 
   // Add gas impact information
   const gasImpactTooltips = {
@@ -130,79 +124,129 @@ export const CreateTokenForm = () => {
     );
   };
 
-  // Add state for tracking deployment
-  const [deployedToken, setDeployedToken] = useState<{
-    address?: string;
-    txHash?: string;
-  }>();
-
   const handleCreateToken = async () => {
     try {
       setIsCreating(true);
       setError(null);
 
-      if (!writeContract) {
-        throw new Error('Contract write not available. Please connect your wallet.');
+      if (!address) {
+        throw new Error('Please connect your wallet');
       }
 
-      console.log('Creating token with config:', config);
+      if (!chainId) {
+        throw new Error('Please connect to a supported network');
+      }
 
-      // Prepare token creation parameters
-      const tokenParams = {
-        name: config.name,
-        symbol: config.symbol,
-        maxSupply: parseUnits(config.totalSupply || '0', config.decimals),
-        initialSupply: parseUnits(config.totalSupply || '0', config.decimals),
-        tokenPrice: parseUnits(config.initialPrice || '0', 18),
-        maxTransferAmount: config.maxTransferAmount ? parseUnits(config.maxTransferAmount, config.decimals) : 0n,
-        cooldownTime: BigInt(config.cooldownTime),
-        transfersEnabled: config.transfersEnabled,
-        antiBot: config.antiBot,
-        teamVestingDuration: BigInt(config.vestingSchedule.team.duration),
-        teamVestingCliff: BigInt(config.vestingSchedule.team.cliff),
-        teamAllocation: BigInt(config.teamAllocation),
-        teamWallet: config.teamWallet || address || '0x',
-        developerAllocation: BigInt(config.developerAllocation),
-        developerVestingDuration: BigInt(config.developerVesting?.duration || 12),
-        developerVestingCliff: BigInt(config.developerVesting?.cliff || 3),
-        developerWallet: config.developerWallet || address || ZeroAddress,
-        platformTeamAllocation: isMainnet ? BigInt(PLATFORM_TEAM_ALLOCATION) : 0n,
-        platformTeamWallet: isMainnet ? PLATFORM_TEAM_WALLET : ZeroAddress,
-      };
+      if (!window.ethereum) {
+        throw new Error('Please install MetaMask or another Web3 wallet');
+      }
 
-      console.log('Token parameters:', tokenParams);
+      // Validate total allocation
+      const totalAllocation = 
+        config.presaleAllocation + 
+        config.liquidityAllocation + 
+        config.teamAllocation + 
+        config.marketingAllocation;
 
-      // Call writeContract without checking the return value
-      await writeContract({
-        abi: TokenFactoryABI,
-        address: process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as `0x${string}`,
-        functionName: 'createToken',
-        args: [tokenParams],
-        value: parseEther('0.1'),
-      });
+      if (totalAllocation !== 100) {
+        throw new Error('Total allocation must equal 100%');
+      }
 
-      // If we get here, the transaction was submitted successfully
-      setError('Token creation transaction submitted successfully!');
+      // Adjust allocations for mainnet to include platform team
+      let adjustedTeamAllocation = config.teamAllocation;
+      let adjustedConfig = {...config};
 
-      // Note: We won't have the transaction hash immediately
-      // You might want to use useWaitForTransaction hook to track the status
-      
-    } catch (error) {
-      console.error('Token creation error:', error);
-      let errorMessage = 'Failed to create token';
-      
-      if (error instanceof Error) {
-        if (error.message.includes('insufficient funds')) {
-          errorMessage = 'Insufficient funds to pay for gas and creation fee';
-        } else if (error.message.includes('user rejected')) {
-          errorMessage = 'Transaction was rejected by user';
-        } else if (error.message.includes('nonce')) {
-          errorMessage = 'Transaction nonce error. Please reset your wallet connection and try again.';
-        } else {
-          errorMessage = error.message;
+      if (isMainnet) {
+        // Take 2% from team allocation for platform team
+        adjustedTeamAllocation = config.teamAllocation - PLATFORM_TEAM_ALLOCATION;
+        
+        if (adjustedTeamAllocation < 5) {
+          throw new Error('Team allocation too small to include platform fee. Minimum 7% team allocation required.');
         }
+
+        adjustedConfig = {
+          ...config,
+          teamAllocation: adjustedTeamAllocation,
+        };
       }
-      
+
+      // Get gas optimization settings if minimal features enabled
+      if (useMinimalFeatures) {
+        const provider = new BrowserProvider(window.ethereum as any);
+        const feeData = await provider.getFeeData();
+        
+        if (!feeData.gasPrice) {
+          throw new Error("Could not get gas price");
+        }
+
+        // Use optimized gas settings
+        const optimizedGasPrice = feeData.gasPrice * BigInt(80) / BigInt(100);
+        await writeContract({
+          abi: TokenFactoryABI,
+          address: process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as `0x${string}`,
+          functionName: 'createToken',
+          args: [
+            {
+              name: config.name,
+              symbol: config.symbol,
+              maxSupply: parseUnits(config.totalSupply || '0', config.decimals),
+              initialSupply: parseUnits(config.totalSupply || '0', config.decimals),
+              tokenPrice: parseUnits(config.initialPrice || '0', 18), // ETH has 18 decimals
+              maxTransferAmount: config.maxTransferAmount ? parseUnits(config.maxTransferAmount, config.decimals) : 0n,
+              cooldownTime: BigInt(config.cooldownTime),
+              transfersEnabled: config.transfersEnabled,
+              antiBot: config.antiBot,
+              teamVestingDuration: BigInt(config.vestingSchedule.team.duration),
+              teamVestingCliff: BigInt(config.vestingSchedule.team.cliff),
+              teamAllocation: BigInt(adjustedConfig.teamAllocation),
+              teamWallet: config.teamWallet || address || '0x',
+              developerAllocation: BigInt(config.developerAllocation),
+              developerVestingDuration: BigInt(config.developerVesting?.duration || 12),
+              developerVestingCliff: BigInt(config.developerVesting?.cliff || 3),
+              developerWallet: config.developerWallet || address || ZeroAddress,
+              platformTeamAllocation: isMainnet ? BigInt(PLATFORM_TEAM_ALLOCATION) : 0n,
+              platformTeamWallet: isMainnet ? PLATFORM_TEAM_WALLET : ZeroAddress,
+            }
+          ],
+          value: parseEther('0.1'), // Creation fee - should be fetched from contract
+          maxFeePerGas: optimizedGasPrice,
+          maxPriorityFeePerGas: feeData.maxPriorityFeePerGas ?? undefined
+        });
+      } else {
+        // Call the contract
+        await writeContract({
+          abi: TokenFactoryABI,
+          address: process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as `0x${string}`,
+          functionName: 'createToken',
+          args: [
+            {
+              name: config.name,
+              symbol: config.symbol,
+              maxSupply: parseUnits(config.totalSupply || '0', config.decimals),
+              initialSupply: parseUnits(config.totalSupply || '0', config.decimals),
+              tokenPrice: parseUnits(config.initialPrice || '0', 18), // ETH has 18 decimals
+              maxTransferAmount: config.maxTransferAmount ? parseUnits(config.maxTransferAmount, config.decimals) : 0n,
+              cooldownTime: BigInt(config.cooldownTime),
+              transfersEnabled: config.transfersEnabled,
+              antiBot: config.antiBot,
+              teamVestingDuration: BigInt(config.vestingSchedule.team.duration),
+              teamVestingCliff: BigInt(config.vestingSchedule.team.cliff),
+              teamAllocation: BigInt(adjustedConfig.teamAllocation),
+              teamWallet: config.teamWallet || address || '0x',
+              developerAllocation: BigInt(config.developerAllocation),
+              developerVestingDuration: BigInt(config.developerVesting?.duration || 12),
+              developerVestingCliff: BigInt(config.developerVesting?.cliff || 3),
+              developerWallet: config.developerWallet || address || ZeroAddress,
+              platformTeamAllocation: isMainnet ? BigInt(PLATFORM_TEAM_ALLOCATION) : 0n,
+              platformTeamWallet: isMainnet ? PLATFORM_TEAM_WALLET : ZeroAddress,
+            }
+          ],
+          value: parseEther('0.1'), // Creation fee - should be fetched from contract
+        });
+      }
+
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create token';
       setError(errorMessage);
     } finally {
       setIsCreating(false);
@@ -220,9 +264,7 @@ export const CreateTokenForm = () => {
           <CardTitle className="text-lg">Create Your Token</CardTitle>
         </CardHeader>
         <CardContent className="py-2">
-          <NetworkRequirements />
-
-          <Tabs defaultValue="basic" className="w-full mt-4">
+          <Tabs defaultValue="basic" className="w-full">
             <TabsList className="grid w-full grid-cols-4 mb-2">
               <TabsTrigger value="basic">Basic</TabsTrigger>
               <TabsTrigger value="tokenomics">Token</TabsTrigger>
@@ -282,146 +324,142 @@ export const CreateTokenForm = () => {
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <LabelWithTooltip 
-                      label="Total Supply" 
-                      tooltip={tooltips.totalSupply} 
-                    />
+                    <LabelWithTooltip label="Total Supply" tooltip={tooltips.totalSupply} />
                     <input
                       type="number"
                       className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg text-sm"
-                      placeholder="e.g., 1000000"
+                      placeholder="1000000"
                       value={config.totalSupply}
                       onChange={(e) => setConfig({...config, totalSupply: e.target.value})}
                     />
                   </div>
+
                   <div>
-                    <LabelWithTooltip 
-                      label="Initial Price (ETH)" 
-                      tooltip={tooltips.initialPrice} 
-                    />
-                    <input
-                      type="number"
-                      step="0.000000000000000001"
-                      className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg text-sm"
-                      placeholder="e.g., 0.001"
-                      value={config.initialPrice}
-                      onChange={(e) => setConfig({...config, initialPrice: e.target.value})}
-                    />
-                  </div>
-                  <div>
-                    <LabelWithTooltip 
-                      label="Decimals" 
-                      tooltip="Number of decimal places for your token (default: 18)" 
-                    />
-                    <input
-                      type="number"
-                      min="0"
-                      max="18"
-                      className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg text-sm"
-                      value={config.decimals}
-                      onChange={(e) => setConfig({...config, decimals: Number(e.target.value)})}
-                    />
+                    <LabelWithTooltip label="Initial Price" tooltip={tooltips.initialPrice} />
+                    <div className="relative">
+                      <input
+                        type="number"
+                        className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg text-sm"
+                        placeholder="0.0001"
+                        value={config.initialPrice}
+                        onChange={(e) => setConfig({...config, initialPrice: e.target.value})}
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
+                        ETH
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <LabelWithTooltip label="Presale (%)" tooltip={tooltips.presaleAllocation} />
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg text-sm"
-                      value={config.presaleAllocation}
-                      onChange={(e) => setConfig({...config, presaleAllocation: Number(e.target.value)})}
-                    />
-                  </div>
-                  <div>
-                    <LabelWithTooltip label="Liquidity (%)" tooltip={tooltips.liquidityAllocation} />
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg text-sm"
-                      value={config.liquidityAllocation}
-                      onChange={(e) => setConfig({...config, liquidityAllocation: Number(e.target.value)})}
-                    />
-                  </div>
-                  <div>
-                    <LabelWithTooltip label="Team (%)" tooltip={tooltips.teamAllocation} />
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg text-sm"
-                      value={config.teamAllocation}
-                      onChange={(e) => setConfig({...config, teamAllocation: Number(e.target.value)})}
-                    />
-                  </div>
-                  <div>
-                    <LabelWithTooltip label="Marketing (%)" tooltip={tooltips.marketingAllocation} />
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg text-sm"
-                      value={config.marketingAllocation}
-                      onChange={(e) => setConfig({...config, marketingAllocation: Number(e.target.value)})}
-                    />
-                  </div>
-                  <div>
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
                     <LabelWithTooltip 
-                      label="Developer (%)" 
-                      tooltip="Allocation for project developers. Recommended: 5%. Subject to vesting schedule." 
-                    />
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg text-sm"
-                      value={config.developerAllocation}
-                      onChange={(e) => setConfig({...config, developerAllocation: Number(e.target.value)})}
+                      label="Token Distribution" 
+                      tooltip={tooltips.distribution}
                     />
                   </div>
-                </div>
 
-                <div className="mt-4">
-                  <div className="w-full bg-gray-700 rounded-lg h-3 overflow-hidden">
-                    <div className="h-full flex">
-                      <div className="bg-blue-500 h-full" style={{ width: `${config.presaleAllocation}%` }} />
-                      <div className="bg-green-500 h-full" style={{ width: `${config.liquidityAllocation}%` }} />
-                      <div className="bg-yellow-500 h-full" style={{ width: `${config.teamAllocation}%` }} />
-                      <div className="bg-purple-500 h-full" style={{ width: `${config.marketingAllocation}%` }} />
-                      <div className="bg-red-500 h-full" style={{ width: `${config.developerAllocation}%` }} />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <LabelWithTooltip 
+                        label="Presale (%)" 
+                        tooltip={tooltips.presaleAllocation}
+                      />
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg text-sm"
+                          value={config.presaleAllocation}
+                          onChange={(e) => setConfig({...config, presaleAllocation: Number(e.target.value)})}
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
+                          %
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-400 mt-1">Recommended: 40-60%</p>
+                    </div>
+
+                    <div>
+                      <LabelWithTooltip 
+                        label="Liquidity (%)" 
+                        tooltip={tooltips.liquidityAllocation}
+                      />
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg text-sm"
+                          value={config.liquidityAllocation}
+                          onChange={(e) => setConfig({...config, liquidityAllocation: Number(e.target.value)})}
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
+                          %
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-400 mt-1">Recommended: 20-30%</p>
+                    </div>
+
+                    <div>
+                      <LabelWithTooltip 
+                        label="Team (%)" 
+                        tooltip={tooltips.teamAllocation}
+                      />
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg text-sm"
+                          value={config.teamAllocation}
+                          onChange={(e) => setConfig({...config, teamAllocation: Number(e.target.value)})}
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
+                          %
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-400 mt-1">Recommended: 10-15%</p>
+                    </div>
+
+                    <div>
+                      <LabelWithTooltip 
+                        label="Marketing (%)" 
+                        tooltip={tooltips.marketingAllocation}
+                      />
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg text-sm"
+                          value={config.marketingAllocation}
+                          onChange={(e) => setConfig({...config, marketingAllocation: Number(e.target.value)})}
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
+                          %
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-400 mt-1">Recommended: 5-15%</p>
                     </div>
                   </div>
 
-                  <div className="mt-2">
-                    <div className="grid grid-cols-2 gap-2 text-xs mb-4">
-                      <div className="flex items-center">
-                        <div className="w-3 h-3 bg-blue-500 rounded mr-2"></div>
-                        <span>Presale ({config.presaleAllocation}%)</span>
-                      </div>
-                      <div className="flex items-center">
-                        <div className="w-3 h-3 bg-green-500 rounded mr-2"></div>
-                        <span>Liquidity ({config.liquidityAllocation}%)</span>
-                      </div>
-                      <div className="flex items-center">
-                        <div className="w-3 h-3 bg-yellow-500 rounded mr-2"></div>
-                        <span>Team ({config.teamAllocation}%)</span>
-                      </div>
-                      <div className="flex items-center">
-                        <div className="w-3 h-3 bg-purple-500 rounded mr-2"></div>
-                        <span>Marketing ({config.marketingAllocation}%)</span>
-                      </div>
-                      <div className="flex items-center">
-                        <div className="w-3 h-3 bg-red-500 rounded mr-2"></div>
-                        <span>Developers ({config.developerAllocation}%)</span>
-                      </div>
+                  {/* Distribution Total Validation */}
+                  <div className="mt-4">
+                    <div className="flex justify-between text-sm mb-2">
+                      <span>Total Distribution</span>
+                      <span className={totalAllocation === 100 ? 'text-green-400' : 'text-red-400'}>
+                        {totalAllocation}%
+                      </span>
                     </div>
-
-                    <div className="text-sm font-medium">
-                      Total: {totalAllocation}% {totalAllocation !== 100 && <span className="text-red-400">(Must equal 100%)</span>}
+                    <div className="w-full bg-gray-700 rounded-lg h-3 overflow-hidden">
+                      <div className="h-full flex">
+                        <div className="bg-blue-500 h-full" style={{ width: `${config.presaleAllocation}%` }} />
+                        <div className="bg-green-500 h-full" style={{ width: `${config.liquidityAllocation}%` }} />
+                        <div className="bg-yellow-500 h-full" style={{ width: `${config.teamAllocation}%` }} />
+                        <div className="bg-purple-500 h-full" style={{ width: `${config.marketingAllocation}%` }} />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -602,8 +640,42 @@ export const CreateTokenForm = () => {
             </TabsContent>
           </Tabs>
 
+          <div className="mt-4">
+            {error && (
+              <Alert variant="destructive" className="mb-4">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+
+            <button
+              className="w-full py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 disabled:cursor-not-allowed rounded-lg font-medium text-sm"
+              onClick={handleCreateToken}
+              disabled={isCreating || !isValid || !writeContract || isPending}
+            >
+              {isCreating || isPending ? (
+                <div className="flex items-center justify-center gap-2">
+                  <Spinner size="sm" />
+                  <span>Creating Token...</span>
+                </div>
+              ) : (
+                'Create Token'
+              )}
+            </button>
+          </div>
+
+          <div className="mt-4">
+            <label className="flex items-center space-x-2 mb-2">
+              <input
+                type="checkbox"
+                checked={useMinimalFeatures}
+                onChange={(e) => setUseMinimalFeatures(e.target.checked)}
+              />
+              <span className="text-sm">Use minimal features (lower gas cost)</span>
+            </label>
+          </div>
+
           {isMainnet && (
-            <Alert className="mt-4">
+            <Alert className="mb-4">
               <InfoIcon className="h-4 w-4" />
               <AlertTitle>{MAINNET_INFO.title}</AlertTitle>
               <AlertDescription>
@@ -623,41 +695,6 @@ export const CreateTokenForm = () => {
           validationErrors={validationErrors}
         />
         <TokenTester config={config} />
-        <DeploymentSimulator config={config} />
-        
-        <Card>
-          <CardContent className="py-4">
-            {error && (
-              <Alert 
-                className="mb-4" 
-                variant={error.includes('success') ? 'default' : 'destructive'}
-              >
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-            <button
-              onClick={handleCreateToken}
-              disabled={!isValid || isCreating}
-              className="w-full py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 disabled:cursor-not-allowed rounded-lg font-medium text-sm"
-            >
-              {isCreating ? (
-                <span className="flex items-center justify-center">
-                  <Spinner size="sm" className="mr-2" />
-                  Creating Token...
-                </span>
-              ) : (
-                'Create Token'
-              )}
-            </button>
-          </CardContent>
-        </Card>
-
-        {deployedToken && (
-          <TokenTracker 
-            tokenAddress={deployedToken.address}
-            transactionHash={deployedToken.txHash}
-          />
-        )}
       </div>
     </div>
   );
