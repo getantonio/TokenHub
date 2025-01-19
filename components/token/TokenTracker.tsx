@@ -14,7 +14,6 @@ export function TokenTracker({ tokenAddress, transactionHash }: TokenTrackerProp
 
   const { data: txData, isLoading, isSuccess } = useTransaction({
     hash: transactionHash as `0x${string}`,
-    enabled: !!transactionHash,
   });
 
   const addToWallet = async () => {

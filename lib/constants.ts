@@ -1,6 +1,6 @@
 // Documentation URLs
 export const DOC_PATHS = {
-  FEE_STRUCTURE: '/docs/FEE_STRUCTURE',
+  FEE_STRUCTURE: '/docs/fee-structure',
   LOCAL_TESTNET: '/docs/LOCAL_TESTNET',
   SMART_CONTRACTS: '/docs/SMART_CONTRACTS',
   UI_COMPONENTS: '/docs/UI_COMPONENTS',

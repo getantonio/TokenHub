@@ -4,8 +4,10 @@ import { InfoIcon, AlertTriangle } from 'lucide-react';
 import { NETWORKS_WITH_COSTS } from '@/app/providers';
 import { Button } from "@/components/ui/button";
 import { ethers } from 'ethers';
+import { useState } from 'react';
 
 export function NetworkRequirements() {
+  const [error, setError] = useState<string | null>(null);
   const chainId = useChainId();
   const { address } = useAccount();
   const { data: balance } = useBalance({
@@ -15,28 +17,42 @@ export function NetworkRequirements() {
   const requestTestEth = async () => {
     try {
       if (!address) return;
-      
-      // Create provider with proper ethers v6 syntax
-      const provider = new ethers.JsonRpcProvider('http://127.0.0.1:8545');
-      
-      // Get first account's private key from hardhat
-      const wallet = new ethers.Wallet(
-        // Default hardhat first private key
+
+      const provider = new ethers.JsonRpcProvider('http://127.0.0.1:8545', {
+        chainId: 31337,
+      });
+
+      // Test connection first
+      try {
+        const network = await provider.getNetwork();
+        console.log('Connected to network:', network);
+      } catch (e) {
+        setError('Local node not running. Please start your local Hardhat node with: npm run local-testnet');
+        return;
+      }
+
+      // Create signer with Hardhat's default first account
+      const signer = new ethers.Wallet(
         '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
         provider
       );
-      
-      const tx = await wallet.sendTransaction({
+
+      console.log('Sending test ETH from:', signer.address);
+
+      const tx = await signer.sendTransaction({
         to: address,
         value: ethers.parseEther("100.0")
       });
 
-      await tx.wait();
-      
-      // Force UI update
-      setTimeout(() => window.location.reload(), 2000);
+      console.log('Faucet TX:', tx.hash);
+      const receipt = await tx.wait();
+      console.log('Transaction confirmed:', receipt);
+
+      // Show success message
+      setError('Successfully sent 100 test ETH! Please wait a few seconds for your balance to update.');
     } catch (error) {
       console.error('Error requesting test ETH:', error);
+      setError(error instanceof Error ? error.message : 'Failed to request test ETH');
     }
   };
 
@@ -102,6 +118,11 @@ export function NetworkRequirements() {
 
   return (
     <div className="space-y-4">
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
       <Alert variant={hasInsufficientBalance ? "destructive" : "default"}>
         <AlertTriangle className="h-4 w-4" />
         <AlertTitle>Network Requirements</AlertTitle>

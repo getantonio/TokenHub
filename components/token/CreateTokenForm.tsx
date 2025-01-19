@@ -105,7 +105,7 @@ export const CreateTokenForm = () => {
   );
 
   // Contract interaction setup
-  const { writeContract, isPending } = useWriteContract();
+  const { writeContract } = useWriteContract();
 
   // Add gas impact information
   const gasImpactTooltips = {
@@ -142,52 +142,68 @@ export const CreateTokenForm = () => {
       setError(null);
 
       if (!writeContract) {
-        throw new Error('Contract write not available');
+        throw new Error('Contract write not available. Please connect your wallet.');
       }
 
-      const tx = await writeContract({
+      console.log('Creating token with config:', config);
+
+      // Prepare token creation parameters
+      const tokenParams = {
+        name: config.name,
+        symbol: config.symbol,
+        maxSupply: parseUnits(config.totalSupply || '0', config.decimals),
+        initialSupply: parseUnits(config.totalSupply || '0', config.decimals),
+        tokenPrice: parseUnits(config.initialPrice || '0', 18),
+        maxTransferAmount: config.maxTransferAmount ? parseUnits(config.maxTransferAmount, config.decimals) : 0n,
+        cooldownTime: BigInt(config.cooldownTime),
+        transfersEnabled: config.transfersEnabled,
+        antiBot: config.antiBot,
+        teamVestingDuration: BigInt(config.vestingSchedule.team.duration),
+        teamVestingCliff: BigInt(config.vestingSchedule.team.cliff),
+        teamAllocation: BigInt(config.teamAllocation),
+        teamWallet: config.teamWallet || address || '0x',
+        developerAllocation: BigInt(config.developerAllocation),
+        developerVestingDuration: BigInt(config.developerVesting?.duration || 12),
+        developerVestingCliff: BigInt(config.developerVesting?.cliff || 3),
+        developerWallet: config.developerWallet || address || ZeroAddress,
+        platformTeamAllocation: isMainnet ? BigInt(PLATFORM_TEAM_ALLOCATION) : 0n,
+        platformTeamWallet: isMainnet ? PLATFORM_TEAM_WALLET : ZeroAddress,
+      };
+
+      console.log('Token parameters:', tokenParams);
+
+      // Call writeContract without checking the return value
+      await writeContract({
         abi: TokenFactoryABI,
         address: process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as `0x${string}`,
         functionName: 'createToken',
-        args: [
-          {
-            name: config.name,
-            symbol: config.symbol,
-            maxSupply: parseUnits(config.totalSupply || '0', config.decimals),
-            initialSupply: parseUnits(config.totalSupply || '0', config.decimals),
-            tokenPrice: parseUnits(config.initialPrice || '0', 18), // ETH has 18 decimals
-            maxTransferAmount: config.maxTransferAmount ? parseUnits(config.maxTransferAmount, config.decimals) : 0n,
-            cooldownTime: BigInt(config.cooldownTime),
-            transfersEnabled: config.transfersEnabled,
-            antiBot: config.antiBot,
-            teamVestingDuration: BigInt(config.vestingSchedule.team.duration),
-            teamVestingCliff: BigInt(config.vestingSchedule.team.cliff),
-            teamAllocation: BigInt(config.teamAllocation),
-            teamWallet: config.teamWallet || address || '0x',
-            developerAllocation: BigInt(config.developerAllocation),
-            developerVestingDuration: BigInt(config.developerVesting?.duration || 12),
-            developerVestingCliff: BigInt(config.developerVesting?.cliff || 3),
-            developerWallet: config.developerWallet || address || ZeroAddress,
-            platformTeamAllocation: isMainnet ? BigInt(PLATFORM_TEAM_ALLOCATION) : 0n,
-            platformTeamWallet: isMainnet ? PLATFORM_TEAM_WALLET : ZeroAddress,
-          }
-        ],
+        args: [tokenParams],
         value: parseEther('0.1'),
       });
 
-      if (!tx?.hash) {
-        throw new Error('Transaction failed');
-      }
-
-      setDeployedToken({
-        txHash: tx.hash,
-        // Address will be set after confirmation
-      });
-
+      // If we get here, the transaction was submitted successfully
       setError('Token creation transaction submitted successfully!');
+
+      // Note: We won't have the transaction hash immediately
+      // You might want to use useWaitForTransaction hook to track the status
+      
     } catch (error) {
       console.error('Token creation error:', error);
-      setError(error instanceof Error ? error.message : 'Failed to create token');
+      let errorMessage = 'Failed to create token';
+      
+      if (error instanceof Error) {
+        if (error.message.includes('insufficient funds')) {
+          errorMessage = 'Insufficient funds to pay for gas and creation fee';
+        } else if (error.message.includes('user rejected')) {
+          errorMessage = 'Transaction was rejected by user';
+        } else if (error.message.includes('nonce')) {
+          errorMessage = 'Transaction nonce error. Please reset your wallet connection and try again.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      setError(errorMessage);
     } finally {
       setIsCreating(false);
     }
@@ -586,42 +602,8 @@ export const CreateTokenForm = () => {
             </TabsContent>
           </Tabs>
 
-          <div className="mt-4">
-            {error && (
-              <Alert variant="destructive" className="mb-4">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-
-            <button
-              className="w-full py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 disabled:cursor-not-allowed rounded-lg font-medium text-sm"
-              onClick={handleCreateToken}
-              disabled={isCreating || !isValid || !writeContract || isPending}
-            >
-              {isCreating || isPending ? (
-                <div className="flex items-center justify-center gap-2">
-                  <Spinner size="sm" />
-                  <span>Creating Token...</span>
-                </div>
-              ) : (
-                'Create Token'
-              )}
-            </button>
-          </div>
-
-          <div className="mt-4">
-            <label className="flex items-center space-x-2 mb-2">
-              <input
-                type="checkbox"
-                checked={useMinimalFeatures}
-                onChange={(e) => setUseMinimalFeatures(e.target.checked)}
-              />
-              <span className="text-sm">Use minimal features (lower gas cost)</span>
-            </label>
-          </div>
-
           {isMainnet && (
-            <Alert className="mb-4">
+            <Alert className="mt-4">
               <InfoIcon className="h-4 w-4" />
               <AlertTitle>{MAINNET_INFO.title}</AlertTitle>
               <AlertDescription>
@@ -631,13 +613,6 @@ export const CreateTokenForm = () => {
               </AlertDescription>
             </Alert>
           )}
-
-          <Link 
-            href={FEE_STRUCTURE_DOC_URL} 
-            className="text-blue-400 hover:underline"
-          >
-            View Fee Documentation
-          </Link>
         </CardContent>
       </Card>
 
@@ -647,8 +622,36 @@ export const CreateTokenForm = () => {
           isValid={isValid}
           validationErrors={validationErrors}
         />
-        <DeploymentSimulator config={config} />
         <TokenTester config={config} />
+        <DeploymentSimulator config={config} />
+        
+        <Card>
+          <CardContent className="py-4">
+            {error && (
+              <Alert 
+                className="mb-4" 
+                variant={error.includes('success') ? 'default' : 'destructive'}
+              >
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            <button
+              onClick={handleCreateToken}
+              disabled={!isValid || isCreating}
+              className="w-full py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 disabled:cursor-not-allowed rounded-lg font-medium text-sm"
+            >
+              {isCreating ? (
+                <span className="flex items-center justify-center">
+                  <Spinner size="sm" className="mr-2" />
+                  Creating Token...
+                </span>
+              ) : (
+                'Create Token'
+              )}
+            </button>
+          </CardContent>
+        </Card>
+
         {deployedToken && (
           <TokenTracker 
             tokenAddress={deployedToken.address}

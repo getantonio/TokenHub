@@ -110,19 +110,31 @@ export function TokenTester({ config }: TokenTesterProps) {
           );
 
           // Estimate gas with proper value
-          const estimatedGas = await provider.estimateGas({
-            to: factoryAddress,
-            data: createData,
-            value: parseEther('0.1')
+          const gasEstimate = await factoryContract.createToken.estimateGas({
+            name: config.name,
+            symbol: config.symbol,
+            maxSupply: parseUnits(config.totalSupply || '0', config.decimals),
+            initialSupply: parseUnits(config.totalSupply || '0', config.decimals),
+            tokenPrice: parseUnits(config.initialPrice || '0', 18),
+            maxTransferAmount: config.maxTransferAmount ? parseUnits(config.maxTransferAmount, config.decimals) : 0n,
+            cooldownTime: BigInt(config.cooldownTime || 0),
+            transfersEnabled: config.transfersEnabled,
+            antiBot: config.antiBot,
+            teamVestingDuration: BigInt(config.vestingSchedule.team.duration),
+            teamVestingCliff: BigInt(config.vestingSchedule.team.cliff),
+            teamAllocation: BigInt(config.teamAllocation),
+            teamWallet: config.teamWallet || ZeroAddress,
+          }, {
+            value: parseUnits('0.1', 18) // Add creation fee
           });
 
           const feeData = await provider.getFeeData();
           const gasPrice = feeData.gasPrice || 0n;
-          const totalCost = estimatedGas * gasPrice;
+          const totalCost = gasEstimate * gasPrice;
 
           // Add detailed breakdown
           details.push('Gas Estimation Breakdown:');
-          details.push(`• Base Gas Units: ${estimatedGas.toString()}`);
+          details.push(`• Base Gas Units: ${gasEstimate.toString()}`);
           details.push(`• Current Gas Price: ${formatEther(gasPrice)} ETH/gas`);
           details.push(`• Creation Fee: 0.1 ETH`);
           details.push(`• Estimated Gas Cost: ${formatEther(totalCost)} ETH`);
@@ -439,10 +451,7 @@ export function TokenTester({ config }: TokenTesterProps) {
     try {
       if (!window.ethereum) throw new Error('Web3 provider required');
       
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
-      
-      // Skip ENS resolution
-      provider.getResolver = async () => null;
+      const provider = new BrowserProvider(window.ethereum);
       
       // Rest of simulation logic
       const gasEstimate = await provider.estimateGas({

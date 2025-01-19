@@ -66,7 +66,7 @@ const NETWORK_COSTS = {
   },
 };
 
-// Define supported networks
+// Define supported networks as a tuple of Chain types
 export const SUPPORTED_NETWORKS = [
   mainnet,
   arbitrum,
@@ -83,26 +83,27 @@ export const NETWORKS_WITH_COSTS = SUPPORTED_NETWORKS.map(network => ({
   ...NETWORK_COSTS[network.id],
 }));
 
+// Customize hardhat chain configuration
+const customHardhat = {
+  ...hardhat,
+  contracts: {
+    ensRegistry: undefined,
+    multicall3: undefined,
+  },
+} as const;
+
+// Create wagmi config
 const config = createConfig({
-  chains: SUPPORTED_NETWORKS,
-  connectors: [
-    injected(),
-  ],
+  chains: [mainnet, arbitrum, optimism, polygon, bsc, sepolia, customHardhat],
+  connectors: [injected()],
   transports: {
-    [sepolia.id]: http(),
     [mainnet.id]: http(),
+    [sepolia.id]: http(),
     [arbitrum.id]: http(),
     [optimism.id]: http(),
     [polygon.id]: http(),
     [bsc.id]: http(),
-    [hardhat.id]: http('http://127.0.0.1:8545', {
-      pollingInterval: 1000,
-      batch: { multicall: true },
-      chainParameters: {
-        name: 'Hardhat Local',
-        chainId: 31337,
-        ensAddress: null,
-      },
+    [customHardhat.id]: http('http://127.0.0.1:8545', {
       timeout: 30000,
       retryCount: 3,
       retryDelay: 1000,
