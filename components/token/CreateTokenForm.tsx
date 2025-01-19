@@ -134,7 +134,7 @@ export function CreateTokenForm() {
   const chainId = useChainId();
   const isMainnet = chainId === 1;
   const publicClient = usePublicClient();
-  const { writeContract, data: txData } = useWriteContract();
+  const { writeContract, isLoading: isWritePending } = useWriteContract();
 
   const [useMinimalFeatures, setUseMinimalFeatures] = useState(false);
 
@@ -200,7 +200,7 @@ export function CreateTokenForm() {
   // Watch for transaction confirmation
   useWatchPendingTransactions({
     onTransactions: (transactions) => {
-      if (txData && transactions.includes(txData as Hash)) {
+      if (transactions.includes(txData as Hash)) {
         // Transaction confirmed
         if (publicClient) {
           publicClient.getTransactionReceipt({ hash: txData as Hash }).then((receipt) => {
@@ -234,6 +234,10 @@ export function CreateTokenForm() {
       setWriteError(null);
       setError(null);
 
+      if (!writeContract || !publicClient) {
+        throw new Error('Contract interaction not available');
+      }
+
       // Prepare contract parameters
       const params = {
         name: config.name,
@@ -256,27 +260,29 @@ export function CreateTokenForm() {
       };
 
       // Write contract
-      const { hash } = await writeContract({
+      const txHash = await writeContract({
         abi: TokenFactoryABI,
         address: process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as `0x${string}`,
         functionName: 'createToken',
         args: [params],
         value: parseUnits('0.1', 18),
-      });
+      } as const);
+
+      if (!txHash) throw new Error('Transaction failed');
 
       // Wait for transaction confirmation
-      if (publicClient) {
-        const receipt = await publicClient.waitForTransactionReceipt({ hash });
-        
-        // Find TokenCreated event
-        const tokenCreatedEvent = receipt.logs.find(log => 
-          log.topics[0] === ethers.id("TokenCreated(address,address,string,string)")
-        );
+      const receipt = await publicClient.waitForTransactionReceipt({ 
+        hash: txHash 
+      });
+      
+      // Find TokenCreated event
+      const tokenCreatedEvent = receipt.logs.find(log => 
+        log.topics[0] === ethers.id("TokenCreated(address,address,string,string)")
+      );
 
-        if (tokenCreatedEvent?.topics[1]) {
-          const tokenAddress = `0x${tokenCreatedEvent.topics[1].slice(26)}`;
-          setDeployedToken({ address: tokenAddress });
-        }
+      if (tokenCreatedEvent?.topics[1]) {
+        const tokenAddress = `0x${tokenCreatedEvent.topics[1].slice(26)}`;
+        setDeployedToken({ address: tokenAddress });
       }
 
     } catch (err: any) {
