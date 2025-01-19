@@ -1,4 +1,4 @@
-import { ethers } from "hardhat";
+import { ethers } from "ethers";
 
 export const DEFAULT_TOKEN_PARAMS = {
   name: "Test Token",
@@ -17,11 +17,13 @@ export const DEFAULT_TOKEN_PARAMS = {
 };
 
 export const timeTravel = async (seconds: number) => {
-  await ethers.provider.send("evm_increaseTime", [seconds]);
-  await ethers.provider.send("evm_mine", []);
+  const provider = new ethers.JsonRpcProvider();
+  await provider.send("evm_increaseTime", [seconds]);
+  await provider.send("evm_mine", []);
 };
 
 export const getLatestBlockTimestamp = async () => {
-  const block = await ethers.provider.getBlock("latest");
+  const provider = new ethers.JsonRpcProvider();
+  const block = await provider.getBlock("latest");
   return block ? block.timestamp : 0;
 }; 

@@ -1,0 +1,20 @@
+{
+  "name": "tokenhub-deployer",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@electron/remote": "^2.1.2",
+    "electron": "^34.0.0",
+    "electron-builder": "^25.1.8",
+    "electron-store": "^10.0.0",
+    "electron-updater": "^6.3.9",
+    "ethers": "^6.8.1"
+  }
+}

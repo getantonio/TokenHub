@@ -12,7 +12,7 @@ import { TokenPreview } from './TokenPreview';
 import { validateTokenConfig } from '@/lib/utils';
 import { TokenConfig } from './types';
 import { Tooltip } from '@/components/ui/tooltip';
-import { tooltips } from './tooltips';
+import { tooltips as tooltipTexts } from './tooltips';
 import { VestingExampleModal } from './VestingExampleModal';
 import { ethers } from 'ethers';
 import { useAccount, useChainId, useWriteContract } from 'wagmi';
@@ -32,10 +32,15 @@ import Link from 'next/link';
 import { DeploymentSimulator } from './DeploymentSimulator';
 import { TokenTracker } from './TokenTracker';
 import { LocalTestnetInstructions } from '../network/LocalTestnetInstructions';
+import { Button } from "@/components/ui/button";
+import { Terminal } from 'lucide-react';
+import { Copy } from 'lucide-react';
+import { ChevronUp, ChevronDown } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 
 // Add platform fee configuration
-const PLATFORM_TEAM_WALLET = "YOUR_WALLET_ADDRESS"; // Replace with your wallet address
-const PLATFORM_TEAM_ALLOCATION = 2; // 2% of total supply for platform team
+const PLATFORM_TEAM_WALLET = "0xc1039a6754B15188E3728a97C4E7fF04C652c28c"; // TokenHub platform wallet
+const PLATFORM_TEAM_ALLOCATION = 2; // 2% of total supply for platform
 
 // Add near the top with other tooltips
 const MAINNET_INFO = {
@@ -51,6 +56,14 @@ const isMobileDevice = () => {
 
 // Update all input fields to use smaller padding
 const inputClassName = "w-full p-1.5 rounded bg-gray-700 text-white text-sm";
+
+// Update tooltips near the top of the file
+const tooltips = {
+  // ... existing tooltips ...
+  teamAllocation: "Percentage allocated to the project team (founders, core team members)",
+  developerAllocation: "Percentage allocated to the token creator (you) for development and maintenance",
+  marketingAllocation: "Percentage allocated for marketing and promotional activities",
+};
 
 export function CreateTokenForm() {
   const [mounted, setMounted] = useState(false);
@@ -75,11 +88,11 @@ export function CreateTokenForm() {
     totalSupply: '',
     decimals: 18,
     initialPrice: '',
-    presaleAllocation: 0,
-    liquidityAllocation: 0,
-    teamAllocation: 0,
-    marketingAllocation: 0,
-    developerAllocation: 0,
+    presaleAllocation: 40,    // 40% for presale - common for fair launches
+    liquidityAllocation: 30,  // 30% for liquidity - ensures good trading depth
+    teamAllocation: 10,      // 10% for team - reasonable for small/medium projects
+    marketingAllocation: 10, // 10% for marketing - standard allocation
+    developerAllocation: 10, // 10% for development - covers future improvements
     maxTransferAmount: '',
     cooldownTime: 0,
     transfersEnabled: true,
@@ -103,6 +116,7 @@ export function CreateTokenForm() {
   });
 
   const [isVestingModalOpen, setIsVestingModalOpen] = useState(false);
+  const [isPlatformFeeExpanded, setIsPlatformFeeExpanded] = useState(false);
 
   const totalAllocation = 
     config.presaleAllocation + 
@@ -146,9 +160,8 @@ export function CreateTokenForm() {
     );
   };
 
-  // Add state for tracking deployment
+  // Remove transaction tracking code
   const [deployedToken, setDeployedToken] = useState<{
-    address?: string;
     txHash?: string;
   }>();
 
@@ -156,6 +169,7 @@ export function CreateTokenForm() {
     try {
       setIsCreating(true);
       setError(null);
+      setDeployedToken(undefined);
 
       if (!writeContract) {
         throw new Error('Contract write not available. Please connect your wallet.');
@@ -188,7 +202,7 @@ export function CreateTokenForm() {
 
       console.log('Token parameters:', tokenParams);
 
-      // Call writeContract without checking the return value
+      // Call writeContract to submit transaction
       await writeContract({
         abi: TokenFactoryABI,
         address: process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as `0x${string}`,
@@ -197,11 +211,7 @@ export function CreateTokenForm() {
         value: parseEther('0.1'),
       });
 
-      // If we get here, the transaction was submitted successfully
-      setError('Token creation transaction submitted successfully!');
-
-      // Note: We won't have the transaction hash immediately
-      // You might want to use useWaitForTransaction hook to track the status
+      setError('success: Token creation transaction submitted! Please check your wallet and Etherscan for the transaction details.');
       
     } catch (error) {
       console.error('Token creation error:', error);
@@ -276,7 +286,7 @@ export function CreateTokenForm() {
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <LabelWithTooltip label="Token Name" tooltip={tooltips.name} />
+                    <LabelWithTooltip label="Token Name" tooltip={tooltipTexts.name} />
                     <input
                       type="text"
                       value={config.name}
@@ -286,7 +296,7 @@ export function CreateTokenForm() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <LabelWithTooltip label="Token Symbol" tooltip={tooltips.symbol} />
+                    <LabelWithTooltip label="Token Symbol" tooltip={tooltipTexts.symbol} />
                     <input
                       type="text"
                       value={config.symbol}
@@ -298,7 +308,7 @@ export function CreateTokenForm() {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <LabelWithTooltip label="Total Supply" tooltip={tooltips.totalSupply} />
+                    <LabelWithTooltip label="Total Supply" tooltip={tooltipTexts.totalSupply} />
                     <input
                       type="text"
                       value={config.totalSupply}
@@ -308,7 +318,7 @@ export function CreateTokenForm() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <LabelWithTooltip label="Initial Price (ETH)" tooltip={tooltips.initialPrice} />
+                    <LabelWithTooltip label="Initial Price (ETH)" tooltip={tooltipTexts.initialPrice} />
                     <input
                       type="text"
                       value={config.initialPrice}
@@ -323,29 +333,12 @@ export function CreateTokenForm() {
               {/* Token Distribution */}
               <div className="space-y-3">
                 <h3 className="text-sm font-medium">Token Distribution</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <LabelWithTooltip label="Presale %" tooltip={tooltips.presaleAllocation} />
-                    <input
-                      type="number"
-                      value={config.presaleAllocation}
-                      onChange={(e) => setConfig({ ...config, presaleAllocation: Number(e.target.value) })}
-                      className={inputClassName}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <LabelWithTooltip label="Liquidity %" tooltip={tooltips.liquidityAllocation} />
-                    <input
-                      type="number"
-                      value={config.liquidityAllocation}
-                      onChange={(e) => setConfig({ ...config, liquidityAllocation: Number(e.target.value) })}
-                      className={inputClassName}
-                    />
-                  </div>
-                </div>
                 <div className="grid grid-cols-3 gap-4">
                   <div className="space-y-2">
-                    <LabelWithTooltip label="Team %" tooltip={tooltips.teamAllocation} />
+                    <LabelWithTooltip 
+                      label="Team %" 
+                      tooltip={tooltipTexts.teamAllocation} 
+                    />
                     <input
                       type="number"
                       value={config.teamAllocation}
@@ -354,7 +347,10 @@ export function CreateTokenForm() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <LabelWithTooltip label="Marketing %" tooltip={tooltips.marketingAllocation} />
+                    <LabelWithTooltip 
+                      label="Marketing %" 
+                      tooltip={tooltipTexts.marketingAllocation} 
+                    />
                     <input
                       type="number"
                       value={config.marketingAllocation}
@@ -363,7 +359,10 @@ export function CreateTokenForm() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <LabelWithTooltip label="Developer %" tooltip={tooltips.developerAllocation} />
+                    <LabelWithTooltip 
+                      label="Creator %" 
+                      tooltip={tooltipTexts.developerAllocation} 
+                    />
                     <input
                       type="number"
                       value={config.developerAllocation}
@@ -386,7 +385,7 @@ export function CreateTokenForm() {
               {/* Vesting Configuration */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-medium">Vesting Schedule</h3>
+                  <h3 className="text-sm font-medium">Vesting & Distribution</h3>
                   <button
                     onClick={() => setIsVestingModalOpen(true)}
                     className="text-sm text-blue-400 hover:text-blue-300"
@@ -394,9 +393,41 @@ export function CreateTokenForm() {
                     View Example
                   </button>
                 </div>
+
+                {/* Team Wallet */}
+                <div className="space-y-2">
+                  <LabelWithTooltip 
+                    label="Team Wallet Address" 
+                    tooltip="Address that will receive the team allocation (founders, core team)" 
+                  />
+                  <input
+                    type="text"
+                    value={config.teamWallet}
+                    onChange={(e) => setConfig({ ...config, teamWallet: e.target.value })}
+                    className={inputClassName}
+                    placeholder="0x..."
+                  />
+                </div>
+
+                {/* Creator Wallet */}
+                <div className="space-y-2">
+                  <LabelWithTooltip 
+                    label="Creator Wallet Address" 
+                    tooltip="Your wallet address that will receive the creator allocation" 
+                  />
+                  <input
+                    type="text"
+                    value={config.developerWallet}
+                    onChange={(e) => setConfig({ ...config, developerWallet: e.target.value })}
+                    className={inputClassName}
+                    placeholder="0x..."
+                  />
+                </div>
+
+                {/* Vesting Schedules */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <LabelWithTooltip label="Team Vesting Duration (months)" tooltip={tooltips.vestingDuration} />
+                    <LabelWithTooltip label="Team Vesting Duration (months)" tooltip={tooltipTexts.vestingDuration} />
                     <input
                       type="number"
                       value={config.vestingSchedule.team.duration}
@@ -411,7 +442,7 @@ export function CreateTokenForm() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <LabelWithTooltip label="Team Vesting Cliff (months)" tooltip={tooltips.vestingCliff} />
+                    <LabelWithTooltip label="Team Vesting Cliff (months)" tooltip={tooltipTexts.vestingCliff} />
                     <input
                       type="number"
                       value={config.vestingSchedule.team.cliff}
@@ -426,6 +457,35 @@ export function CreateTokenForm() {
                     />
                   </div>
                 </div>
+
+                {/* Platform Fee Info */}
+                {isMainnet && (
+                  <div className="mt-2 p-2 rounded bg-blue-900/20 border border-blue-800 text-xs">
+                    <div 
+                      className="flex items-center justify-between cursor-pointer"
+                      onClick={() => setIsPlatformFeeExpanded(!isPlatformFeeExpanded)}
+                    >
+                      <div className="flex items-center gap-2">
+                        <InfoIcon className="h-4 w-4 text-blue-400" />
+                        <span>Platform Fee: 2% of total supply</span>
+                      </div>
+                      {isPlatformFeeExpanded ? (
+                        <ChevronUp className="h-3 w-3" />
+                      ) : (
+                        <ChevronDown className="h-3 w-3" />
+                      )}
+                    </div>
+                    {isPlatformFeeExpanded && (
+                      <div className="mt-1 text-gray-400 space-y-1">
+                        <p>This fee is automatically allocated to the TokenHub platform:</p>
+                        <div className="font-mono bg-gray-900/50 p-1 rounded">
+                          {PLATFORM_TEAM_WALLET.slice(0, 8)}...{PLATFORM_TEAM_WALLET.slice(-6)}
+                        </div>
+                        <p>Fee is only applied on mainnet deployments.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Security Features */}
@@ -440,7 +500,7 @@ export function CreateTokenForm() {
                         onChange={(e) => setConfig({ ...config, antiBot: e.target.checked })}
                         className="rounded bg-gray-700"
                       />
-                      <LabelWithTooltip label="Anti-Bot Protection" tooltip={tooltips.antiBot} />
+                      <LabelWithTooltip label="Anti-Bot Protection" tooltip={tooltipTexts.antiBot} />
                     </div>
                     <GasImpactIndicator impact="medium" />
                   </div>
@@ -452,7 +512,7 @@ export function CreateTokenForm() {
                         onChange={(e) => setConfig({ ...config, transfersEnabled: e.target.checked })}
                         className="rounded bg-gray-700"
                       />
-                      <LabelWithTooltip label="Enable Transfers at Launch" tooltip={tooltips.transfersEnabled} />
+                      <LabelWithTooltip label="Enable Transfers at Launch" tooltip={tooltipTexts.transfersEnabled} />
                     </div>
                     <GasImpactIndicator impact="low" />
                   </div>
@@ -467,6 +527,122 @@ export function CreateTokenForm() {
             <NetworkRequirements />
             <TokenTester config={config} />
             <DeploymentSimulator config={config} />
+            
+            {/* Verify & Publish Section */}
+            <Card className="bg-gray-800 border-gray-700">
+              <CardHeader className="py-3 border-b border-gray-700">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <ExternalLink className="h-5 w-5" />
+                  Verify & Publish Contract
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 space-y-3">
+                <div className="text-sm">
+                  <div className="flex items-center justify-between">
+                    <p>After deployment, verify your contract on {chainId === 11155111 ? 'Sepolia' : 'Ethereum Mainnet'} Etherscan:</p>
+                    {chainId !== 11155111 && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleSwitchToSepolia}
+                        className="text-xs h-7"
+                      >
+                        Switch to Sepolia
+                      </Button>
+                    )}
+                  </div>
+                  <ul className="list-disc list-inside mt-2 space-y-1 text-gray-300">
+                    <li>Make your contract source code public</li>
+                    <li>Enable direct interaction through Etherscan</li>
+                    <li>Build trust with your community</li>
+                  </ul>
+                </div>
+
+                <div className="space-y-2">
+                  <h4 className="text-sm font-medium">Steps to Verify:</h4>
+                  <ol className="list-decimal list-inside space-y-2 text-sm text-gray-300">
+                    <li>Wait for contract deployment to be confirmed</li>
+                    <li>Get your personal Etherscan API key:
+                      <div className="ml-4 mt-1">
+                        <a 
+                          href={chainId === 11155111 ? "https://sepolia.etherscan.io/apis" : "https://etherscan.io/apis"}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-400 hover:text-blue-300 inline-flex items-center gap-1"
+                        >
+                          Create Your API Key
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                        <div className="text-xs text-gray-400 mt-1 space-y-1">
+                          <p>Each creator needs their own API key:</p>
+                          <ul className="list-disc list-inside pl-2">
+                            <li>Sign up for a free Etherscan account</li>
+                            <li>Create your personal API key</li>
+                            <li>Use this key for all your contract verifications</li>
+                          </ul>
+                          <p className="text-yellow-400 mt-2">Note: Keep your API key private and never share it</p>
+                        </div>
+                      </div>
+                    </li>
+                    <li>Go to Etherscan:
+                      {chainId === 11155111 ? (
+                        <div className="ml-4 mt-1">
+                          <a 
+                            href="https://sepolia.etherscan.io" 
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-400 hover:text-blue-300 inline-flex items-center gap-1"
+                          >
+                            Sepolia Etherscan
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                          <p className="text-xs text-gray-400 mt-1">Use Sepolia Etherscan for testnet deployments</p>
+                        </div>
+                      ) : (
+                        <div className="ml-4 mt-1">
+                          <a 
+                            href="https://etherscan.io" 
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-400 hover:text-blue-300 inline-flex items-center gap-1"
+                          >
+                            Ethereum Mainnet Etherscan
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                          <p className="text-xs text-gray-400 mt-1">Use Mainnet Etherscan for production deployments</p>
+                        </div>
+                      )}
+                    </li>
+                    <li>Click on "Verify Contract" in the contract page</li>
+                    <li>Enter your Etherscan API key when prompted</li>
+                    <li>Select Solidity (Single file) as compiler type</li>
+                    <li>Choose compiler version 0.8.19</li>
+                    <li>Enable optimization (200 runs)</li>
+                    <li>Copy contract source code from GitHub</li>
+                    <li>Verify and publish</li>
+                  </ol>
+                </div>
+
+                <Alert variant="default" className="bg-blue-900/20 border-blue-800 mt-4">
+                  <AlertTitle className="flex items-center gap-2">
+                    <InfoIcon className="h-4 w-4" />
+                    Important Notes
+                  </AlertTitle>
+                  <AlertDescription className="mt-2 text-sm space-y-2">
+                    <p>
+                      {chainId === 11155111 ? (
+                        <>You're currently on Sepolia testnet - perfect for testing your token before mainnet deployment.</>
+                      ) : (
+                        <>You're currently on mainnet. For testing, switch to Sepolia testnet using the button above.</>
+                      )}
+                    </p>
+                    <p className="text-yellow-400">
+                      Make sure to keep your Etherscan API key private and never share it publicly.
+                    </p>
+                  </AlertDescription>
+                </Alert>
+              </CardContent>
+            </Card>
           </div>
         </TabsContent>
       </Tabs>
@@ -478,36 +654,72 @@ export function CreateTokenForm() {
         validationErrors={validationErrors}
       />
 
-      {/* Error Display */}
-      {error && (
-        <Alert variant={error.includes('success') ? 'success' : 'destructive'}>
-          <AlertTitle>
-            {error.includes('success') ? 'Success' : 'Error'}
-          </AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
+      {/* Create Button and Status */}
+      <div className="space-y-4">
+        <div className="flex justify-end">
+          <Button
+            onClick={handleCreateToken}
+            disabled={!isValid || isCreating || !address}
+            size="default"
+            className="w-[200px] bg-blue-600 hover:bg-blue-700"
+          >
+            {isCreating ? (
+              <div className="flex items-center gap-2">
+                <Spinner className="h-4 w-4" />
+                <span>Creating Token...</span>
+              </div>
+            ) : (
+              <>
+                <Terminal className="mr-2 h-4 w-4" />
+                Create Token
+              </>
+            )}
+          </Button>
+        </div>
 
-      {/* Create Button */}
-      <div className="flex justify-end">
-        <button
-          onClick={handleCreateToken}
-          disabled={!isValid || isCreating || !address}
-          className={`px-6 py-2 rounded-lg font-medium ${
-            !isValid || isCreating || !address
-              ? 'bg-gray-600 cursor-not-allowed'
-              : 'bg-blue-600 hover:bg-blue-700'
-          }`}
-        >
-          {isCreating ? (
-            <div className="flex items-center gap-2">
-              <Spinner />
-              <span>Creating...</span>
-            </div>
-          ) : (
-            'Create Token'
-          )}
-        </button>
+        {/* Status and Next Steps */}
+        {error && (
+          <Alert variant={error.includes('success') ? 'default' : 'destructive'} className={error.includes('success') ? 'bg-green-900/20 border-green-800' : ''}>
+            <AlertTitle className="flex items-center gap-2">
+              {error.includes('success') ? (
+                <>
+                  <div className="h-2 w-2 rounded-full bg-green-500" />
+                  Token Creation Started
+                </>
+              ) : (
+                <>
+                  <div className="h-2 w-2 rounded-full bg-red-500" />
+                  Error Creating Token
+                </>
+              )}
+            </AlertTitle>
+            <AlertDescription>
+              {error.includes('success') ? (
+                <div className="space-y-2 mt-2">
+                  <p>Your token creation transaction has been submitted!</p>
+                  <div className="mt-2">
+                    <p className="font-medium mb-1">Next steps:</p>
+                    <ol className="list-decimal list-inside space-y-1 pl-2">
+                      <li>Check your wallet for the transaction details</li>
+                      <li>View the transaction on <a 
+                        href="https://sepolia.etherscan.io" 
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-400 hover:text-blue-300"
+                      >Sepolia Etherscan</a></li>
+                      <li>Once confirmed, copy your token address from the transaction details</li>
+                      <li>Add the token to MetaMask using the token address</li>
+                      <li>Test token transfers and vesting schedules</li>
+                      <li>Deploy to mainnet when ready</li>
+                    </ol>
+                  </div>
+                </div>
+              ) : (
+                error
+              )}
+            </AlertDescription>
+          </Alert>
+        )}
       </div>
 
       {/* Vesting Example Modal */}

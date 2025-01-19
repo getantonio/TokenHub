@@ -1,6 +1,6 @@
 "use client";
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { TokenConfig } from './types';
 import { formatNumber } from '@/lib/utils';
@@ -14,6 +14,25 @@ interface TokenPreviewProps {
 }
 
 export function TokenPreview({ config, isValid, validationErrors }: TokenPreviewProps) {
+  const [ethPrice, setEthPrice] = useState<number | null>(null);
+
+  useEffect(() => {
+    const fetchEthPrice = async () => {
+      try {
+        const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd');
+        const data = await response.json();
+        setEthPrice(data.ethereum.usd);
+      } catch (error) {
+        console.error('Failed to fetch ETH price:', error);
+      }
+    };
+
+    fetchEthPrice();
+    // Refresh price every 60 seconds
+    const interval = setInterval(fetchEthPrice, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Calculate total allocation
   const totalAllocation = 
     Number(config.presaleAllocation) + 
@@ -21,6 +40,13 @@ export function TokenPreview({ config, isValid, validationErrors }: TokenPreview
     Number(config.teamAllocation) + 
     Number(config.marketingAllocation) +
     Number(config.developerAllocation);
+
+  // Calculate USD price
+  const getUsdPrice = () => {
+    if (!config.initialPrice || !ethPrice) return null;
+    const usdPrice = Number(config.initialPrice) * ethPrice;
+    return usdPrice < 0.01 ? usdPrice.toExponential(2) : usdPrice.toFixed(2);
+  };
 
   return (
     <Card className="w-full bg-gray-800 border-gray-700">
@@ -30,44 +56,88 @@ export function TokenPreview({ config, isValid, validationErrors }: TokenPreview
       <CardContent className="p-4 space-y-6">
         {/* Basic Info */}
         <div className="space-y-3">
-          <div className="flex justify-between items-center">
+          <div className="grid grid-cols-[120px_1fr] gap-2 items-center">
             <span className="text-gray-400">Name:</span>
             <span className="text-white font-medium">{config.name || '-'}</span>
           </div>
-          <div className="flex justify-between items-center">
+          <div className="grid grid-cols-[120px_1fr] gap-2 items-center">
             <span className="text-gray-400">Symbol:</span>
             <span className="text-white font-medium">{config.symbol || '-'}</span>
           </div>
-          <div className="flex justify-between items-center">
+          <div className="grid grid-cols-[120px_1fr] gap-2 items-center">
             <span className="text-gray-400">Total Supply:</span>
             <span className="text-white font-medium">{config.totalSupply ? formatNumber(Number(config.totalSupply)) : '-'}</span>
           </div>
-          <div className="flex justify-between items-center">
+          <div className="grid grid-cols-[120px_1fr] gap-2 items-center">
             <span className="text-gray-400">Initial Price:</span>
-            <span className="text-white font-medium">{config.initialPrice ? `${config.initialPrice} ETH` : '-'}</span>
+            <span className="text-white font-medium">
+              {config.initialPrice ? (
+                <>
+                  {config.initialPrice} ETH
+                  <span className="text-gray-400 ml-2">
+                    (${getUsdPrice()})
+                  </span>
+                </>
+              ) : '-'}
+            </span>
           </div>
         </div>
 
         {/* Distribution Graph */}
         <div className="space-y-4">
           <h3 className="text-sm font-medium text-white">Distribution</h3>
-          <div className="w-full bg-gray-700 rounded-lg h-3 overflow-hidden">
-            <div className="h-full flex">
-              <Tooltip content={tooltips.presaleAllocation}>
-                <div className="bg-blue-500 h-full transition-all" style={{ width: `${config.presaleAllocation}%` }} />
-              </Tooltip>
-              <Tooltip content={tooltips.liquidityAllocation}>
-                <div className="bg-green-500 h-full transition-all" style={{ width: `${config.liquidityAllocation}%` }} />
-              </Tooltip>
-              <Tooltip content={tooltips.teamAllocation}>
-                <div className="bg-yellow-500 h-full transition-all" style={{ width: `${config.teamAllocation}%` }} />
-              </Tooltip>
-              <Tooltip content={tooltips.marketingAllocation}>
-                <div className="bg-purple-500 h-full transition-all" style={{ width: `${config.marketingAllocation}%` }} />
-              </Tooltip>
-              <Tooltip content={tooltips.developerAllocation}>
-                <div className="bg-red-500 h-full transition-all" style={{ width: `${config.developerAllocation}%` }} />
-              </Tooltip>
+          <div className="w-full bg-gray-700 rounded-lg h-4 overflow-hidden">
+            <div className="flex h-full">
+              {config.presaleAllocation > 0 && (
+                <div 
+                  className="bg-blue-500 h-full transition-all relative group"
+                  style={{ width: `${config.presaleAllocation}%` }}
+                >
+                  <div className="opacity-0 group-hover:opacity-100 absolute bottom-full mb-1 left-1/2 transform -translate-x-1/2 bg-gray-900 text-xs px-2 py-1 rounded">
+                    Presale: {config.presaleAllocation}%
+                  </div>
+                </div>
+              )}
+              {config.liquidityAllocation > 0 && (
+                <div 
+                  className="bg-green-500 h-full transition-all relative group"
+                  style={{ width: `${config.liquidityAllocation}%` }}
+                >
+                  <div className="opacity-0 group-hover:opacity-100 absolute bottom-full mb-1 left-1/2 transform -translate-x-1/2 bg-gray-900 text-xs px-2 py-1 rounded">
+                    Liquidity: {config.liquidityAllocation}%
+                  </div>
+                </div>
+              )}
+              {config.teamAllocation > 0 && (
+                <div 
+                  className="bg-yellow-500 h-full transition-all relative group"
+                  style={{ width: `${config.teamAllocation}%` }}
+                >
+                  <div className="opacity-0 group-hover:opacity-100 absolute bottom-full mb-1 left-1/2 transform -translate-x-1/2 bg-gray-900 text-xs px-2 py-1 rounded">
+                    Team: {config.teamAllocation}%
+                  </div>
+                </div>
+              )}
+              {config.marketingAllocation > 0 && (
+                <div 
+                  className="bg-purple-500 h-full transition-all relative group"
+                  style={{ width: `${config.marketingAllocation}%` }}
+                >
+                  <div className="opacity-0 group-hover:opacity-100 absolute bottom-full mb-1 left-1/2 transform -translate-x-1/2 bg-gray-900 text-xs px-2 py-1 rounded">
+                    Marketing: {config.marketingAllocation}%
+                  </div>
+                </div>
+              )}
+              {config.developerAllocation > 0 && (
+                <div 
+                  className="bg-red-500 h-full transition-all relative group"
+                  style={{ width: `${config.developerAllocation}%` }}
+                >
+                  <div className="opacity-0 group-hover:opacity-100 absolute bottom-full mb-1 left-1/2 transform -translate-x-1/2 bg-gray-900 text-xs px-2 py-1 rounded">
+                    Developers: {config.developerAllocation}%
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
