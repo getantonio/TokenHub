@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TokenConfig, SecurityRisk } from './types';
 import { Progress } from "@/components/ui/progress";
@@ -30,6 +30,7 @@ export function TokenTester({ config }: TokenTesterProps) {
   const [isRunning, setIsRunning] = useState(false);
   const [currentTest, setCurrentTest] = useState(0);
   const [results, setResults] = useState<TestResult[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   const tests = [
     // Basic Validation
@@ -59,30 +60,43 @@ export function TokenTester({ config }: TokenTesterProps) {
     {
       name: "Gas Cost Estimation",
       run: async () => {
-        if (!window.ethereum) {
-          throw new Error("Web3 provider required for gas estimation");
-        }
-
-        const factoryAddress = process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS;
-        if (!factoryAddress) {
-          throw new Error("Token factory address not configured");
-        }
-
-        const provider = new BrowserProvider(window.ethereum as any);
-        const details = [];
-
         try {
+          const details: string[] = [];
+          
+          if (!window.ethereum) {
+            throw new Error("Web3 provider required for gas estimation");
+          }
+
+          // Validate parameters first
+          if (!config.name || !config.symbol || !config.totalSupply) {
+            throw new Error("Missing required token parameters: name, symbol, and total supply are required");
+          }
+
+          const provider = new BrowserProvider(window.ethereum as any, {
+            name: 'Local Test Network',
+            chainId: 31337
+          });
+
+          // Get current chain ID
+          const network = await provider.getNetwork();
+          const chainId = Number(network.chainId);
+
+          // Check if we're on the right network
+          if (chainId !== 31337 && chainId !== 11155111) { // Local or Sepolia
+            throw new Error(`Please switch to a test network. Current network ID: ${chainId}`);
+          }
+
+          const factoryAddress = process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS;
+          if (!factoryAddress) {
+            throw new Error("Token factory address not configured");
+          }
+
           // Get contract interface
           const factoryContract = new Contract(
             factoryAddress,
             TokenFactoryABI,
             provider
           );
-
-          // Validate parameters before estimation
-          if (!config.name || !config.symbol || !config.totalSupply) {
-            throw new Error("Missing required token parameters");
-          }
 
           // Format parameters carefully
           const params = {
@@ -150,23 +164,7 @@ export function TokenTester({ config }: TokenTesterProps) {
           };
         } catch (error) {
           console.error('Gas estimation error:', error);
-          
-          // Provide more helpful error messages
-          let errorMessage = 'Gas estimation failed: ';
-          if (error instanceof Error) {
-            if (error.message.includes('CALL_EXCEPTION')) {
-              errorMessage += 'Contract interaction failed. Please verify:';
-              details.push('• All token parameters are valid');
-              details.push('• You have enough ETH for gas');
-              details.push('• The contract address is correct');
-            } else {
-              errorMessage += error.message;
-            }
-          } else {
-            errorMessage += 'Unknown error occurred';
-          }
-
-          throw new Error(errorMessage);
+          throw error;
         }
       }
     },
@@ -451,7 +449,10 @@ export function TokenTester({ config }: TokenTesterProps) {
     try {
       if (!window.ethereum) throw new Error('Web3 provider required');
       
-      const provider = new BrowserProvider(window.ethereum);
+      const provider = new BrowserProvider(window.ethereum as any, {
+        name: 'Local Test Network',
+        chainId: 31337
+      });
       
       // Rest of simulation logic
       const gasEstimate = await provider.estimateGas({
@@ -465,6 +466,33 @@ export function TokenTester({ config }: TokenTesterProps) {
       throw error;
     }
   };
+
+  useEffect(() => {
+    const checkNetwork = async () => {
+      if (!window.ethereum) return;
+      
+      try {
+        const provider = new BrowserProvider(window.ethereum);
+        const network = await provider.getNetwork();
+        const chainId = Number(network.chainId);
+        
+        if (chainId !== 31337 && chainId !== 11155111) {
+          setError('Please switch to a test network (Local or Sepolia)');
+        } else {
+          setError(null);
+        }
+      } catch (err) {
+        console.error('Network check error:', err);
+      }
+    };
+
+    checkNetwork();
+    window.ethereum?.on('chainChanged', checkNetwork);
+    
+    return () => {
+      window.ethereum?.removeListener('chainChanged', checkNetwork);
+    };
+  }, []);
 
   return (
     <Card>

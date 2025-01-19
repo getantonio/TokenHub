@@ -32,96 +32,68 @@ export function NetworkSelector() {
   const mainnetVersion = NETWORKS_WITH_COSTS.find(n => n.name === 'Ethereum');
 
   const handleNetworkSwitch = useCallback(async (networkId: number) => {
-    if (isSwitching || isPending) {
-      setError('A network switch is already in progress. Please wait.');
-      return;
-    }
+    if (isSwitching) return;
 
     try {
       setIsSwitching(true);
-      setIsPending(true);
       setError(null);
+      setIsOpen(false);
 
       if (!window.ethereum) {
-        throw new Error('Please install MetaMask or another Web3 wallet');
+        throw new Error('Please install MetaMask');
       }
 
-      const targetNetwork = NETWORKS_WITH_COSTS.find(n => n.id === networkId);
-      if (!targetNetwork) {
-        throw new Error('Unsupported network');
+      // Check if already on network
+      const currentChainId = await window.ethereum.request({ method: 'eth_chainId' });
+      if (currentChainId === `0x${networkId.toString(16)}`) {
+        setIsSwitching(false);
+        return;
       }
 
-      await connectAsync({
-        chainId: networkId,
-        connector: injected(),
+      // Switch network
+      await window.ethereum.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: `0x${networkId.toString(16)}` }],
       });
+
+      // Wait for network to be ready
+      await new Promise(resolve => setTimeout(resolve, 500));
 
     } catch (error: any) {
-      if (error?.code === 4001 || error?.message?.includes('User rejected')) {
-        setError('Network switch cancelled by user. Please try again.');
-      } else if (error?.code === 4902) {
-        setError('Network not added to MetaMask. Please add it first.');
-      } else if (error?.code === -32002) {
-        setError('A MetaMask request is pending. Please check your wallet.');
-      } else if (error?.message) {
-        setError(error.message);
-      } else {
-        setError('Failed to switch network. Please try again.');
-      }
       console.error('Network switch error:', error);
+      setError(error.message || 'Failed to switch network');
     } finally {
-      setTimeout(() => {
-        setIsSwitching(false);
-        setIsPending(false);
+      setIsSwitching(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => setError(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const dropdown = document.getElementById('network-dropdown');
+      if (dropdown && !dropdown.contains(event.target as Node)) {
         setIsOpen(false);
-        setShowInfo(false);
-      }, 1000);
-    }
-  }, [connectAsync, isSwitching, isPending]);
-
-  const LOCAL_TESTNET_INFO = {
-    name: "Local Testnet",
-    warning: "⚠️ For testing only. Transactions are not real.",
-    setup: "Run 'npm run local-testnet' to start local network"
-  };
-
-  const handleLocalTestnet = async () => {
-    try {
-      console.log('Attempting to connect to local testnet...');
-      
-      const response = await fetch('http://127.0.0.1:8545', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'eth_blockNumber',
-          params: [],
-          id: 1
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Local testnet not running');
       }
+    };
 
-      const data = await response.json();
-      console.log('Local testnet response:', data);
-
-      await handleNetworkSwitch(hardhat.id);
-    } catch (error) {
-      console.error('Local testnet error:', error);
-      setError(`Local testnet not available. ${LOCAL_TESTNET_INFO.setup}`);
-    }
-  };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   return (
-    <div className="relative">
+    <div id="network-dropdown" className="relative">
       <div className="flex items-center gap-2">
         <button
-          onClick={() => setIsOpen(!isOpen)}
-          disabled={isSwitching || isPending}
+          onClick={() => !isSwitching && setIsOpen(!isOpen)}
+          disabled={isSwitching}
           className={`flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg border border-gray-700 text-sm font-medium
-            ${(isSwitching || isPending) ? 'opacity-50 cursor-not-allowed' : ''}`}
+            ${isSwitching ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
           {isSwitching ? (
             <span>Switching...</span>
@@ -205,7 +177,7 @@ export function NetworkSelector() {
         </div>
       )}
 
-      {isOpen && !isSwitching && !isPending && (
+      {isOpen && !isSwitching && (
         <div className="absolute top-full mt-2 w-64 py-1 bg-gray-800 rounded-lg border border-gray-700 shadow-lg z-50">
           {NETWORKS_WITH_COSTS.map((network) => (
             <button

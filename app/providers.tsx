@@ -83,18 +83,9 @@ export const NETWORKS_WITH_COSTS = SUPPORTED_NETWORKS.map(network => ({
   ...NETWORK_COSTS[network.id],
 }));
 
-// Customize hardhat chain configuration
-const customHardhat = {
-  ...hardhat,
-  contracts: {
-    ensRegistry: undefined,
-    multicall3: undefined,
-  },
-} as const;
-
 // Create wagmi config
 const config = createConfig({
-  chains: [mainnet, arbitrum, optimism, polygon, bsc, sepolia, customHardhat],
+  chains: [...SUPPORTED_NETWORKS],
   connectors: [injected()],
   transports: {
     [mainnet.id]: http(),
@@ -103,11 +94,7 @@ const config = createConfig({
     [optimism.id]: http(),
     [polygon.id]: http(),
     [bsc.id]: http(),
-    [customHardhat.id]: http('http://127.0.0.1:8545', {
-      timeout: 30000,
-      retryCount: 3,
-      retryDelay: 1000,
-    }),
+    [hardhat.id]: http('http://127.0.0.1:8545'),
   },
 });
 

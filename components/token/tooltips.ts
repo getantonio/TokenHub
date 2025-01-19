@@ -23,6 +23,11 @@ export const tooltips = {
   • Partnerships and promotions
   • Exchange listings
   Recommended: 5-15%`,
+  developerAllocation: `Tokens allocated for development team:
+  • Subject to vesting schedule
+  • Used for ongoing development
+  • Technical team incentives
+  Recommended: 5-10%`,
   maxTransferAmount: "Maximum amount of tokens that can be transferred in a single transaction. Helps prevent dumping.",
   antiBot: "Implements measures to prevent automated trading bots from manipulating the token price at launch.",
   transfersEnabled: "If enabled, tokens can be transferred immediately after launch. If disabled, transfers start locked.",

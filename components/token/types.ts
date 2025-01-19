@@ -39,10 +39,10 @@ export interface TokenConfig {
   teamWallet: string;
 
   // Developer Wallet
-  developerWallet?: string;
+  developerWallet: string;
 
   // Developer Vesting
-  developerVesting?: {
+  developerVesting: {
     duration: number;
     cliff: number;
   };
