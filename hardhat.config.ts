@@ -1,6 +1,7 @@
 require("@nomicfoundation/hardhat-ethers");
 require("@nomicfoundation/hardhat-toolbox");
 require("solidity-coverage");
+require("@nomiclabs/hardhat-etherscan");
 
 const config = {
   solidity: {
@@ -26,11 +27,18 @@ const config = {
       accounts: {
         mnemonic: "test test test test test test test test test test test test junk",
       },
+    },
+    sepolia: {
+      url: process.env.SEPOLIA_RPC_URL || "https://rpc.sepolia.org",
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
     }
   },
   gasReporter: {
     enabled: process.env.REPORT_GAS !== undefined,
     currency: "USD",
+  },
+  etherscan: {
+    apiKey: process.env.ETHERSCAN_API_KEY,
   },
 };
 

@@ -9,6 +9,10 @@ import "./TokenVesting.sol";
 contract TokenFactory is Ownable, ReentrancyGuard {
     // Token creation fee
     uint256 public creationFee;
+    uint256 public constant TARGET_USD_FEE = 100; // $100 in USD
+    
+    // Mapping for discounted addresses
+    mapping(address => uint256) public discountedFees;
     
     // Struct to store token configuration
     struct TokenConfig {
@@ -32,9 +36,41 @@ contract TokenFactory is Ownable, ReentrancyGuard {
     event TokenCreated(address indexed tokenAddress, string name, string symbol);
     event VestingScheduleCreated(address indexed tokenAddress, address indexed vestingContract, address beneficiary);
     event CreationFeeUpdated(uint256 newFee);
+    event DiscountSet(address indexed user, uint256 discountedFee);
 
-    constructor(uint256 _creationFee) {
-        creationFee = _creationFee;
+    constructor(uint256 _initialFee) {
+        creationFee = _initialFee;
+    }
+
+    /**
+     * @dev Updates the creation fee based on ETH/USD price
+     * @param _ethPriceInUsd Current ETH price in USD (with 8 decimals)
+     */
+    function updateFeeFromEthPrice(uint256 _ethPriceInUsd) external onlyOwner {
+        // Calculate fee in ETH to equal $100
+        // _ethPriceInUsd has 8 decimals, so we multiply TARGET_USD_FEE by 1e26 and divide by price
+        creationFee = (TARGET_USD_FEE * 1e26) / _ethPriceInUsd;
+        emit CreationFeeUpdated(creationFee);
+    }
+
+    /**
+     * @dev Sets a custom creation fee for a specific address
+     * @param user Address to set discount for
+     * @param discountedFee The discounted fee amount (0 for free)
+     */
+    function setDiscountedFee(address user, uint256 discountedFee) external onlyOwner {
+        require(discountedFee <= creationFee, "Discounted fee cannot be higher than regular fee");
+        discountedFees[user] = discountedFee;
+        emit DiscountSet(user, discountedFee);
+    }
+
+    /**
+     * @dev Gets the creation fee for a specific address
+     * @param user Address to check
+     */
+    function getCreationFee(address user) public view returns (uint256) {
+        uint256 discountedFee = discountedFees[user];
+        return discountedFee > 0 ? discountedFee : creationFee;
     }
 
     /**
@@ -42,7 +78,8 @@ contract TokenFactory is Ownable, ReentrancyGuard {
      * @param config Token configuration parameters
      */
     function createToken(TokenConfig calldata config) external payable nonReentrant {
-        require(msg.value >= creationFee, "Insufficient creation fee");
+        uint256 requiredFee = getCreationFee(msg.sender);
+        require(msg.value >= requiredFee, "Insufficient creation fee");
         require(config.initialSupply <= config.maxSupply, "Initial supply exceeds max supply");
         require(config.teamWallet != address(0), "Invalid team wallet");
 

@@ -40,6 +40,7 @@
   "devDependencies": {
     "@nomicfoundation/hardhat-ethers": "^3.0.8",
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@nomiclabs/hardhat-etherscan": "^3.1.8",
     "@swc/jest": "^0.2.37",
     "@testing-library/jest-dom": "^5.17.0",
     "@testing-library/react": "^14.0.0",

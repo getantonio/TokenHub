@@ -46,6 +46,7 @@ import { ChevronUp, ChevronDown } from 'lucide-react';
 import { ExternalLink } from 'lucide-react';
 import { formatNumber } from '@/lib/utils';
 import { CheckCircle } from 'lucide-react';
+import { Contract } from 'ethers';
 
 // Add platform fee configuration
 const PLATFORM_TEAM_WALLET = "0xc1039a6754B15188E3728a97C4E7fF04C652c28c"; // TokenHub platform wallet
@@ -129,6 +130,11 @@ export function CreateTokenForm() {
   const [isPlatformFeeExpanded, setIsPlatformFeeExpanded] = useState(false);
   const [isPresaleMechanismExpanded, setIsPresaleMechanismExpanded] = useState(false);
   const [isVerifyExpanded, setIsVerifyExpanded] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [discountAddress, setDiscountAddress] = useState('');
+  const [discountAmount, setDiscountAmount] = useState('');
+  const [ethPrice, setEthPrice] = useState<number | null>(null);
+  const [creationFee, setCreationFee] = useState<string>('0.1');
 
   const { address } = useAccount();
   const chainId = useChainId();
@@ -235,6 +241,54 @@ export function CreateTokenForm() {
     }
   });
 
+  // Check if current user is admin (contract owner)
+  useEffect(() => {
+    const checkAdmin = async () => {
+      if (!address || !window.ethereum) return;
+      
+      try {
+        const provider = new BrowserProvider(window.ethereum as any);
+        const factory = new Contract(
+          process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as string,
+          TokenFactoryABI,
+          provider
+        );
+        
+        const owner = await factory.owner();
+        setIsAdmin(owner.toLowerCase() === address.toLowerCase());
+      } catch (err) {
+        console.error('Error checking admin status:', err);
+      }
+    };
+
+    checkAdmin();
+  }, [address]);
+
+  // Add ETH price fetching
+  useEffect(() => {
+    const fetchEthPrice = async () => {
+      try {
+        const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd');
+        const data = await response.json();
+        const price = data.ethereum.usd;
+        setEthPrice(price);
+        
+        // Calculate fee in ETH to equal $100
+        if (price > 0) {
+          const feeInEth = (100 / price).toFixed(6); // $100 divided by ETH price
+          setCreationFee(feeInEth);
+        }
+      } catch (error) {
+        console.error('Failed to fetch ETH price:', error);
+      }
+    };
+
+    fetchEthPrice();
+    // Refresh price every 5 minutes
+    const interval = setInterval(fetchEthPrice, 300000);
+    return () => clearInterval(interval);
+  }, []);
+
   const handleCreateToken = async () => {
     if (!address) {
       setError('Please connect your wallet first');
@@ -255,6 +309,25 @@ export function CreateTokenForm() {
 
       if (!writeContract || !publicClient) {
         throw new Error('Contract interaction not available');
+      }
+
+      // Get user's discounted fee if any
+      let userFee = creationFee;
+      if (address) {
+        try {
+          const provider = new BrowserProvider(window.ethereum as any);
+          const factory = new Contract(
+            process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as string,
+            TokenFactoryABI,
+            provider
+          );
+          const discountedFee = await factory.getCreationFee(address);
+          if (discountedFee > 0n) {
+            userFee = formatEther(discountedFee);
+          }
+        } catch (err) {
+          console.error('Error checking discounted fee:', err);
+        }
       }
 
       // Prepare contract parameters
@@ -282,13 +355,13 @@ export function CreateTokenForm() {
 
       console.log('Creating token with params:', params);
 
-      // Write contract
+      // Write contract with dynamic fee
       const tx = await writeContract({
         abi: TokenFactoryABI,
         address: process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as `0x${string}`,
         functionName: 'createToken',
         args: [params],
-        value: parseUnits('0.1', 18),
+        value: parseUnits(userFee, 18),
       });
 
       console.log('Transaction submitted:', tx);
@@ -344,12 +417,105 @@ export function CreateTokenForm() {
     return handleNetworkSwitch(11155111); // Sepolia chainId
   };
 
+  const handleSetDiscount = async () => {
+    if (!address || !window.ethereum) return;
+    
+    try {
+      setIsSubmitting(true);
+      setError(null);
+
+      const provider = new BrowserProvider(window.ethereum as any);
+      const signer = await provider.getSigner();
+      const factory = new Contract(
+        process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as string,
+        TokenFactoryABI,
+        signer
+      );
+
+      const tx = await factory.setDiscountedFee(
+        discountAddress,
+        parseUnits(discountAmount || '0', 18)
+      );
+
+      await tx.wait();
+      setDiscountAddress('');
+      setDiscountAmount('');
+      
+    } catch (err: any) {
+      console.error('Error setting discount:', err);
+      setError(err.message || 'Failed to set discount');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   if (!mounted) {
     return null;
   }
 
   return (
     <div className="max-w-3xl mx-auto space-y-4">
+      {/* Add fee info at the top */}
+      <Card className="bg-gray-800 border-gray-700">
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <InfoIcon className="h-4 w-4 text-blue-400" />
+              <span className="text-sm">Creation Fee:</span>
+            </div>
+            <div className="text-sm">
+              <span className="text-blue-400">{creationFee} ETH</span>
+              {ethPrice && <span className="text-gray-400 ml-2">(≈ $100)</span>}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {isAdmin && (
+        <Card className="bg-gray-800 border-gray-700">
+          <CardHeader className="py-3 border-b border-gray-700">
+            <CardTitle className="text-lg">Admin Controls</CardTitle>
+          </CardHeader>
+          <CardContent className="p-4 space-y-4">
+            <div className="space-y-3">
+              <h3 className="text-sm font-medium">Set Discounted Fee</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs">Address</label>
+                  <input
+                    type="text"
+                    value={discountAddress}
+                    onChange={(e) => setDiscountAddress(e.target.value)}
+                    className="w-full p-2 rounded bg-gray-700 text-white"
+                    placeholder="0x..."
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs">Fee Amount (ETH)</label>
+                  <input
+                    type="text"
+                    value={discountAmount}
+                    onChange={(e) => setDiscountAmount(e.target.value)}
+                    className="w-full p-2 rounded bg-gray-700 text-white"
+                    placeholder="0.05"
+                  />
+                </div>
+              </div>
+              <button
+                onClick={handleSetDiscount}
+                disabled={isSubmitting || !discountAddress}
+                className="w-full py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 rounded-lg text-sm"
+              >
+                {isSubmitting ? 'Setting Discount...' : 'Set Discount'}
+              </button>
+              <p className="text-xs text-gray-400">
+                Set to 0 for free token creation, or any amount less than the standard fee ({formatEther(parseUnits('0.1', 18))} ETH)
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      
       <Tabs defaultValue="basic" className="w-full">
         <TabsList className="grid w-full grid-cols-3 mb-2">
           <TabsTrigger value="basic">Basic Info</TabsTrigger>
