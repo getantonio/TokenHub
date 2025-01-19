@@ -134,7 +134,7 @@ export function CreateTokenForm() {
   const chainId = useChainId();
   const isMainnet = chainId === 1;
   const publicClient = usePublicClient();
-  const { writeContract, isLoading: isWritePending } = useWriteContract();
+  const { writeContract } = useWriteContract();
 
   const [useMinimalFeatures, setUseMinimalFeatures] = useState(false);
 
@@ -200,21 +200,34 @@ export function CreateTokenForm() {
   // Watch for transaction confirmation
   useWatchPendingTransactions({
     onTransactions: (transactions) => {
-      if (transactions.includes(txData as Hash)) {
+      const hash = transactions[0];
+      if (hash) {
+        // Update status
+        setError(`Transaction confirmed. Processing token creation... (${hash.slice(0, 6)}...${hash.slice(-4)})`);
+
         // Transaction confirmed
         if (publicClient) {
-          publicClient.getTransactionReceipt({ hash: txData as Hash }).then((receipt) => {
+          publicClient.getTransactionReceipt({ hash }).then((receipt) => {
+            console.log('Transaction receipt:', receipt);
+            
             const tokenCreatedEvent = receipt.logs.find(log => 
               log.topics[0] === ethers.id("TokenCreated(address,address,string,string)")
             );
+
             if (tokenCreatedEvent?.topics[1]) {
               const tokenAddress = `0x${tokenCreatedEvent.topics[1].slice(26)}`;
               setDeployedToken({ address: tokenAddress });
+              setIsWriting(false);
+              setError(null); // Clear any error/status messages
+            } else {
+              console.error('TokenCreated event not found in logs:', receipt.logs);
+              setWriteError(new Error('Token creation transaction succeeded but token address not found'));
               setIsWriting(false);
             }
           }).catch(err => {
             console.error('Receipt error:', err);
             setWriteError(err as Error);
+            setError('Failed to process transaction receipt. Please check Etherscan for details.');
             setIsWriting(false);
           });
         }
@@ -225,6 +238,12 @@ export function CreateTokenForm() {
   const handleCreateToken = async () => {
     if (!address) {
       setError('Please connect your wallet first');
+      return;
+    }
+
+    // Check network first
+    if (chainId !== 11155111 && chainId !== 1) {
+      setError('Please switch to Sepolia testnet or Ethereum mainnet');
       return;
     }
 
@@ -253,45 +272,47 @@ export function CreateTokenForm() {
         teamVestingCliff: BigInt(config.vestingSchedule.team.cliff),
         teamAllocation: BigInt(config.teamAllocation),
         teamWallet: config.teamWallet || address,
+        marketingWallet: config.marketingWallet || address,
         developerAllocation: BigInt(config.developerAllocation),
         developerVestingDuration: BigInt(config.developerVesting?.duration || 12),
         developerVestingCliff: BigInt(config.developerVesting?.cliff || 3),
         developerWallet: config.developerWallet || address,
+        presaleDuration: BigInt(config.presaleDuration || 7),
       };
 
+      console.log('Creating token with params:', params);
+
       // Write contract
-      const txHash = await writeContract({
+      const tx = await writeContract({
         abi: TokenFactoryABI,
         address: process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as `0x${string}`,
         functionName: 'createToken',
         args: [params],
         value: parseUnits('0.1', 18),
-      } as const);
-
-      if (!txHash) throw new Error('Transaction failed');
-
-      // Wait for transaction confirmation
-      const receipt = await publicClient.waitForTransactionReceipt({ 
-        hash: txHash 
       });
-      
-      // Find TokenCreated event
-      const tokenCreatedEvent = receipt.logs.find(log => 
-        log.topics[0] === ethers.id("TokenCreated(address,address,string,string)")
-      );
 
-      if (tokenCreatedEvent?.topics[1]) {
-        const tokenAddress = `0x${tokenCreatedEvent.topics[1].slice(26)}`;
-        setDeployedToken({ address: tokenAddress });
-      }
+      console.log('Transaction submitted:', tx);
+
+      // Show pending status
+      setError('Transaction submitted. Waiting for confirmation...');
 
     } catch (err: any) {
       console.error('Token creation error:', err);
       setWriteError(err);
-      setError(err.message || 'Failed to create token. Please try again.');
+      
+      // Provide more specific error messages
+      if (err.message?.includes('network changed')) {
+        setError('Network changed during transaction. Please try again.');
+      } else if (err.message?.includes('no matching fragment')) {
+        setError('Contract interaction failed. Please check if you are on the correct network.');
+      } else if (err.message?.includes('Failed to fetch')) {
+        setError('Network connection error. Please check your internet connection and try again.');
+      } else {
+        setError(err.message || 'Failed to create token. Please try again.');
+      }
     } finally {
-      setIsWriting(false);
       setIsSubmitting(false);
+      // Note: isWriting will be set to false by the transaction watcher
     }
   };
 
@@ -836,7 +857,9 @@ export function CreateTokenForm() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => setIsVerifyExpanded(!isVerifyExpanded)}
+                    onClick={() => {
+                      setIsVerifyExpanded(!isVerifyExpanded);
+                    }}
                     className="h-7"
                   >
                     {isVerifyExpanded ? 'Hide Details' : 'Show Details'}

@@ -11,6 +11,7 @@ import { TokenFactoryABI } from '@/contracts/abis/TokenFactory';
 import { ethers } from 'ethers';
 import { validateTokenConfig } from '@/lib/utils';
 import { Spinner } from "@/components/ui/spinner";
+import { Contract } from 'ethers';
 
 interface SimulationStep {
   name: string;
@@ -137,10 +138,15 @@ export function DeploymentSimulator({ config }: DeploymentSimulatorProps) {
       currentSteps[0].status = 'success';
 
       // Step 2: Contract Deployment
-      const deploymentGas = await simulateDeployment();
-      currentSteps[1].status = 'success';
-      currentSteps[1].gasEstimate = deploymentGas;
-      totalGasUsed += deploymentGas;
+      const deploymentResult = await simulateDeployment();
+      if (deploymentResult.success) {
+        currentSteps[1].status = 'success';
+        currentSteps[1].gasEstimate = deploymentResult.gasEstimate;
+        totalGasUsed += deploymentResult.gasEstimate;
+      } else {
+        currentSteps[1].status = 'error';
+        currentSteps[1].error = deploymentResult.error || 'Failed to estimate gas';
+      }
 
       // Step 3: Token Configuration
       currentSteps[2].status = 'success';
@@ -171,29 +177,94 @@ export function DeploymentSimulator({ config }: DeploymentSimulatorProps) {
     // Throw error if validation fails
   };
 
-  const simulateDeployment = async (): Promise<bigint> => {
+  const simulateDeployment = async () => {
     try {
-      const provider = new ethers.JsonRpcProvider('http://127.0.0.1:8545', {
-        chainId: 31337,
-        name: 'Hardhat'
-      });
+      // Check for ethereum provider
+      if (!window.ethereum) {
+        throw new Error('MetaMask not installed');
+      }
 
-      // Get factory contract
-      const factoryContract = new ethers.Contract(
-        process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS!,
+      // Check and switch network first if needed
+      const provider = new ethers.BrowserProvider(window.ethereum as any);
+      
+      const network = await provider.getNetwork();
+      const chainId = Number(network.chainId);
+      
+      if (chainId !== 11155111) {
+        await window.ethereum.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: '0xaa36a7' }], // 11155111 in hex
+        });
+        
+        // Wait for network switch to complete
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Get new provider after network switch
+        const updatedProvider = new ethers.BrowserProvider(window.ethereum as any);
+        return await simulateWithProvider(updatedProvider);
+      }
+      
+      return await simulateWithProvider(provider);
+    } catch (err: any) {
+      console.error('Deployment simulation error:', err);
+      return {
+        success: false,
+        gasEstimate: 0n,
+        error: err.message
+      };
+    }
+  };
+
+  const simulateWithProvider = async (provider: ethers.Provider) => {
+    try {
+      // Create contract instance with proper ABI
+      const factory = new Contract(
+        process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as string,
         TokenFactoryABI,
         provider
       );
 
-      // Estimate gas for token creation
-      const gasEstimate = await factoryContract.createToken.estimateGas(
-        // Your token parameters here
+      // Prepare parameters for gas estimation
+      const params = {
+        name: config.name,
+        symbol: config.symbol,
+        maxSupply: parseUnits(config.totalSupply || '0', config.decimals),
+        initialSupply: parseUnits(config.totalSupply || '0', config.decimals),
+        tokenPrice: parseUnits(config.initialPrice || '0', 18),
+        maxTransferAmount: config.maxTransferAmount ? parseUnits(config.maxTransferAmount, config.decimals) : 0n,
+        cooldownTime: BigInt(config.cooldownTime || 0),
+        transfersEnabled: config.transfersEnabled,
+        antiBot: config.antiBot,
+        teamVestingDuration: BigInt(config.vestingSchedule.team.duration),
+        teamVestingCliff: BigInt(config.vestingSchedule.team.cliff),
+        teamAllocation: BigInt(config.teamAllocation),
+        teamWallet: config.teamWallet || address,
+        marketingWallet: config.marketingWallet || address,
+        developerAllocation: BigInt(config.developerAllocation),
+        developerVestingDuration: BigInt(config.developerVesting?.duration || 12),
+        developerVestingCliff: BigInt(config.developerVesting?.cliff || 3),
+        developerWallet: config.developerWallet || address,
+        presaleDuration: BigInt(config.presaleDuration || 7),
+      };
+
+      // Estimate gas with proper parameters
+      const gasEstimate = await factory.createToken.estimateGas(
+        params,
+        { value: parseUnits('0.1', 18) }
       );
 
-      return gasEstimate || 200000n; // Return default value if estimation fails
-    } catch (error) {
-      console.error('Deployment simulation error:', error);
-      return 200000n; // Return default gas estimate on error
+      return {
+        success: true,
+        gasEstimate: gasEstimate,
+        error: null
+      };
+    } catch (err: any) {
+      console.error('Gas estimation error:', err);
+      return {
+        success: false,
+        gasEstimate: 0n,
+        error: err.message
+      };
     }
   };
 
