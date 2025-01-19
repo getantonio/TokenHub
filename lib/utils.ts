@@ -31,9 +31,9 @@ export function validateTokenConfig(config: TokenConfig): string[] {
     errors.push(`Total token allocation must equal 100% (currently ${totalAllocation}%)`);
   }
 
-  // Team allocation validation for mainnet
-  if (config.teamAllocation < 7) {
-    errors.push('Team allocation must be at least 7% (5% team + 2% platform fee)');
+  // Update team allocation validation
+  if (config.teamAllocation < 2) {
+    errors.push('Team allocation must be at least 2% to cover platform fee');
   }
 
   // Developer allocation validation

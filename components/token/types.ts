@@ -12,6 +12,7 @@ export interface TokenConfig {
 
   // Distribution
   presaleAllocation: number;
+  presaleDuration: number;  // Duration in days
   liquidityAllocation: number;
   teamAllocation: number;
   marketingAllocation: number;
@@ -46,6 +47,9 @@ export interface TokenConfig {
     duration: number;
     cliff: number;
   };
+
+  // Marketing Wallet
+  marketingWallet: string;
 }
 
 // Add SecurityRisk type

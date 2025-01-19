@@ -1,14 +1,16 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TokenConfig } from './types';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { InfoIcon, CheckCircle, XCircle } from 'lucide-react';
-import { useChainId, useEstimateGas, useSimulateContract } from 'wagmi';
+import { useChainId, useEstimateGas, useSimulateContract, useAccount } from 'wagmi';
+import { usePublicClient } from 'wagmi';
 import { parseUnits, formatEther } from 'viem';
 import { NETWORKS_WITH_COSTS } from '@/app/providers';
 import { TokenFactoryABI } from '@/contracts/abis/TokenFactory';
 import { ethers } from 'ethers';
 import { validateTokenConfig } from '@/lib/utils';
+import { Spinner } from "@/components/ui/spinner";
 
 interface SimulationStep {
   name: string;
@@ -31,6 +33,11 @@ export function DeploymentSimulator({ config }: DeploymentSimulatorProps) {
   ]);
   const [totalGas, setTotalGas] = useState<bigint>(0n);
   const [isSimulating, setIsSimulating] = useState(false);
+  const [estimatedGas, setEstimatedGas] = useState<string | null>(null);
+  const [isEstimating, setIsEstimating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { address } = useAccount();
+  const publicClient = usePublicClient();
 
   const network = NETWORKS_WITH_COSTS.find(n => n.id === chainId);
 
@@ -59,6 +66,55 @@ export function DeploymentSimulator({ config }: DeploymentSimulatorProps) {
     }],
     value: parseUnits('0.1', 18), // Creation fee
   });
+
+  useEffect(() => {
+    let mounted = true;
+
+    const estimateGas = async () => {
+      if (!address || !chainId) return;
+      
+      try {
+        setIsEstimating(true);
+        setError(null);
+
+        // Add delay to prevent rapid re-estimation during network changes
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        // Mock gas estimation based on features
+        const baseGas = 500000n;
+        const antiBot = config.antiBot ? 100000n : 0n;
+        const vesting = (config.vestingSchedule?.team?.duration || 0) > 0 ? 150000n : 0n;
+        const maxTransfer = config.maxTransferAmount ? 80000n : 0n;
+        const cooldown = config.cooldownTime > 0 ? 90000n : 0n;
+
+        const totalGas = baseGas + antiBot + vesting + maxTransfer + cooldown;
+        
+        if (mounted) {
+          setEstimatedGas(formatEther(totalGas * 50000000000n)); // Assuming 50 gwei gas price
+          setError(null);
+        }
+      } catch (err) {
+        if (mounted) {
+          console.error('Gas estimation error:', err);
+          setError('Failed to estimate gas. Please try again after network stabilizes.');
+          setEstimatedGas(null);
+        }
+      } finally {
+        if (mounted) {
+          setIsEstimating(false);
+        }
+      }
+    };
+
+    // Only estimate if we have a valid network connection
+    if (chainId && !isEstimating) {
+      estimateGas();
+    }
+
+    return () => {
+      mounted = false;
+    };
+  }, [config, address, chainId]);
 
   const runSimulation = async () => {
     try {
