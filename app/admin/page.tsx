@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { useAccount } from 'wagmi';
+import { useAccount, useConnect } from 'wagmi';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -17,15 +17,19 @@ export default function AdminPage() {
   const [discountAmount, setDiscountAmount] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string>('');
   const { address } = useAccount();
+  const { connect, connectors } = useConnect();
 
   useEffect(() => {
     const checkAdminStatus = async () => {
       if (!address || !window.ethereum) {
+        setDebugInfo('No address or ethereum provider found');
         setIsLoading(false);
         return;
       }
       try {
+        setDebugInfo(`Checking admin status for address: ${address}`);
         const provider = new BrowserProvider(window.ethereum as any);
         const factory = new Contract(
           process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as string,
@@ -33,10 +37,13 @@ export default function AdminPage() {
           provider
         );
         const owner = await factory.owner();
+        setDebugInfo(prev => `${prev}\nContract owner: ${owner}`);
         setIsAdmin(owner.toLowerCase() === address.toLowerCase());
-      } catch (err) {
+        setDebugInfo(prev => `${prev}\nIs admin: ${owner.toLowerCase() === address.toLowerCase()}`);
+      } catch (err: any) {
         console.error('Error checking admin status:', err);
         setError('Failed to verify admin status');
+        setDebugInfo(prev => `${prev}\nError: ${err.message}`);
       } finally {
         setIsLoading(false);
       }
@@ -84,12 +91,38 @@ export default function AdminPage() {
     );
   }
 
+  if (!address) {
+    return (
+      <div className="max-w-4xl mx-auto p-4">
+        <Alert>
+          <AlertDescription>
+            Please connect your wallet to access the admin panel.
+            <div className="mt-4">
+              {connectors.map((connector) => (
+                <Button
+                  key={connector.uid}
+                  onClick={() => connect({ connector })}
+                  className="mr-2"
+                >
+                  Connect {connector.name}
+                </Button>
+              ))}
+            </div>
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
   if (!isAdmin) {
     return (
       <div className="max-w-4xl mx-auto p-4">
         <Alert>
           <AlertDescription>
             You must be the contract owner to access this page.
+            <pre className="mt-4 p-2 bg-gray-800 rounded text-xs whitespace-pre-wrap">
+              {debugInfo}
+            </pre>
           </AlertDescription>
         </Alert>
       </div>
@@ -145,6 +178,10 @@ export default function AdminPage() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
+
+      <pre className="mt-4 p-2 bg-gray-800 rounded text-xs whitespace-pre-wrap">
+        {debugInfo}
+      </pre>
     </div>
   );
 } 

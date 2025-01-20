@@ -21,6 +21,8 @@ export function Navigation() {
           provider
         );
         const owner = await factory.owner();
+        console.log('Owner address:', owner);
+        console.log('Current address:', address);
         setIsAdmin(owner.toLowerCase() === address.toLowerCase());
       } catch (err) {
         console.error('Error checking admin status:', err);
@@ -39,12 +41,6 @@ export function Navigation() {
             </Link>
           </div>
           <div className="flex items-center space-x-4">
-            <Link 
-              href="/docs/fee-structure" 
-              className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm"
-            >
-              Docs
-            </Link>
             {isAdmin && (
               <Link 
                 href="/admin" 
