@@ -62,10 +62,6 @@ firebase-debug.log
 /coverage
 /coverage.json
 
-# Logs
-/logs
-*.log
-
 # Cache
 .cache
 .swc/ 

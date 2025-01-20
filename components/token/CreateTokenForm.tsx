@@ -49,7 +49,7 @@ import { CheckCircle } from 'lucide-react';
 import { Contract } from 'ethers';
 
 // Add platform fee configuration
-const PLATFORM_TEAM_WALLET = "0xc1039a6754B15188E3728a97C4E7fF04C652c28c"; // TokenHub platform wallet
+const PLATFORM_TEAM_WALLET = "0xb6083258E7E7B04Bdc72640E1a75E1F40541e83F"; // TokenHub platform wallet
 const PLATFORM_TEAM_ALLOCATION = 2; // 2% of total supply for platform
 
 // Add near the top with other tooltips
@@ -116,18 +116,13 @@ interface ContractWriteConfig {
 // Platform fee message component
 function PlatformFeeMessage() {
   const chainId = useChainId();
-  const isMainnet = chainId === 1; // Ethereum mainnet
+  const isMainnet = chainId === 1;
 
   return (
     <div className="mb-4 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
       <p className="text-yellow-400 text-sm">
         2% Platform Fee Applied on Mainnet
       </p>
-      {isMainnet && (
-        <div className="mt-2 text-sm text-blue-400 bg-blue-500/10 p-2 rounded border border-blue-500/20">
-          The platform fee (2% of total supply) will be allocated to: {PLATFORM_TEAM_WALLET}
-        </div>
-      )}
     </div>
   );
 }
@@ -153,7 +148,6 @@ export function CreateTokenForm() {
   const [discountAddress, setDiscountAddress] = useState('');
   const [discountAmount, setDiscountAmount] = useState('');
   const [ethPrice, setEthPrice] = useState<number | null>(null);
-  const [creationFee, setCreationFee] = useState<string>('0.1');
 
   const { address } = useAccount();
   const chainId = useChainId();
@@ -262,9 +256,8 @@ export function CreateTokenForm() {
 
   // Check if current user is admin (contract owner)
   useEffect(() => {
-    const checkAdmin = async () => {
+    const checkAdminStatus = async () => {
       if (!address || !window.ethereum) return;
-      
       try {
         const provider = new BrowserProvider(window.ethereum as any);
         const factory = new Contract(
@@ -272,15 +265,13 @@ export function CreateTokenForm() {
           TokenFactoryABI,
           provider
         );
-        
         const owner = await factory.owner();
         setIsAdmin(owner.toLowerCase() === address.toLowerCase());
       } catch (err) {
         console.error('Error checking admin status:', err);
       }
     };
-
-    checkAdmin();
+    checkAdminStatus();
   }, [address]);
 
   // Add ETH price fetching
@@ -291,12 +282,6 @@ export function CreateTokenForm() {
         const data = await response.json();
         const price = data.ethereum.usd;
         setEthPrice(price);
-        
-        // Calculate fee in ETH to equal $100
-        if (price > 0) {
-          const feeInEth = (100 / price).toFixed(6); // $100 divided by ETH price
-          setCreationFee(feeInEth);
-        }
       } catch (error) {
         console.error('Failed to fetch ETH price:', error);
       }
@@ -309,15 +294,8 @@ export function CreateTokenForm() {
   }, []);
 
   const handleCreateToken = async () => {
-    if (!address) {
-      setError('Please connect your wallet first');
-      return;
-    }
-
-    // Check network first
-    if (chainId !== 11155111 && chainId !== 1) {
-      setError('Please switch to Sepolia testnet or Ethereum mainnet');
-      return;
+    if (!address || !window.ethereum) {
+      throw new Error('Contract interaction not available');
     }
 
     try {
@@ -330,62 +308,41 @@ export function CreateTokenForm() {
         throw new Error('Contract interaction not available');
       }
 
-      // Get user's discounted fee if any
-      let userFee = creationFee;
-      if (address) {
-        try {
-          const provider = new BrowserProvider(window.ethereum as any);
-          const factory = new Contract(
-            process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as string,
-            TokenFactoryABI,
-            provider
-          );
-          const discountedFee = await factory.getCreationFee(address);
-          if (discountedFee > 0n) {
-            userFee = formatEther(discountedFee);
-          }
-        } catch (err) {
-          console.error('Error checking discounted fee:', err);
-        }
-      }
-
       // Prepare contract parameters
       const params = {
         name: config.name,
         symbol: config.symbol,
-        maxSupply: parseUnits(config.totalSupply || '0', config.decimals),
-        initialSupply: parseUnits(config.totalSupply || '0', config.decimals),
+        maxSupply: parseUnits(config.totalSupply, config.decimals),
+        initialSupply: parseUnits(config.totalSupply, config.decimals),
         tokenPrice: parseUnits(config.initialPrice || '0', 18),
-        maxTransferAmount: config.maxTransferAmount ? parseUnits(config.maxTransferAmount, config.decimals) : 0n,
+        maxTransferAmount: config.maxTransferAmount ? parseUnits(config.maxTransferAmount, config.decimals) : parseUnits(config.totalSupply, config.decimals),
         cooldownTime: BigInt(config.cooldownTime || 0),
         transfersEnabled: config.transfersEnabled,
         antiBot: config.antiBot,
-        teamVestingDuration: BigInt(config.vestingSchedule.team.duration),
-        teamVestingCliff: BigInt(config.vestingSchedule.team.cliff),
+        teamVestingDuration: BigInt(config.vestingSchedule.team.duration * 30 * 24 * 60 * 60), // Convert months to seconds
+        teamVestingCliff: BigInt(config.vestingSchedule.team.cliff * 30 * 24 * 60 * 60),
         teamAllocation: BigInt(config.teamAllocation),
         teamWallet: config.teamWallet || address,
-        marketingWallet: config.marketingWallet || address,
-        developerAllocation: BigInt(config.developerAllocation),
-        developerVestingDuration: BigInt(config.developerVesting?.duration || 12),
-        developerVestingCliff: BigInt(config.developerVesting?.cliff || 3),
         developerWallet: config.developerWallet || address,
+        developerAllocation: BigInt(config.developerAllocation),
+        developerVestingDuration: BigInt(config.developerVesting.duration * 30 * 24 * 60 * 60),
+        developerVestingCliff: BigInt(config.developerVesting.cliff * 30 * 24 * 60 * 60),
         presaleDuration: BigInt(config.presaleDuration || 7),
+      };
+
+      const contractConfig = {
+        address: process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as Address,
+        abi: TokenFactoryABI,
+        functionName: 'createToken',
+        args: [params],
+        value: parseUnits('0.1', 18), // Standard creation fee
       };
 
       console.log('Creating token with params:', params);
 
-      // Write contract with dynamic fee
-      const tx = await writeContract({
-        abi: TokenFactoryABI,
-        address: process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as `0x${string}`,
-        functionName: 'createToken',
-        args: [params],
-        value: parseUnits(userFee, 18),
-      });
-
-      console.log('Transaction submitted:', tx);
-
-      // Show pending status
+      const hash = await writeContract(contractConfig);
+      
+      // Update status
       setError('Transaction submitted. Waiting for confirmation...');
 
     } catch (err: any) {
@@ -474,69 +431,47 @@ export function CreateTokenForm() {
 
   return (
     <div className="max-w-4xl mx-auto">
-      <PlatformFeeMessage />
-      <div className="max-w-3xl mx-auto space-y-4">
-        {/* Add fee info at the top */}
-        <Card className="bg-gray-800 border-gray-700">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <InfoIcon className="h-4 w-4 text-blue-400" />
-                <span className="text-sm">Creation Fee:</span>
+      {isAdmin && (
+        <Card className="bg-gray-800 border-gray-700 mb-4">
+          <CardHeader className="py-3 border-b border-gray-700">
+            <CardTitle className="text-lg">Admin Controls</CardTitle>
+          </CardHeader>
+          <CardContent className="p-4 space-y-4">
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium mb-1">Discount Address</label>
+                <input
+                  type="text"
+                  value={discountAddress}
+                  onChange={(e) => setDiscountAddress(e.target.value)}
+                  placeholder="0x..."
+                  className={inputClassName}
+                />
               </div>
-              <div className="text-sm">
-                <span className="text-blue-400">{creationFee} ETH</span>
-                {ethPrice && <span className="text-gray-400 ml-2">(≈ $100)</span>}
+              <div>
+                <label className="block text-sm font-medium mb-1">Discount Amount (ETH)</label>
+                <input
+                  type="text"
+                  value={discountAmount}
+                  onChange={(e) => setDiscountAmount(e.target.value)}
+                  placeholder="0.05"
+                  className={inputClassName}
+                />
               </div>
+              <Button
+                onClick={handleSetDiscount}
+                disabled={isSubmitting || !discountAddress || !discountAmount}
+                className="w-full"
+              >
+                {isSubmitting ? <Spinner /> : 'Set Discount'}
+              </Button>
             </div>
           </CardContent>
         </Card>
-
-        {isAdmin && (
-          <Card className="bg-gray-800 border-gray-700">
-            <CardHeader className="py-3 border-b border-gray-700">
-              <CardTitle className="text-lg">Admin Controls</CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 space-y-4">
-              <div className="space-y-3">
-                <h3 className="text-sm font-medium">Set Discounted Fee</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-xs">Address</label>
-                    <input
-                      type="text"
-                      value={discountAddress}
-                      onChange={(e) => setDiscountAddress(e.target.value)}
-                      className="w-full p-2 rounded bg-gray-700 text-white"
-                      placeholder="0x..."
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs">Fee Amount (ETH)</label>
-                    <input
-                      type="text"
-                      value={discountAmount}
-                      onChange={(e) => setDiscountAmount(e.target.value)}
-                      className="w-full p-2 rounded bg-gray-700 text-white"
-                      placeholder="0.05"
-                    />
-                  </div>
-                </div>
-                <button
-                  onClick={handleSetDiscount}
-                  disabled={isSubmitting || !discountAddress}
-                  className="w-full py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 rounded-lg text-sm"
-                >
-                  {isSubmitting ? 'Setting Discount...' : 'Set Discount'}
-                </button>
-                <p className="text-xs text-gray-400">
-                  Set to 0 for free token creation, or any amount less than the standard fee ({formatEther(parseUnits('0.1', 18))} ETH)
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-        
+      )}
+      <div className="max-w-3xl mx-auto space-y-4">
+        {/* Only show platform fee message in token distribution section */}
+        {currentStep === 2 && <PlatformFeeMessage />}
         <Tabs defaultValue="basic" className="w-full">
           <TabsList className="grid w-full grid-cols-3 mb-2">
             <TabsTrigger value="basic">Basic Info</TabsTrigger>

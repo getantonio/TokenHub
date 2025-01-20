@@ -4,10 +4,18 @@
     "ignore": [
       "firebase.json",
       "**/.*",
-      "**/node_modules/**"
+      "**/node_modules/**",
+      "**/.git/**",
+      "**/.next/cache/**",
+      "**/coverage/**",
+      "**/test/**",
+      "**/*.test.*"
     ],
     "frameworksBackend": {
       "region": "us-central1"
-    }
+    },
+    "predeploy": [
+      "npm run build"
+    ]
   }
 } 
