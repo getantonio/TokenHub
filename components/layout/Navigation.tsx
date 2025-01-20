@@ -3,8 +3,10 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useAccount } from 'wagmi';
-import { BrowserProvider, Contract } from 'ethers';
-import TokenFactoryABI from '@/contracts/abis/TokenFactory.json';
+import { isAddress } from 'ethers';
+import { getContractOwner } from '@/lib/alchemy';
+import { NetworkSelector } from '@/components/network-selector';
+import { WalletConnect } from '@/components/wallet-connect';
 
 export function Navigation() {
   const [isAdmin, setIsAdmin] = useState(false);
@@ -12,18 +14,19 @@ export function Navigation() {
 
   useEffect(() => {
     const checkAdminStatus = async () => {
-      if (!address || !window.ethereum) return;
+      if (!address) return;
       try {
-        const provider = new BrowserProvider(window.ethereum as any);
-        const factory = new Contract(
-          process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as string,
-          TokenFactoryABI,
-          provider
-        );
-        const owner = await factory.owner();
-        console.log('Owner address:', owner);
-        console.log('Current address:', address);
-        setIsAdmin(owner.toLowerCase() === address.toLowerCase());
+        const contractAddress = process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS;
+        
+        if (!contractAddress || !isAddress(contractAddress)) {
+          console.error('Invalid contract address:', contractAddress);
+          return;
+        }
+
+        const owner = await getContractOwner(contractAddress);
+        if (owner) {
+          setIsAdmin(owner.toLowerCase() === address.toLowerCase());
+        }
       } catch (err) {
         console.error('Error checking admin status:', err);
       }
@@ -41,6 +44,8 @@ export function Navigation() {
             </Link>
           </div>
           <div className="flex items-center space-x-4">
+            <NetworkSelector />
+            <WalletConnect />
             {isAdmin && (
               <Link 
                 href="/admin" 

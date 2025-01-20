@@ -46,9 +46,9 @@ import { ExternalLink } from 'lucide-react';
 import { formatNumber } from '@/lib/utils';
 import { CheckCircle } from 'lucide-react';
 import { Contract } from 'ethers';
+import { Log } from 'ethers';
 
-// Add platform fee configuration
-const PLATFORM_TEAM_WALLET = "0xb6083258E7E7B04Bdc72640E1a75E1F40541e83F"; // TokenHub platform wallet
+// Remove hardcoded platform fee configuration
 const PLATFORM_TEAM_ALLOCATION = 2; // 2% of total supply for platform
 
 // Add near the top with other tooltips
@@ -74,16 +74,30 @@ const tooltips = {
   marketingAllocation: "Percentage allocated for marketing and promotional activities",
 };
 
+type TransactionLog = {
+  topics: string[];
+  data: string;
+};
+
 interface DeployedToken {
   address: string;
+  name: string;
+  symbol: string;
 }
 
-interface TransactionLog {
-  topics: string[];
-}
-
-interface TransactionReceipt {
-  logs: TransactionLog[];
+interface VestingSchedule {
+  team: {
+    duration: number;
+    cliff: number;
+  };
+  advisors: {
+    duration: number;
+    cliff: number;
+  };
+  developer: {
+    duration: number;
+    cliff: number;
+  };
 }
 
 interface ContractWriteConfig {
@@ -228,17 +242,39 @@ export function CreateTokenForm() {
           publicClient.getTransactionReceipt({ hash }).then((receipt) => {
             console.log('Transaction receipt:', receipt);
             
-            const tokenCreatedEvent = receipt.logs.find(log => 
-              log.topics[0] === ethers.id("TokenCreated(address,address,string,string)")
-            );
+            // Log all event signatures for debugging
+            const eventSignatures = receipt.logs.map(log => {
+              try {
+                return {
+                  topic0: log.topics[0],
+                  decodedSignature: ethers.id("TokenCreated(address,string,string)"),
+                  matches: log.topics[0] === ethers.id("TokenCreated(address,string,string)")
+                };
+              } catch (e) {
+                return { error: e };
+              }
+            });
+            console.log('Event signatures:', eventSignatures);
+            
+            const tokenCreatedEvent = receipt.logs.find((log: TransactionLog) => {
+              const eventSignature = "TokenCreated(address,string,string)";
+              const eventTopic = ethers.id(eventSignature);
+              return log.topics[0] === eventTopic;
+            });
 
             if (tokenCreatedEvent?.topics[1]) {
               const tokenAddress = `0x${tokenCreatedEvent.topics[1].slice(26)}`;
-              setDeployedToken({ address: tokenAddress });
+              console.log('Found token address:', tokenAddress);
+              setDeployedToken({
+                address: tokenAddress,
+                name: config.name,
+                symbol: config.symbol
+              });
               setIsWriting(false);
               setError(null); // Clear any error/status messages
             } else {
-              console.error('TokenCreated event not found in logs:', receipt.logs);
+              console.error('TokenCreated event not found in logs. All logs:', receipt.logs);
+              console.error('Expected event signature:', ethers.id("TokenCreated(address,string,string)"));
               setWriteError(new Error('Token creation transaction succeeded but token address not found'));
               setIsWriting(false);
             }
@@ -335,47 +371,20 @@ export function CreateTokenForm() {
       setIsSubmitting(true);
       setError('Preparing transaction...');
 
-      const provider = new BrowserProvider(window.ethereum as any);
-      const signer = await provider.getSigner();
-      
-      // Get current chain ID
-      const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-      const chainIdNum = parseInt(chainId as string, 16);
-      
-      if (chainIdNum !== 11155111 && chainIdNum !== 1) {
-        setError('Please switch to Ethereum Mainnet or Sepolia Testnet');
-        setIsSubmitting(false);
-        return;
-      }
-
+      // Validate contract address first
       const contractAddress = process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS;
       if (!contractAddress || !ethers.isAddress(contractAddress)) {
-        setError('Invalid contract address');
-        setIsSubmitting(false);
-        return;
+        throw new Error(`Invalid contract address: ${contractAddress}`);
       }
 
-      const networkName = chainIdNum === 1 ? 'Mainnet' : 'Sepolia';
-      setError(`Connected to ${networkName}. Preparing transaction...`);
+      const provider = new BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const factory = new Contract(contractAddress, TokenFactoryABI, signer);
       
-      // Get current balance
-      const balance = await provider.getBalance(address);
-      if (balance.toString() === '0') {
-        setError(`You need ${networkName === 'Mainnet' ? 'ETH' : 'Sepolia ETH'} to create a token.`);
-        setIsSubmitting(false);
-        return;
-      }
-
-      const factory = new Contract(
-        contractAddress,
-        TokenFactoryABI,
-        signer
-      );
-
       // Get creation fee
       const creationFee = await factory.creationFee();
-      setError(`Creation fee: ${formatEther(creationFee)} ETH`);
-
+      console.log('Creation fee:', formatEther(creationFee), 'ETH');
+      
       // Prepare token configuration
       const tokenConfig = {
         name: config.name,
@@ -387,56 +396,61 @@ export function CreateTokenForm() {
         cooldownTime: BigInt(config.cooldownTime || 0),
         transfersEnabled: config.transfersEnabled,
         antiBot: config.antiBot,
-        teamVestingDuration: BigInt(config.vestingSchedule.team.duration * 30 * 24 * 60 * 60), // Convert months to seconds
+        teamVestingDuration: BigInt(config.vestingSchedule.team.duration * 30 * 24 * 60 * 60),
         teamVestingCliff: BigInt(config.vestingSchedule.team.cliff * 30 * 24 * 60 * 60),
         teamAllocation: BigInt(config.teamAllocation),
-        teamWallet: config.teamWallet || address
+        teamWallet: config.teamWallet || address,
+        developerAllocation: BigInt(config.developerAllocation || 0),
+        developerVestingDuration: BigInt(config.developerVesting.duration * 30 * 24 * 60 * 60),
+        developerVestingCliff: BigInt(config.developerVesting.cliff * 30 * 24 * 60 * 60),
+        developerWallet: config.developerWallet || address
       };
 
-      // Estimate gas first
+      // Simulate the transaction first
       try {
-        const gasEstimate = await factory.createToken.estimateGas(
-          tokenConfig,
-          { value: creationFee }
-        );
-        setError(`Estimated gas: ${formatEther(gasEstimate)} ETH`);
-      } catch (gasErr: any) {
-        console.error('Gas estimation failed:', gasErr);
-        setError(`Gas estimation failed: ${gasErr.message}`);
-        setIsSubmitting(false);
-        return;
+        setError('Simulating deployment...');
+        await factory.createToken.estimateGas(tokenConfig, { value: creationFee });
+        console.log('Simulation successful');
+      } catch (simError: any) {
+        console.error('Simulation failed:', simError);
+        throw new Error(`Deployment simulation failed: ${simError.message}`);
       }
 
-      setError('Waiting for wallet confirmation...');
-      const tx = await factory.createToken(
-        tokenConfig,
-        { value: creationFee }
-      );
-
-      setError(`Transaction submitted: ${tx.hash}`);
-      setIsWriting(true);
-
+      // If simulation successful, proceed with actual deployment
+      setError('Creating token...');
+      const tx = await factory.createToken(tokenConfig, { value: creationFee });
+      setError('Transaction submitted. Waiting for confirmation...');
+      
       const receipt = await tx.wait();
       console.log('Transaction receipt:', receipt);
 
-      const tokenCreatedEvent = receipt.logs.find((log: { topics: string[] }) => 
-        log.topics[0] === ethers.id("TokenCreated(address,string,string)")
-      );
+      // Find the TokenCreated event
+      const tokenCreatedEvent = receipt.logs.find((log: TransactionLog) => {
+        const eventSignature = "TokenCreated(address,string,string)";
+        const eventTopic = ethers.id(eventSignature);
+        return log.topics[0] === eventTopic;
+      });
 
-      if (tokenCreatedEvent?.topics[1]) {
-        const tokenAddress = `0x${tokenCreatedEvent.topics[1].slice(26)}`;
-        setDeployedToken({ address: tokenAddress });
-        setError(null);
-      } else {
-        throw new Error('Token address not found in event logs');
+      if (!tokenCreatedEvent) {
+        console.error('TokenCreated event not found in logs. All logs:', receipt.logs);
+        throw new Error('Token creation failed: Event not found');
       }
 
+      // Parse the event data
+      const tokenAddress = ethers.getAddress('0x' + tokenCreatedEvent.topics[1].slice(26));
+      setDeployedToken({
+        address: tokenAddress,
+        name: config.name,
+        symbol: config.symbol
+      });
+      
+      setCurrentStep(3); // Move to success step
+      setError(null);
     } catch (err: any) {
       console.error('Token creation error:', err);
-      setError(`Failed to create token: ${err.message}`);
+      setError(err.message || 'Failed to create token');
     } finally {
       setIsSubmitting(false);
-      setIsWriting(false);
     }
   };
 

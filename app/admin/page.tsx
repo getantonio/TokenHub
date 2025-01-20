@@ -1,14 +1,15 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { useAccount, useConnect } from 'wagmi';
+import { useAccount } from 'wagmi';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { BrowserProvider, Contract } from 'ethers';
+import { BrowserProvider, Contract, isAddress } from 'ethers';
 import { parseUnits } from 'viem';
 import TokenFactoryABI from '@/contracts/abis/TokenFactory.json';
+import { getContractOwner } from '@/lib/alchemy';
 
 export default function AdminPage() {
   const [isAdmin, setIsAdmin] = useState(false);
@@ -17,43 +18,41 @@ export default function AdminPage() {
   const [discountAmount, setDiscountAmount] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [debugInfo, setDebugInfo] = useState<string>('');
   const { address } = useAccount();
-  const { connect, connectors } = useConnect();
 
   useEffect(() => {
     const checkAdminStatus = async () => {
-      if (!address || !window.ethereum) {
-        setDebugInfo('No address or ethereum provider found');
+      if (!address) {
         setIsLoading(false);
+        setError('Please connect your wallet first');
         return;
       }
+
       try {
         const contractAddress = process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS;
-        setDebugInfo(`Checking admin status for address: ${address}\nContract address: ${contractAddress}`);
-        
-        if (!contractAddress) {
-          throw new Error('Contract address not configured in environment');
+        if (!contractAddress || !isAddress(contractAddress)) {
+          throw new Error('Invalid contract address configuration');
         }
 
-        const provider = new BrowserProvider(window.ethereum as any);
-        const factory = new Contract(
-          contractAddress,
-          TokenFactoryABI,
-          provider
-        );
-        const owner = await factory.owner();
-        setDebugInfo(prev => `${prev}\nContract owner: ${owner}`);
-        setIsAdmin(owner.toLowerCase() === address.toLowerCase());
-        setDebugInfo(prev => `${prev}\nIs admin: ${owner.toLowerCase() === address.toLowerCase()}`);
+        const owner = await getContractOwner(contractAddress);
+        if (!owner) {
+          throw new Error('Failed to get contract owner');
+        }
+
+        const isOwner = owner.toLowerCase() === address.toLowerCase();
+        setIsAdmin(isOwner);
+        
+        if (!isOwner) {
+          setError('You must be the contract owner to access this page');
+        }
       } catch (err: any) {
-        console.error('Error checking admin status:', err);
-        setError('Failed to verify admin status');
-        setDebugInfo(prev => `${prev}\nError: ${err.message}`);
+        console.error('Admin check error:', err);
+        setError(err.message || 'Failed to check admin status');
       } finally {
         setIsLoading(false);
       }
     };
+
     checkAdminStatus();
   }, [address]);
 
@@ -64,13 +63,18 @@ export default function AdminPage() {
       setIsSubmitting(true);
       setError(null);
 
-      const provider = new BrowserProvider(window.ethereum as any);
+      const contractAddress = process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS;
+      if (!contractAddress || !isAddress(contractAddress)) {
+        throw new Error('Invalid contract address configuration');
+      }
+
+      if (!isAddress(discountAddress)) {
+        throw new Error('Invalid discount address');
+      }
+
+      const provider = new BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
-      const factory = new Contract(
-        process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as string,
-        TokenFactoryABI,
-        signer
-      );
+      const factory = new Contract(contractAddress, TokenFactoryABI, signer);
 
       const tx = await factory.setDiscountedFee(
         discountAddress,
@@ -91,44 +95,18 @@ export default function AdminPage() {
 
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center min-h-screen">
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <Spinner className="h-8 w-8" />
-      </div>
-    );
-  }
-
-  if (!address) {
-    return (
-      <div className="max-w-4xl mx-auto p-4">
-        <Alert>
-          <AlertDescription>
-            Please connect your wallet to access the admin panel.
-            <div className="mt-4">
-              {connectors.map((connector) => (
-                <Button
-                  key={connector.uid}
-                  onClick={() => connect({ connector })}
-                  className="mr-2"
-                >
-                  Connect {connector.name}
-                </Button>
-              ))}
-            </div>
-          </AlertDescription>
-        </Alert>
       </div>
     );
   }
 
   if (!isAdmin) {
     return (
-      <div className="max-w-4xl mx-auto p-4">
-        <Alert>
+      <div className="min-h-screen bg-gray-900 p-8">
+        <Alert variant="destructive">
           <AlertDescription>
-            You must be the contract owner to access this page.
-            <pre className="mt-4 p-2 bg-gray-800 rounded text-xs whitespace-pre-wrap">
-              {debugInfo}
-            </pre>
+            {error || 'You must be the contract owner to access this page'}
           </AlertDescription>
         </Alert>
       </div>
@@ -136,58 +114,44 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-6">Admin Dashboard</h1>
-      
-      <Card className="bg-gray-800 border-gray-700 mb-4">
-        <CardHeader className="py-3 border-b border-gray-700">
-          <CardTitle className="text-lg">Discount Management</CardTitle>
-        </CardHeader>
-        <CardContent className="p-4 space-y-4">
-          <div className="space-y-3">
-            <div>
-              <label className="block text-sm font-medium mb-1">Discount Address</label>
+    <div className="min-h-screen bg-gray-900 p-8">
+      <div className="max-w-4xl mx-auto space-y-6">
+        <Card className="bg-gray-800 border-gray-700">
+          <CardHeader>
+            <CardTitle>Admin Controls</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <input
                 type="text"
+                placeholder="Wallet Address"
                 value={discountAddress}
                 onChange={(e) => setDiscountAddress(e.target.value)}
-                placeholder="0x..."
-                className="w-full p-1.5 rounded bg-gray-700 text-white text-sm"
+                className="px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Discount Amount (ETH)</label>
               <input
                 type="text"
+                placeholder="Discount Amount (ETH)"
                 value={discountAmount}
                 onChange={(e) => setDiscountAmount(e.target.value)}
-                placeholder="0.05"
-                className="w-full p-1.5 rounded bg-gray-700 text-white text-sm"
+                className="px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              <p className="text-xs text-gray-400 mt-1">
-                Set to 0 for free token creation, or any amount less than the standard fee (0.1 ETH)
-              </p>
             </div>
             <Button
               onClick={handleSetDiscount}
-              disabled={isSubmitting || !discountAddress || !discountAmount}
+              disabled={isSubmitting}
               className="w-full"
             >
-              {isSubmitting ? <Spinner /> : 'Set Discount'}
+              {isSubmitting ? <Spinner className="h-4 w-4" /> : 'Set Discount'}
             </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {error && (
-        <Alert>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
-      <pre className="mt-4 p-2 bg-gray-800 rounded text-xs whitespace-pre-wrap">
-        {debugInfo}
-      </pre>
+            {error && (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 } 

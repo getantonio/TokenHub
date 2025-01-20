@@ -1,10 +1,26 @@
-import "@nomicfoundation/hardhat-ethers";
-import "@nomicfoundation/hardhat-toolbox";
-import "solidity-coverage";
-import "@nomiclabs/hardhat-etherscan";
-import { HardhatUserConfig } from "hardhat/config";
+require("@nomicfoundation/hardhat-ethers");
+require("@nomicfoundation/hardhat-toolbox");
+require("solidity-coverage");
+require("dotenv").config();
+require("@nomicfoundation/hardhat-verify");
 
-const config: HardhatUserConfig = {
+const SEPOLIA_RPC_URL = process.env.SEPOLIA_RPC_URL;
+const PRIVATE_KEY = process.env.PRIVATE_KEY;
+const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY;
+
+if (!SEPOLIA_RPC_URL) {
+  throw new Error("Please set your SEPOLIA_RPC_URL in a .env file");
+}
+
+if (!PRIVATE_KEY) {
+  throw new Error("Please set your PRIVATE_KEY in a .env file");
+}
+
+if (!ETHERSCAN_API_KEY) {
+  throw new Error("Please set your ETHERSCAN_API_KEY in a .env file");
+}
+
+const config = {
   solidity: {
     version: "0.8.19",
     settings: {
@@ -30,17 +46,18 @@ const config: HardhatUserConfig = {
       },
     },
     sepolia: {
-      url: process.env.SEPOLIA_RPC_URL || "https://rpc.sepolia.org",
-      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+      url: SEPOLIA_RPC_URL,
+      accounts: [PRIVATE_KEY],
+      chainId: 11155111
     }
+  },
+  etherscan: {
+    apiKey: ETHERSCAN_API_KEY
   },
   gasReporter: {
     enabled: process.env.REPORT_GAS !== undefined,
     currency: "USD",
-  },
-  etherscan: {
-    apiKey: process.env.ETHERSCAN_API_KEY,
-  },
+  }
 };
 
-export default config; 
+module.exports = config; 

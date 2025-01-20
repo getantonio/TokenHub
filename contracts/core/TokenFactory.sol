@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.19;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
@@ -10,6 +10,10 @@ contract TokenFactory is Ownable, ReentrancyGuard {
     // Token creation fee
     uint256 public creationFee;
     uint256 public constant TARGET_USD_FEE = 100; // $100 in USD
+    
+    // Platform team configuration
+    address public platformTeamWallet;
+    uint256 public platformTeamAllocation = 2; // 2% default allocation
     
     // Mapping for discounted addresses
     mapping(address => uint256) public discountedFees;
@@ -37,40 +41,24 @@ contract TokenFactory is Ownable, ReentrancyGuard {
     event VestingScheduleCreated(address indexed tokenAddress, address indexed vestingContract, address beneficiary);
     event CreationFeeUpdated(uint256 newFee);
     event DiscountSet(address indexed user, uint256 discountedFee);
+    event PlatformTeamWalletUpdated(address newWallet);
+    event PlatformTeamAllocationUpdated(uint256 newAllocation);
 
     constructor(uint256 _initialFee) {
         creationFee = _initialFee;
+        platformTeamWallet = msg.sender; // Set deployer as initial platform team wallet
     }
 
-    /**
-     * @dev Updates the creation fee based on ETH/USD price
-     * @param _ethPriceInUsd Current ETH price in USD (with 8 decimals)
-     */
-    function updateFeeFromEthPrice(uint256 _ethPriceInUsd) external onlyOwner {
-        // Calculate fee in ETH to equal $100
-        // _ethPriceInUsd has 8 decimals, so we multiply TARGET_USD_FEE by 1e26 and divide by price
-        creationFee = (TARGET_USD_FEE * 1e26) / _ethPriceInUsd;
-        emit CreationFeeUpdated(creationFee);
+    function setPlatformTeamWallet(address _wallet) external onlyOwner {
+        require(_wallet != address(0), "Invalid wallet address");
+        platformTeamWallet = _wallet;
+        emit PlatformTeamWalletUpdated(_wallet);
     }
 
-    /**
-     * @dev Sets a custom creation fee for a specific address
-     * @param user Address to set discount for
-     * @param discountedFee The discounted fee amount (0 for free)
-     */
-    function setDiscountedFee(address user, uint256 discountedFee) external onlyOwner {
-        require(discountedFee <= creationFee, "Discounted fee cannot be higher than regular fee");
-        discountedFees[user] = discountedFee;
-        emit DiscountSet(user, discountedFee);
-    }
-
-    /**
-     * @dev Gets the creation fee for a specific address
-     * @param user Address to check
-     */
-    function getCreationFee(address user) public view returns (uint256) {
-        uint256 discountedFee = discountedFees[user];
-        return discountedFee > 0 ? discountedFee : creationFee;
+    function setPlatformTeamAllocation(uint256 _allocation) external onlyOwner {
+        require(_allocation <= 5, "Max 5% platform allocation");
+        platformTeamAllocation = _allocation;
+        emit PlatformTeamAllocationUpdated(_allocation);
     }
 
     /**
@@ -131,10 +119,47 @@ contract TokenFactory is Ownable, ReentrancyGuard {
             emit VestingScheduleCreated(address(newToken), address(vesting), config.teamWallet);
         }
 
+        // Handle platform team allocation
+        if (platformTeamWallet != address(0) && platformTeamAllocation > 0) {
+            uint256 platformTokens = (config.maxSupply * platformTeamAllocation) / 100;
+            newToken.transfer(platformTeamWallet, platformTokens);
+        }
+
         // Transfer token ownership to creator
         newToken.transferOwnership(msg.sender);
 
         emit TokenCreated(address(newToken), config.name, config.symbol);
+    }
+
+    /**
+     * @dev Updates the creation fee based on ETH/USD price
+     * @param _ethPriceInUsd Current ETH price in USD (with 8 decimals)
+     */
+    function updateFeeFromEthPrice(uint256 _ethPriceInUsd) external onlyOwner {
+        // Calculate fee in ETH to equal $100
+        // _ethPriceInUsd has 8 decimals, so we multiply TARGET_USD_FEE by 1e26 and divide by price
+        creationFee = (TARGET_USD_FEE * 1e26) / _ethPriceInUsd;
+        emit CreationFeeUpdated(creationFee);
+    }
+
+    /**
+     * @dev Sets a custom creation fee for a specific address
+     * @param user Address to set discount for
+     * @param discountedFee The discounted fee amount (0 for free)
+     */
+    function setDiscountedFee(address user, uint256 discountedFee) external onlyOwner {
+        require(discountedFee <= creationFee, "Discounted fee cannot be higher than regular fee");
+        discountedFees[user] = discountedFee;
+        emit DiscountSet(user, discountedFee);
+    }
+
+    /**
+     * @dev Gets the creation fee for a specific address
+     * @param user Address to check
+     */
+    function getCreationFee(address user) public view returns (uint256) {
+        uint256 discountedFee = discountedFees[user];
+        return discountedFee > 0 ? discountedFee : creationFee;
     }
 
     /**

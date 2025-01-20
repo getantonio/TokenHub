@@ -19,11 +19,25 @@ export function TokenPreview({ config, isValid, validationErrors }: TokenPreview
   useEffect(() => {
     const fetchEthPrice = async () => {
       try {
-        const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd');
+        // Use Alchemy's getTokenMetadata which includes price info
+        const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd', {
+          headers: {
+            'Accept': 'application/json',
+          },
+          mode: 'cors',
+          cache: 'no-cache',
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to fetch ETH price');
+        }
+        
         const data = await response.json();
         setEthPrice(data.ethereum.usd);
       } catch (error) {
         console.error('Failed to fetch ETH price:', error);
+        // Fallback to a default price if the fetch fails
+        setEthPrice(2000); // Default price
       }
     };
 
