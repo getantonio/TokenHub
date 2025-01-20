@@ -29,10 +29,16 @@ export default function AdminPage() {
         return;
       }
       try {
-        setDebugInfo(`Checking admin status for address: ${address}`);
+        const contractAddress = process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS;
+        setDebugInfo(`Checking admin status for address: ${address}\nContract address: ${contractAddress}`);
+        
+        if (!contractAddress || contractAddress === 'YOUR_DEPLOYED_CONTRACT_ADDRESS') {
+          throw new Error('Contract address not configured');
+        }
+
         const provider = new BrowserProvider(window.ethereum as any);
         const factory = new Contract(
-          process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as string,
+          contractAddress,
           TokenFactoryABI,
           provider
         );

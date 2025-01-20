@@ -38,7 +38,6 @@ import { FEE_STRUCTURE_DOC_URL } from '@/lib/constants';
 import Link from 'next/link';
 import { DeploymentSimulator } from './DeploymentSimulator';
 import { TokenTracker } from './TokenTracker';
-import { LocalTestnetInstructions } from '../network/LocalTestnetInstructions';
 import { Button } from "@/components/ui/button";
 import { Terminal } from 'lucide-react';
 import { Copy } from 'lucide-react';
@@ -254,17 +253,69 @@ export function CreateTokenForm() {
     }
   });
 
-  // Check if current user is admin (contract owner)
+  // Update ETH price fetching
+  useEffect(() => {
+    const fetchEthPrice = async () => {
+      try {
+        // Use a CORS proxy
+        const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd', {
+          headers: {
+            'Accept': 'application/json',
+          },
+          mode: 'cors'
+        });
+        if (!response.ok) {
+          throw new Error('Failed to fetch ETH price');
+        }
+        const data = await response.json();
+        const price = data.ethereum.usd;
+        setEthPrice(price);
+      } catch (error) {
+        console.error('Failed to fetch ETH price:', error);
+        // Set a fallback price to prevent UI issues
+        setEthPrice(2000); // Fallback price
+      }
+    };
+
+    fetchEthPrice();
+    const interval = setInterval(fetchEthPrice, 300000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Update admin status check
   useEffect(() => {
     const checkAdminStatus = async () => {
       if (!address || !window.ethereum) return;
+      
       try {
         const provider = new BrowserProvider(window.ethereum as any);
+        const signer = await provider.getSigner();
+        
+        // Get current chain ID
+        const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+        const chainIdNum = parseInt(chainId as string, 16);
+        
+        // Only check on Sepolia or Mainnet
+        if (chainIdNum !== 11155111 && chainIdNum !== 1) {
+          console.log('Please switch to Sepolia or Mainnet');
+          return;
+        }
+
+        const contractAddress = process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS;
+        if (!contractAddress || !ethers.isAddress(contractAddress)) {
+          console.error('Invalid contract address');
+          return;
+        }
+
+        console.log('Checking admin status for address:', address);
+        console.log('Contract address:', contractAddress);
+        
         const factory = new Contract(
-          process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as string,
+          contractAddress,
           TokenFactoryABI,
           provider
         );
+        
         const owner = await factory.owner();
         setIsAdmin(owner.toLowerCase() === address.toLowerCase());
       } catch (err) {
@@ -274,42 +325,59 @@ export function CreateTokenForm() {
     checkAdminStatus();
   }, [address]);
 
-  // Add ETH price fetching
-  useEffect(() => {
-    const fetchEthPrice = async () => {
-      try {
-        const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd');
-        const data = await response.json();
-        const price = data.ethereum.usd;
-        setEthPrice(price);
-      } catch (error) {
-        console.error('Failed to fetch ETH price:', error);
-      }
-    };
-
-    fetchEthPrice();
-    // Refresh price every 5 minutes
-    const interval = setInterval(fetchEthPrice, 300000);
-    return () => clearInterval(interval);
-  }, []);
-
   const handleCreateToken = async () => {
     if (!address || !window.ethereum) {
-      throw new Error('Contract interaction not available');
+      setError('Please connect your wallet first');
+      return;
     }
 
     try {
       setIsSubmitting(true);
-      setIsWriting(true);
-      setWriteError(null);
-      setError(null);
+      setError('Preparing transaction...');
 
-      if (!writeContract || !publicClient) {
-        throw new Error('Contract interaction not available');
+      const provider = new BrowserProvider(window.ethereum as any);
+      const signer = await provider.getSigner();
+      
+      // Get current chain ID
+      const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+      const chainIdNum = parseInt(chainId as string, 16);
+      
+      if (chainIdNum !== 11155111 && chainIdNum !== 1) {
+        setError('Please switch to Ethereum Mainnet or Sepolia Testnet');
+        setIsSubmitting(false);
+        return;
       }
 
-      // Prepare contract parameters
-      const params = {
+      const contractAddress = process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS;
+      if (!contractAddress || !ethers.isAddress(contractAddress)) {
+        setError('Invalid contract address');
+        setIsSubmitting(false);
+        return;
+      }
+
+      const networkName = chainIdNum === 1 ? 'Mainnet' : 'Sepolia';
+      setError(`Connected to ${networkName}. Preparing transaction...`);
+      
+      // Get current balance
+      const balance = await provider.getBalance(address);
+      if (balance.toString() === '0') {
+        setError(`You need ${networkName === 'Mainnet' ? 'ETH' : 'Sepolia ETH'} to create a token.`);
+        setIsSubmitting(false);
+        return;
+      }
+
+      const factory = new Contract(
+        contractAddress,
+        TokenFactoryABI,
+        signer
+      );
+
+      // Get creation fee
+      const creationFee = await factory.creationFee();
+      setError(`Creation fee: ${formatEther(creationFee)} ETH`);
+
+      // Prepare token configuration
+      const tokenConfig = {
         name: config.name,
         symbol: config.symbol,
         maxSupply: parseUnits(config.totalSupply, config.decimals),
@@ -322,46 +390,53 @@ export function CreateTokenForm() {
         teamVestingDuration: BigInt(config.vestingSchedule.team.duration * 30 * 24 * 60 * 60), // Convert months to seconds
         teamVestingCliff: BigInt(config.vestingSchedule.team.cliff * 30 * 24 * 60 * 60),
         teamAllocation: BigInt(config.teamAllocation),
-        teamWallet: config.teamWallet || address,
-        developerWallet: config.developerWallet || address,
-        developerAllocation: BigInt(config.developerAllocation),
-        developerVestingDuration: BigInt(config.developerVesting.duration * 30 * 24 * 60 * 60),
-        developerVestingCliff: BigInt(config.developerVesting.cliff * 30 * 24 * 60 * 60),
-        presaleDuration: BigInt(config.presaleDuration || 7),
+        teamWallet: config.teamWallet || address
       };
 
-      const contractConfig = {
-        address: process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as Address,
-        abi: TokenFactoryABI,
-        functionName: 'createToken',
-        args: [params],
-        value: parseUnits('0.1', 18), // Standard creation fee
-      };
+      // Estimate gas first
+      try {
+        const gasEstimate = await factory.createToken.estimateGas(
+          tokenConfig,
+          { value: creationFee }
+        );
+        setError(`Estimated gas: ${formatEther(gasEstimate)} ETH`);
+      } catch (gasErr: any) {
+        console.error('Gas estimation failed:', gasErr);
+        setError(`Gas estimation failed: ${gasErr.message}`);
+        setIsSubmitting(false);
+        return;
+      }
 
-      console.log('Creating token with params:', params);
+      setError('Waiting for wallet confirmation...');
+      const tx = await factory.createToken(
+        tokenConfig,
+        { value: creationFee }
+      );
 
-      const hash = await writeContract(contractConfig);
-      
-      // Update status
-      setError('Transaction submitted. Waiting for confirmation...');
+      setError(`Transaction submitted: ${tx.hash}`);
+      setIsWriting(true);
+
+      const receipt = await tx.wait();
+      console.log('Transaction receipt:', receipt);
+
+      const tokenCreatedEvent = receipt.logs.find((log: { topics: string[] }) => 
+        log.topics[0] === ethers.id("TokenCreated(address,string,string)")
+      );
+
+      if (tokenCreatedEvent?.topics[1]) {
+        const tokenAddress = `0x${tokenCreatedEvent.topics[1].slice(26)}`;
+        setDeployedToken({ address: tokenAddress });
+        setError(null);
+      } else {
+        throw new Error('Token address not found in event logs');
+      }
 
     } catch (err: any) {
       console.error('Token creation error:', err);
-      setWriteError(err);
-      
-      // Provide more specific error messages
-      if (err.message?.includes('network changed')) {
-        setError('Network changed during transaction. Please try again.');
-      } else if (err.message?.includes('no matching fragment')) {
-        setError('Contract interaction failed. Please check if you are on the correct network.');
-      } else if (err.message?.includes('Failed to fetch')) {
-        setError('Network connection error. Please check your internet connection and try again.');
-      } else {
-        setError(err.message || 'Failed to create token. Please try again.');
-      }
+      setError(`Failed to create token: ${err.message}`);
     } finally {
       setIsSubmitting(false);
-      // Note: isWriting will be set to false by the transaction watcher
+      setIsWriting(false);
     }
   };
 
@@ -371,26 +446,67 @@ export function CreateTokenForm() {
         throw new Error('Please install MetaMask');
       }
 
-      // Check if already on network
+      // Get current chain ID
       const currentChainId = await window.ethereum.request({ method: 'eth_chainId' });
-      if (currentChainId === `0x${networkId.toString(16)}`) {
+      const currentChainIdNum = parseInt(currentChainId as string, 16);
+
+      // Only switch if not already on the correct network
+      if (currentChainIdNum === networkId) {
         return;
       }
 
-      // Switch network
-      await window.ethereum.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: `0x${networkId.toString(16)}` }],
-      });
+      // Clear any previous errors
+      setError(null);
+
+      // Switch to appropriate network
+      if (networkId === 11155111) { // Sepolia
+        await window.ethereum.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: '0xaa36a7' }], // Sepolia chainId in hex
+        });
+      } else if (networkId === 1) { // Mainnet
+        await window.ethereum.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: '0x1' }], // Mainnet chainId in hex
+        });
+      }
 
     } catch (error: any) {
-      console.error('Network switch error:', error);
-      setError(error.message || 'Failed to switch network');
+      // Handle error if network doesn't exist
+      if (error.code === 4902 && window.ethereum) {
+        try {
+          if (networkId === 11155111) {
+            await window.ethereum.request({
+              method: 'wallet_addEthereumChain',
+              params: [
+                {
+                  chainId: '0xaa36a7',
+                  chainName: 'Sepolia',
+                  nativeCurrency: {
+                    name: 'ETH',
+                    symbol: 'ETH',
+                    decimals: 18
+                  },
+                  rpcUrls: ['https://rpc.sepolia.org'],
+                  blockExplorerUrls: ['https://sepolia.etherscan.io']
+                }
+              ]
+            });
+          }
+        } catch (addError) {
+          console.error('Error adding network:', addError);
+          setError('Failed to add network to MetaMask');
+        }
+      } else {
+        console.error('Network switch error:', error);
+        setError(error.message || 'Failed to switch network');
+      }
     }
   };
 
-  const handleSwitchToSepolia = () => {
-    return handleNetworkSwitch(11155111); // Sepolia chainId
+  const handleSwitchToSepolia = async () => {
+    setError('Switching to Sepolia network...');
+    await handleNetworkSwitch(11155111);
   };
 
   const handleSetDiscount = async () => {
