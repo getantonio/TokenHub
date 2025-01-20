@@ -1,10 +1,10 @@
 'use client';
 
-import { WagmiProvider, createConfig, http } from 'wagmi';
+import { WagmiProvider, createConfig } from 'wagmi';
 import { mainnet, sepolia, arbitrum, optimism, polygon, bsc } from 'wagmi/chains';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { type ReactNode } from 'react';
-import { injected } from 'wagmi/connectors';
+import { type ReactNode, useEffect } from 'react';
+import { createWeb3Modal, defaultWagmiConfig } from '@web3modal/wagmi/react';
 
 // Define network costs
 const NETWORK_COSTS = {
@@ -74,23 +74,38 @@ export const NETWORKS_WITH_COSTS = SUPPORTED_NETWORKS.map(network => ({
   ...NETWORK_COSTS[network.id],
 }));
 
-// Create wagmi config
-const config = createConfig({
+// Create wagmi config with WalletConnect
+const projectId = '84be01b175bc677d2cb5d8dd7ea13be8';
+
+const metadata = {
+  name: 'TokenHub',
+  description: 'Create and manage your tokens with ease',
+  url: 'https://tokenhub.com',
+  icons: ['https://tokenhub.com/icon.png']
+};
+
+const config = defaultWagmiConfig({
   chains: [...SUPPORTED_NETWORKS],
-  connectors: [injected()],
-  transports: {
-    [mainnet.id]: http(),
-    [sepolia.id]: http(),
-    [arbitrum.id]: http(),
-    [optimism.id]: http(),
-    [polygon.id]: http(),
-    [bsc.id]: http(),
-  },
+  projectId,
+  metadata,
+  ssr: true
 });
 
 const queryClient = new QueryClient();
 
 export function Providers({ children }: { children: ReactNode }) {
+  useEffect(() => {
+    // Initialize Web3Modal on client side only
+    if (typeof window !== 'undefined') {
+      createWeb3Modal({
+        wagmiConfig: config,
+        projectId,
+        defaultChain: sepolia,
+        themeMode: 'dark'
+      });
+    }
+  }, []); // Empty dependency array means this runs once on mount
+
   return (
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>

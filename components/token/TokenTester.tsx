@@ -88,7 +88,7 @@ export function TokenTester({ config }: TokenTesterProps) {
 
           const factoryAddress = process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS;
           if (!factoryAddress) {
-            throw new Error("Token factory address not configured");
+            throw new Error("Token factory address not configured in environment");
           }
 
           // Get contract interface
@@ -117,42 +117,23 @@ export function TokenTester({ config }: TokenTesterProps) {
             teamWallet: config.teamWallet || ZeroAddress,
           };
 
-          // Get creation data
-          const createData = factoryContract.interface.encodeFunctionData(
-            'createToken',
-            [params]
-          );
-
-          // Estimate gas with proper value
-          const gasEstimate = await factoryContract.createToken.estimateGas({
-            name: config.name,
-            symbol: config.symbol,
-            maxSupply: parseUnits(config.totalSupply || '0', config.decimals),
-            initialSupply: parseUnits(config.totalSupply || '0', config.decimals),
-            tokenPrice: parseUnits(config.initialPrice || '0', 18),
-            maxTransferAmount: config.maxTransferAmount ? parseUnits(config.maxTransferAmount, config.decimals) : 0n,
-            cooldownTime: BigInt(config.cooldownTime || 0),
-            transfersEnabled: config.transfersEnabled,
-            antiBot: config.antiBot,
-            teamVestingDuration: BigInt(config.vestingSchedule.team.duration),
-            teamVestingCliff: BigInt(config.vestingSchedule.team.cliff),
-            teamAllocation: BigInt(config.teamAllocation),
-            teamWallet: config.teamWallet || ZeroAddress,
-          }, {
-            value: parseUnits('0.1', 18) // Add creation fee
+          // Get gas estimate with proper value parameter
+          const gasEstimate = await provider.estimateGas({
+            to: factoryAddress,
+            data: factoryContract.interface.encodeFunctionData('createToken', [params]),
+            value: parseUnits('0.1', 18) // Include creation fee
           });
 
           const feeData = await provider.getFeeData();
-          const gasPrice = feeData.gasPrice || 0n;
+          const gasPrice = feeData.gasPrice || parseUnits('50', 9); // Default to 50 gwei if not available
           const totalCost = gasEstimate * gasPrice;
 
-          // Add detailed breakdown
           details.push('Gas Estimation Breakdown:');
           details.push(`• Base Gas Units: ${gasEstimate.toString()}`);
           details.push(`• Current Gas Price: ${formatEther(gasPrice)} ETH/gas`);
           details.push(`• Creation Fee: 0.1 ETH`);
           details.push(`• Estimated Gas Cost: ${formatEther(totalCost)} ETH`);
-          details.push(`• Total Estimated Cost: ${formatEther(totalCost + parseEther('0.1'))} ETH`);
+          details.push(`• Total Estimated Cost: ${formatEther(totalCost + parseUnits('0.1', 18))} ETH`);
           details.push('\nNote: Actual costs may vary based on:');
           details.push('• Network congestion');
           details.push('• Gas price fluctuations');

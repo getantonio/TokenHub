@@ -217,9 +217,14 @@ export function DeploymentSimulator({ config }: DeploymentSimulatorProps) {
 
   const simulateWithProvider = async (provider: ethers.Provider) => {
     try {
+      const factoryAddress = process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS;
+      if (!factoryAddress) {
+        throw new Error('Token factory address not configured in environment');
+      }
+
       // Create contract instance with proper ABI
       const factory = new Contract(
-        process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as string,
+        factoryAddress,
         TokenFactoryABI,
         provider
       );
@@ -239,19 +244,18 @@ export function DeploymentSimulator({ config }: DeploymentSimulatorProps) {
         teamVestingCliff: BigInt(config.vestingSchedule.team.cliff),
         teamAllocation: BigInt(config.teamAllocation),
         teamWallet: config.teamWallet || address,
-        marketingWallet: config.marketingWallet || address,
         developerAllocation: BigInt(config.developerAllocation),
         developerVestingDuration: BigInt(config.developerVesting?.duration || 12),
         developerVestingCliff: BigInt(config.developerVesting?.cliff || 3),
         developerWallet: config.developerWallet || address,
-        presaleDuration: BigInt(config.presaleDuration || 7),
       };
 
-      // Estimate gas with proper parameters
-      const gasEstimate = await factory.createToken.estimateGas(
-        params,
-        { value: parseUnits('0.1', 18) }
-      );
+      // Estimate gas with proper value parameter
+      const gasEstimate = await provider.estimateGas({
+        to: factoryAddress,
+        data: factory.interface.encodeFunctionData('createToken', [params]),
+        value: parseUnits('0.1', 18) // Include creation fee
+      });
 
       return {
         success: true,

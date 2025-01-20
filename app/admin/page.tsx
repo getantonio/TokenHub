@@ -32,8 +32,8 @@ export default function AdminPage() {
         const contractAddress = process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS;
         setDebugInfo(`Checking admin status for address: ${address}\nContract address: ${contractAddress}`);
         
-        if (!contractAddress || contractAddress === 'YOUR_DEPLOYED_CONTRACT_ADDRESS') {
-          throw new Error('Contract address not configured');
+        if (!contractAddress) {
+          throw new Error('Contract address not configured in environment');
         }
 
         const provider = new BrowserProvider(window.ethereum as any);
