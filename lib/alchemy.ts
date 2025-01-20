@@ -1,7 +1,11 @@
 import { Network, Alchemy } from "alchemy-sdk";
 
+if (!process.env.NEXT_PUBLIC_ALCHEMY_API_KEY) {
+  throw new Error("NEXT_PUBLIC_ALCHEMY_API_KEY is required");
+}
+
 const settings = {
-  apiKey: process.env.NEXT_PUBLIC_ALCHEMY_API_KEY || "8FJS9MC0tBnw9GOzqo1lmDxkaJV7KmRj",
+  apiKey: process.env.NEXT_PUBLIC_ALCHEMY_API_KEY,
   network: Network.ETH_SEPOLIA,
 };
 

@@ -1,4 +1,5 @@
-const { ethers } = require("hardhat");
+import "@nomicfoundation/hardhat-ethers";
+import { ethers } from "hardhat";
 
 async function main() {
   try {
@@ -25,7 +26,14 @@ async function main() {
     
     // Wait for a few block confirmations
     console.log("\nWaiting for block confirmations...");
-    const receipt = await factory.deploymentTransaction()?.wait(5);
+    const deployTx = factory.deploymentTransaction();
+    if (!deployTx) {
+      throw new Error("Deployment transaction not found");
+    }
+    const receipt = await deployTx.wait(5);
+    if (!receipt) {
+      throw new Error("Failed to get deployment receipt");
+    }
     console.log("Deployment confirmed in block:", receipt.blockNumber);
     
     console.log("\nDeployment complete! Next steps:");
