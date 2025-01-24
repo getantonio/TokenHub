@@ -67,15 +67,15 @@ export function TokenTester({ config }: TokenTesterProps) {
             throw new Error("Web3 provider required for gas estimation");
           }
 
+          // Get current account
+          const provider = new BrowserProvider(window.ethereum as any);
+          const signer = await provider.getSigner();
+          const currentAddress = await signer.getAddress();
+
           // Validate parameters first
           if (!config.name || !config.symbol || !config.totalSupply) {
             throw new Error("Missing required token parameters: name, symbol, and total supply are required");
           }
-
-          const provider = new BrowserProvider(window.ethereum as any, {
-            name: 'Local Test Network',
-            chainId: 31337
-          });
 
           // Get current chain ID
           const network = await provider.getNetwork();
@@ -98,6 +98,11 @@ export function TokenTester({ config }: TokenTesterProps) {
             provider
           );
 
+          // Ensure wallet addresses are set
+          const teamWallet = config.teamWallet || currentAddress;
+          const developerWallet = config.developerWallet || currentAddress;
+          const marketingWallet = config.marketingWallet || currentAddress;
+
           // Format parameters carefully
           const params = {
             name: config.name,
@@ -107,22 +112,25 @@ export function TokenTester({ config }: TokenTesterProps) {
             tokenPrice: parseUnits(config.initialPrice || '0', 18),
             maxTransferAmount: config.maxTransferAmount 
               ? parseUnits(config.maxTransferAmount, config.decimals) 
-              : 0n,
+              : parseUnits(config.totalSupply, config.decimals),
             cooldownTime: BigInt(config.cooldownTime || 0),
             transfersEnabled: config.transfersEnabled,
             antiBot: config.antiBot,
-            teamVestingDuration: BigInt(config.vestingSchedule.team.duration),
-            teamVestingCliff: BigInt(config.vestingSchedule.team.cliff),
+            teamVestingDuration: BigInt(config.vestingSchedule.team.duration * 30 * 24 * 60 * 60),
+            teamVestingCliff: BigInt(config.vestingSchedule.team.cliff * 30 * 24 * 60 * 60),
             teamAllocation: BigInt(config.teamAllocation),
-            teamWallet: config.teamWallet || ZeroAddress,
+            teamWallet: teamWallet,
+            developerAllocation: BigInt(config.developerAllocation || 0),
+            developerVestingDuration: BigInt(config.developerVesting.duration * 30 * 24 * 60 * 60),
+            developerVestingCliff: BigInt(config.developerVesting.cliff * 30 * 24 * 60 * 60),
+            developerWallet: developerWallet
           };
 
           // Get gas estimate with proper value parameter
-          const gasEstimate = await provider.estimateGas({
-            to: factoryAddress,
-            data: factoryContract.interface.encodeFunctionData('createToken', [params]),
-            value: parseUnits('0.1', 18) // Include creation fee
-          });
+          const gasEstimate = await factoryContract.createToken.estimateGas(
+            params,
+            { value: parseUnits('0.1', 18) }
+          );
 
           const feeData = await provider.getFeeData();
           const gasPrice = feeData.gasPrice || parseUnits('50', 9); // Default to 50 gwei if not available
