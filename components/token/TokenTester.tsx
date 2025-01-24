@@ -32,6 +32,7 @@ export function TokenTester({ config }: TokenTesterProps) {
   const [currentTest, setCurrentTest] = useState(0);
   const [results, setResults] = useState<TestResult[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [simulationStatus, setSimulationStatus] = useState<string>('Ready');
 
   const tests = [
     // Basic Validation
@@ -68,10 +69,15 @@ export function TokenTester({ config }: TokenTesterProps) {
             throw new Error("Web3 provider required for gas estimation");
           }
 
-          // Get current account
+          // Get current account and check balance
           const provider = new BrowserProvider(window.ethereum as any);
           const signer = await provider.getSigner();
           const currentAddress = await signer.getAddress();
+          const balance = await provider.getBalance(currentAddress);
+          
+          if (balance === BigInt(0)) {
+            throw new Error("Your wallet has no Sepolia ETH. Please get some from a Sepolia faucet: https://sepoliafaucet.com");
+          }
 
           // Validate parameters first
           if (!config.name || !config.symbol || !config.totalSupply) {
@@ -84,7 +90,7 @@ export function TokenTester({ config }: TokenTesterProps) {
 
           // Check if we're on the right network
           if (chainId !== 31337 && chainId !== 11155111) { // Local or Sepolia
-            throw new Error(`Please switch to a test network. Current network ID: ${chainId}`);
+            throw new Error(`Please switch to Sepolia testnet. Current network ID: ${chainId}`);
           }
 
           const factoryAddress = process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS;
@@ -96,17 +102,13 @@ export function TokenTester({ config }: TokenTesterProps) {
           const factoryContract = new Contract(
             factoryAddress,
             TokenFactoryABI,
-            provider
+            signer
           );
 
-          // Ensure wallet addresses are set and valid
-          const teamWallet = config.teamWallet || currentAddress;
-          const developerWallet = config.developerWallet || currentAddress;
-          const marketingWallet = config.marketingWallet || currentAddress;
-
-          // Validate wallet addresses
-          if (!ethers.isAddress(teamWallet) || teamWallet === ZeroAddress) {
-            throw new Error("Invalid team wallet address. Please set a valid team wallet address in the advanced settings.");
+          // Get creation fee first to check balance
+          const creationFee = await factoryContract.creationFee();
+          if (balance < creationFee) {
+            throw new Error(`Insufficient funds. You need at least ${formatEther(creationFee)} Sepolia ETH for the creation fee. Get some from https://sepoliafaucet.com`);
           }
 
           // Format parameters carefully
@@ -125,36 +127,45 @@ export function TokenTester({ config }: TokenTesterProps) {
             teamVestingDuration: BigInt(config.vestingSchedule.team.duration * 30 * 24 * 60 * 60),
             teamVestingCliff: BigInt(config.vestingSchedule.team.cliff * 30 * 24 * 60 * 60),
             teamAllocation: BigInt(config.teamAllocation),
-            teamWallet,
-            developerAllocation: BigInt(config.developerAllocation || 0),
-            developerVestingDuration: BigInt((config.developerVesting?.duration || 0) * 30 * 24 * 60 * 60),
-            developerVestingCliff: BigInt((config.developerVesting?.cliff || 0) * 30 * 24 * 60 * 60),
-            developerWallet
+            teamWallet: currentAddress, // Use connected wallet as team wallet
+            developerAllocation: BigInt(0), // Set to 0 for now
+            developerVestingDuration: BigInt(0),
+            developerVestingCliff: BigInt(0),
+            developerWallet: currentAddress
           };
 
           console.log('Debug - Token Parameters:', {
             ...params,
-            teamWallet,
-            developerWallet,
-            marketingWallet
+            teamWallet: currentAddress,
+            developerWallet: currentAddress,
+            vestingDurationInSeconds: Number(params.teamVestingDuration),
+            vestingCliffInSeconds: Number(params.teamVestingCliff),
+            balance: formatEther(balance),
+            creationFee: formatEther(creationFee)
           });
 
           // Get gas estimate with proper value parameter
           const gasEstimate = await factoryContract.createToken.estimateGas(
             params,
-            { value: parseUnits('0.1', 18) }
+            { value: creationFee }
           );
 
           const feeData = await provider.getFeeData();
           const gasPrice = feeData.gasPrice || parseUnits('50', 9); // Default to 50 gwei if not available
-          const totalCost = gasEstimate * gasPrice;
+          const gasCost = gasEstimate * gasPrice;
+          const totalCost = gasCost + creationFee;
+
+          if (balance < totalCost) {
+            throw new Error(`Insufficient funds. You need at least ${formatEther(totalCost)} Sepolia ETH (${formatEther(gasCost)} for gas + ${formatEther(creationFee)} creation fee). Get some from https://sepoliafaucet.com`);
+          }
 
           details.push('Gas Estimation Breakdown:');
+          details.push(`• Your Balance: ${formatEther(balance)} ETH`);
           details.push(`• Base Gas Units: ${gasEstimate.toString()}`);
           details.push(`• Current Gas Price: ${formatEther(gasPrice)} ETH/gas`);
-          details.push(`• Creation Fee: 0.1 ETH`);
-          details.push(`• Estimated Gas Cost: ${formatEther(totalCost)} ETH`);
-          details.push(`• Total Estimated Cost: ${formatEther(totalCost + parseUnits('0.1', 18))} ETH`);
+          details.push(`• Creation Fee: ${formatEther(creationFee)} ETH`);
+          details.push(`• Estimated Gas Cost: ${formatEther(gasCost)} ETH`);
+          details.push(`• Total Required: ${formatEther(totalCost)} ETH`);
           details.push('\nNote: Actual costs may vary based on:');
           details.push('• Network congestion');
           details.push('• Gas price fluctuations');
@@ -164,8 +175,12 @@ export function TokenTester({ config }: TokenTesterProps) {
             message: "Gas estimation completed successfully", 
             details 
           };
-        } catch (error) {
+        } catch (error: any) {
           console.error('Gas estimation error:', error);
+          // Improve error message for insufficient funds
+          if (error.message.includes('insufficient funds')) {
+            throw new Error('Insufficient Sepolia ETH. Please get some from https://sepoliafaucet.com');
+          }
           throw error;
         }
       }
@@ -416,13 +431,13 @@ export function TokenTester({ config }: TokenTesterProps) {
   ];
 
   const runTests = async () => {
-    setIsRunning(true);
-    setResults([]);
-    setCurrentTest(0);
+      setIsRunning(true);
+      setResults([]);
+      setCurrentTest(0);
 
-    for (let i = 0; i < tests.length; i++) {
+      for (let i = 0; i < tests.length; i++) {
       const test = tests[i];
-      setCurrentTest(i);
+        setCurrentTest(i);
       
       try {
         const result = await test.run();
@@ -447,25 +462,78 @@ export function TokenTester({ config }: TokenTesterProps) {
     setIsRunning(false);
   };
 
-  const simulateDeployment = async () => {
+  const simulateTokenCreation = async () => {
     try {
-      if (!window.ethereum) throw new Error('Web3 provider required');
+      setSimulationStatus('Preparing simulation...');
       
-      const provider = new BrowserProvider(window.ethereum as any, {
-        name: 'Local Test Network',
-        chainId: 31337
-      });
+      if (!window.ethereum) {
+        throw new Error('Please install MetaMask');
+      }
+
+      // Get contract address
+      const contractAddress = process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS;
+      if (!contractAddress) {
+        throw new Error('Contract address not found');
+      }
       
-      // Rest of simulation logic
-      const gasEstimate = await provider.estimateGas({
-        to: null, // Contract deployment
-        data: '0x', // Contract bytecode would go here
+      // Get current account
+      const provider = new BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const currentAddress = await signer.getAddress();
+
+      // Prepare token configuration for simulation
+      const tokenConfig = {
+        name: config.name,
+        symbol: config.symbol,
+        maxSupply: parseUnits(config.totalSupply, config.decimals),
+        initialSupply: parseUnits(config.totalSupply, config.decimals),
+        tokenPrice: parseUnits(config.initialPrice || '0', 18),
+        maxTransferAmount: config.maxTransferAmount ? parseUnits(config.maxTransferAmount, config.decimals) : parseUnits(config.totalSupply, config.decimals),
+        cooldownTime: BigInt(config.cooldownTime || 0),
+        transfersEnabled: config.transfersEnabled,
+        antiBot: config.antiBot,
+        teamVestingDuration: BigInt(config.vestingSchedule.team.duration * 30 * 24 * 60 * 60),
+        teamVestingCliff: BigInt(config.vestingSchedule.team.cliff * 30 * 24 * 60 * 60),
+        teamAllocation: BigInt(config.teamAllocation),
+        teamWallet: currentAddress,
+        developerAllocation: BigInt(0),
+        developerVestingDuration: BigInt(0),
+        developerVestingCliff: BigInt(0),
+        developerWallet: currentAddress
+      };
+
+      // Debug log
+      console.log('Test Configuration:', {
+        ...tokenConfig,
+        teamWallet: tokenConfig.teamWallet,
+        developerWallet: tokenConfig.developerWallet,
+        currentAddress,
+        vestingDurationInSeconds: Number(tokenConfig.teamVestingDuration),
+        vestingCliffInSeconds: Number(tokenConfig.teamVestingCliff)
       });
 
-      return gasEstimate;
-    } catch (error) {
-      console.error('Deployment simulation error:', error);
-      throw error;
+      setSimulationStatus('Connecting to contract...');
+      const factory = new Contract(contractAddress, TokenFactoryABI, signer);
+      
+      // Get creation fee
+      const creationFee = await factory.creationFee();
+      console.log('Creation fee:', formatEther(creationFee), 'ETH');
+
+      // Simulate gas estimation
+      setSimulationStatus('Estimating gas costs...');
+      const gasEstimate = await factory.createToken.estimateGas(tokenConfig, { value: creationFee });
+      console.log('Gas estimate:', gasEstimate.toString());
+
+      // Simulate deployment
+      setSimulationStatus('Simulating deployment...');
+      await factory.createToken.staticCall(tokenConfig, { value: creationFee });
+
+      setSimulationStatus('Simulation successful! ✅');
+      setError(null);
+    } catch (err: any) {
+      console.error('Simulation error:', err);
+      setError(err.message || 'Simulation failed');
+      setSimulationStatus('Simulation failed ❌');
     }
   };
 
@@ -480,17 +548,17 @@ export function TokenTester({ config }: TokenTesterProps) {
         
         if (chainId !== 31337 && chainId !== 11155111) {
           setError('Please switch to a test network (Local or Sepolia)');
-        } else {
+    } else {
           setError(null);
         }
       } catch (err) {
         console.error('Network check error:', err);
-      }
+    }
     };
 
     checkNetwork();
     window.ethereum?.on('chainChanged', checkNetwork);
-    
+
     return () => {
       window.ethereum?.removeListener('chainChanged', checkNetwork);
     };
@@ -537,8 +605,8 @@ export function TokenTester({ config }: TokenTesterProps) {
                     <span className="font-medium">{result.name}</span>
                     <span className={result.status === 'success' ? 'text-green-400' : 'text-red-400'}>
                       {result.status === 'success' ? '✓' : '✗'}
-                    </span>
-                  </div>
+            </span>
+          </div>
                   {result.message && (
                     <p className="text-sm mt-1 text-gray-400">{result.message}</p>
                   )}
@@ -547,9 +615,9 @@ export function TokenTester({ config }: TokenTesterProps) {
                       {result.details.map((detail, i) => (
                         <p key={i} className="text-xs text-gray-500">• {detail}</p>
                       ))}
-                    </div>
-                  )}
-                </div>
+          </div>
+        )}
+      </div>
               ))}
 
               {!isRunning && (

@@ -13,7 +13,7 @@ const deploy = async () => {
     console.log("Deploying TokenFactory with account:", deployer.address);
     console.log("Account balance:", ethers.formatEther(await deployer.provider.getBalance(deployer.address)), "ETH");
 
-    const creationFee = ethers.parseEther("0.1"); // 0.1 ETH initial fee for non-owners
+    const creationFee = ethers.parseEther("0.001"); // 0.001 ETH initial fee for non-owners
     console.log("Deploying TokenFactory with creation fee:", ethers.formatEther(creationFee), "ETH");
 
     const TokenFactory = await ethers.getContractFactory("TokenFactory", deployer);

@@ -158,6 +158,11 @@ contract TokenFactory is Ownable, ReentrancyGuard {
      * @param user Address to check
      */
     function getCreationFee(address user) public view returns (uint256) {
+        // Owner is exempt from fees
+        if (user == owner()) {
+            return 0;
+        }
+        // Check for discounted fee
         uint256 discountedFee = discountedFees[user];
         return discountedFee > 0 ? discountedFee : creationFee;
     }

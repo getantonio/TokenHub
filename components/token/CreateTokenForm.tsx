@@ -18,7 +18,7 @@ import { ethers } from 'ethers';
 import { 
   useAccount, 
   useChainId,
-  usePublicClient,
+  usePublicClient, 
   useWriteContract,
   useWatchPendingTransactions,
 } from 'wagmi';
@@ -262,12 +262,12 @@ export function CreateTokenForm() {
             if (tokenCreatedEvent?.topics[1]) {
               const tokenAddress = `0x${tokenCreatedEvent.topics[1].slice(26)}`;
               console.log('Found token address:', tokenAddress);
-              setDeployedToken({
+          setDeployedToken({
                 address: tokenAddress,
                 name: config.name,
                 symbol: config.symbol
               });
-              setIsWriting(false);
+        setIsWriting(false);
               setError(null); // Clear any error/status messages
             } else {
               console.error('TokenCreated event not found in logs. All logs:', receipt.logs);
@@ -276,12 +276,12 @@ export function CreateTokenForm() {
               setIsWriting(false);
             }
           }).catch(err => {
-            console.error('Receipt error:', err);
+      console.error('Receipt error:', err);
             setWriteError(err as Error);
-            setError('Failed to process transaction receipt. Please check Etherscan for details.');
-            setIsWriting(false);
+      setError('Failed to process transaction receipt. Please check Etherscan for details.');
+      setIsWriting(false);
           });
-        }
+    }
       }
     }
   });
@@ -318,10 +318,10 @@ export function CreateTokenForm() {
   const handleCreateToken = async () => {
     if (!address || !window.ethereum) {
       setError('Please connect your wallet first');
-      return;
-    }
+        return;
+      }
 
-    try {
+      try {
       setIsSubmitting(true);
       setError('Preparing transaction...');
 
@@ -474,8 +474,8 @@ export function CreateTokenForm() {
 
       // Only switch if not already on the correct network
       if (currentChainIdNum === networkId) {
-        return;
-      }
+      return;
+    }
 
       // Clear any previous errors
       setError(null);
@@ -551,53 +551,53 @@ export function CreateTokenForm() {
             <Card className="bg-gray-800 border-gray-700">
               <CardHeader className="py-3 border-b border-gray-700">
                 <CardTitle className="text-lg">Token Configuration</CardTitle>
-              </CardHeader>
+          </CardHeader>
               <CardContent className="p-4 space-y-4">
                 {/* Basic Info Fields */}
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
+              <div className="space-y-2">
                       <LabelWithTooltip label="Token Name" tooltip={tooltipTexts.name} />
-                      <input
-                        type="text"
+                    <input
+                      type="text"
                         value={config.name}
                         onChange={(e) => setConfig({ ...config, name: e.target.value })}
                         className={inputClassName}
                         placeholder="MyToken"
-                      />
-                    </div>
-                    <div className="space-y-2">
+                    />
+                  </div>
+              <div className="space-y-2">
                       <LabelWithTooltip label="Token Symbol" tooltip={tooltipTexts.symbol} />
-                      <input
-                        type="text"
+                    <input
+                      type="text"
                         value={config.symbol}
                         onChange={(e) => setConfig({ ...config, symbol: e.target.value })}
                         className={inputClassName}
                         placeholder="MTK"
-                      />
-                    </div>
+                    />
+                  </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <LabelWithTooltip label="Total Supply" tooltip={tooltipTexts.totalSupply} />
-                      <input
-                        type="text"
+                    <input
+                      type="text"
                         value={config.totalSupply}
                         onChange={(e) => setConfig({ ...config, totalSupply: e.target.value })}
                         className={inputClassName}
                         placeholder="1000000"
-                      />
-                    </div>
-                    <div className="space-y-2">
+                    />
+                  </div>
+              <div className="space-y-2">
                       <LabelWithTooltip label="Initial Price (ETH)" tooltip={tooltipTexts.initialPrice} />
-                      <input
-                        type="text"
+                    <input
+                      type="text"
                         value={config.initialPrice}
                         onChange={(e) => setConfig({ ...config, initialPrice: e.target.value })}
                         className={inputClassName}
                         placeholder="0.0001"
-                      />
-                    </div>
+                    />
+                  </div>
                   </div>
                 </div>
 
@@ -605,7 +605,7 @@ export function CreateTokenForm() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-medium">Token Distribution</h3>
-                  </div>
+              </div>
 
                   <div className="flex gap-4">
                     <div className="space-y-2 flex-1">
@@ -613,13 +613,13 @@ export function CreateTokenForm() {
                         label="Presale %" 
                         tooltip="Percentage of tokens available for initial public sale before trading begins" 
                       />
-                      <input
+                    <input
                         type="number"
                         value={config.presaleAllocation}
                         onChange={(e) => setConfig({ ...config, presaleAllocation: Number(e.target.value) })}
                         className={inputClassName}
-                      />
-                    </div>
+                    />
+                  </div>
                     <div className="space-y-2 flex-1">
                       <LabelWithTooltip 
                         label="Liquidity %" 
@@ -631,7 +631,7 @@ export function CreateTokenForm() {
                         onChange={(e) => setConfig({ ...config, liquidityAllocation: Number(e.target.value) })}
                         className={inputClassName}
                       />
-                    </div>
+                  </div>
                     <div className="space-y-2 flex-1">
                       <LabelWithTooltip 
                         label="Presale Duration" 
@@ -647,8 +647,8 @@ export function CreateTokenForm() {
                         placeholder="7"
                       />
                       <p className="text-[10px] text-gray-400">1-30 days</p>
-                    </div>
-                  </div>
+                </div>
+              </div>
 
                   {/* Presale Mechanism - Foldable */}
                   <div className="p-2 rounded bg-blue-900/20 border border-blue-800 text-xs">
@@ -659,13 +659,13 @@ export function CreateTokenForm() {
                       <div className="flex items-center gap-2">
                         <InfoIcon className="h-4 w-4 text-blue-400" />
                         <span className="font-medium">Presale Mechanism</span>
-                      </div>
+                </div>
                       {isPresaleMechanismExpanded ? (
                         <ChevronUp className="h-3 w-3" />
                       ) : (
                         <ChevronDown className="h-3 w-3" />
-                      )}
-                    </div>
+                  )}
+                </div>
                     {isPresaleMechanismExpanded && (
                       <div className="mt-2 space-y-2 text-gray-300">
                         <p>1. <strong>Initial Setup</strong>: {config.presaleAllocation}% of total supply ({config.totalSupply ? formatNumber(Number(config.totalSupply) * config.presaleAllocation / 100) : '0'} tokens) allocated for presale</p>
@@ -699,14 +699,14 @@ export function CreateTokenForm() {
                             <InfoIcon className="h-3 w-3" />
                             Important: Presale ends automatically after {config.presaleDuration} days or when all tokens are sold.
                           </p>
-                        </div>
-                      </div>
-                    )}
                   </div>
+                  </div>
+                )}
+              </div>
 
                   <div className="flex gap-4">
                     <div className="space-y-2 flex-1">
-                      <LabelWithTooltip 
+                    <LabelWithTooltip 
                         label="Team %" 
                         tooltip="Percentage allocated to your project team. Note: 2% will be allocated to the platform team." 
                       />
@@ -723,8 +723,8 @@ export function CreateTokenForm() {
                         <div className="flex items-center justify-between text-xs text-gray-400">
                           <span>Platform: 2%</span>
                           <span>Your Team: {Math.max(0, config.teamAllocation - 2)}%</span>
-                        </div>
-                      </div>
+                    </div>
+                    </div>
                     </div>
                     <div className="space-y-2 flex-1">
                       <LabelWithTooltip 
@@ -750,7 +750,7 @@ export function CreateTokenForm() {
                         className={inputClassName}
                       />
                     </div>
-                  </div>
+                    </div>
 
                   <div className="mt-4 p-2 rounded bg-gray-900/50 border border-gray-700">
                     <h4 className="text-sm font-medium mb-2">Wallet Address Requirements:</h4>
@@ -784,11 +784,11 @@ export function CreateTokenForm() {
                     >
                       View Example
                     </button>
-                  </div>
+                </div>
 
                   {/* Team Wallet */}
                   <div className="space-y-2">
-                    <LabelWithTooltip 
+                      <LabelWithTooltip 
                       label="Team Wallet Address" 
                       tooltip="Address that will receive the team allocation (founders, core team)" 
                     />
@@ -798,7 +798,7 @@ export function CreateTokenForm() {
                       onChange={(e) => setConfig({ ...config, teamWallet: e.target.value })}
                       className={inputClassName}
                       placeholder="0x..."
-                    />
+                      />
                   </div>
 
                   {/* Marketing Wallet */}
@@ -814,7 +814,7 @@ export function CreateTokenForm() {
                       className={inputClassName}
                       placeholder="0x..."
                     />
-                  </div>
+                </div>
 
                   {/* Creator Wallet */}
                   <div className="space-y-2">
@@ -822,14 +822,14 @@ export function CreateTokenForm() {
                       label="Creator Wallet Address" 
                       tooltip="Your wallet address that will receive the creator allocation" 
                     />
-                    <input
+                      <input
                       type="text"
                       value={config.developerWallet}
                       onChange={(e) => setConfig({ ...config, developerWallet: e.target.value })}
                       className={inputClassName}
                       placeholder="0x..."
                     />
-                  </div>
+                    </div>
 
                   {/* Vesting Schedules */}
                   <div className="grid grid-cols-2 gap-4">
@@ -846,8 +846,8 @@ export function CreateTokenForm() {
                           }
                         })}
                         className={inputClassName}
-                      />
-                    </div>
+                    />
+                  </div>
                     <div className="space-y-2">
                       <LabelWithTooltip label="Team Vesting Cliff (months)" tooltip={tooltipTexts.vestingCliff} />
                       <input
@@ -864,11 +864,11 @@ export function CreateTokenForm() {
                       />
                     </div>
                   </div>
-                </div>
+                  </div>
 
-                {/* Security Features */}
+                  {/* Security Features */}
                 <div className="space-y-3">
-                  <h3 className="text-sm font-medium">Security Features</h3>
+                    <h3 className="text-sm font-medium">Security Features</h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -893,7 +893,7 @@ export function CreateTokenForm() {
                       </div>
                     </div>
                   </div>
-                </div>
+                      </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -907,12 +907,12 @@ export function CreateTokenForm() {
           </TabsContent>
         </Tabs>
 
-        {/* Token Preview */}
-        <TokenPreview
-          config={config}
-          isValid={isValid}
-          validationErrors={validationErrors}
-        />
+                {/* Token Preview */}
+                  <TokenPreview 
+                    config={config} 
+                    isValid={isValid}
+                    validationErrors={validationErrors}
+                      />
 
         {/* Create Button and Status */}
         <div className="space-y-4">
@@ -925,7 +925,7 @@ export function CreateTokenForm() {
               <div className="flex items-center justify-center gap-2">
                 {isWriting && <Spinner className="h-5 w-5" />}
                 {isWriting ? 'Creating Token...' : 'Create Token'}
-              </div>
+                        </div>
             </Button>
           </div>
 
@@ -1034,7 +1034,7 @@ export function CreateTokenForm() {
                               Create Your API Key
                               <ExternalLink className="h-3 w-3" />
                             </a>
-                          </div>
+                  </div>
                         </li>
                         <li>Go to your contract on Etherscan:
                           <div className="ml-4 mt-1">
@@ -1067,9 +1067,9 @@ export function CreateTokenForm() {
                         Keep your Etherscan API key private and never share it publicly.
                       </AlertDescription>
                     </Alert>
-                  </CardContent>
+                    </CardContent>
                 )}
-              </Card>
+                </Card>
             </div>
           )}
         </div>
