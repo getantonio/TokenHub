@@ -157,9 +157,6 @@ export function CreateTokenForm() {
   const [isPlatformFeeExpanded, setIsPlatformFeeExpanded] = useState(false);
   const [isPresaleMechanismExpanded, setIsPresaleMechanismExpanded] = useState(false);
   const [isVerifyExpanded, setIsVerifyExpanded] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [discountAddress, setDiscountAddress] = useState('');
-  const [discountAmount, setDiscountAmount] = useState('');
   const [ethPrice, setEthPrice] = useState<number | null>(null);
 
   const { address } = useAccount();
@@ -318,49 +315,6 @@ export function CreateTokenForm() {
     return () => clearInterval(interval);
   }, []);
 
-  // Update admin status check
-  useEffect(() => {
-    const checkAdminStatus = async () => {
-      if (!address || !window.ethereum) return;
-      
-      try {
-        const provider = new BrowserProvider(window.ethereum as any);
-        const signer = await provider.getSigner();
-        
-        // Get current chain ID
-        const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-        const chainIdNum = parseInt(chainId as string, 16);
-        
-        // Only check on Sepolia or Mainnet
-        if (chainIdNum !== 11155111 && chainIdNum !== 1) {
-          console.log('Please switch to Sepolia or Mainnet');
-          return;
-        }
-
-        const contractAddress = process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS;
-        if (!contractAddress || !ethers.isAddress(contractAddress)) {
-          console.error('Invalid contract address');
-          return;
-        }
-
-        console.log('Checking admin status for address:', address);
-        console.log('Contract address:', contractAddress);
-        
-        const factory = new Contract(
-          contractAddress,
-          TokenFactoryABI,
-          provider
-        );
-        
-        const owner = await factory.owner();
-        setIsAdmin(owner.toLowerCase() === address.toLowerCase());
-      } catch (err) {
-        console.error('Error checking admin status:', err);
-      }
-    };
-    checkAdminStatus();
-  }, [address]);
-
   const handleCreateToken = async () => {
     if (!address || !window.ethereum) {
       setError('Please connect your wallet first');
@@ -377,8 +331,17 @@ export function CreateTokenForm() {
         throw new Error(`Invalid contract address: ${contractAddress}`);
       }
 
+      // Get current account for default wallet
       const provider = new BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
+      const currentAddress = await signer.getAddress();
+
+      // Validate team wallet
+      const teamWallet = config.teamWallet || currentAddress;
+      if (!ethers.isAddress(teamWallet) || teamWallet === ZeroAddress) {
+        throw new Error('Invalid team wallet address. Please set a valid team wallet address in the advanced settings or connect your wallet.');
+      }
+
       const factory = new Contract(contractAddress, TokenFactoryABI, signer);
       
       // Get creation fee
@@ -396,21 +359,49 @@ export function CreateTokenForm() {
         cooldownTime: BigInt(config.cooldownTime || 0),
         transfersEnabled: config.transfersEnabled,
         antiBot: config.antiBot,
-        teamVestingDuration: BigInt(config.vestingSchedule.team.duration * 30 * 24 * 60 * 60),
-        teamVestingCliff: BigInt(config.vestingSchedule.team.cliff * 30 * 24 * 60 * 60),
-        teamAllocation: BigInt(config.teamAllocation),
-        teamWallet: config.teamWallet || address,
-        developerAllocation: BigInt(config.developerAllocation || 0),
-        developerVestingDuration: BigInt(config.developerVesting.duration * 30 * 24 * 60 * 60),
-        developerVestingCliff: BigInt(config.developerVesting.cliff * 30 * 24 * 60 * 60),
-        developerWallet: config.developerWallet || address
+        // Team allocation (total team allocation including platform)
+        teamVestingDuration: BigInt(config.vestingSchedule.team.duration),
+        teamVestingCliff: BigInt(config.vestingSchedule.team.cliff),
+        teamAllocation: BigInt(config.teamAllocation), // Total team allocation
+        teamWallet: config.teamWallet || currentAddress, // User's team wallet
+        // Developer allocation (not used)
+        developerAllocation: BigInt(0),
+        developerVestingDuration: BigInt(0),
+        developerVestingCliff: BigInt(0),
+        developerWallet: currentAddress // Set to user's address instead of zero address
       };
+
+      // Debug log
+      console.log('Token Configuration:', {
+        ...tokenConfig,
+        teamWallet: tokenConfig.teamWallet,
+        teamAllocation: Number(tokenConfig.teamAllocation),
+        teamVestingDuration: Number(tokenConfig.teamVestingDuration),
+        teamVestingCliff: Number(tokenConfig.teamVestingCliff),
+        contractAddress,
+        currentAddress
+      });
+
+      // Validate configuration
+      if (!tokenConfig.teamWallet || tokenConfig.teamWallet === ZeroAddress) {
+        throw new Error('Team wallet address is required and cannot be zero address');
+      }
+
+      // Validate team wallet is a valid address
+      if (!ethers.isAddress(tokenConfig.teamWallet)) {
+        throw new Error('Invalid team wallet address format');
+      }
+
+      // Validate team allocation is at least 2%
+      if (Number(tokenConfig.teamAllocation) < 2) {
+        throw new Error('Team allocation must be at least 2% (platform fee)');
+      }
 
       // Simulate the transaction first
       try {
         setError('Simulating deployment...');
-        await factory.createToken.estimateGas(tokenConfig, { value: creationFee });
-        console.log('Simulation successful');
+        const gasEstimate = await factory.createToken.estimateGas(tokenConfig, { value: creationFee });
+        console.log('Gas estimate:', gasEstimate.toString());
       } catch (simError: any) {
         console.error('Simulation failed:', simError);
         throw new Error(`Deployment simulation failed: ${simError.message}`);
@@ -424,20 +415,37 @@ export function CreateTokenForm() {
       const receipt = await tx.wait();
       console.log('Transaction receipt:', receipt);
 
+      // Log all events for debugging
+      console.log('All transaction logs:', receipt.logs.map((log: ethers.Log) => ({
+        address: log.address,
+        topics: log.topics,
+        data: log.data
+      })));
+
       // Find the TokenCreated event
-      const tokenCreatedEvent = receipt.logs.find((log: TransactionLog) => {
+      const tokenCreatedEvent = receipt.logs.find((log: ethers.Log) => {
+        // The event we're looking for is emitted by the factory contract
+        if (log.address.toLowerCase() !== contractAddress.toLowerCase()) {
+          return false;
+        }
+        
+        // Check if this is the TokenCreated event
         const eventSignature = "TokenCreated(address,string,string)";
         const eventTopic = ethers.id(eventSignature);
         return log.topics[0] === eventTopic;
       });
 
       if (!tokenCreatedEvent) {
-        console.error('TokenCreated event not found in logs. All logs:', receipt.logs);
-        throw new Error('Token creation failed: Event not found');
+        console.error('TokenCreated event not found. Contract address:', contractAddress);
+        console.error('Expected event signature:', ethers.id("TokenCreated(address,string,string)"));
+        console.error('Available events:', receipt.logs.map((log: ethers.Log) => log.topics[0]));
+        throw new Error('Token creation succeeded but event not found. Check console for details.');
       }
 
-      // Parse the event data
-      const tokenAddress = ethers.getAddress('0x' + tokenCreatedEvent.topics[1].slice(26));
+      // Parse the event data - the token address is the first indexed parameter
+      const tokenAddress = ethers.getAddress(ethers.dataSlice(tokenCreatedEvent.topics[1], 12));
+      console.log('New token deployed at:', tokenAddress);
+      
       setDeployedToken({
         address: tokenAddress,
         name: config.name,
@@ -523,82 +531,12 @@ export function CreateTokenForm() {
     await handleNetworkSwitch(11155111);
   };
 
-  const handleSetDiscount = async () => {
-    if (!address || !window.ethereum) return;
-    
-    try {
-      setIsSubmitting(true);
-      setError(null);
-
-      const provider = new BrowserProvider(window.ethereum as any);
-      const signer = await provider.getSigner();
-      const factory = new Contract(
-        process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as string,
-        TokenFactoryABI,
-        signer
-      );
-
-      const tx = await factory.setDiscountedFee(
-        discountAddress,
-        parseUnits(discountAmount || '0', 18)
-      );
-
-      await tx.wait();
-      setDiscountAddress('');
-      setDiscountAmount('');
-      
-    } catch (err: any) {
-      console.error('Error setting discount:', err);
-      setError(err.message || 'Failed to set discount');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   if (!mounted) {
     return null;
   }
 
   return (
     <div className="max-w-4xl mx-auto">
-      {isAdmin && (
-        <Card className="bg-gray-800 border-gray-700 mb-4">
-          <CardHeader className="py-3 border-b border-gray-700">
-            <CardTitle className="text-lg">Admin Controls</CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 space-y-4">
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium mb-1">Discount Address</label>
-                <input
-                  type="text"
-                  value={discountAddress}
-                  onChange={(e) => setDiscountAddress(e.target.value)}
-                  placeholder="0x..."
-                  className={inputClassName}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Discount Amount (ETH)</label>
-                <input
-                  type="text"
-                  value={discountAmount}
-                  onChange={(e) => setDiscountAmount(e.target.value)}
-                  placeholder="0.05"
-                  className={inputClassName}
-                />
-              </div>
-              <Button
-                onClick={handleSetDiscount}
-                disabled={isSubmitting || !discountAddress || !discountAmount}
-                className="w-full"
-              >
-                {isSubmitting ? <Spinner /> : 'Set Discount'}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
       <div className="max-w-3xl mx-auto space-y-4">
         {/* Only show platform fee message in token distribution section */}
         {currentStep === 2 && <PlatformFeeMessage />}
@@ -770,17 +708,23 @@ export function CreateTokenForm() {
                     <div className="space-y-2 flex-1">
                       <LabelWithTooltip 
                         label="Team %" 
-                        tooltip="Percentage allocated to the project team (minimum 2% for platform fee)" 
+                        tooltip="Percentage allocated to your project team. Note: 2% will be allocated to the platform team." 
                       />
-                      <input
-                        type="number"
-                        min="2"
-                        max="100"
-                        value={config.teamAllocation}
-                        onChange={(e) => setConfig({ ...config, teamAllocation: Number(e.target.value) })}
-                        className={inputClassName}
-                        placeholder="2"
-                      />
+                      <div className="space-y-1">
+                        <input
+                          type="number"
+                          min="2"
+                          max="100"
+                          value={config.teamAllocation}
+                          onChange={(e) => setConfig({ ...config, teamAllocation: Number(e.target.value) })}
+                          className={inputClassName}
+                          placeholder="2"
+                        />
+                        <div className="flex items-center justify-between text-xs text-gray-400">
+                          <span>Platform: 2%</span>
+                          <span>Your Team: {Math.max(0, config.teamAllocation - 2)}%</span>
+                        </div>
+                      </div>
                     </div>
                     <div className="space-y-2 flex-1">
                       <LabelWithTooltip 
@@ -813,7 +757,8 @@ export function CreateTokenForm() {
                     <ul className="text-xs space-y-1 text-gray-300">
                       <li>• Presale - Handled automatically by the contract</li>
                       <li>• Liquidity - Locked in the trading pair automatically</li>
-                      <li>• Team - Separate wallet recommended for team funds</li>
+                      <li>• Platform Team - Fixed 2% allocated to platform</li>
+                      <li>• Your Team - Separate wallet required for team allocation</li>
                       <li>• Marketing - Separate wallet recommended for tracking expenses</li>
                       <li>• Creator - Your development/maintenance wallet</li>
                     </ul>

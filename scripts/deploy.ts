@@ -1,7 +1,9 @@
-import "@nomicfoundation/hardhat-ethers";
-import { ethers } from "hardhat";
+// Import hardhat runtime environment
+const hardhat = require("hardhat");
 
-async function main() {
+const deploy = async () => {
+  const { ethers } = hardhat;
+
   try {
     const signers = await ethers.getSigners();
     if (!signers || signers.length === 0) {
@@ -11,7 +13,7 @@ async function main() {
     console.log("Deploying TokenFactory with account:", deployer.address);
     console.log("Account balance:", ethers.formatEther(await deployer.provider.getBalance(deployer.address)), "ETH");
 
-    const creationFee = ethers.parseEther("0.1"); // 0.1 ETH initial fee
+    const creationFee = ethers.parseEther("0.1"); // 0.1 ETH initial fee for non-owners
     console.log("Deploying TokenFactory with creation fee:", ethers.formatEther(creationFee), "ETH");
 
     const TokenFactory = await ethers.getContractFactory("TokenFactory", deployer);
@@ -46,7 +48,7 @@ async function main() {
   }
 }
 
-main()
+deploy()
   .then(() => process.exit(0))
   .catch((error) => {
     console.error("\nScript failed:");

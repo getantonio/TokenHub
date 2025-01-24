@@ -1,87 +1,128 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { useAccount } from 'wagmi';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { BrowserProvider, Contract, isAddress } from 'ethers';
-import { parseUnits } from 'viem';
+import { Spinner } from "@/components/ui/spinner";
+import { useAccount } from 'wagmi';
+import { BrowserProvider, Contract, formatEther, parseEther } from 'ethers';
 import TokenFactoryABI from '@/contracts/abis/TokenFactory.json';
-import { getContractOwner } from '@/lib/alchemy';
+import { NetworkRequirements } from '@/components/network/NetworkRequirements';
 
 export default function AdminPage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [currentFee, setCurrentFee] = useState<string>('0');
+  const [newFee, setNewFee] = useState<string>('');
   const [discountAddress, setDiscountAddress] = useState('');
   const [discountAmount, setDiscountAmount] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [contractBalance, setContractBalance] = useState<string>('0');
+
   const { address } = useAccount();
 
+  // Check admin status and load contract data
   useEffect(() => {
-    const checkAdminStatus = async () => {
-      if (!address) {
+    const loadContractData = async () => {
+      if (!address || !window.ethereum) {
         setIsLoading(false);
-        setError('Please connect your wallet first');
         return;
       }
 
       try {
+        const provider = new BrowserProvider(window.ethereum);
         const contractAddress = process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS;
-        if (!contractAddress || !isAddress(contractAddress)) {
-          throw new Error('Invalid contract address configuration');
-        }
-
-        const owner = await getContractOwner(contractAddress);
-        if (!owner) {
-          throw new Error('Failed to get contract owner');
-        }
-
-        const isOwner = owner.toLowerCase() === address.toLowerCase();
-        setIsAdmin(isOwner);
         
-        if (!isOwner) {
-          setError('You must be the contract owner to access this page');
+        if (!contractAddress) {
+          throw new Error('Contract address not configured');
         }
-      } catch (err: any) {
-        console.error('Admin check error:', err);
-        setError(err.message || 'Failed to check admin status');
+
+        const contract = new Contract(contractAddress, TokenFactoryABI, provider);
+        
+        // Check if user is admin
+        const owner = await contract.owner();
+        const isUserAdmin = owner.toLowerCase() === address.toLowerCase();
+        setIsAdmin(isUserAdmin);
+
+        if (isUserAdmin) {
+          // Load contract data
+          const fee = await contract.creationFee();
+          setCurrentFee(formatEther(fee));
+
+          // Get contract balance
+          const balance = await provider.getBalance(contractAddress);
+          setContractBalance(formatEther(balance));
+        }
+
+      } catch (err) {
+        console.error('Error loading contract data:', err);
+        setError('Failed to load contract data');
       } finally {
         setIsLoading(false);
       }
     };
 
-    checkAdminStatus();
+    loadContractData();
   }, [address]);
 
-  const handleSetDiscount = async () => {
-    if (!address || !window.ethereum) return;
+  const handleUpdateFee = async () => {
+    if (!window.ethereum || !address) return;
     
     try {
       setIsSubmitting(true);
       setError(null);
 
+      const provider = new BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
       const contractAddress = process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS;
-      if (!contractAddress || !isAddress(contractAddress)) {
-        throw new Error('Invalid contract address configuration');
+      
+      if (!contractAddress) {
+        throw new Error('Contract address not configured');
       }
 
-      if (!isAddress(discountAddress)) {
-        throw new Error('Invalid discount address');
-      }
+      const contract = new Contract(contractAddress, TokenFactoryABI, signer);
+      
+      const tx = await contract.updateCreationFee(parseEther(newFee));
+      await tx.wait();
+      
+      // Update current fee
+      const updatedFee = await contract.creationFee();
+      setCurrentFee(formatEther(updatedFee));
+      setNewFee('');
+      
+    } catch (err: any) {
+      console.error('Error updating fee:', err);
+      setError(err.message || 'Failed to update fee');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSetDiscount = async () => {
+    if (!window.ethereum || !address) return;
+    
+    try {
+      setIsSubmitting(true);
+      setError(null);
 
       const provider = new BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
-      const factory = new Contract(contractAddress, TokenFactoryABI, signer);
+      const contractAddress = process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS;
+      
+      if (!contractAddress) {
+        throw new Error('Contract address not configured');
+      }
 
-      const tx = await factory.setDiscountedFee(
+      const contract = new Contract(contractAddress, TokenFactoryABI, signer);
+      
+      const tx = await contract.setDiscountedFee(
         discountAddress,
-        parseUnits(discountAmount || '0', 18)
+        parseEther(discountAmount)
       );
-
       await tx.wait();
+      
       setDiscountAddress('');
       setDiscountAmount('');
       
@@ -93,9 +134,41 @@ export default function AdminPage() {
     }
   };
 
+  const handleWithdraw = async () => {
+    if (!window.ethereum || !address) return;
+    
+    try {
+      setIsSubmitting(true);
+      setError(null);
+
+      const provider = new BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const contractAddress = process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS;
+      
+      if (!contractAddress) {
+        throw new Error('Contract address not configured');
+      }
+
+      const contract = new Contract(contractAddress, TokenFactoryABI, signer);
+      
+      const tx = await contract.withdrawFees();
+      await tx.wait();
+      
+      // Update contract balance
+      const balance = await provider.getBalance(contractAddress);
+      setContractBalance(formatEther(balance));
+      
+    } catch (err: any) {
+      console.error('Error withdrawing funds:', err);
+      setError(err.message || 'Failed to withdraw funds');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+      <div className="flex items-center justify-center min-h-screen">
         <Spinner className="h-8 w-8" />
       </div>
     );
@@ -103,10 +176,10 @@ export default function AdminPage() {
 
   if (!isAdmin) {
     return (
-      <div className="min-h-screen bg-gray-900 p-8">
+      <div className="container mx-auto px-4 py-8">
         <Alert variant="destructive">
           <AlertDescription>
-            {error || 'You must be the contract owner to access this page'}
+            You do not have permission to access this page.
           </AlertDescription>
         </Alert>
       </div>
@@ -114,41 +187,108 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 p-8">
-      <div className="max-w-4xl mx-auto space-y-6">
-        <Card className="bg-gray-800 border-gray-700">
-          <CardHeader>
-            <CardTitle>Admin Controls</CardTitle>
+    <div className="container mx-auto px-4 py-4">
+      <NetworkRequirements />
+      
+      <div className="max-w-4xl mx-auto space-y-4">
+        <h1 className="text-xl font-bold mb-3">Contract Administration</h1>
+
+        {error && (
+          <Alert variant="destructive" className="py-2">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {/* Contract Overview & Fee Management Combined */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg">Contract & Fee Management</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <input
-                type="text"
-                placeholder="Wallet Address"
-                value={discountAddress}
-                onChange={(e) => setDiscountAddress(e.target.value)}
-                className="px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <input
-                type="text"
-                placeholder="Discount Amount (ETH)"
-                value={discountAmount}
-                onChange={(e) => setDiscountAmount(e.target.value)}
-                className="px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+          <CardContent className="space-y-3">
+            {/* Contract Info */}
+            <div className="grid grid-cols-3 gap-2 text-sm">
+              <div>
+                <span className="text-gray-400">Contract: </span>
+                <span className="font-mono text-xs">{process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS}</span>
+              </div>
+              <div>
+                <span className="text-gray-400">Current Fee: </span>
+                <span>{currentFee} ETH</span>
+              </div>
+              <div>
+                <span className="text-gray-400">Balance: </span>
+                <span>{contractBalance} ETH</span>
+              </div>
             </div>
-            <Button
-              onClick={handleSetDiscount}
-              disabled={isSubmitting}
-              className="w-full"
-            >
-              {isSubmitting ? <Spinner className="h-4 w-4" /> : 'Set Discount'}
-            </Button>
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
+
+            {/* Update Fee */}
+            <div className="flex gap-2 items-center">
+              <input
+                type="text"
+                value={newFee}
+                onChange={(e) => setNewFee(e.target.value)}
+                placeholder="New Fee (ETH)"
+                className="flex-1 p-1.5 rounded bg-gray-700 text-white text-sm"
+              />
+              <Button
+                onClick={handleUpdateFee}
+                disabled={isSubmitting || !newFee}
+                className="whitespace-nowrap"
+                size="sm"
+              >
+                {isSubmitting ? <Spinner className="h-4 w-4" /> : 'Update Fee'}
+              </Button>
+            </div>
+
+            {/* Withdraw Section */}
+            <div className="flex gap-2 items-center justify-between border-t border-gray-700 pt-2">
+              <span className="text-sm text-gray-400">
+                Available to withdraw: {contractBalance} ETH
+              </span>
+              <Button
+                onClick={handleWithdraw}
+                disabled={isSubmitting || parseFloat(contractBalance) === 0}
+                size="sm"
+                variant={parseFloat(contractBalance) > 0 ? "default" : "secondary"}
+              >
+                {isSubmitting ? <Spinner className="h-4 w-4" /> : 'Withdraw All'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Discount Management */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg">Discount Management</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-[1fr,auto] gap-2 items-start">
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  value={discountAddress}
+                  onChange={(e) => setDiscountAddress(e.target.value)}
+                  placeholder="Address (0x...)"
+                  className="w-full p-1.5 rounded bg-gray-700 text-white text-sm"
+                />
+                <input
+                  type="text"
+                  value={discountAmount}
+                  onChange={(e) => setDiscountAmount(e.target.value)}
+                  placeholder="Discounted Fee (ETH)"
+                  className="w-full p-1.5 rounded bg-gray-700 text-white text-sm"
+                />
+              </div>
+              <Button
+                onClick={handleSetDiscount}
+                disabled={isSubmitting || !discountAddress || !discountAmount}
+                size="sm"
+                className="h-full"
+              >
+                {isSubmitting ? <Spinner className="h-4 w-4" /> : 'Set\nDiscount'}
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>

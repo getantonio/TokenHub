@@ -14,6 +14,7 @@ import {
   ZeroAddress 
 } from 'ethers';
 import TokenFactoryABI from '@/contracts/abis/TokenFactory.json';
+import { ethers } from 'ethers';
 
 interface TestResult {
   name: string;
@@ -98,10 +99,15 @@ export function TokenTester({ config }: TokenTesterProps) {
             provider
           );
 
-          // Ensure wallet addresses are set
+          // Ensure wallet addresses are set and valid
           const teamWallet = config.teamWallet || currentAddress;
           const developerWallet = config.developerWallet || currentAddress;
           const marketingWallet = config.marketingWallet || currentAddress;
+
+          // Validate wallet addresses
+          if (!ethers.isAddress(teamWallet) || teamWallet === ZeroAddress) {
+            throw new Error("Invalid team wallet address. Please set a valid team wallet address in the advanced settings.");
+          }
 
           // Format parameters carefully
           const params = {
@@ -119,12 +125,19 @@ export function TokenTester({ config }: TokenTesterProps) {
             teamVestingDuration: BigInt(config.vestingSchedule.team.duration * 30 * 24 * 60 * 60),
             teamVestingCliff: BigInt(config.vestingSchedule.team.cliff * 30 * 24 * 60 * 60),
             teamAllocation: BigInt(config.teamAllocation),
-            teamWallet: teamWallet,
+            teamWallet,
             developerAllocation: BigInt(config.developerAllocation || 0),
-            developerVestingDuration: BigInt(config.developerVesting.duration * 30 * 24 * 60 * 60),
-            developerVestingCliff: BigInt(config.developerVesting.cliff * 30 * 24 * 60 * 60),
-            developerWallet: developerWallet
+            developerVestingDuration: BigInt((config.developerVesting?.duration || 0) * 30 * 24 * 60 * 60),
+            developerVestingCliff: BigInt((config.developerVesting?.cliff || 0) * 30 * 24 * 60 * 60),
+            developerWallet
           };
+
+          console.log('Debug - Token Parameters:', {
+            ...params,
+            teamWallet,
+            developerWallet,
+            marketingWallet
+          });
 
           // Get gas estimate with proper value parameter
           const gasEstimate = await factoryContract.createToken.estimateGas(

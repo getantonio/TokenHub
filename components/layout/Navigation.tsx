@@ -3,10 +3,10 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useAccount } from 'wagmi';
-import { isAddress } from 'ethers';
-import { getContractOwner } from '@/lib/alchemy';
+import { isAddress, Contract, BrowserProvider } from 'ethers';
 import { NetworkSelector } from '@/components/network-selector';
 import { WalletConnect } from '@/components/wallet-connect';
+import TokenFactoryABI from '@/contracts/abis/TokenFactory.json';
 
 export function Navigation() {
   const [isAdmin, setIsAdmin] = useState(false);
@@ -14,7 +14,7 @@ export function Navigation() {
 
   useEffect(() => {
     const checkAdminStatus = async () => {
-      if (!address) return;
+      if (!address || !window.ethereum) return;
       try {
         const contractAddress = process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS;
         
@@ -23,10 +23,11 @@ export function Navigation() {
           return;
         }
 
-        const owner = await getContractOwner(contractAddress);
-        if (owner) {
-          setIsAdmin(owner.toLowerCase() === address.toLowerCase());
-        }
+        const provider = new BrowserProvider(window.ethereum);
+        const contract = new Contract(contractAddress, TokenFactoryABI, provider);
+        const owner = await contract.owner();
+        
+        setIsAdmin(owner.toLowerCase() === address.toLowerCase());
       } catch (err) {
         console.error('Error checking admin status:', err);
       }
