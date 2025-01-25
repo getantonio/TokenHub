@@ -1,6 +1,4 @@
 import { TokenConfig } from '@/components/token/types';
-import { type ClassValue, clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
 
 export const formatNumber = (num: number): string => {
   if (isNaN(num)) return '0';
@@ -10,12 +8,15 @@ export const formatNumber = (num: number): string => {
   return num.toString();
 };
 
-export function validateTokenConfig(config: TokenConfig): string[] {
+export const validateTokenConfig = (config: TokenConfig): string[] => {
   const errors: string[] = [];
 
   // Basic validation
   if (!config.name) errors.push('Token name is required');
   if (!config.symbol) errors.push('Token symbol is required');
+  if (config.symbol && config.symbol.length > 6) errors.push('Symbol should be 6 characters or less');
+
+  // Tokenomics validation
   if (!config.totalSupply) errors.push('Total supply is required');
   if (!config.initialPrice) errors.push('Initial price is required');
 
@@ -24,47 +25,16 @@ export function validateTokenConfig(config: TokenConfig): string[] {
     config.presaleAllocation + 
     config.liquidityAllocation + 
     config.teamAllocation + 
-    config.marketingAllocation +
-    config.developerAllocation;
-
+    config.marketingAllocation;
+  
   if (totalAllocation !== 100) {
-    errors.push(`Total token allocation must equal 100% (currently ${totalAllocation}%)`);
-  }
-
-  // Update team allocation validation
-  if (config.teamAllocation < 2) {
-    errors.push('Team allocation must be at least 2% to cover platform fee');
-  }
-
-  // Marketing allocation validation
-  if (config.marketingAllocation <= 0) {
-    errors.push('Marketing allocation must be greater than 0%');
-  }
-
-  // Developer allocation validation
-  if (config.developerAllocation < 5) {
-    errors.push('Developer allocation should be at least 5%');
-  }
-
-  // Wallet validation
-  if (!config.teamWallet) {
-    errors.push('Team wallet address is required');
-  }
-  if (!config.marketingWallet) {
-    errors.push('Marketing wallet address is required');
-  }
-  if (!config.developerWallet) {
-    errors.push('Developer wallet address is required');
+    errors.push('Total token allocation must equal 100%');
   }
 
   // Vesting validation
-  if (config.vestingSchedule.team.duration < 6) {
-    errors.push('Team vesting duration should be at least 6 months');
+  if (config.vestingSchedule.team.duration < config.vestingSchedule.team.cliff) {
+    errors.push('Team vesting duration must be greater than cliff period');
   }
 
   return errors;
-}
-
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-} 
+}; 

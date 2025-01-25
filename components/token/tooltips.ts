@@ -23,11 +23,6 @@ export const tooltips = {
   • Partnerships and promotions
   • Exchange listings
   Recommended: 5-15%`,
-  developerAllocation: `Tokens allocated for development team:
-  • Subject to vesting schedule
-  • Used for ongoing development
-  • Technical team incentives
-  Recommended: 5-10%`,
   maxTransferAmount: "Maximum amount of tokens that can be transferred in a single transaction. Helps prevent dumping.",
   antiBot: "Implements measures to prevent automated trading bots from manipulating the token price at launch.",
   transfersEnabled: "If enabled, tokens can be transferred immediately after launch. If disabled, transfers start locked.",
@@ -42,26 +37,4 @@ Example Distribution:
 • Liquidity: 30% - For trading on DEX
 • Team: 10% - Vested over time
 • Marketing: 10% - For growth`,
-};
-
-export const networkTooltips = {
-  ethereum: {
-    title: "Ethereum Mainnet",
-    requirements: "Requires ETH for gas fees (0.5 ETH recommended)",
-    warning: "High gas fees, best for final deployment",
-    faucet: null
-  },
-  polygon: {
-    title: "Polygon Network",
-    requirements: "Requires MATIC for gas fees (5 MATIC recommended)",
-    warning: "Ensure you have MATIC tokens, not just ETH",
-    faucet: "https://faucet.polygon.technology/"
-  },
-  sepolia: {
-    title: "Sepolia Testnet",
-    requirements: "Requires Sepolia ETH (0.1 ETH recommended)",
-    warning: "Test network only - tokens have no real value",
-    faucet: "https://sepoliafaucet.com/"
-  },
-  // ... add other networks
 }; 

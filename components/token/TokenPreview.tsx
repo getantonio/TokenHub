@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import React from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TokenConfig } from './types';
 import { formatNumber } from '@/lib/utils';
-import { Tooltip } from '../ui/tooltip';
+import { Tooltip } from '@/components/ui/tooltip';
 import { tooltips } from './tooltips';
 
 interface TokenPreviewProps {
@@ -13,144 +13,148 @@ interface TokenPreviewProps {
   validationErrors: string[];
 }
 
-export function TokenPreview({ config, isValid, validationErrors }: TokenPreviewProps) {
-  const [ethPrice, setEthPrice] = useState<number | null>(null);
-
-  useEffect(() => {
-    const fetchEthPrice = async () => {
-      try {
-        // Use Alchemy's getTokenMetadata which includes price info
-        const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd', {
-          headers: {
-            'Accept': 'application/json',
-          },
-          mode: 'cors',
-          cache: 'no-cache',
-        });
-        
-        if (!response.ok) {
-          throw new Error('Failed to fetch ETH price');
-        }
-        
-        const data = await response.json();
-        setEthPrice(data.ethereum.usd);
-      } catch (error) {
-        console.error('Failed to fetch ETH price:', error);
-        // Fallback to a default price if the fetch fails
-        setEthPrice(2000); // Default price
-      }
-    };
-
-    fetchEthPrice();
-    // Refresh price every 60 seconds
-    const interval = setInterval(fetchEthPrice, 60000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Calculate total allocation
+export const TokenPreview: React.FC<TokenPreviewProps> = ({ 
+  config, 
+  isValid, 
+  validationErrors 
+}) => {
   const totalAllocation = 
-    Number(config.presaleAllocation) + 
-    Number(config.liquidityAllocation) + 
-    Number(config.teamAllocation) + 
-    Number(config.marketingAllocation) +
-    Number(config.developerAllocation);
+    config.presaleAllocation + 
+    config.liquidityAllocation + 
+    config.teamAllocation + 
+    config.marketingAllocation;
 
-  // Calculate USD price
-  const getUsdPrice = () => {
-    if (!config.initialPrice || !ethPrice) return null;
-    const usdPrice = Number(config.initialPrice) * ethPrice;
-    return usdPrice < 0.01 ? usdPrice.toExponential(2) : usdPrice.toFixed(2);
-  };
+  const PreviewItem = ({ label, value, tooltip }: { label: string; value: string; tooltip: string }) => (
+    <div>
+      <Tooltip content={tooltip}>
+        <span className="text-gray-400">{label}:</span>
+      </Tooltip>
+      <p>{value}</p>
+    </div>
+  );
 
   return (
-    <Card className="w-full bg-gray-800 border-gray-700">
-      <CardHeader className="py-3 border-b border-gray-700">
-        <CardTitle className="text-lg font-semibold text-white">Token Preview</CardTitle>
+    <Card className="bg-gray-800 text-white">
+      <CardHeader className="py-3">
+        <CardTitle className="text-lg">Token Preview</CardTitle>
       </CardHeader>
-      <CardContent className="p-4 space-y-6">
-        {/* Basic Info */}
+      <CardContent className="py-2">
         <div className="space-y-3">
-          <div className="grid grid-cols-[120px_1fr] gap-2 items-center">
-            <span className="text-gray-400">Name:</span>
-            <span className="text-white font-medium">{config.name || '-'}</span>
+          <div>
+            <h3 className="text-sm font-semibold mb-1">Token Information</h3>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <PreviewItem 
+                label="Name" 
+                value={config.name || 'Not set'} 
+                tooltip={tooltips.name}
+              />
+              <div>
+                <span className="text-gray-400">Symbol:</span>
+                <p>{config.symbol || 'Not set'}</p>
+              </div>
+            </div>
           </div>
-          <div className="grid grid-cols-[120px_1fr] gap-2 items-center">
-            <span className="text-gray-400">Symbol:</span>
-            <span className="text-white font-medium">{config.symbol || '-'}</span>
-          </div>
-          <div className="grid grid-cols-[120px_1fr] gap-2 items-center">
-            <span className="text-gray-400">Total Supply:</span>
-            <span className="text-white font-medium">{config.totalSupply ? formatNumber(Number(config.totalSupply)) : '-'}</span>
-          </div>
-          <div className="grid grid-cols-[120px_1fr] gap-2 items-center">
-            <span className="text-gray-400">Initial Price:</span>
-            <span className="text-white font-medium">
-              {config.initialPrice ? (
-                <>
-                  {config.initialPrice} ETH
-                  <span className="text-gray-400 ml-2">
-                    (${getUsdPrice()})
-                  </span>
-                </>
-              ) : '-'}
-            </span>
-          </div>
-        </div>
 
-        {/* Distribution Graph */}
-        <div className="space-y-2">
-          <h3 className="text-sm font-medium">Token Distribution</h3>
-          <div className="grid grid-cols-5 gap-2 text-xs text-gray-300">
-            <div>Presale ({config.presaleAllocation}%)</div>
-            <div>Liquidity ({config.liquidityAllocation}%)</div>
-            <div>Team ({config.teamAllocation}%)</div>
-            <div>Marketing ({config.marketingAllocation}%)</div>
-            <div>Creator ({config.developerAllocation}%)</div>
+          <div>
+            <h3 className="text-sm font-semibold mb-1">Tokenomics</h3>
+            <div className="space-y-1">
+              <div>
+                <span className="text-gray-400">Total Supply:</span>
+                <p>{formatNumber(Number(config.totalSupply)) || 'Not set'}</p>
+              </div>
+              <div>
+                <span className="text-gray-400">Initial Price:</span>
+                <p>{config.initialPrice ? `${config.initialPrice} ETH` : 'Not set'}</p>
+              </div>
+            </div>
           </div>
-          <div className="text-xs text-gray-400">Total: {totalAllocation}%</div>
-          
-          {/* Distribution Bar */}
-          <div className="h-4 w-full flex rounded overflow-hidden">
-            <div 
-              className="bg-blue-500" 
-              style={{ width: `${config.presaleAllocation}%` }}
-              title={`Presale: ${config.presaleAllocation}%`}
-            />
-            <div 
-              className="bg-green-500" 
-              style={{ width: `${config.liquidityAllocation}%` }}
-              title={`Liquidity: ${config.liquidityAllocation}%`}
-            />
-            <div 
-              className="bg-yellow-500" 
-              style={{ width: `${config.teamAllocation}%` }}
-              title={`Team: ${config.teamAllocation}%`}
-            />
-            <div 
-              className="bg-purple-500" 
-              style={{ width: `${config.marketingAllocation}%` }}
-              title={`Marketing: ${config.marketingAllocation}%`}
-            />
-            <div 
-              className="bg-red-500" 
-              style={{ width: `${config.developerAllocation}%` }}
-              title={`Creator: ${config.developerAllocation}%`}
-            />
-          </div>
-        </div>
 
-        {/* Validation Errors */}
-        {!isValid && validationErrors.length > 0 && (
-          <div className="mt-4 p-3 bg-red-900/50 rounded-lg border border-red-700">
-            <h4 className="text-sm font-medium text-red-400 mb-2">Validation Errors:</h4>
-            <ul className="text-sm space-y-1">
-              {validationErrors.map((error, i) => (
-                <li key={i} className="text-red-300">• {error}</li>
-              ))}
-            </ul>
+          <div>
+            <h3 className="text-sm font-semibold mb-1">Distribution</h3>
+            <div className="space-y-1">
+              <div className="w-full bg-gray-700 rounded-full h-3 overflow-hidden">
+                <div 
+                  className="h-full flex"
+                  style={{ width: '100%' }}
+                >
+                  <div 
+                    className="bg-blue-500" 
+                    style={{ width: `${config.presaleAllocation}%` }}
+                    title="Presale"
+                  />
+                  <div 
+                    className="bg-green-500" 
+                    style={{ width: `${config.liquidityAllocation}%` }}
+                    title="Liquidity"
+                  />
+                  <div 
+                    className="bg-yellow-500" 
+                    style={{ width: `${config.teamAllocation}%` }}
+                    title="Team"
+                  />
+                  <div 
+                    className="bg-purple-500" 
+                    style={{ width: `${config.marketingAllocation}%` }}
+                    title="Marketing"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-1 text-xs">
+                <div>
+                  <span className="inline-block w-2 h-2 bg-blue-500 mr-1" />
+                  Presale: {config.presaleAllocation}%
+                </div>
+                <div>
+                  <span className="inline-block w-2 h-2 bg-green-500 mr-1" />
+                  Liquidity: {config.liquidityAllocation}%
+                </div>
+                <div>
+                  <span className="inline-block w-2 h-2 bg-yellow-500 mr-1" />
+                  Team: {config.teamAllocation}%
+                </div>
+                <div>
+                  <span className="inline-block w-2 h-2 bg-purple-500 mr-1" />
+                  Marketing: {config.marketingAllocation}%
+                </div>
+              </div>
+              {totalAllocation !== 100 && (
+                <p className="text-red-400 text-xs">
+                  Total allocation must equal 100% (currently {totalAllocation}%)
+                </p>
+              )}
+            </div>
           </div>
-        )}
+
+          <div>
+            <h3 className="text-sm font-semibold mb-1">Security Features</h3>
+            <div className="space-y-0.5 text-xs">
+              <p>
+                <span className="text-gray-400">Max Transfer:</span>{' '}
+                {config.maxTransferAmount ? `${config.maxTransferAmount}% of total supply` : 'No limit'}
+              </p>
+              <p>
+                <span className="text-gray-400">Anti-Bot:</span>{' '}
+                {config.antiBot ? 'Enabled' : 'Disabled'}
+              </p>
+              <p>
+                <span className="text-gray-400">Initial Transfers:</span>{' '}
+                {config.transfersEnabled ? 'Enabled' : 'Disabled'}
+              </p>
+            </div>
+          </div>
+
+          {validationErrors.length > 0 && (
+            <div className="mt-2 p-2 bg-red-900/50 rounded-lg">
+              <h4 className="text-red-400 font-medium text-xs mb-1">Please fix:</h4>
+              <ul className="list-disc list-inside text-xs space-y-0.5">
+                {validationErrors.map((error, index) => (
+                  <li key={index} className="text-red-300">{error}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   );
-} 
+}; 

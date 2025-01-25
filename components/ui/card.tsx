@@ -1,44 +1,47 @@
 import * as React from "react"
 
-export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {}
+const Card = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={`rounded-lg border bg-card text-card-foreground shadow-sm ${className}`}
+    {...props}
+  />
+))
+Card.displayName = "Card"
 
-export function Card({ className, ...props }: CardProps) {
-  return (
-    <div
-      className={`rounded-lg border border-gray-700 bg-card text-card-foreground shadow-sm ${className}`}
-      {...props}
-    />
-  )
-}
+const CardHeader = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={`flex flex-col space-y-1.5 p-6 ${className}`}
+    {...props}
+  />
+))
+CardHeader.displayName = "CardHeader"
 
-export function CardHeader({ className, ...props }: CardProps) {
-  return <div className={`flex flex-col space-y-1.5 p-6 ${className}`} {...props} />
-}
+const CardTitle = React.forwardRef<
+  HTMLParagraphElement,
+  React.HTMLAttributes<HTMLHeadingElement>
+>(({ className, ...props }, ref) => (
+  <h3
+    ref={ref}
+    className={`text-2xl font-semibold leading-none tracking-tight ${className}`}
+    {...props}
+  />
+))
+CardTitle.displayName = "CardTitle"
 
-export function CardTitle({ className, ...props }: CardProps) {
-  return (
-    <h3
-      className={`text-2xl font-semibold leading-none tracking-tight ${className}`}
-      {...props}
-    />
-  )
-}
+const CardContent = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div ref={ref} className={`p-6 pt-0 ${className}`} {...props} />
+))
+CardContent.displayName = "CardContent"
 
-export function CardDescription({ className, ...props }: CardProps) {
-  return (
-    <p className={`text-sm text-muted-foreground ${className}`} {...props} />
-  )
-}
-
-export function CardContent({ className, ...props }: CardProps) {
-  return <div className={`p-6 pt-0 ${className}`} {...props} />
-}
-
-export function CardFooter({ className, ...props }: CardProps) {
-  return (
-    <div
-      className={`flex items-center p-6 pt-0 ${className}`}
-      {...props}
-    />
-  )
-} 
+export { Card, CardHeader, CardTitle, CardContent } 

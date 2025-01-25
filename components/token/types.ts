@@ -12,11 +12,9 @@ export interface TokenConfig {
 
   // Distribution
   presaleAllocation: number;
-  presaleDuration: number;  // Duration in days
   liquidityAllocation: number;
   teamAllocation: number;
   marketingAllocation: number;
-  developerAllocation: number;
 
   // Security Settings
   maxTransferAmount: string;
@@ -35,28 +33,4 @@ export interface TokenConfig {
       cliff: number;
     };
   };
-
-  // Team Wallet
-  teamWallet: string;
-
-  // Developer Wallet
-  developerWallet: string;
-
-  // Developer Vesting
-  developerVesting: {
-    duration: number;
-    cliff: number;
-  };
-
-  // Marketing Wallet
-  marketingWallet: string;
-}
-
-// Add SecurityRisk type
-export interface SecurityRisk {
-  severity: 'HIGH' | 'MEDIUM' | 'LOW';
-  message: string;
-  impact: string;
-  mitigation: string;
-  details: string[];
 } 
