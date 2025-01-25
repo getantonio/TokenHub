@@ -106,7 +106,7 @@ export function TokenTester({ config }: TokenTesterProps) {
           );
 
           // Get creation fee first to check balance
-          const creationFee = await factoryContract.creationFee();
+          const creationFee = await factoryContract.getCreationFee(currentAddress);
           if (balance < creationFee) {
             throw new Error(`Insufficient funds. You need at least ${formatEther(creationFee)} Sepolia ETH for the creation fee. Get some from https://sepoliafaucet.com`);
           }
@@ -126,11 +126,11 @@ export function TokenTester({ config }: TokenTesterProps) {
             antiBot: config.antiBot,
             teamVestingDuration: BigInt(config.vestingSchedule.team.duration * 30 * 24 * 60 * 60),
             teamVestingCliff: BigInt(config.vestingSchedule.team.cliff * 30 * 24 * 60 * 60),
-            teamAllocation: BigInt(config.teamAllocation),
-            teamWallet: currentAddress, // Use connected wallet as team wallet
-            developerAllocation: BigInt(0), // Set to 0 for now
-            developerVestingDuration: BigInt(0),
-            developerVestingCliff: BigInt(0),
+            teamAllocation: BigInt(Math.floor(config.teamAllocation)),
+            teamWallet: currentAddress,
+            marketingAllocation: BigInt(Math.floor(config.marketingAllocation)),
+            marketingWallet: currentAddress,
+            developerAllocation: BigInt(Math.floor(config.developerAllocation)),
             developerWallet: currentAddress
           };
 
@@ -494,11 +494,11 @@ export function TokenTester({ config }: TokenTesterProps) {
         antiBot: config.antiBot,
         teamVestingDuration: BigInt(config.vestingSchedule.team.duration * 30 * 24 * 60 * 60),
         teamVestingCliff: BigInt(config.vestingSchedule.team.cliff * 30 * 24 * 60 * 60),
-        teamAllocation: BigInt(config.teamAllocation),
+        teamAllocation: BigInt(Math.floor(config.teamAllocation)),
         teamWallet: currentAddress,
-        developerAllocation: BigInt(0),
-        developerVestingDuration: BigInt(0),
-        developerVestingCliff: BigInt(0),
+        marketingAllocation: BigInt(Math.floor(config.marketingAllocation)),
+        marketingWallet: currentAddress,
+        developerAllocation: BigInt(Math.floor(config.developerAllocation)),
         developerWallet: currentAddress
       };
 

@@ -34,6 +34,12 @@ contract TokenFactory is Ownable, ReentrancyGuard {
         uint256 teamVestingCliff;
         uint256 teamAllocation;
         address teamWallet;
+        // Marketing configuration
+        uint256 marketingAllocation;
+        address marketingWallet;
+        // Developer configuration
+        uint256 developerAllocation;
+        address developerWallet;
     }
 
     // Events
@@ -70,6 +76,8 @@ contract TokenFactory is Ownable, ReentrancyGuard {
         require(msg.value >= requiredFee, "Insufficient creation fee");
         require(config.initialSupply <= config.maxSupply, "Initial supply exceeds max supply");
         require(config.teamWallet != address(0), "Invalid team wallet");
+        require(config.marketingWallet != address(0), "Invalid marketing wallet");
+        require(config.developerWallet != address(0), "Invalid developer wallet");
 
         // Create the token
         BaseToken newToken = new BaseToken(
@@ -89,12 +97,9 @@ contract TokenFactory is Ownable, ReentrancyGuard {
         }
         newToken.setTransfersEnabled(config.transfersEnabled);
 
-        // Calculate team allocation
+        // Calculate and distribute team allocation
         uint256 teamTokens = (config.maxSupply * config.teamAllocation) / 100;
-
-        // Create vesting contract for team tokens
         if (teamTokens > 0 && config.teamVestingDuration > 0) {
-            // Convert months to seconds for vesting duration and cliff
             uint256 vestingDuration = config.teamVestingDuration * 30 days;
             uint256 vestingCliff = config.teamVestingCliff * 30 days;
 
@@ -107,13 +112,8 @@ contract TokenFactory is Ownable, ReentrancyGuard {
                 true // Make it revocable
             );
 
-            // Transfer team tokens to vesting contract
             newToken.transfer(address(vesting), teamTokens);
-            
-            // Set the vesting amount
             vesting.setTotalAmount(teamTokens);
-            
-            // Transfer vesting contract ownership to token owner
             vesting.transferOwnership(msg.sender);
 
             emit VestingScheduleCreated(address(newToken), address(vesting), config.teamWallet);
@@ -123,6 +123,18 @@ contract TokenFactory is Ownable, ReentrancyGuard {
         if (platformTeamWallet != address(0) && platformTeamAllocation > 0) {
             uint256 platformTokens = (config.maxSupply * platformTeamAllocation) / 100;
             newToken.transfer(platformTeamWallet, platformTokens);
+        }
+
+        // Handle marketing allocation
+        if (config.marketingAllocation > 0) {
+            uint256 marketingTokens = (config.maxSupply * config.marketingAllocation) / 100;
+            newToken.transfer(config.marketingWallet, marketingTokens);
+        }
+
+        // Handle developer allocation
+        if (config.developerAllocation > 0) {
+            uint256 developerTokens = (config.maxSupply * config.developerAllocation) / 100;
+            newToken.transfer(config.developerWallet, developerTokens);
         }
 
         // Transfer token ownership to creator

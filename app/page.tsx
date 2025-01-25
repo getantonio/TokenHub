@@ -5,9 +5,9 @@ import { NetworkSelector } from '@/components/network-selector';
 import Link from 'next/link';
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Clock, Shield, ExternalLink, ChevronDown, ChevronUp, ArrowUpDown } from 'lucide-react';
+import { Clock, Shield, ExternalLink, ChevronDown, ChevronUp, ArrowUpDown, InfoIcon } from 'lucide-react';
 import { useAccount } from 'wagmi';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 // Sample data - would come from your backend in production
 const SAMPLE_TOKENS = [
@@ -26,6 +26,7 @@ const SAMPLE_TOKENS = [
     contractAddress: '0x1234...5678',
     age: '2d',
     verified: true,
+    presaleAllocation: 40,
   },
   {
     name: 'NewToken',
@@ -42,6 +43,7 @@ const SAMPLE_TOKENS = [
     contractAddress: '0x5678...9012',
     age: '6h',
     verified: true,
+    presaleAllocation: 40,
   },
   {
     name: 'Metaverse Token',
@@ -58,7 +60,127 @@ const SAMPLE_TOKENS = [
     contractAddress: '0x9012...3456',
     age: '5d',
     verified: true,
+    presaleAllocation: 40,
   },
+  {
+    name: 'GameFi Token',
+    symbol: 'GFT',
+    price: 0.015,
+    marketCap: '320000',
+    nextPhasePrice: 0.018,
+    raised: '2100',
+    hardCap: '4500',
+    progress: 46,
+    minBuy: '0.15',
+    maxBuy: '6',
+    saleEnds: '2025-03-10T00:00:00',
+    contractAddress: '0xabcd...ef12',
+    age: '1d',
+    verified: true,
+    presaleAllocation: 40,
+  },
+  {
+    name: 'DeFi Protocol',
+    symbol: 'DFP',
+    price: 0.035,
+    marketCap: '750000',
+    nextPhasePrice: 0.04,
+    raised: '3500',
+    hardCap: '7000',
+    progress: 50,
+    minBuy: '0.25',
+    maxBuy: '10',
+    saleEnds: '2025-02-25T00:00:00',
+    contractAddress: '0xdef0...1234',
+    age: '3d',
+    verified: true,
+    presaleAllocation: 40,
+  },
+  {
+    name: 'AI Network Token',
+    symbol: 'AIT',
+    price: 0.02,
+    marketCap: '400000',
+    nextPhasePrice: 0.025,
+    raised: '1900',
+    hardCap: '4000',
+    progress: 48,
+    minBuy: '0.15',
+    maxBuy: '7',
+    saleEnds: '2025-03-05T00:00:00',
+    contractAddress: '0x4567...89ab',
+    age: '12h',
+    verified: true,
+    presaleAllocation: 40,
+  },
+  {
+    name: 'NFT Marketplace',
+    symbol: 'NFTM',
+    price: 0.018,
+    marketCap: '360000',
+    nextPhasePrice: 0.022,
+    raised: '2400',
+    hardCap: '5000',
+    progress: 48,
+    minBuy: '0.12',
+    maxBuy: '6',
+    saleEnds: '2025-03-08T00:00:00',
+    contractAddress: '0x7890...cdef',
+    age: '4d',
+    verified: true,
+    presaleAllocation: 40,
+  },
+  {
+    name: 'Web3 Infrastructure',
+    symbol: 'W3I',
+    price: 0.028,
+    marketCap: '560000',
+    nextPhasePrice: 0.032,
+    raised: '2900',
+    hardCap: '5500',
+    progress: 53,
+    minBuy: '0.2',
+    maxBuy: '8',
+    saleEnds: '2025-02-22T00:00:00',
+    contractAddress: '0xfedc...ba98',
+    age: '2d',
+    verified: true,
+    presaleAllocation: 40,
+  },
+  {
+    name: 'Social Token',
+    symbol: 'SOC',
+    price: 0.016,
+    marketCap: '320000',
+    nextPhasePrice: 0.019,
+    raised: '1600',
+    hardCap: '3800',
+    progress: 42,
+    minBuy: '0.1',
+    maxBuy: '5',
+    saleEnds: '2025-03-12T00:00:00',
+    contractAddress: '0x3456...7890',
+    age: '8h',
+    verified: true,
+    presaleAllocation: 40,
+  },
+  {
+    name: 'Privacy Protocol',
+    symbol: 'PRIV',
+    price: 0.022,
+    marketCap: '440000',
+    nextPhasePrice: 0.026,
+    raised: '2200',
+    hardCap: '4800',
+    progress: 46,
+    minBuy: '0.15',
+    maxBuy: '7',
+    saleEnds: '2025-03-01T00:00:00',
+    contractAddress: '0x2345...6789',
+    age: '3d',
+    verified: true,
+    presaleAllocation: 40,
+  }
 ];
 
 type SortKey = 'price' | 'marketCap' | 'age';
@@ -69,6 +191,44 @@ export default function Home() {
   const [purchaseAmount, setPurchaseAmount] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('age');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [isPresaleMechanismExpanded, setIsPresaleMechanismExpanded] = useState(false);
+  const [glowingCards, setGlowingCards] = useState<{[key: number]: string}>({});
+
+  // Add useEffect for client-side only animations
+  useEffect(() => {
+    const cards = document.querySelectorAll('.token-card');
+    cards.forEach((card) => {
+      const delay = Math.floor(Math.random() * 300);
+      card.setAttribute('style', `transition-delay: ${delay}ms`);
+    });
+
+    const animateCards = () => {
+      // Clear previous glowing cards
+      setGlowingCards({});
+      
+      // Get 3 random unique indices
+      const indices = new Set<number>();
+      while(indices.size < 3) {
+        indices.add(Math.floor(Math.random() * SAMPLE_TOKENS.length));
+      }
+      
+      // Create new glowing cards object with random colors
+      const newGlowingCards: {[key: number]: string} = {};
+      indices.forEach(index => {
+        newGlowingCards[index] = Math.random() > 0.5 ? 'glow-green' : 'glow-red';
+      });
+      
+      setGlowingCards(newGlowingCards);
+    };
+
+    // Initial animation
+    animateCards();
+    
+    // Set up interval for animation
+    const interval = setInterval(animateCards, 1000);
+    
+    return () => clearInterval(interval);
+  }, []);
 
   const getTimeRemaining = (endTime: string) => {
     const end = new Date(endTime).getTime();
@@ -104,6 +264,41 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gray-900">
+      <style>{`
+        @keyframes panel-float {
+          0% { transform: translateY(0px); }
+          50% { transform: translateY(-5px); }
+          100% { transform: translateY(0px); }
+        }
+        @keyframes button-jitter {
+          0% { transform: translate(0, 0); }
+          25% { transform: translate(1px, 1px); }
+          50% { transform: translate(-1px, -1px); }
+          75% { transform: translate(-1px, 1px); }
+          100% { transform: translate(0, 0); }
+        }
+        .panel-hover-animate {
+          animation: panel-float 3s ease-in-out infinite;
+        }
+        .button-jitter {
+          animation: button-jitter 0.5s ease-in-out infinite;
+        }
+        .button-jitter:hover {
+          animation: none;
+        }
+        .token-card {
+          transition: all 0.3s ease;
+        }
+        .glow-green {
+          box-shadow: 0 0 15px rgba(34, 197, 94, 0.2);
+          border-color: rgba(34, 197, 94, 0.3);
+        }
+        .glow-red {
+          box-shadow: 0 0 15px rgba(239, 68, 68, 0.2);
+          border-color: rgba(239, 68, 68, 0.3);
+        }
+      `}</style>
+
       {/* Main Content */}
       <div className="container mx-auto px-4 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -158,45 +353,48 @@ export default function Home() {
             </div>
 
             {/* Token Cards */}
-            <div className="space-y-4">
+            <div className="space-y-1.5">
               {sortedTokens.map((token, index) => (
-                <Card key={token.symbol} className="bg-gray-800 text-white">
-                  <CardContent className="p-4">
-                    <div className="space-y-4">
+                <Card 
+                  key={token.symbol} 
+                  className={`token-card bg-gray-800 text-white border-b border-gray-700 transition-all duration-300 hover:bg-gray-750 hover:panel-hover-animate ${glowingCards[index] || ''}`}
+                >
+                  <CardContent className="p-2">
+                    <div className="space-y-2">
                       {/* Compact View */}
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2">
                           <div>
                             <div className="flex items-center gap-2">
-                              <h2 className="text-lg font-bold">{token.name}</h2>
+                              <h2 className="text-base font-bold">{token.name}</h2>
                               {token.verified && (
-                                <Shield className="h-4 w-4 text-green-400" />
+                                <Shield className="h-3 w-3 text-green-400" />
                               )}
                             </div>
-                            <p className="text-sm text-gray-400">{token.symbol}</p>
+                            <p className="text-xs text-gray-400">{token.symbol}</p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-6">
+                        <div className="flex items-center gap-4">
                           <div className="text-right">
-                            <p className="text-sm text-gray-400">Price</p>
-                            <p className="font-medium">{token.price} ETH</p>
+                            <p className="text-xs text-gray-400">Price</p>
+                            <p className="text-sm font-medium">{token.price} ETH</p>
                           </div>
                           <div className="text-right">
-                            <p className="text-sm text-gray-400">Market Cap</p>
-                            <p className="font-medium">${token.marketCap}</p>
+                            <p className="text-xs text-gray-400">Market Cap</p>
+                            <p className="text-sm font-medium">${token.marketCap}</p>
                           </div>
                           <div className="text-right">
-                            <p className="text-sm text-gray-400">Age</p>
-                            <p className="font-medium">{token.age}</p>
+                            <p className="text-xs text-gray-400">Age</p>
+                            <p className="text-sm font-medium">{token.age}</p>
                           </div>
                           <button
                             onClick={() => setExpandedCard(expandedCard === index ? null : index)}
-                            className="p-2 hover:bg-gray-700 rounded-lg"
+                            className="p-1 hover:bg-gray-700 rounded-lg transition-transform hover:scale-105"
                           >
                             {expandedCard === index ? (
-                              <ChevronUp className="h-5 w-5" />
+                              <ChevronUp className="h-4 w-4" />
                             ) : (
-                              <ChevronDown className="h-5 w-5" />
+                              <ChevronDown className="h-4 w-4" />
                             )}
                           </button>
                         </div>
@@ -204,15 +402,49 @@ export default function Home() {
 
                       {/* Expanded View */}
                       {expandedCard === index && (
-                        <div className="pt-4 border-t border-gray-700 space-y-4">
+                        <div className="pt-2 border-t border-gray-700 space-y-3">
+                          {/* Presale Mechanism Guide */}
+                          <div className="flex flex-col space-y-2">
+                            {/* Presale Mechanism Guide */}
+                            <div className="p-2 rounded bg-blue-900/20 border border-blue-800 text-xs">
+                              <div 
+                                className="flex items-center justify-between cursor-pointer"
+                                onClick={() => setIsPresaleMechanismExpanded(!isPresaleMechanismExpanded)}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <InfoIcon className="h-4 w-4 text-blue-400" />
+                                  <span className="font-medium">Presale Mechanism</span>
+                                </div>
+                                {isPresaleMechanismExpanded ? (
+                                  <ChevronUp className="h-3 w-3" />
+                                ) : (
+                                  <ChevronDown className="h-3 w-3" />
+                                )}
+                              </div>
+                              {isPresaleMechanismExpanded && (
+                                <div className="mt-2 space-y-2 text-gray-300">
+                                  <p>1. <strong>Initial Setup</strong>: {token.presaleAllocation}% of total supply allocated for presale</p>
+                                  <p>2. <strong>Fixed Price</strong>: {token.price} ETH per token</p>
+                                  <p>3. <strong>Duration</strong>: Ends when all tokens are sold</p>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Presale Percentage */}
+                            <div className="text-right">
+                              <p className="text-xs text-gray-400">Presale %</p>
+                              <p className="text-sm font-medium">{token.presaleAllocation}%</p>
+                            </div>
+                          </div>
+
                           {/* Progress */}
                           <div>
-                            <div className="flex justify-between mb-2">
-                              <span>Progress</span>
-                              <span>{token.progress}%</span>
+                            <div className="flex justify-between mb-1">
+                              <span className="text-sm">Progress</span>
+                              <span className="text-sm">{token.progress}%</span>
                             </div>
-                            <Progress value={token.progress} className="bg-gray-700" />
-                            <div className="flex justify-between mt-2 text-sm text-gray-400">
+                            <Progress value={token.progress} className="bg-gray-700 h-2" />
+                            <div className="flex justify-between mt-1 text-xs text-gray-400">
                               <span>{token.raised} ETH raised</span>
                               <span>{token.hardCap} ETH hard cap</span>
                             </div>
@@ -221,27 +453,27 @@ export default function Home() {
                           {/* Purchase Info */}
                           <div className="grid grid-cols-2 gap-4">
                             <div>
-                              <p className="text-sm text-gray-400">Min Buy</p>
-                              <p className="font-medium">{token.minBuy} ETH</p>
+                              <p className="text-xs text-gray-400">Min Buy</p>
+                              <p className="text-sm font-medium">{token.minBuy} ETH</p>
                             </div>
                             <div>
-                              <p className="text-sm text-gray-400">Max Buy</p>
-                              <p className="font-medium">{token.maxBuy} ETH</p>
+                              <p className="text-xs text-gray-400">Max Buy</p>
+                              <p className="text-sm font-medium">{token.maxBuy} ETH</p>
                             </div>
                           </div>
 
                           {/* Time Remaining */}
-                          <div className="flex items-center gap-2 text-sm">
-                            <Clock className="h-4 w-4 text-gray-400" />
+                          <div className="flex items-center gap-2 text-xs">
+                            <Clock className="h-3 w-3 text-gray-400" />
                             <span>{getTimeRemaining(token.saleEnds)} remaining</span>
                           </div>
 
-                          {/* Purchase Interface */}
-                          <div className="flex gap-3">
+                          {/* Purchase Interface with animated button */}
+                          <div className="flex gap-2">
                             <input
                               type="number"
                               placeholder="Amount in ETH"
-                              className="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              className="flex-1 px-3 py-1 text-sm bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                               value={purchaseAmount}
                               onChange={(e) => setPurchaseAmount(e.target.value)}
                               min={token.minBuy}
@@ -251,9 +483,9 @@ export default function Home() {
                             <button
                               onClick={handlePurchase}
                               disabled={!isConnected}
-                              className={`px-6 py-2 rounded-lg font-semibold ${
+                              className={`px-4 py-1 rounded-lg text-sm font-semibold ${
                                 isConnected 
-                                  ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+                                  ? 'bg-blue-600 hover:bg-blue-700 text-white button-jitter' 
                                   : 'bg-gray-600 text-gray-400 cursor-not-allowed'
                               }`}
                             >
@@ -262,7 +494,7 @@ export default function Home() {
                           </div>
 
                           {/* Contract Info */}
-                          <div className="flex items-center gap-2 text-sm text-gray-400">
+                          <div className="flex items-center gap-2 text-xs text-gray-400">
                             <span>Contract:</span>
                             <code>{token.contractAddress}</code>
                             <a
@@ -271,7 +503,7 @@ export default function Home() {
                               rel="noopener noreferrer"
                               className="text-blue-400 hover:text-blue-300"
                             >
-                              <ExternalLink className="h-4 w-4" />
+                              <ExternalLink className="h-3 w-3" />
                             </a>
                           </div>
                         </div>

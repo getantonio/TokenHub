@@ -36,9 +36,25 @@ export function validateTokenConfig(config: TokenConfig): string[] {
     errors.push('Team allocation must be at least 2% to cover platform fee');
   }
 
+  // Marketing allocation validation
+  if (config.marketingAllocation <= 0) {
+    errors.push('Marketing allocation must be greater than 0%');
+  }
+
   // Developer allocation validation
   if (config.developerAllocation < 5) {
     errors.push('Developer allocation should be at least 5%');
+  }
+
+  // Wallet validation
+  if (!config.teamWallet) {
+    errors.push('Team wallet address is required');
+  }
+  if (!config.marketingWallet) {
+    errors.push('Marketing wallet address is required');
+  }
+  if (!config.developerWallet) {
+    errors.push('Developer wallet address is required');
   }
 
   // Vesting validation

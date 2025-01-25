@@ -173,6 +173,26 @@
             "internalType": "address",
             "name": "teamWallet",
             "type": "address"
+          },
+          {
+            "internalType": "uint256",
+            "name": "marketingAllocation",
+            "type": "uint256"
+          },
+          {
+            "internalType": "address",
+            "name": "marketingWallet",
+            "type": "address"
+          },
+          {
+            "internalType": "uint256",
+            "name": "developerAllocation",
+            "type": "uint256"
+          },
+          {
+            "internalType": "address",
+            "name": "developerWallet",
+            "type": "address"
           }
         ],
         "internalType": "struct TokenFactory.TokenConfig",
@@ -188,6 +208,25 @@
   {
     "inputs": [],
     "name": "creationFee",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      }
+    ],
+    "name": "getCreationFee",
     "outputs": [
       {
         "internalType": "uint256",

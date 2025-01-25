@@ -43,6 +43,10 @@
 - [ ] Advanced trading features
 - [ ] Platform DAO implementation
 - [ ] Community rewards system
+- [ ] Specialized Token Factories
+  - [ ] Security Token Factory (KYC, compliance, dividends)
+  - [ ] Enhanced Utility Token Factory (staking, service access)
+  - [ ] Meme Token Factory (marketing, liquidity, community)
 
 ## Recent Updates
 - Added admin panel for discount management

@@ -157,6 +157,7 @@ export function CreateTokenForm() {
   const [isPlatformFeeExpanded, setIsPlatformFeeExpanded] = useState(false);
   const [isPresaleMechanismExpanded, setIsPresaleMechanismExpanded] = useState(false);
   const [isVerifyExpanded, setIsVerifyExpanded] = useState(false);
+  const [isWalletRequirementsExpanded, setIsWalletRequirementsExpanded] = useState(false);
   const [ethPrice, setEthPrice] = useState<number | null>(null);
 
   const { address } = useAccount();
@@ -203,6 +204,16 @@ export function CreateTokenForm() {
     },
     presaleDuration: 7, // Default 7 days
   });
+
+  // Add validation for marketing allocation and wallet
+  useEffect(() => {
+    if (config.marketingAllocation <= 0) {
+      setConfig(prev => ({ ...prev, marketingAllocation: 10 })); // Set default 10%
+    }
+    if (!config.marketingWallet && address) {
+      setConfig(prev => ({ ...prev, marketingWallet: address }));
+    }
+  }, [config.marketingAllocation, config.marketingWallet, address]);
 
   const totalAllocation = 
     config.presaleAllocation + 
@@ -255,7 +266,7 @@ export function CreateTokenForm() {
             
             const tokenCreatedEvent = receipt.logs.find((log: TransactionLog) => {
               const eventSignature = "TokenCreated(address,string,string)";
-              const eventTopic = ethers.id(eventSignature);
+              const eventTopic = ethers.keccak256(ethers.toUtf8Bytes(eventSignature));
               return log.topics[0] === eventTopic;
             });
 
@@ -344,9 +355,9 @@ export function CreateTokenForm() {
 
       const factory = new Contract(contractAddress, TokenFactoryABI, signer);
       
-      // Get creation fee
-      const creationFee = await factory.creationFee();
-      console.log('Creation fee:', formatEther(creationFee), 'ETH');
+      // Get creation fee based on user status
+      const creationFee = await factory.getCreationFee(currentAddress);
+      console.log('Creation fee for address:', currentAddress, 'is:', formatEther(creationFee), 'ETH');
       
       // Prepare token configuration
       const tokenConfig = {
@@ -359,45 +370,57 @@ export function CreateTokenForm() {
         cooldownTime: BigInt(config.cooldownTime || 0),
         transfersEnabled: config.transfersEnabled,
         antiBot: config.antiBot,
-        // Team allocation (total team allocation including platform)
-        teamVestingDuration: BigInt(config.vestingSchedule.team.duration),
-        teamVestingCliff: BigInt(config.vestingSchedule.team.cliff),
-        teamAllocation: BigInt(config.teamAllocation), // Total team allocation
-        teamWallet: config.teamWallet || currentAddress, // User's team wallet
-        // Developer allocation (not used)
-        developerAllocation: BigInt(0),
-        developerVestingDuration: BigInt(0),
-        developerVestingCliff: BigInt(0),
-        developerWallet: currentAddress // Set to user's address instead of zero address
+        teamVestingDuration: BigInt(config.vestingSchedule.team.duration * 30 * 24 * 60 * 60),
+        teamVestingCliff: BigInt(config.vestingSchedule.team.cliff * 30 * 24 * 60 * 60),
+        teamAllocation: BigInt(Math.floor(config.teamAllocation)),
+        teamWallet: config.teamWallet || currentAddress,
+        marketingAllocation: BigInt(Math.floor(config.marketingAllocation)),
+        marketingWallet: config.marketingWallet || currentAddress,
+        developerAllocation: BigInt(Math.floor(config.developerAllocation)),
+        developerWallet: config.developerWallet || currentAddress
       };
 
       // Debug log
       console.log('Token Configuration:', {
         ...tokenConfig,
         teamWallet: tokenConfig.teamWallet,
+        marketingWallet: tokenConfig.marketingWallet,
+        developerWallet: tokenConfig.developerWallet,
         teamAllocation: Number(tokenConfig.teamAllocation),
-        teamVestingDuration: Number(tokenConfig.teamVestingDuration),
-        teamVestingCliff: Number(tokenConfig.teamVestingCliff),
-        contractAddress,
-        currentAddress
+        marketingAllocation: Number(tokenConfig.marketingAllocation),
+        developerAllocation: Number(tokenConfig.developerAllocation)
       });
 
-      // Validate configuration
-      if (!tokenConfig.teamWallet || tokenConfig.teamWallet === ZeroAddress) {
-        throw new Error('Team wallet address is required and cannot be zero address');
-      }
-
-      // Validate team wallet is a valid address
-      if (!ethers.isAddress(tokenConfig.teamWallet)) {
-        throw new Error('Invalid team wallet address format');
-      }
-
-      // Validate team allocation is at least 2%
+      // Validate allocations
       if (Number(tokenConfig.teamAllocation) < 2) {
         throw new Error('Team allocation must be at least 2% (platform fee)');
       }
+      if (Number(tokenConfig.marketingAllocation) <= 0) {
+        throw new Error('Marketing allocation must be greater than 0%');
+      }
+      if (Number(tokenConfig.developerAllocation) <= 0) {
+        throw new Error('Developer allocation must be greater than 0%');
+      }
 
-      // Simulate the transaction first
+      // Validate total allocation
+      const totalAllocation = Number(tokenConfig.teamAllocation) + 
+                            Number(tokenConfig.marketingAllocation) + 
+                            Number(tokenConfig.developerAllocation);
+      if (totalAllocation > 100) {
+        throw new Error(`Total allocation (${totalAllocation}%) exceeds 100%`);
+      }
+
+      // Validate wallet addresses
+      if (!ethers.isAddress(tokenConfig.teamWallet) || tokenConfig.teamWallet === ZeroAddress) {
+        throw new Error('Team wallet address is required and cannot be zero address');
+      }
+      if (!ethers.isAddress(tokenConfig.marketingWallet) || tokenConfig.marketingWallet === ZeroAddress) {
+        throw new Error('Marketing wallet address is required and cannot be zero address');
+      }
+      if (!ethers.isAddress(tokenConfig.developerWallet) || tokenConfig.developerWallet === ZeroAddress) {
+        throw new Error('Developer wallet address is required and cannot be zero address');
+      }
+
       try {
         setError('Simulating deployment...');
         const gasEstimate = await factory.createToken.estimateGas(tokenConfig, { value: creationFee });
@@ -407,7 +430,7 @@ export function CreateTokenForm() {
         throw new Error(`Deployment simulation failed: ${simError.message}`);
       }
 
-      // If simulation successful, proceed with actual deployment
+      // Create token
       setError('Creating token...');
       const tx = await factory.createToken(tokenConfig, { value: creationFee });
       setError('Transaction submitted. Waiting for confirmation...');
@@ -431,7 +454,7 @@ export function CreateTokenForm() {
         
         // Check if this is the TokenCreated event
         const eventSignature = "TokenCreated(address,string,string)";
-        const eventTopic = ethers.id(eventSignature);
+        const eventTopic = ethers.keccak256(ethers.toUtf8Bytes(eventSignature));
         return log.topics[0] === eventTopic;
       });
 
@@ -578,7 +601,7 @@ export function CreateTokenForm() {
                   </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
+              <div className="space-y-2">
                       <LabelWithTooltip label="Total Supply" tooltip={tooltipTexts.totalSupply} />
                     <input
                       type="text"
@@ -598,30 +621,75 @@ export function CreateTokenForm() {
                         placeholder="0.0001"
                     />
                   </div>
-                  </div>
                 </div>
+              </div>
 
                 {/* Token Distribution */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-medium">Token Distribution</h3>
-              </div>
+                  </div>
 
                   <div className="flex gap-4">
                     <div className="space-y-2 flex-1">
-                      <LabelWithTooltip 
-                        label="Presale %" 
-                        tooltip="Percentage of tokens available for initial public sale before trading begins" 
-                      />
-                    <input
+                      <div className="flex items-center justify-between">
+                        <LabelWithTooltip 
+                          label="Presale %" 
+                          tooltip="Percentage of tokens available for initial public sale before trading begins" 
+                        />
+                        <div 
+                          className="cursor-pointer flex items-center gap-2"
+                          onClick={() => setIsPresaleMechanismExpanded(!isPresaleMechanismExpanded)}
+                        >
+                          <span className="text-xs text-blue-400">Presale Mechanism</span>
+                          <InfoIcon className="h-3 w-3 text-blue-400" />
+                        </div>
+                      </div>
+                      {isPresaleMechanismExpanded && (
+                        <div className="mb-2 p-2 rounded bg-blue-900/20 border border-blue-800 text-xs">
+                          <p>1. <strong>Initial Setup</strong>: {config.presaleAllocation}% of total supply ({config.totalSupply ? formatNumber(Number(config.totalSupply) * config.presaleAllocation / 100) : '0'} tokens) allocated for presale</p>
+                          <p>2. <strong>Fixed Price</strong>: {config.initialPrice || '0'} ETH per token</p>
+                          <p>3. <strong>Duration</strong>:</p>
+                          <ul className="list-disc list-inside pl-4 space-y-1">
+                            <li>Starts immediately after token creation</li>
+                            <li>Automatic countdown for {config.presaleDuration} days</li>
+                            <li>Ends when either:
+                              <ul className="list-[circle] list-inside pl-4 mt-1 text-gray-400">
+                                <li>All tokens are sold (hard cap reached)</li>
+                                <li>Timer reaches {config.presaleDuration} days</li>
+                                <li>Contract owner manually ends sale</li>
+                              </ul>
+                            </li>
+                          </ul>
+                          <p>4. <strong>Automatic Process</strong>:</p>
+                          <ul className="list-disc list-inside pl-4 space-y-1">
+                            <li>Investors send ETH to participate</li>
+                            <li>Tokens are distributed instantly upon payment</li>
+                            <li>Progress and time remaining tracked via smart contract</li>
+                          </ul>
+                          <p>5. <strong>After Presale</strong>:</p>
+                          <ul className="list-disc list-inside pl-4 space-y-1">
+                            <li>{config.liquidityAllocation}% of tokens automatically paired with ETH for liquidity</li>
+                            <li>Trading becomes enabled on DEX</li>
+                            <li>Any unsold tokens remain locked in the contract</li>
+                          </ul>
+                          <div className="mt-2 p-2 bg-yellow-900/20 border border-yellow-800 rounded">
+                            <p className="text-yellow-400 flex items-center gap-1">
+                              <InfoIcon className="h-3 w-3" />
+                              Important: Presale ends automatically after {config.presaleDuration} days or when all tokens are sold.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                      <input
                         type="number"
                         value={config.presaleAllocation}
                         onChange={(e) => setConfig({ ...config, presaleAllocation: Number(e.target.value) })}
                         className={inputClassName}
-                    />
-                  </div>
+                      />
+                    </div>
                     <div className="space-y-2 flex-1">
-                      <LabelWithTooltip 
+                    <LabelWithTooltip 
                         label="Liquidity %" 
                         tooltip="Percentage locked in trading pair to enable token trading" 
                       />
@@ -631,7 +699,7 @@ export function CreateTokenForm() {
                         onChange={(e) => setConfig({ ...config, liquidityAllocation: Number(e.target.value) })}
                         className={inputClassName}
                       />
-                  </div>
+                    </div>
                     <div className="space-y-2 flex-1">
                       <LabelWithTooltip 
                         label="Presale Duration" 
@@ -648,71 +716,17 @@ export function CreateTokenForm() {
                       />
                       <p className="text-[10px] text-gray-400">1-30 days</p>
                 </div>
-              </div>
-
-                  {/* Presale Mechanism - Foldable */}
-                  <div className="p-2 rounded bg-blue-900/20 border border-blue-800 text-xs">
-                    <div 
-                      className="flex items-center justify-between cursor-pointer"
-                      onClick={() => setIsPresaleMechanismExpanded(!isPresaleMechanismExpanded)}
-                    >
-                      <div className="flex items-center gap-2">
-                        <InfoIcon className="h-4 w-4 text-blue-400" />
-                        <span className="font-medium">Presale Mechanism</span>
-                </div>
-                      {isPresaleMechanismExpanded ? (
-                        <ChevronUp className="h-3 w-3" />
-                      ) : (
-                        <ChevronDown className="h-3 w-3" />
-                  )}
-                </div>
-                    {isPresaleMechanismExpanded && (
-                      <div className="mt-2 space-y-2 text-gray-300">
-                        <p>1. <strong>Initial Setup</strong>: {config.presaleAllocation}% of total supply ({config.totalSupply ? formatNumber(Number(config.totalSupply) * config.presaleAllocation / 100) : '0'} tokens) allocated for presale</p>
-                        <p>2. <strong>Fixed Price</strong>: {config.initialPrice || '0'} ETH per token</p>
-                        <p>3. <strong>Duration</strong>:</p>
-                        <ul className="list-disc list-inside pl-4 space-y-1">
-                          <li>Starts immediately after token creation</li>
-                          <li>Automatic countdown for {config.presaleDuration} days</li>
-                          <li>Ends when either:
-                            <ul className="list-[circle] list-inside pl-4 mt-1 text-gray-400">
-                              <li>All tokens are sold (hard cap reached)</li>
-                              <li>Timer reaches {config.presaleDuration} days</li>
-                              <li>Contract owner manually ends sale</li>
-                            </ul>
-                          </li>
-                        </ul>
-                        <p>4. <strong>Automatic Process</strong>:</p>
-                        <ul className="list-disc list-inside pl-4 space-y-1">
-                          <li>Investors send ETH to participate</li>
-                          <li>Tokens are distributed instantly upon payment</li>
-                          <li>Progress and time remaining tracked via smart contract</li>
-                        </ul>
-                        <p>5. <strong>After Presale</strong>:</p>
-                        <ul className="list-disc list-inside pl-4 space-y-1">
-                          <li>{config.liquidityAllocation}% of tokens automatically paired with ETH for liquidity</li>
-                          <li>Trading becomes enabled on DEX</li>
-                          <li>Any unsold tokens remain locked in the contract</li>
-                        </ul>
-                        <div className="mt-2 p-2 bg-yellow-900/20 border border-yellow-800 rounded">
-                          <p className="text-yellow-400 flex items-center gap-1">
-                            <InfoIcon className="h-3 w-3" />
-                            Important: Presale ends automatically after {config.presaleDuration} days or when all tokens are sold.
-                          </p>
-                  </div>
-                  </div>
-                )}
-              </div>
+                    </div>
 
                   <div className="flex gap-4">
                     <div className="space-y-2 flex-1">
-                    <LabelWithTooltip 
+                      <LabelWithTooltip 
                         label="Team %" 
                         tooltip="Percentage allocated to your project team. Note: 2% will be allocated to the platform team." 
                       />
                       <div className="space-y-1">
                         <input
-                          type="number"
+                        type="number"
                           min="2"
                           max="100"
                           value={config.teamAllocation}
@@ -724,7 +738,7 @@ export function CreateTokenForm() {
                           <span>Platform: 2%</span>
                           <span>Your Team: {Math.max(0, config.teamAllocation - 2)}%</span>
                     </div>
-                    </div>
+                </div>
                     </div>
                     <div className="space-y-2 flex-1">
                       <LabelWithTooltip 
@@ -737,9 +751,9 @@ export function CreateTokenForm() {
                         onChange={(e) => setConfig({ ...config, marketingAllocation: Number(e.target.value) })}
                         className={inputClassName}
                       />
-                    </div>
+                  </div>
                     <div className="space-y-2 flex-1">
-                      <LabelWithTooltip 
+                    <LabelWithTooltip 
                         label="Creator %" 
                         tooltip="Percentage allocated to you (the token creator) for development and maintenance" 
                       />
@@ -748,20 +762,33 @@ export function CreateTokenForm() {
                         value={config.developerAllocation}
                         onChange={(e) => setConfig({ ...config, developerAllocation: Number(e.target.value) })}
                         className={inputClassName}
-                      />
-                    </div>
-                    </div>
+                    />
+                  </div>
+                </div>
 
+                  {/* Wallet Address Requirements - Now Foldable */}
                   <div className="mt-4 p-2 rounded bg-gray-900/50 border border-gray-700">
-                    <h4 className="text-sm font-medium mb-2">Wallet Address Requirements:</h4>
-                    <ul className="text-xs space-y-1 text-gray-300">
-                      <li>• Presale - Handled automatically by the contract</li>
-                      <li>• Liquidity - Locked in the trading pair automatically</li>
-                      <li>• Platform Team - Fixed 2% allocated to platform</li>
-                      <li>• Your Team - Separate wallet required for team allocation</li>
-                      <li>• Marketing - Separate wallet recommended for tracking expenses</li>
-                      <li>• Creator - Your development/maintenance wallet</li>
-                    </ul>
+                    <div 
+                      className="flex items-center justify-between cursor-pointer"
+                      onClick={() => setIsWalletRequirementsExpanded(!isWalletRequirementsExpanded)}
+                    >
+                      <h4 className="text-sm font-medium">Wallet Address Requirements</h4>
+                      {isWalletRequirementsExpanded ? (
+                        <ChevronUp className="h-4 w-4" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4" />
+                      )}
+                    </div>
+                    {isWalletRequirementsExpanded && (
+                      <ul className="text-xs space-y-1 text-gray-300 mt-2">
+                        <li>• Presale - Handled automatically by the contract</li>
+                        <li>• Liquidity - Locked in the trading pair automatically</li>
+                        <li>• Platform Team - Fixed 2% allocated to platform</li>
+                        <li>• Your Team - Separate wallet required for team allocation</li>
+                        <li>• Marketing - Separate wallet recommended for tracking expenses</li>
+                        <li>• Creator - Your development/maintenance wallet</li>
+                      </ul>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -784,7 +811,7 @@ export function CreateTokenForm() {
                     >
                       View Example
                     </button>
-                </div>
+                    </div>
 
                   {/* Team Wallet */}
                   <div className="space-y-2">
@@ -972,7 +999,7 @@ export function CreateTokenForm() {
                           </li>
                           <li>View on{' '}
                             <a 
-                              href={`${chainId === 11155111 ? 'https://sepolia.etherscan.io' : 'https://etherscan.io'}/address/${deployedToken.address}`}
+                              href={`${chainId === 11155111 ? 'https://sepolia.etherscan.io' : 'https://etherscan.io'}/token/${deployedToken.address}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="text-blue-400 hover:text-blue-300"
