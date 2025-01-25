@@ -1,0 +1,35 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user owns the document
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Token Factory Collection
+    match /tokens/{tokenId} {
+      allow read: if true;  // Anyone can read token data
+      allow create: if isAuthenticated();  // Only authenticated users can create
+      allow update, delete: if isOwner(resource.data.creatorId);  // Only creator can modify
+    }
+
+    // User Collection
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId);
+    }
+
+    // Deployment History
+    match /deployments/{deploymentId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isOwner(resource.data.userId);
+    }
+  }
+} 

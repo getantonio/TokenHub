@@ -1,0 +1,69 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+/dist
+
+# hardhat
+/artifacts
+/cache
+/typechain-types
+
+# misc
+.DS_Store
+*.pem
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# local env files
+.env*.local
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Hardhat
+coverage
+coverage.json
+typechain
+typechain-types
+
+# Logs
+logs
+*.log
+
+# Firebase
+.firebase/
+*.log
+firebase-debug.log*
+firebase-debug.*.log*
+
+# Contract artifacts
+/deployments
