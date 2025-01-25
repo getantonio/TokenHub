@@ -39,10 +39,18 @@ export function Navigation() {
     <nav className="bg-gray-800 border-b border-gray-700">
       <div className="max-w-7xl mx-auto px-8 sm:px-8 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          <div className="flex items-center">
-            <Link href="/" className="text-white font-bold text-xl">
+          <div className="flex items-center space-x-8">
+            <Link href="/" className="text-white font-extrabold text-3xl">
               TokenHub<span className="text-blue-400">.dev</span>
             </Link>
+            <div className="hidden md:flex space-x-4">
+              <Link 
+                href="/docs" 
+                className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm"
+              >
+                Documentation
+              </Link>
+            </div>
           </div>
           <div className="flex items-center space-x-4">
             <NetworkSelector />

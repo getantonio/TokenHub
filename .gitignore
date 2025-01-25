@@ -5,6 +5,7 @@
 
 # Testing
 /coverage
+coverage.json
 
 # Next.js
 /.next/
@@ -59,9 +60,8 @@ firebase-debug.log
 /typechain
 /typechain-types
 
-# Coverage
-/coverage
-/coverage.json
+# OpenZeppelin
+.openzeppelin/unknown-*.json
 
 # Cache
 .cache

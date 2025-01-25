@@ -11,12 +11,29 @@ contract TokenFactory is Ownable, ReentrancyGuard {
     uint256 public creationFee;
     uint256 public constant TARGET_USD_FEE = 100; // $100 in USD
     
+    // Fee tiers for additional features
+    uint256 public antiBotFee;
+    uint256 public vestingFee;
+    
     // Platform team configuration
     address public platformTeamWallet;
     uint256 public platformTeamAllocation = 2; // 2% default allocation
     
+    // Fee sharing configuration
+    mapping(address => uint256) public partnerShares; // Share percentage for platform partners
+    
     // Mapping for discounted addresses
     mapping(address => uint256) public discountedFees;
+    
+    // Constants for allocation limits
+    uint256 public constant MAX_TEAM_ALLOCATION = 30; // 30%
+    uint256 public constant MAX_MARKETING_ALLOCATION = 15; // 15%
+    uint256 public constant MAX_DEVELOPER_ALLOCATION = 10; // 10%
+    uint256 public constant MIN_ALLOCATION = 1; // 1%
+    
+    // Liquidity configuration
+    uint256 public constant MIN_LIQUIDITY_LOCK = 180 days;
+    mapping(address => uint256) public liquidityLockTime;
     
     // Struct to store token configuration
     struct TokenConfig {
@@ -40,18 +57,25 @@ contract TokenFactory is Ownable, ReentrancyGuard {
         // Developer configuration
         uint256 developerAllocation;
         address developerWallet;
+        // Liquidity configuration
+        uint256 liquidityAllocation;
+        uint256 liquidityLockDuration;
     }
 
     // Events
-    event TokenCreated(address indexed tokenAddress, string name, string symbol);
+    event TokenCreated(address indexed tokenAddress, string name, string symbol, bool hasAntiBot);
     event VestingScheduleCreated(address indexed tokenAddress, address indexed vestingContract, address beneficiary);
     event CreationFeeUpdated(uint256 newFee);
     event DiscountSet(address indexed user, uint256 discountedFee);
     event PlatformTeamWalletUpdated(address newWallet);
     event PlatformTeamAllocationUpdated(uint256 newAllocation);
+    event PartnerShareUpdated(address indexed partner, uint256 share);
+    event LiquidityLocked(address indexed token, uint256 amount, uint256 unlockTime);
 
     constructor(uint256 _initialFee) {
         creationFee = _initialFee;
+        antiBotFee = _initialFee / 2; // 50% of base fee
+        vestingFee = _initialFee / 4; // 25% of base fee
         platformTeamWallet = msg.sender; // Set deployer as initial platform team wallet
     }
 
@@ -72,12 +96,32 @@ contract TokenFactory is Ownable, ReentrancyGuard {
      * @param config Token configuration parameters
      */
     function createToken(TokenConfig calldata config) external payable nonReentrant {
-        uint256 requiredFee = getCreationFee(msg.sender);
-        require(msg.value >= requiredFee, "Insufficient creation fee");
-        require(config.initialSupply <= config.maxSupply, "Initial supply exceeds max supply");
-        require(config.teamWallet != address(0), "Invalid team wallet");
-        require(config.marketingWallet != address(0), "Invalid marketing wallet");
-        require(config.developerWallet != address(0), "Invalid developer wallet");
+        uint256 totalFee = calculateTotalFee(config, msg.sender);
+        require(msg.value >= totalFee, "Insufficient creation fee");
+        
+        // Validate allocations
+        require(config.teamAllocation >= MIN_ALLOCATION && config.teamAllocation <= MAX_TEAM_ALLOCATION, 
+                "Invalid team allocation");
+        require(config.marketingAllocation <= MAX_MARKETING_ALLOCATION, 
+                "Marketing allocation too high");
+        require(config.developerAllocation <= MAX_DEVELOPER_ALLOCATION, 
+                "Developer allocation too high");
+                
+        // Validate liquidity configuration
+        if (config.liquidityAllocation > 0) {
+            require(config.liquidityLockDuration >= MIN_LIQUIDITY_LOCK, 
+                    "Liquidity lock too short");
+            require(config.liquidityAllocation <= 50, 
+                    "Max 50% liquidity allocation");
+        }
+        
+        // Validate total allocation including liquidity
+        uint256 totalAllocation = config.teamAllocation + 
+                                 config.marketingAllocation + 
+                                 config.developerAllocation + 
+                                 config.liquidityAllocation +
+                                 platformTeamAllocation;
+        require(totalAllocation <= 100, "Total allocation exceeds 100%");
 
         // Create the token
         BaseToken newToken = new BaseToken(
@@ -96,6 +140,11 @@ contract TokenFactory is Ownable, ReentrancyGuard {
             newToken.setCooldownTime(config.cooldownTime);
         }
         newToken.setTransfersEnabled(config.transfersEnabled);
+
+        // Enable anti-bot if requested
+        if (config.antiBot) {
+            newToken.setAntiBot(true);
+        }
 
         // Calculate and distribute team allocation
         uint256 teamTokens = (config.maxSupply * config.teamAllocation) / 100;
@@ -137,10 +186,36 @@ contract TokenFactory is Ownable, ReentrancyGuard {
             newToken.transfer(config.developerWallet, developerTokens);
         }
 
+        // Handle liquidity allocation and locking
+        if (config.liquidityAllocation > 0) {
+            uint256 liquidityTokens = (config.maxSupply * config.liquidityAllocation) / 100;
+            liquidityLockTime[address(newToken)] = block.timestamp + config.liquidityLockDuration;
+            newToken.lockTokens(msg.sender, liquidityTokens, config.liquidityLockDuration);
+            emit LiquidityLocked(address(newToken), liquidityTokens, liquidityLockTime[address(newToken)]);
+        }
+
         // Transfer token ownership to creator
         newToken.transferOwnership(msg.sender);
 
-        emit TokenCreated(address(newToken), config.name, config.symbol);
+        emit TokenCreated(address(newToken), config.name, config.symbol, config.antiBot);
+        
+        // Distribute fees to partners if any
+        distributeFees();
+    }
+
+    function calculateTotalFee(TokenConfig calldata config, address user) public view returns (uint256) {
+        uint256 baseFee = getCreationFee(user);
+        uint256 totalFee = baseFee;
+        
+        if (config.antiBot) {
+            totalFee += antiBotFee;
+        }
+        
+        if (config.teamVestingDuration > 0) {
+            totalFee += vestingFee;
+        }
+        
+        return totalFee;
     }
 
     /**
@@ -197,5 +272,42 @@ contract TokenFactory is Ownable, ReentrancyGuard {
         
         (bool success, ) = owner().call{value: balance}("");
         require(success, "Transfer failed");
+    }
+
+    function setPartnerShare(address partner, uint256 sharePercentage) external onlyOwner {
+        require(sharePercentage <= 50, "Share cannot exceed 50%");
+        partnerShares[partner] = sharePercentage;
+        emit PartnerShareUpdated(partner, sharePercentage);
+    }
+
+    function distributeFees() internal {
+        uint256 totalFees = msg.value;
+        uint256 remainingFees = totalFees;
+        
+        // Distribute to partners
+        for (address partner : getPartners()) {
+            if (partnerShares[partner] > 0) {
+                uint256 partnerFee = (totalFees * partnerShares[partner]) / 100;
+                remainingFees -= partnerFee;
+                (bool success, ) = partner.call{value: partnerFee}("");
+                require(success, "Partner fee transfer failed");
+            }
+        }
+        
+        // Transfer remaining fees to owner
+        if (remainingFees > 0) {
+            (bool success, ) = owner().call{value: remainingFees}("");
+            require(success, "Owner fee transfer failed");
+        }
+    }
+
+    function getPartners() internal view returns (address[] memory) {
+        // Implementation to return array of partners
+        // This is a placeholder - actual implementation would maintain a list of partners
+        return new address[](0);
+    }
+
+    function isLiquidityLocked(address token) public view returns (bool) {
+        return block.timestamp < liquidityLockTime[token];
     }
 } 

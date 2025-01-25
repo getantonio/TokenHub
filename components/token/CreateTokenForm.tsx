@@ -423,7 +423,10 @@ export function CreateTokenForm() {
 
       try {
         setError('Simulating deployment...');
-        const gasEstimate = await factory.createToken.estimateGas(tokenConfig, { value: creationFee });
+        const gasEstimate = await factory.createToken.estimateGas(
+          tokenConfig,
+          { value: creationFee }
+        );
         console.log('Gas estimate:', gasEstimate.toString());
       } catch (simError: any) {
         console.error('Simulation failed:', simError);
@@ -432,7 +435,10 @@ export function CreateTokenForm() {
 
       // Create token
       setError('Creating token...');
-      const tx = await factory.createToken(tokenConfig, { value: creationFee });
+      const tx = await factory.createToken(
+        tokenConfig,
+        { value: creationFee }
+      );
       setError('Transaction submitted. Waiting for confirmation...');
       
       const receipt = await tx.wait();
@@ -628,7 +634,7 @@ export function CreateTokenForm() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-medium">Token Distribution</h3>
-                  </div>
+              </div>
 
                   <div className="flex gap-4">
                     <div className="space-y-2 flex-1">
@@ -643,8 +649,8 @@ export function CreateTokenForm() {
                         >
                           <span className="text-xs text-blue-400">Presale Mechanism</span>
                           <InfoIcon className="h-3 w-3 text-blue-400" />
-                        </div>
                       </div>
+                  </div>
                       {isPresaleMechanismExpanded && (
                         <div className="mb-2 p-2 rounded bg-blue-900/20 border border-blue-800 text-xs">
                           <p>1. <strong>Initial Setup</strong>: {config.presaleAllocation}% of total supply ({config.totalSupply ? formatNumber(Number(config.totalSupply) * config.presaleAllocation / 100) : '0'} tokens) allocated for presale</p>
@@ -678,8 +684,8 @@ export function CreateTokenForm() {
                               <InfoIcon className="h-3 w-3" />
                               Important: Presale ends automatically after {config.presaleDuration} days or when all tokens are sold.
                             </p>
-                          </div>
-                        </div>
+                </div>
+                  </div>
                       )}
                       <input
                         type="number"

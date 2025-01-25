@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TokenConfig, SecurityRisk } from './types';
 import { Progress } from "@/components/ui/progress";
 import { Spinner } from "@/components/ui/spinner";
+import { formatNumber } from '@/lib/utils';
 import { 
   BrowserProvider, 
   parseUnits, 
@@ -357,27 +358,68 @@ export function TokenTester({ config }: TokenTesterProps) {
         const total = 
           config.presaleAllocation + 
           config.liquidityAllocation + 
-          config.teamAllocation + // Team allocation (platform fee will be taken from this)
+          config.teamAllocation + 
           config.marketingAllocation +
           config.developerAllocation;
 
-        console.log('Distribution Analysis:', {
-          presale: config.presaleAllocation,
-          liquidity: config.liquidityAllocation,
-          team: config.teamAllocation,
-          marketing: config.marketingAllocation,
-          developer: config.developerAllocation,
-          total: total,
-          platformFee: '2% (taken from team allocation)'
-        });
+        details.push('📊 TOKEN DISTRIBUTION ANALYSIS\n');
+        
+        // Presale Section
+        details.push('🔷 PRESALE');
+        details.push(`    Allocation: ${config.presaleAllocation}%`);
+        details.push(`    Duration:  ${config.presaleDuration} days`);
+        details.push(`    Tokens:    ${formatNumber(Number(config.totalSupply) * config.presaleAllocation / 100)}\n`);
+        
+        // Liquidity Section
+        details.push('🔷 LIQUIDITY');
+        details.push(`    Allocation: ${config.liquidityAllocation}%`);
+        details.push(`    Status:     Auto-locked in trading pair`);
+        details.push(`    Tokens:     ${formatNumber(Number(config.totalSupply) * config.liquidityAllocation / 100)}\n`);
+        
+        // Team Section
+        details.push('🔷 TEAM');
+        details.push(`    Allocation: ${config.teamAllocation}%`);
+        details.push(`    Tokens:     ${formatNumber(Number(config.totalSupply) * config.teamAllocation / 100)}`);
+        details.push(`    Vesting:    ${config.vestingSchedule.team.duration} months`);
+        details.push(`    Cliff:      ${config.vestingSchedule.team.cliff} months`);
+        details.push(`    Address:    ${config.teamWallet || 'Not set'}\n`);
+        details.push('    PLATFORM FEE');
+        details.push(`    Fixed Rate: 2% of total supply`);
+        details.push(`    Tokens:     ${formatNumber(Number(config.totalSupply) * 0.02)}`);
+        details.push(`    Note:       Platform wallet receives 2% of tokens (standard team allocation)`);
+        details.push(`    Powers:     No special permissions - standard token holder rights only`);
+        details.push(`    Limits:     No voting/governance rights`);
+        details.push(`               No token recovery ability`);
+        details.push(`               No burning or minting ability`);
+        details.push(`    Vesting:    Subject to team vesting schedule`);
+        details.push(`    Your Share: ${config.teamAllocation - 2}% (${formatNumber(Number(config.totalSupply) * (config.teamAllocation - 2) / 100)})\n`);
+        
+        // Marketing Section
+        details.push('🔷 MARKETING');
+        details.push(`    Allocation: ${config.marketingAllocation}%`);
+        details.push(`    Tokens:     ${formatNumber(Number(config.totalSupply) * config.marketingAllocation / 100)}`);
+        details.push(`    Status:     No vesting, available at launch`);
+        details.push(`    Address:    ${config.marketingWallet || 'Not set'}\n`);
+        
+        // Developer Section
+        details.push('🔷 DEVELOPERS');
+        details.push(`    Allocation: ${config.developerAllocation}%`);
+        details.push(`    Tokens:     ${formatNumber(Number(config.totalSupply) * config.developerAllocation / 100)}`);
+        details.push(`    Vesting:    ${config.developerVesting.duration} months`);
+        details.push(`    Cliff:      ${config.developerVesting.cliff} months`);
+        details.push(`    Address:    ${config.developerWallet || 'Not set'}\n`);
 
-        details.push(`Current Distribution:`);
-        details.push(`• Presale: ${config.presaleAllocation}%`);
-        details.push(`• Liquidity: ${config.liquidityAllocation}%`);
-        details.push(`• Team: ${config.teamAllocation}% (includes 2% platform fee)`);
-        details.push(`• Marketing: ${config.marketingAllocation}%`);
-        details.push(`• Developers: ${config.developerAllocation}%`);
-        details.push(`\nNote: 2% platform fee is taken from team allocation`);
+        // Vesting Timeline Section
+        details.push('⏳ VESTING TIMELINE\n');
+        details.push('TEAM TOKENS');
+        details.push(`    Lock Period:     ${config.vestingSchedule.team.cliff} months`);
+        details.push(`    Monthly Release: ${formatNumber((Number(config.totalSupply) * config.teamAllocation / 100) / config.vestingSchedule.team.duration)} tokens`);
+        details.push(`    Full Release:    Month ${config.vestingSchedule.team.duration}\n`);
+        
+        details.push('DEVELOPER TOKENS');
+        details.push(`    Lock Period:     ${config.developerVesting.cliff} months`);
+        details.push(`    Monthly Release: ${formatNumber((Number(config.totalSupply) * config.developerAllocation / 100) / config.developerVesting.duration)} tokens`);
+        details.push(`    Full Release:    Month ${config.developerVesting.duration}`);
 
         if (total !== 100) {
           throw new Error(`Token distribution must equal 100% (currently ${total}%)`);
@@ -567,23 +609,23 @@ export function TokenTester({ config }: TokenTesterProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Token Configuration Tester</CardTitle>
+        <CardTitle className="text-2xl">Token Configuration Tester</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="space-y-4">
+        <div className="space-y-6">
           {!isRunning && results.length === 0 && (
             <button
               onClick={runTests}
-              className="w-full py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium text-sm"
+              className="w-full py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium text-base"
             >
               Run Tests
             </button>
           )}
 
           {isRunning && (
-            <div className="space-y-2">
+            <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm">{tests[currentTest].name}</span>
+                <span className="text-base font-medium">{tests[currentTest].name}</span>
                 <Spinner size="sm" />
               </div>
               <Progress value={(currentTest + 1) / tests.length * 100} />
@@ -591,29 +633,29 @@ export function TokenTester({ config }: TokenTesterProps) {
           )}
 
           {results.length > 0 && (
-            <div className="space-y-2">
+            <div className="space-y-4">
               {results.map((result, index) => (
                 <div
                   key={index}
-                  className={`p-3 rounded-lg border ${
+                  className={`p-4 rounded-lg border ${
                     result.status === 'success' 
                       ? 'border-green-600 bg-green-600/10' 
                       : 'border-red-600 bg-red-600/10'
                   }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium">{result.name}</span>
-                    <span className={result.status === 'success' ? 'text-green-400' : 'text-red-400'}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-semibold text-lg">{result.name}</span>
+                    <span className={`text-2xl ${result.status === 'success' ? 'text-green-400' : 'text-red-400'}`}>
                       {result.status === 'success' ? '✓' : '✗'}
             </span>
           </div>
                   {result.message && (
-                    <p className="text-sm mt-1 text-gray-400">{result.message}</p>
+                    <p className="text-base mb-3 text-gray-300">{result.message}</p>
                   )}
                   {result.details && result.details.length > 0 && (
-                    <div className="mt-2 space-y-1">
+                    <div className="space-y-2 bg-gray-900/50 p-3 rounded-lg">
                       {result.details.map((detail, i) => (
-                        <p key={i} className="text-xs text-gray-500">• {detail}</p>
+                        <p key={i} className="text-sm text-gray-400 leading-relaxed">{detail}</p>
                       ))}
           </div>
         )}
@@ -623,7 +665,7 @@ export function TokenTester({ config }: TokenTesterProps) {
               {!isRunning && (
                 <button
                   onClick={runTests}
-                  className="w-full py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium text-sm"
+                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium text-base mt-4"
                 >
                   Run Tests Again
                 </button>
