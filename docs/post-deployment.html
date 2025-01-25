@@ -1,0 +1,243 @@
+<html>
+<head>
+  <title>Post-Deployment Token Management Guide</title>
+  <style>
+    body { font-family: system-ui; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 2rem; }
+    pre { background: #1a1b26; color: #c9d1d9; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; }
+    code { background: #2d2e3b; padding: 0.2rem 0.4rem; border-radius: 0.25rem; }
+    h1, h2, h3 { color: #fff; }
+    p, li { color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <h1>Post-Deployment Token Management Guide</h1>
+  
+  <p>This guide explains all the features available to token creators after deploying their token through our factory.</p>
+  
+  <h2>Table of Contents</h2>
+  <ol>
+    <li><a href="#security-features">Security Features</a></li>
+    <li><a href="#token-economics">Token Economics</a></li>
+    <li><a href="#governance-system">Governance System</a></li>
+    <li><a href="#emergency-controls">Emergency Controls</a></li>
+  </ol>
+
+  <h2 id="security-features">Security Features</h2>
+
+  <h3>Anti-Bot Protection</h3>
+  <ul>
+    <li><strong>Enable/Disable</strong>: <code>setAntiBot(bool enabled)</code></li>
+    <li><strong>Duration</strong>: 5 minutes after enabling</li>
+    <li><strong>Restrictions</strong>:
+      <ul>
+        <li>Maximum wallet size: 2% of total supply</li>
+        <li>Prevents sniping and bot manipulation during launch</li>
+      </ul>
+    </li>
+  </ul>
+
+  <pre><code>// Enable anti-bot protection at launch
+myToken.setAntiBot(true);</code></pre>
+
+  <h3>Whitelist Management</h3>
+  <ul>
+    <li><strong>Add/Remove</strong>: <code>updateWhitelist(address account, bool status)</code></li>
+    <li><strong>Purpose</strong>: Exempt trusted addresses from transfer restrictions</li>
+  </ul>
+
+  <pre><code>// Add address to whitelist
+myToken.updateWhitelist(trustedAddress, true);</code></pre>
+
+  <h3>Transfer Limits</h3>
+  <ol>
+    <li>
+      <strong>Daily Limits</strong>
+      <pre><code>// Set daily transfer limit for an address
+myToken.setDailyLimit(address, maxDailyAmount);</code></pre>
+    </li>
+    <li>
+      <strong>Maximum Transfer Amount</strong>
+      <pre><code>// Set maximum amount per transfer
+myToken.setMaxTransferAmount(maxAmount);</code></pre>
+    </li>
+    <li>
+      <strong>Cooldown Time</strong>
+      <pre><code>// Set cooldown between transfers
+myToken.setCooldownTime(timeInSeconds);</code></pre>
+    </li>
+  </ol>
+
+  <h2 id="token-economics">Token Economics</h2>
+
+  <h3>Fee Management</h3>
+  <p>Tokens can implement three types of fees:</p>
+  <ol>
+    <li><strong>Buyback Fee</strong> (Default: 1%)</li>
+    <li><strong>Burn Fee</strong> (Default: 1%)</li>
+    <li><strong>Reward Fee</strong> (Default: 1%)</li>
+  </ol>
+
+  <pre><code>// Update buyback and burn fees (in basis points, max 500 = 5%)
+myToken.setFees(buybackFee, burnFee);
+
+// Update reward fee (in basis points, max 500 = 5%)
+myToken.setRewardFee(rewardFee);
+
+// Exclude address from fees
+myToken.setFeeExclusion(address, true);</code></pre>
+
+  <h3>Token Burning</h3>
+  <ol>
+    <li>
+      <strong>Manual Burning</strong>
+      <pre><code>// Burn tokens from own wallet
+myToken.burn(amount);
+
+// Burn tokens from approved wallet
+myToken.burnFrom(address, amount);</code></pre>
+    </li>
+    <li>
+      <strong>Automatic Burning</strong>
+      <ul>
+        <li>Occurs when collected burn fees reach threshold</li>
+        <li>Threshold: 0.1% of initial supply by default</li>
+      </ul>
+      <pre><code>// Update auto-burn threshold
+myToken.setAutoBurnThreshold(newThreshold);</code></pre>
+    </li>
+  </ol>
+
+  <h3>Buyback System</h3>
+  <ul>
+    <li>Collects fees for token buybacks</li>
+    <li>Executed manually by owner</li>
+  </ul>
+  <pre><code>// Execute buyback when threshold reached
+myToken.executeBuyback();
+
+// Update buyback threshold
+myToken.setBuybackThreshold(newThreshold);</code></pre>
+
+  <h3>Reward Distribution</h3>
+  <ul>
+    <li>Holders earn rewards based on their holdings</li>
+    <li>Points system tracks eligibility</li>
+  </ul>
+  <pre><code>// Claim available rewards
+myToken.claimRewards();</code></pre>
+
+  <h3>Token Locking</h3>
+  <pre><code>// Lock tokens
+myToken.lockTokens(address, amount, durationInSeconds);
+
+// Unlock tokens (when lock period expires)
+myToken.unlockTokens(address);</code></pre>
+
+  <h2 id="governance-system">Governance System</h2>
+
+  <h3>Creating Proposals</h3>
+  <p>Requirements:</p>
+  <ul>
+    <li>Minimum 100,000 tokens to create proposal</li>
+    <li>1-day voting delay</li>
+    <li>3-day voting period</li>
+  </ul>
+
+  <pre><code>// Create new proposal
+myToken.propose(
+    targetAddress,
+    "Proposal description",
+    callData
+);</code></pre>
+
+  <h3>Voting</h3>
+  <pre><code>// Cast vote on proposal
+myToken.castVote(proposalId, support);</code></pre>
+
+  <h3>Execution</h3>
+  <pre><code>// Execute successful proposal
+myToken.executeProposal(proposalId);</code></pre>
+
+  <h2 id="emergency-controls">Emergency Controls</h2>
+
+  <h3>Emergency Mode</h3>
+  <p>Allows freezing all transfers except by emergency admins</p>
+
+  <pre><code>// Add emergency admin
+myToken.setEmergencyAdmin(address, true);
+
+// Enable emergency mode
+myToken.enableEmergencyMode();
+
+// Disable emergency mode (owner only)
+myToken.disableEmergencyMode();</code></pre>
+
+  <h3>Asset Recovery</h3>
+  <p>During emergency mode:</p>
+  <pre><code>// Recover stuck ERC20 tokens
+myToken.recoverERC20(tokenAddress, recipient, amount);
+
+// Recover stuck ETH
+myToken.recoverETH(recipient);</code></pre>
+
+  <h2>Best Practices</h2>
+
+  <ol>
+    <li>
+      <strong>Launch Sequence</strong>
+      <ul>
+        <li>Enable anti-bot protection</li>
+        <li>Set appropriate transfer limits</li>
+        <li>Whitelist legitimate addresses</li>
+        <li>Configure fees</li>
+      </ul>
+    </li>
+    <li>
+      <strong>Ongoing Management</strong>
+      <ul>
+        <li>Monitor fee collections</li>
+        <li>Execute buybacks strategically</li>
+        <li>Adjust parameters based on market conditions</li>
+        <li>Maintain emergency admin list</li>
+      </ul>
+    </li>
+    <li>
+      <strong>Security Considerations</strong>
+      <ul>
+        <li>Test all features on testnet first</li>
+        <li>Keep owner wallet secure</li>
+        <li>Document all parameter changes</li>
+        <li>Monitor for unusual activity</li>
+      </ul>
+    </li>
+  </ol>
+
+  <h2>Important Notes</h2>
+
+  <ol>
+    <li>
+      <strong>Fee Caps</strong>
+      <ul>
+        <li>Individual fees capped at 5%</li>
+        <li>Combined fees should be reasonable to maintain trading volume</li>
+      </ul>
+    </li>
+    <li>
+      <strong>Emergency Controls</strong>
+      <ul>
+        <li>7-day cooldown between emergency actions</li>
+        <li>Only owner can disable emergency mode</li>
+        <li>Emergency admins can't recover base token</li>
+      </ul>
+    </li>
+    <li>
+      <strong>Governance</strong>
+      <ul>
+        <li>Proposals can't execute arbitrary code</li>
+        <li>Voting power based on current token holdings</li>
+        <li>Execution only after successful vote</li>
+      </ul>
+    </li>
+  </ol>
+</body>
+</html> 

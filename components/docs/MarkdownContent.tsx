@@ -1,6 +1,7 @@
+'use client';
+
 import React from 'react';
 import { MDXRemote } from 'next-mdx-remote/rsc';
-import { Code } from 'lucide-react';
 
 interface MarkdownContentProps {
   content: string;
@@ -22,76 +23,22 @@ export function MarkdownContent({ content, title, lastUpdated }: MarkdownContent
         </div>
       )}
       
-      <div className="prose prose-invert max-w-none">
+      <div className="prose prose-invert max-w-none
+        prose-pre:bg-[#1a1b26] prose-pre:border prose-pre:border-[#2d2e3b] prose-pre:rounded-lg 
+        prose-pre:p-4 prose-pre:my-6 prose-pre:overflow-x-auto
+        prose-code:bg-[#2d2e3b] prose-code:rounded prose-code:px-2 prose-code:py-0.5 
+        prose-code:text-sm prose-code:text-[#c9d1d9]
+        prose-a:text-blue-400 prose-a:no-underline hover:prose-a:underline
+        prose-blockquote:border-l-blue-500 prose-blockquote:bg-[#1e293b] 
+        prose-blockquote:p-4 prose-blockquote:rounded-lg
+        prose-table:w-full prose-table:border-collapse prose-table:my-8
+        prose-th:bg-[#1e293b] prose-th:border-b-2 prose-th:border-blue-500 
+        prose-th:p-3 prose-th:text-left
+        prose-td:p-3 prose-td:border-b prose-td:border-[#2d2e3b]
+        hover:prose-tr:bg-[#1a1b26]
+      ">
         <MDXRemote source={content} />
       </div>
-
-      {/* Code block styling */}
-      <style jsx global>{`
-        .prose pre {
-          background-color: #1a1b26;
-          border: 1px solid #2d2e3b;
-          border-radius: 0.5rem;
-          padding: 1rem;
-          margin: 1.5rem 0;
-          overflow-x: auto;
-        }
-
-        .prose pre code {
-          background-color: transparent;
-          border: none;
-          padding: 0;
-          font-size: 0.875rem;
-          line-height: 1.7;
-          color: #c9d1d9;
-        }
-
-        .prose code {
-          background-color: #2d2e3b;
-          border-radius: 0.25rem;
-          padding: 0.2em 0.4em;
-          font-size: 0.875em;
-          color: #c9d1d9;
-        }
-
-        .prose a {
-          color: #60a5fa;
-          text-decoration: none;
-        }
-
-        .prose a:hover {
-          text-decoration: underline;
-        }
-
-        .prose blockquote {
-          border-left-color: #3b82f6;
-          background-color: #1e293b;
-          padding: 1rem;
-          border-radius: 0.5rem;
-        }
-
-        .prose table {
-          width: 100%;
-          border-collapse: collapse;
-          margin: 2rem 0;
-        }
-
-        .prose table th {
-          background-color: #1e293b;
-          border-bottom: 2px solid #3b82f6;
-          padding: 0.75rem;
-          text-align: left;
-        }
-
-        .prose table td {
-          padding: 0.75rem;
-          border-bottom: 1px solid #2d2e3b;
-        }
-
-        .prose table tr:hover {
-          background-color: #1a1b26;
-        }
-      `}</style>
     </div>
   );
 } 

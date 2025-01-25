@@ -1,0 +1,205 @@
+<html>
+<head>
+  <title>Token Creation Guide</title>
+  <style>
+    body { font-family: system-ui; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 2rem; }
+    pre { background: #1a1b26; color: #c9d1d9; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; }
+    code { background: #2d2e3b; padding: 0.2rem 0.4rem; border-radius: 0.25rem; }
+    h1, h2, h3 { color: #fff; }
+    p, li { color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <h1>Token Creation Guide</h1>
+  
+  <p>This guide explains the token creation process and the features you can enable during token deployment.</p>
+  
+  <h2>Creation Fee Structure</h2>
+  <p>Base fee: $100 USD equivalent in ETH</p>
+  <p>Additional fees:</p>
+  <ul>
+    <li>Anti-Bot Protection: +50% of base fee</li>
+    <li>Vesting Features: +25% of base fee</li>
+  </ul>
+
+  <h2>Token Configuration Options</h2>
+  
+  <h3>Basic Token Information</h3>
+  <pre><code>struct TokenConfig {
+    string name;        // Token name
+    string symbol;      // Token symbol
+    uint256 maxSupply;  // Maximum total supply
+    uint256 initialSupply; // Initial circulating supply
+    uint256 tokenPrice; // Initial token price
+}</code></pre>
+
+  <h3>Transfer Restrictions</h3>
+  <pre><code>// Transfer limits
+uint256 maxTransferAmount;  // Maximum amount per transfer (0 for no limit)
+uint256 cooldownTime;       // Time between transfers (0 for no cooldown)
+bool transfersEnabled;      // Enable/disable all transfers
+bool antiBot;              // Enable anti-bot protection at launch</code></pre>
+
+  <h3>Token Distribution</h3>
+  <p>All allocations are in percentages (1-100):</p>
+  <pre><code>// Team allocation
+uint256 teamAllocation;        // Max 30%
+uint256 teamVestingDuration;   // In months
+uint256 teamVestingCliff;      // In months
+address teamWallet;
+
+// Marketing allocation
+uint256 marketingAllocation;   // Max 15%
+address marketingWallet;
+
+// Developer allocation
+uint256 developerAllocation;   // Max 10%
+address developerWallet;
+
+// Liquidity allocation
+uint256 liquidityAllocation;   // Max 50%
+uint256 liquidityLockDuration; // Minimum 180 days</code></pre>
+
+  <h2>Allocation Limits</h2>
+  <ol>
+    <li>
+      <strong>Team Allocation</strong>
+      <ul>
+        <li>Minimum: 1%</li>
+        <li>Maximum: 30%</li>
+        <li>Optional vesting schedule</li>
+      </ul>
+    </li>
+    <li>
+      <strong>Marketing Allocation</strong>
+      <ul>
+        <li>Maximum: 15%</li>
+        <li>Instant unlock</li>
+        <li>Requires valid wallet address</li>
+      </ul>
+    </li>
+    <li>
+      <strong>Developer Allocation</strong>
+      <ul>
+        <li>Maximum: 10%</li>
+        <li>Instant unlock</li>
+        <li>Requires valid wallet address</li>
+      </ul>
+    </li>
+    <li>
+      <strong>Liquidity Allocation</strong>
+      <ul>
+        <li>Maximum: 50%</li>
+        <li>Minimum lock: 180 days</li>
+        <li>Automatic locking on creation</li>
+      </ul>
+    </li>
+    <li>
+      <strong>Platform Fee</strong>
+      <ul>
+        <li>Fixed: 2%</li>
+        <li>Automatically allocated</li>
+      </ul>
+    </li>
+  </ol>
+
+  <h2>Example Creation</h2>
+  <pre><code>const tokenConfig = {
+    name: "My Token",
+    symbol: "MTK",
+    maxSupply: "1000000000000000000000000", // 1 million tokens
+    initialSupply: "500000000000000000000000", // 500k tokens
+    tokenPrice: "1000000000000000", // 0.001 ETH
+    maxTransferAmount: "10000000000000000000000", // 10k tokens
+    cooldownTime: 300, // 5 minutes
+    transfersEnabled: true,
+    antiBot: true,
+    
+    // Team allocation with 12-month vesting, 2-month cliff
+    teamAllocation: 20,
+    teamVestingDuration: 12,
+    teamVestingCliff: 2,
+    teamWallet: "0x...",
+    
+    // Marketing and Developer allocations
+    marketingAllocation: 10,
+    marketingWallet: "0x...",
+    developerAllocation: 5,
+    developerWallet: "0x...",
+    
+    // Liquidity allocation
+    liquidityAllocation: 40,
+    liquidityLockDuration: 180 // days
+};
+
+// Calculate total fee
+const fee = await factory.calculateTotalFee(tokenConfig, creator);
+
+// Create token
+await factory.createToken(tokenConfig, { value: fee });</code></pre>
+
+  <h2>Post-Creation Steps</h2>
+  <ol>
+    <li>
+      <strong>Immediate Actions</strong>
+      <ul>
+        <li>Verify token on blockchain explorer</li>
+        <li>Add liquidity if required</li>
+        <li>Configure additional security settings</li>
+      </ul>
+    </li>
+    <li>
+      <strong>Within 24 Hours</strong>
+      <ul>
+        <li>Set up transfer limits</li>
+        <li>Configure fee system</li>
+        <li>Add emergency admins</li>
+      </ul>
+    </li>
+    <li>
+      <strong>Within First Week</strong>
+      <ul>
+        <li>Monitor token metrics</li>
+        <li>Adjust parameters as needed</li>
+        <li>Enable governance features</li>
+      </ul>
+    </li>
+  </ol>
+
+  <h2>Important Notes</h2>
+  <ol>
+    <li>
+      <strong>Fees</strong>
+      <ul>
+        <li>All fees must be paid in ETH</li>
+        <li>Fee amount varies with ETH price</li>
+        <li>No refunds for failed deployments</li>
+      </ul>
+    </li>
+    <li>
+      <strong>Allocations</strong>
+      <ul>
+        <li>Total allocations cannot exceed 100%</li>
+        <li>All wallet addresses must be valid</li>
+        <li>Vesting is irreversible once set</li>
+      </ul>
+    </li>
+    <li>
+      <strong>Security</strong>
+      <ul>
+        <li>Anti-bot protection recommended for fair launch</li>
+        <li>Test all features on testnet first</li>
+        <li>Keep owner wallet secure</li>
+      </ul>
+    </li>
+    <li>
+      <strong>Compliance</strong>
+      <ul>
+        <li>Ensure token complies with local regulations</li>
+        <li>Document all configuration decisions</li>
+        <li>Consider legal implications of features</li>
+      </ul>
+    </li>
+  </ol>
+</body>
+</html> 
