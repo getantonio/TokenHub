@@ -22,6 +22,7 @@
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "@openzeppelin/contracts": "^5.2.0",
     "@openzeppelin/contracts-upgradeable": "^5.2.0",
     "@openzeppelin/hardhat-upgrades": "^3.9.0",
     "@types/chai": "^4.3.20",

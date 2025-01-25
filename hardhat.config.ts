@@ -1,11 +1,12 @@
-import { HardhatUserConfig } from "hardhat/config";
-import "@nomicfoundation/hardhat-toolbox";
-import "@openzeppelin/hardhat-upgrades";
-import * as dotenv from "dotenv";
+require("@nomicfoundation/hardhat-toolbox");
+require("@openzeppelin/hardhat-upgrades");
+require("dotenv").config();
 
-dotenv.config();
+const SEPOLIA_RPC_URL = process.env.SEPOLIA_RPC_URL;
+const PRIVATE_KEY = process.env.PRIVATE_KEY || "";
 
-const config: HardhatUserConfig = {
+/** @type import('hardhat/config').HardhatUserConfig */
+module.exports = {
   solidity: {
     version: "0.8.22",
     settings: {
@@ -16,14 +17,21 @@ const config: HardhatUserConfig = {
     }
   },
   networks: {
+    hardhat: {
+      allowUnlimitedContractSize: true,
+    },
     sepolia: {
-      url: process.env.SEPOLIA_RPC_URL || "",
-      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+      url: SEPOLIA_RPC_URL,
+      accounts: [PRIVATE_KEY],
     }
+  },
+  paths: {
+    sources: "./contracts",
+    tests: "./test",
+    cache: "./cache",
+    artifacts: "./artifacts"
   },
   etherscan: {
     apiKey: process.env.ETHERSCAN_API_KEY
   }
-};
-
-export default config; 
+}; 
