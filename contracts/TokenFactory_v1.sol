@@ -40,10 +40,20 @@ contract TokenFactory_v1 is Ownable, ReentrancyGuard {
         uint256 createdAt;
     }
 
+    struct PresaleInfo {
+        uint256 price;           // Price in ETH per token
+        uint256 endTime;         // Presale end timestamp
+        bool isActive;           // Whether presale is active
+        uint256 tokensSold;      // Number of tokens sold in presale
+        uint256 presaleAllocation; // Maximum tokens available for presale
+    }
+
     // Mapping from token address to token info
     mapping(address => TokenInfo) public tokens;
     // Mapping from owner to their tokens
     mapping(address => address[]) public userTokens;
+    // Mapping from token address to presale info
+    mapping(address => PresaleInfo) public presales;
 
     event TokenCreated(
         address indexed tokenAddress,
@@ -57,6 +67,20 @@ contract TokenFactory_v1 is Ownable, ReentrancyGuard {
     );
 
     event DeploymentFeeUpdated(uint256 newFee);
+
+    event PresaleStarted(
+        address indexed tokenAddress,
+        uint256 price,
+        uint256 endTime,
+        uint256 presaleAllocation
+    );
+
+    event TokensPurchased(
+        address indexed tokenAddress,
+        address indexed buyer,
+        uint256 amount,
+        uint256 cost
+    );
 
     constructor(uint256 initialFee) Ownable(msg.sender) {
         deploymentFee = initialFee;
@@ -153,5 +177,98 @@ contract TokenFactory_v1 is Ownable, ReentrancyGuard {
      */
     function getTokenInfo(address tokenAddress) public view returns (TokenInfo memory) {
         return tokens[tokenAddress];
+    }
+
+    /**
+     * @dev Starts a simple presale for a token
+     * @param tokenAddress The token address
+     * @param priceInWei Price per token in Wei
+     * @param durationInDays Presale duration in days
+     * @param presaleAllocation Amount of tokens available for presale (rest reserved for liquidity)
+     */
+    function startPresale(
+        address tokenAddress,
+        uint256 priceInWei,
+        uint256 durationInDays,
+        uint256 presaleAllocation
+    ) public {
+        TokenInfo storage tokenInfo = tokens[tokenAddress];
+        require(tokenInfo.owner == msg.sender, "Not token owner");
+        require(durationInDays > 0 && durationInDays <= 30, "Invalid duration");
+        require(priceInWei > 0, "Invalid price");
+        require(presaleAllocation > 0 && presaleAllocation < tokenInfo.initialSupply, "Invalid allocation");
+
+        presales[tokenAddress] = PresaleInfo({
+            price: priceInWei,
+            endTime: block.timestamp + (durationInDays * 1 days),
+            isActive: true,
+            tokensSold: 0,
+            presaleAllocation: presaleAllocation
+        });
+
+        emit PresaleStarted(tokenAddress, priceInWei, block.timestamp + (durationInDays * 1 days), presaleAllocation);
+    }
+
+    /**
+     * @dev Purchases tokens in presale
+     */
+    function purchaseTokens(address tokenAddress, uint256 tokenAmount) public payable nonReentrant {
+        PresaleInfo storage presale = presales[tokenAddress];
+        require(presale.isActive, "Presale not active");
+        require(block.timestamp <= presale.endTime, "Presale ended");
+        require(presale.tokensSold + tokenAmount <= presale.presaleAllocation, "Exceeds presale allocation");
+
+        uint256 cost = tokenAmount * presale.price;
+        require(msg.value >= cost, "Insufficient payment");
+
+        // Transfer tokens from owner to buyer
+        TokenTemplate_v1 token = TokenTemplate_v1(tokenAddress);
+        require(
+            token.transferFrom(tokens[tokenAddress].owner, msg.sender, tokenAmount),
+            "Transfer failed"
+        );
+
+        // Update tokens sold
+        presale.tokensSold += tokenAmount;
+
+        emit TokensPurchased(tokenAddress, msg.sender, tokenAmount, cost);
+
+        // Refund excess payment
+        if (msg.value > cost) {
+            payable(msg.sender).transfer(msg.value - cost);
+        }
+    }
+
+    /**
+     * @dev Ends presale
+     */
+    function endPresale(address tokenAddress) public {
+        PresaleInfo storage presale = presales[tokenAddress];
+        require(tokens[tokenAddress].owner == msg.sender, "Not token owner");
+        require(block.timestamp > presale.endTime, "Presale not ended");
+
+        presale.isActive = false;
+    }
+
+    /**
+     * @dev Gets presale info
+     */
+    function getPresaleInfo(address tokenAddress) public view returns (
+        uint256 price,
+        uint256 endTime,
+        bool isActive,
+        uint256 tokensSold,
+        uint256 presaleAllocation,
+        uint256 remainingAllocation
+    ) {
+        PresaleInfo storage presale = presales[tokenAddress];
+        return (
+            presale.price,
+            presale.endTime,
+            presale.isActive,
+            presale.tokensSold,
+            presale.presaleAllocation,
+            presale.presaleAllocation - presale.tokensSold
+        );
     }
 } 

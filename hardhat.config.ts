@@ -1,37 +1,39 @@
 require("@nomicfoundation/hardhat-toolbox");
-require("@openzeppelin/hardhat-upgrades");
+require("@nomicfoundation/hardhat-ethers");
 require("dotenv").config();
 
-const SEPOLIA_RPC_URL = process.env.SEPOLIA_RPC_URL;
-const PRIVATE_KEY = process.env.PRIVATE_KEY || "";
+const PRIVATE_KEY = process.env.PRIVATE_KEY || "0x0000000000000000000000000000000000000000000000000000000000000000";
+const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || "";
 
-/** @type import('hardhat/config').HardhatUserConfig */
-module.exports = {
+const config = {
   solidity: {
     version: "0.8.22",
     settings: {
       optimizer: {
         enabled: true,
-        runs: 200
-      }
-    }
+        runs: 200,
+      },
+    },
   },
   networks: {
+    ...(process.env.PRIVATE_KEY ? {
+      sepolia: {
+        url: process.env.SEPOLIA_RPC_URL,
+        accounts: [PRIVATE_KEY],
+        verify: {
+          etherscan: {
+            apiKey: ETHERSCAN_API_KEY
+          }
+        }
+      }
+    } : {}),
     hardhat: {
-      allowUnlimitedContractSize: true,
-    },
-    sepolia: {
-      url: SEPOLIA_RPC_URL,
-      accounts: [PRIVATE_KEY],
+      chainId: 1337
     }
   },
-  paths: {
-    sources: "./contracts",
-    tests: "./test",
-    cache: "./cache",
-    artifacts: "./artifacts"
-  },
   etherscan: {
-    apiKey: process.env.ETHERSCAN_API_KEY
-  }
-}; 
+    apiKey: ETHERSCAN_API_KEY,
+  },
+};
+
+module.exports = config; 

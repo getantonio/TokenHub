@@ -1,42 +1,71 @@
 import { useState } from 'react';
-import TokenForm from '../components/TokenForm';
-import DeploymentPanel from '../components/DeploymentPanel';
-import AdminPanel from '../components/AdminPanel';
-import { ethers } from 'ethers';
-import { useWallet } from '../hooks/useWallet';
+import type { MetaMaskInpageProvider } from '@metamask/providers';
+import TokenForm_v1 from '../components/TokenForm_v1';
+import TokenAdmin from '../components/TokenAdmin';
+import NetworkIndicator from '../components/NetworkIndicator';
+import { useNetwork } from '../contexts/NetworkContext';
+
+declare global {
+  interface Window {
+    ethereum?: MetaMaskInpageProvider;
+  }
+}
 
 export default function Home() {
-  const { isConnected, account, connectWallet } = useWallet();
+  const [isConnected, setIsConnected] = useState(false);
+  const [address, setAddress] = useState<string>();
+  const { isSupported } = useNetwork();
+
+  const connectWallet = async () => {
+    if (typeof window.ethereum === 'undefined') {
+      alert('Please install MetaMask to use this app');
+      return;
+    }
+
+    try {
+      const accounts = await window.ethereum.request<string[]>({ 
+        method: 'eth_requestAccounts' 
+      });
+      if (accounts && accounts[0]) {
+        setAddress(accounts[0]);
+        setIsConnected(true);
+      }
+    } catch (error) {
+      console.error('Error connecting wallet:', error);
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-background-primary">
-      <nav className="bg-background-secondary border-b border-border">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-text-primary">Token Factory</h1>
+    <main className="min-h-screen bg-background-primary p-8">
+      <div className="max-w-4xl mx-auto space-y-8">
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-4">
+            <h1 className="text-3xl font-bold text-text-primary">Token Factory</h1>
+            <NetworkIndicator />
+          </div>
           <button
             onClick={connectWallet}
-            className="button-primary"
+            className={`px-4 py-2 rounded font-medium ${
+              isConnected 
+                ? 'bg-green-600 text-white cursor-default'
+                : 'bg-text-accent text-white hover:bg-blue-700'
+            }`}
           >
-            {isConnected ? `Connected: ${account.slice(0,6)}...${account.slice(-4)}` : 'Connect Wallet'}
+            {isConnected ? 'Connected' : 'Connect Wallet'}
           </button>
         </div>
-      </nav>
 
-      <main className="max-w-7xl mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <div className="card">
-            <TokenForm isConnected={isConnected} />
-          </div>
-          <div className="card">
-            <DeploymentPanel isConnected={isConnected} />
-          </div>
-        </div>
-        {isConnected && (
-          <div className="mt-8 card">
-            <AdminPanel account={account} />
+        {isSupported ? (
+          <>
+            <TokenForm_v1 isConnected={isConnected} />
+            <TokenAdmin isConnected={isConnected} address={address} />
+          </>
+        ) : (
+          <div className="p-6 bg-background-accent rounded-lg shadow-lg">
+            <p className="text-text-primary">Please switch to a supported network to use the app.</p>
           </div>
         )}
-      </main>
-    </div>
+      </div>
+    </main>
   );
 } 
