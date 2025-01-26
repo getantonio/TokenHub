@@ -234,6 +234,11 @@ export default function TokenForm_v1({ isConnected }: Props) {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4 bg-background-secondary p-6 rounded-lg shadow-lg">
+        <div className="mb-6 text-center">
+          <h2 className="text-3xl font-bold text-text-primary mb-3">Token Factory Deploy v1</h2>
+          <p className="text-xl text-text-secondary">Create Your Own Token</p>
+        </div>
+
         {toast && (
           <Toast 
             type={toast.type} 

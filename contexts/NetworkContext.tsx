@@ -1,84 +1,74 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import type { MetaMaskInpageProvider } from '@metamask/providers';
-import { SUPPORTED_NETWORKS } from '../config/contracts';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { SUPPORTED_NETWORKS, getNetworkConfig } from '../config/networks';
 
 interface NetworkContextType {
   chainId: number | null;
   isSupported: boolean;
-  networkName: string;
-  switchNetwork: (targetChainId: number) => Promise<void>;
+  networkError: string | null;
 }
 
 const NetworkContext = createContext<NetworkContextType>({
   chainId: null,
   isSupported: false,
-  networkName: 'Unknown Network',
-  switchNetwork: async () => {}
+  networkError: null,
 });
 
-export function NetworkProvider({ children }: { children: ReactNode }) {
+export function NetworkProvider({ children }: { children: React.ReactNode }) {
   const [chainId, setChainId] = useState<number | null>(null);
-  const [mounted, setMounted] = useState(false);
-
-  const updateChainId = async () => {
-    if (typeof window !== 'undefined' && window.ethereum) {
-      try {
-        const chainIdHex = await window.ethereum.request({ method: 'eth_chainId' });
-        setChainId(parseInt(chainIdHex as string, 16));
-      } catch (error) {
-        console.error('Error getting chainId:', error);
-      }
-    }
-  };
-
-  const switchNetwork = async (targetChainId: number) => {
-    if (typeof window === 'undefined' || !window.ethereum) return;
-
-    try {
-      await window.ethereum.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: `0x${targetChainId.toString(16)}` }],
-      });
-    } catch (error: any) {
-      console.error('Error switching network:', error);
-      throw error;
-    }
-  };
+  const [networkError, setNetworkError] = useState<string | null>(null);
 
   useEffect(() => {
-    setMounted(true);
-    updateChainId();
+    const checkNetwork = async () => {
+      if (!window.ethereum) {
+        setNetworkError('Please install MetaMask');
+        return;
+      }
 
-    if (typeof window !== 'undefined' && window.ethereum) {
-      window.ethereum.on('chainChanged', (chainIdHex: unknown) => {
+      try {
+        const chainIdHex = await window.ethereum.request({ method: 'eth_chainId' });
+        const chainId = parseInt(chainIdHex as string, 16);
+        setChainId(chainId);
+        setNetworkError(null);
+      } catch (error) {
+        console.error('Error checking network:', error);
+        setNetworkError('Failed to get network');
+      }
+    };
+
+    checkNetwork();
+
+    if (window.ethereum) {
+      const handleChainChanged = (chainIdHex: unknown) => {
         if (typeof chainIdHex === 'string') {
           setChainId(parseInt(chainIdHex, 16));
         }
-      });
-    }
+      };
 
-    return () => {
-      if (typeof window !== 'undefined' && window.ethereum?.removeListener) {
-        window.ethereum.removeListener('chainChanged', updateChainId);
-      }
-    };
+      window.ethereum.on('chainChanged', handleChainChanged);
+
+      return () => {
+        if (window.ethereum?.removeListener) {
+          window.ethereum.removeListener('chainChanged', handleChainChanged);
+        }
+      };
+    }
   }, []);
 
-  // Prevent hydration mismatch
-  if (!mounted) return <>{children}</>;
-
-  const value = {
-    chainId,
-    isSupported: chainId ? chainId in SUPPORTED_NETWORKS : false,
-    networkName: chainId ? SUPPORTED_NETWORKS[chainId as keyof typeof SUPPORTED_NETWORKS] || 'Unsupported Network' : 'Not Connected',
-    switchNetwork
-  };
+  const isSupported = chainId !== null && Object.values(SUPPORTED_NETWORKS).some(
+    network => network.chainId === chainId
+  );
 
   return (
-    <NetworkContext.Provider value={value}>
+    <NetworkContext.Provider value={{
+      chainId,
+      isSupported,
+      networkError,
+    }}>
       {children}
     </NetworkContext.Provider>
   );
 }
 
-export const useNetwork = () => useContext(NetworkContext); 
+export function useNetwork() {
+  return useContext(NetworkContext);
+} 

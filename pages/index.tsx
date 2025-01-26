@@ -4,6 +4,7 @@ import TokenForm_v1 from '../components/TokenForm_v1';
 import TokenAdmin from '../components/TokenAdmin';
 import NetworkIndicator from '../components/NetworkIndicator';
 import { useNetwork } from '../contexts/NetworkContext';
+import Head from 'next/head';
 
 declare global {
   interface Window {
@@ -37,6 +38,11 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-background-primary p-8">
+      <Head>
+        <title>Token Factory Deploy v1</title>
+        <meta name="description" content="Create and manage your own tokens with Token Factory" />
+        <link rel="icon" href="/favicon.ico" />
+      </Head>
       <div className="max-w-4xl mx-auto space-y-8">
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-4">

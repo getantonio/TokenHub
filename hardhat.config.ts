@@ -1,9 +1,9 @@
 require("@nomicfoundation/hardhat-toolbox");
-require("@nomicfoundation/hardhat-ethers");
+require("@openzeppelin/hardhat-upgrades");
 require("dotenv").config();
 
-const PRIVATE_KEY = process.env.PRIVATE_KEY || "0x0000000000000000000000000000000000000000000000000000000000000000";
-const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || "";
+const PRIVATE_KEY = process.env.PRIVATE_KEY || "";
+const INFURA_KEY = process.env.INFURA_KEY || "";
 
 const config = {
   solidity: {
@@ -11,29 +11,34 @@ const config = {
     settings: {
       optimizer: {
         enabled: true,
-        runs: 200,
-      },
-    },
-  },
-  networks: {
-    ...(process.env.PRIVATE_KEY ? {
-      sepolia: {
-        url: process.env.SEPOLIA_RPC_URL,
-        accounts: [PRIVATE_KEY],
-        verify: {
-          etherscan: {
-            apiKey: ETHERSCAN_API_KEY
-          }
-        }
+        runs: 200
       }
-    } : {}),
-    hardhat: {
-      chainId: 1337
     }
   },
-  etherscan: {
-    apiKey: ETHERSCAN_API_KEY,
+  networks: {
+    sepolia: {
+      url: `https://sepolia.infura.io/v3/${INFURA_KEY}`,
+      accounts: [PRIVATE_KEY]
+    },
+    "arbitrum-sepolia": {
+      url: "https://sepolia-rollup.arbitrum.io/rpc",
+      accounts: [PRIVATE_KEY]
+    },
+    "op-sepolia": {
+      url: "https://sepolia.optimism.io",
+      accounts: [PRIVATE_KEY]
+    },
+    "polygon-amoy": {
+      url: "https://rpc-amoy.polygon.technology",
+      accounts: [PRIVATE_KEY]
+    }
   },
+  paths: {
+    sources: "./contracts",
+    tests: "./test",
+    cache: "./cache",
+    artifacts: "./artifacts"
+  }
 };
 
 module.exports = config; 
