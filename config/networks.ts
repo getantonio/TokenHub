@@ -7,6 +7,12 @@ export interface NetworkConfig {
   isTestnet: boolean;
   version: 'v1' | 'v2';
   currency: string;
+  gasSettings?: {
+    gasMultiplier?: number; // Multiplier for dynamic gas calculation
+    minGasPrice?: number; // Minimum gas price floor
+    maxGasPrice?: number; // Maximum gas price ceiling
+    baseGasLimit?: number; // Base gas limit that can be adjusted
+  };
 }
 
 export const SUPPORTED_NETWORKS: { [key: string]: NetworkConfig } = {
@@ -43,12 +49,18 @@ export const SUPPORTED_NETWORKS: { [key: string]: NetworkConfig } = {
   'polygon-amoy': {
     name: 'Polygon Amoy',
     chainId: 80002,
-    rpcUrl: 'https://rpc-amoy.polygon.technology',
+    rpcUrl: process.env.NEXT_PUBLIC_POLYGON_AMOY_RPC_URL || 'https://rpc-amoy.polygon.technology',
     explorerUrl: 'https://www.oklink.com/amoy',
     factoryAddressEnvKey: 'NEXT_PUBLIC_POLYGON_AMOY_FACTORY_ADDRESS_V1',
     isTestnet: true,
     version: 'v1',
-    currency: 'MATIC'
+    currency: 'MATIC',
+    gasSettings: {
+      gasMultiplier: 1.2, // 20% buffer on estimated gas
+      minGasPrice: 35000000000, // 35 gwei floor
+      maxGasPrice: 200000000000, // 200 gwei ceiling
+      baseGasLimit: 2500000 // Base limit that will be adjusted by estimation
+    }
   }
 };
 
@@ -85,4 +97,35 @@ export const getExplorerUrl = (chainId: number, hash: string, type: 'tx' | 'addr
     }
   }
   return '';
+};
+
+// Helper to get dynamic gas settings
+export const getDynamicGasSettings = async (provider: any, chainId: number) => {
+  const network = getNetworkConfig(chainId);
+  if (!network?.gasSettings) return {};
+
+  try {
+    // Get current network gas price
+    const gasPrice = await provider.getFeeData();
+    const settings = network.gasSettings;
+    
+    // Calculate gas price within bounds
+    const suggestedGasPrice = gasPrice.gasPrice || gasPrice.maxFeePerGas;
+    const adjustedGasPrice = Math.min(
+      Math.max(
+        Number(suggestedGasPrice) * (settings.gasMultiplier || 1),
+        settings.minGasPrice || 0
+      ),
+      settings.maxGasPrice || Number.MAX_SAFE_INTEGER
+    );
+
+    return {
+      maxFeePerGas: adjustedGasPrice,
+      maxPriorityFeePerGas: gasPrice.maxPriorityFeePerGas,
+      gasLimit: settings.baseGasLimit // This will be overridden by estimation
+    };
+  } catch (error) {
+    console.warn('Error getting dynamic gas settings:', error);
+    return {};
+  }
 }; 
