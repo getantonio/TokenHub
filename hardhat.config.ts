@@ -1,48 +1,29 @@
 require("@nomicfoundation/hardhat-toolbox");
-require("@nomicfoundation/hardhat-verify");
+require("@openzeppelin/hardhat-upgrades");
 require("dotenv").config();
 
+/** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
   solidity: {
-    compilers: [
-      {
-        version: "0.8.22",
-        settings: {
-          viaIR: true,
-          optimizer: {
-            enabled: true,
-            runs: 200
-          }
-        }
+    version: "0.8.22",
+    settings: {
+      optimizer: {
+        enabled: true,
+        runs: 200,
       },
-      {
-        version: "0.8.20",
-        settings: {
-          viaIR: true,
-          optimizer: {
-            enabled: true,
-            runs: 200
-          }
-        }
-      },
-      {
-        version: "0.8.19",
-        settings: {
-          viaIR: true,
-          optimizer: {
-            enabled: true,
-            runs: 200
-          }
-        }
-      }
-    ]
+      viaIR: true,
+    },
   },
   networks: {
     sepolia: {
-      url: process.env.SEPOLIA_RPC_URL || "https://rpc.sepolia.org"
-    }
+      url: process.env.SEPOLIA_RPC_URL || "",
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+    },
+    "sepolia-read": {
+      url: process.env.SEPOLIA_RPC_URL || "",
+    },
   },
   etherscan: {
-    apiKey: process.env.ETHERSCAN_API_KEY
-  }
+    apiKey: process.env.ETHERSCAN_API_KEY,
+  },
 }; 

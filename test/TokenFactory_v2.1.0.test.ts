@@ -1,8 +1,8 @@
-import { expect, ethers } from "./helpers/setup";
-import { ContractFactory, Log } from "ethers";
-import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
-import { PresaleTokenContract } from "./helpers/setup";
-import hre from "hardhat";
+const { expect, ethers } = require("./helpers/setup");
+const { ContractFactory, Log } = require("ethers");
+const { HardhatEthersSigner } = require("@nomicfoundation/hardhat-ethers/signers");
+const { PresaleTokenContract } = require("./helpers/setup");
+const hre = require("hardhat");
 
 interface FactoryTestContext {
   TokenFactory: ContractFactory;
@@ -25,7 +25,13 @@ describe("TokenFactory_v2.1.0", function () {
 
     // Deploy factory
     const TokenFactory = await hre.ethers.getContractFactory("TokenFactory_v2_1_0");
-    const factory = await TokenFactory.deploy(implementation.target);
+    const factoryImpl = await TokenFactory.deploy(implementation.target);
+    
+    // Deploy proxy
+    const ERC1967Proxy = await hre.ethers.getContractFactory("ERC1967Proxy");
+    const initData = factoryImpl.interface.encodeFunctionData("initialize");
+    const proxy = await ERC1967Proxy.deploy(factoryImpl.target, initData);
+    const factory = TokenFactory.attach(proxy.target);
 
     context = {
       TokenFactory,
@@ -56,14 +62,15 @@ describe("TokenFactory_v2.1.0", function () {
     const tokenParams = {
       name: "Test Token",
       symbol: "TEST",
-      initialSupply: ethers.parseEther("1000000"),
-      maxSupply: ethers.parseEther("10000000"),
-      enableBlacklist: true,
-      enableTimeLock: true,
-      presaleRate: ethers.parseUnits("1000", 0), // 1 ETH = 1000 tokens
+      initialSupply: ethers.parseUnits("1000000", 18),
+      softCap: ethers.parseEther("100"),
+      hardCap: ethers.parseEther("1000"),
       minContribution: ethers.parseEther("0.1"),
       maxContribution: ethers.parseEther("10"),
-      presaleCap: ethers.parseEther("100")
+      startTime: Math.floor(Date.now() / 1000),
+      endTime: Math.floor(Date.now() / 1000) + 86400,
+      presaleRate: 1000,
+      whitelistEnabled: false
     };
 
     it("Should create a new token with correct parameters", async function () {
@@ -71,13 +78,14 @@ describe("TokenFactory_v2.1.0", function () {
         tokenParams.name,
         tokenParams.symbol,
         tokenParams.initialSupply,
-        tokenParams.maxSupply,
-        tokenParams.enableBlacklist,
-        tokenParams.enableTimeLock,
-        tokenParams.presaleRate,
+        tokenParams.softCap,
+        tokenParams.hardCap,
         tokenParams.minContribution,
         tokenParams.maxContribution,
-        tokenParams.presaleCap
+        tokenParams.startTime,
+        tokenParams.endTime,
+        tokenParams.presaleRate,
+        tokenParams.whitelistEnabled
       );
 
       const receipt = await tx.wait();
@@ -91,14 +99,17 @@ describe("TokenFactory_v2.1.0", function () {
 
       expect(await token.name()).to.equal(tokenParams.name);
       expect(await token.symbol()).to.equal(tokenParams.symbol);
-      expect(await token.totalSupply()).to.equal(tokenParams.initialSupply);
-      expect(await token.maxSupply()).to.equal(tokenParams.maxSupply);
-      expect(await token.blacklistEnabled()).to.equal(tokenParams.enableBlacklist);
-      expect(await token.timeLockEnabled()).to.equal(tokenParams.enableTimeLock);
-      expect(await token.presaleRate()).to.equal(tokenParams.presaleRate);
-      expect(await token.minContribution()).to.equal(tokenParams.minContribution);
-      expect(await token.maxContribution()).to.equal(tokenParams.maxContribution);
-      expect(await token.presaleCap()).to.equal(tokenParams.presaleCap);
+      expect(await token.decimals()).to.equal(18);
+      
+      const presaleInfo = await token.getPresaleStatus();
+      expect(presaleInfo.softCap).to.equal(tokenParams.softCap);
+      expect(presaleInfo.hardCap).to.equal(tokenParams.hardCap);
+      expect(presaleInfo.minContribution).to.equal(tokenParams.minContribution);
+      expect(presaleInfo.maxContribution).to.equal(tokenParams.maxContribution);
+      expect(presaleInfo.startTime).to.equal(tokenParams.startTime);
+      expect(presaleInfo.endTime).to.equal(tokenParams.endTime);
+      expect(presaleInfo.presaleRate).to.equal(tokenParams.presaleRate);
+      expect(presaleInfo.whitelistEnabled).to.equal(tokenParams.whitelistEnabled);
       expect(await token.owner()).to.equal(context.owner.address);
     });
 
@@ -107,13 +118,14 @@ describe("TokenFactory_v2.1.0", function () {
         tokenParams.name,
         tokenParams.symbol,
         tokenParams.initialSupply,
-        tokenParams.maxSupply,
-        tokenParams.enableBlacklist,
-        tokenParams.enableTimeLock,
-        tokenParams.presaleRate,
+        tokenParams.softCap,
+        tokenParams.hardCap,
         tokenParams.minContribution,
         tokenParams.maxContribution,
-        tokenParams.presaleCap
+        tokenParams.startTime,
+        tokenParams.endTime,
+        tokenParams.presaleRate,
+        tokenParams.whitelistEnabled
       );
 
       const tokens = await context.factory.getDeployedTokens();
@@ -125,14 +137,15 @@ describe("TokenFactory_v2.1.0", function () {
         tokenParams.name,
         tokenParams.symbol,
         tokenParams.initialSupply,
-        tokenParams.maxSupply,
-        tokenParams.enableBlacklist,
-        tokenParams.enableTimeLock,
-        tokenParams.presaleRate,
+        tokenParams.softCap,
+        tokenParams.hardCap,
         tokenParams.minContribution,
         tokenParams.maxContribution,
-        tokenParams.presaleCap
-      )).to.be.revertedWith("Ownable: caller is not the owner");
+        tokenParams.startTime,
+        tokenParams.endTime,
+        tokenParams.presaleRate,
+        tokenParams.whitelistEnabled
+      )).to.be.revertedWithCustomError(context.factory, "OwnableUnauthorizedAccount");
     });
   });
 
@@ -145,27 +158,29 @@ describe("TokenFactory_v2.1.0", function () {
       const tokenParams = {
         name: "Test Token",
         symbol: "TEST",
-        initialSupply: ethers.parseEther("1000000"),
-        maxSupply: ethers.parseEther("10000000"),
-        enableBlacklist: true,
-        enableTimeLock: true,
-        presaleRate: ethers.parseUnits("1000", 0),
+        initialSupply: ethers.parseUnits("1000000", 18),
+        softCap: ethers.parseEther("100"),
+        hardCap: ethers.parseEther("1000"),
         minContribution: ethers.parseEther("0.1"),
         maxContribution: ethers.parseEther("10"),
-        presaleCap: ethers.parseEther("100")
+        startTime: Math.floor(Date.now() / 1000),
+        endTime: Math.floor(Date.now() / 1000) + 86400,
+        presaleRate: 1000,
+        whitelistEnabled: false
       };
 
       await expect(context.factory.connect(context.addr1).createToken(
         tokenParams.name,
         tokenParams.symbol,
         tokenParams.initialSupply,
-        tokenParams.maxSupply,
-        tokenParams.enableBlacklist,
-        tokenParams.enableTimeLock,
-        tokenParams.presaleRate,
+        tokenParams.softCap,
+        tokenParams.hardCap,
         tokenParams.minContribution,
         tokenParams.maxContribution,
-        tokenParams.presaleCap
+        tokenParams.startTime,
+        tokenParams.endTime,
+        tokenParams.presaleRate,
+        tokenParams.whitelistEnabled
       )).not.to.be.reverted;
     });
   });

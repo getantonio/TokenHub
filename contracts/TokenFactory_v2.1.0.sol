@@ -29,46 +29,61 @@ contract TokenFactory_v2_1_0 is Initializable, OwnableUpgradeable, UUPSUpgradeab
         tokenImplementation = TokenTemplate_v2_1_0(_implementation);
     }
 
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    function initialize() initializer public {
+        __Ownable_init(msg.sender);
+        __UUPSUpgradeable_init();
+    }
+
+    /// @notice Returns the address of the token template implementation
+    function templateImplementation() public view returns (address) {
+        return address(tokenImplementation);
+    }
+
     /**
      * @notice Creates a new token instance with presale configuration
      * @param name Token name
      * @param symbol Token symbol
      * @param initialSupply Initial token supply
-     * @param maxSupply Maximum token supply
-     * @param enableBlacklist Whether to enable blacklist feature
-     * @param enableTimeLock Whether to enable time lock feature
-     * @param presaleRate Token price in tokens per ETH
+     * @param softCap Soft cap for presale in ETH
+     * @param hardCap Hard cap for presale in ETH
      * @param minContribution Minimum contribution in ETH
      * @param maxContribution Maximum contribution in ETH
-     * @param presaleCap Maximum ETH to raise in presale
+     * @param startTime Presale start time
+     * @param endTime Presale end time
+     * @param presaleRate Token price in tokens per ETH
+     * @param whitelistEnabled Whether to enable whitelist
      * @return address The address of the newly created token
      */
     function createToken(
         string memory name,
         string memory symbol,
         uint256 initialSupply,
-        uint256 maxSupply,
-        bool enableBlacklist,
-        bool enableTimeLock,
-        uint256 presaleRate,
+        uint256 softCap,
+        uint256 hardCap,
         uint256 minContribution,
         uint256 maxContribution,
-        uint256 presaleCap
+        uint256 startTime,
+        uint256 endTime,
+        uint256 presaleRate,
+        bool whitelistEnabled
     ) external onlyOwner returns (address) {
         // Initialize data
         bytes memory initData = abi.encodeWithSelector(
             TokenTemplate_v2_1_0.initialize.selector,
             name,
             symbol,
+            18, // decimals
             initialSupply,
-            maxSupply,
             msg.sender,
-            enableBlacklist,
-            enableTimeLock,
-            presaleRate,
+            softCap,
+            hardCap,
             minContribution,
             maxContribution,
-            presaleCap
+            startTime,
+            endTime,
+            presaleRate,
+            whitelistEnabled
         );
 
         // Deploy proxy

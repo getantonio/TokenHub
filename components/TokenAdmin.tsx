@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { BrowserProvider, Contract, formatUnits } from 'ethers';
-import TokenFactory from '../artifacts/contracts/TokenFactory_v1.sol/TokenFactory_v1.json';
-import TokenTemplate from '../artifacts/contracts/TokenTemplate_v1.sol/TokenTemplate_v1.json';
-import { getNetworkContractAddress } from '../config/contracts';
+import TokenFactory_v1 from '../contracts/abi/TokenFactory_v1.json';
+import TokenTemplate_v1 from '../contracts/abi/TokenTemplate_v1.json';
+import { getContractAddress } from '../config/networks';
 import { getExplorerUrl } from '../config/networks';
 import { useNetwork } from '../contexts/NetworkContext';
 import { Toast } from './ui/Toast';
@@ -58,39 +58,53 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
       setIsLoading(true);
       const provider = new BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
-      const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddress');
+      const userAddress = await signer.getAddress();
+      const factoryAddress = getContractAddress(chainId, 'TokenFactory_v1');
       
       if (!factoryAddress) {
         showToast('error', 'Contract not deployed on this network');
         return;
       }
 
-      const factory = new Contract(factoryAddress, TokenFactory.abi, signer);
-      const userAddress = address || await signer.getAddress();
-      const deployedTokens = await factory.getTokensByUser(userAddress);
+      // Create contract instance with the full ABI
+      const factory = new Contract(
+        factoryAddress,
+        [
+          "function getDeployedTokens() external view returns (address[])",
+          "event TokenCreated(address indexed tokenAddress, string name, string symbol, address indexed owner, uint256 initialSupply, uint256 maxSupply, bool blacklistEnabled, bool timeLockEnabled)"
+        ],
+        signer
+      );
+
+      const deployedTokens = await factory.getDeployedTokens();
       
       const tokenInfoPromises = deployedTokens.map(async (tokenAddress: string) => {
-        const token = new Contract(tokenAddress, TokenTemplate.abi, signer);
-        const [name, symbol, totalSupply, blacklistEnabled, timeLockEnabled] = await Promise.all([
+        const token = new Contract(tokenAddress, TokenTemplate_v1.abi, signer);
+        const [name, symbol, totalSupply, blacklistEnabled, timeLockEnabled, owner] = await Promise.all([
           token.name(),
           token.symbol(),
           token.totalSupply(),
           token.blacklistEnabled(),
-          token.timeLockEnabled()
+          token.timeLockEnabled(),
+          token.owner()
         ]);
 
-        return {
-          address: tokenAddress,
-          name,
-          symbol,
-          totalSupply: formatUnits(totalSupply, TOKEN_DECIMALS),
-          blacklistEnabled,
-          timeLockEnabled
-        };
+        // Only include tokens owned by the current user
+        if (owner.toLowerCase() === userAddress.toLowerCase()) {
+          return {
+            address: tokenAddress,
+            name,
+            symbol,
+            totalSupply: formatUnits(totalSupply, TOKEN_DECIMALS),
+            blacklistEnabled,
+            timeLockEnabled
+          };
+        }
+        return null;
       });
 
       const tokenInfos = await Promise.all(tokenInfoPromises);
-      setTokens(tokenInfos);
+      setTokens(tokenInfos.filter(Boolean));
     } catch (error: any) {
       console.error('Error loading tokens:', error);
       showToast('error', error.message || 'Failed to load tokens');
@@ -106,7 +120,7 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
       setIsLoading(true);
       const provider = new BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
-      const token = new Contract(tokenAddress, TokenTemplate.abi, signer);
+      const token = new Contract(tokenAddress, TokenTemplate_v1.abi, signer);
 
       const tx = await token[blacklist ? 'blacklist' : 'unblacklist'](addressToBlacklist);
       showToast('success', 'Transaction submitted...');
@@ -129,7 +143,7 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
       setIsLoading(true);
       const provider = new BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
-      const token = new Contract(tokenAddress, TokenTemplate.abi, signer);
+      const token = new Contract(tokenAddress, TokenTemplate_v1.abi, signer);
 
       const lockTime = await token.getLockTime(addressToCheck);
       const currentTime = Math.floor(Date.now() / 1000);
@@ -161,7 +175,7 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
       setIsLoading(true);
       const provider = new BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
-      const token = new Contract(tokenAddress, TokenTemplate.abi, signer);
+      const token = new Contract(tokenAddress, TokenTemplate_v1.abi, signer);
 
       const lockUntil = Math.floor(Date.now() / 1000) + (durationDays * 24 * 60 * 60);
       

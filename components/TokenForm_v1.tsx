@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { BrowserProvider, Contract, parseUnits, formatUnits } from 'ethers';
-import { getNetworkContractAddress } from '../config/contracts';
-import TokenFactoryArtifact from '../contracts/abi/TokenFactory_v1.json';
+import { BrowserProvider, Contract, parseUnits, formatUnits, formatEther } from 'ethers';
+import { getContractAddress } from '../config/networks';
+import { useNetwork } from '../contexts/NetworkContext';
+import TokenFactory_v1 from '../contracts/abi/TokenFactory_v1.json';
 import { Toast } from './ui/Toast';
+import { ethers } from 'ethers';
+import { Log } from 'ethers';
 
-const TokenFactoryABI = TokenFactoryArtifact.abi;
 const TOKEN_DECIMALS = 18; // Standard ERC20 decimals
 
 interface FormData {
@@ -26,15 +28,20 @@ interface ToastMessage {
   link?: string;
 }
 
+const defaultValues: FormData = {
+  name: "TokenFactory Test v1",
+  symbol: "TFT1",
+  initialSupply: "1000000",
+  maxSupply: "1000000",
+  blacklistEnabled: false,
+  timeLockEnabled: false,
+};
+
+const deploymentFee = ethers.parseEther("0.0001"); // 0.0001 ETH deployment fee
+
 export default function TokenForm_v1({ isConnected }: Props) {
-  const [formData, setFormData] = useState<FormData>({
-    name: "TokenFactory Test v1",
-    symbol: "TFT1",
-    initialSupply: "1000000",
-    maxSupply: "1000000",
-    blacklistEnabled: false,
-    timeLockEnabled: false,
-  });
+  const { chainId } = useNetwork();
+  const [formData, setFormData] = useState<FormData>(defaultValues);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -45,9 +52,12 @@ export default function TokenForm_v1({ isConnected }: Props) {
     owner: string;
   } | null>(null);
 
+  const resetForm = () => {
+    setFormData(defaultValues);
+  };
+
   const showToast = (type: 'success' | 'error', message: string, link?: string) => {
     setToast({ type, message, link });
-    // Only auto-clear error toasts, success toasts will stay until next action
     if (type === 'error') {
       setTimeout(() => setToast(null), 10000);
     }
@@ -55,120 +65,273 @@ export default function TokenForm_v1({ isConnected }: Props) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isConnected) {
-      setError("Please connect your wallet first");
+    
+    // Check for any web3 provider
+    const provider = window.ethereum || 
+                    (window as any).web3?.currentProvider || 
+                    (window as any).walletProvider;
+                    
+    if (!provider) {
+      showToast('error', 'Please install a Web3 wallet (MetaMask, Trust Wallet, etc.)');
       return;
     }
-    
-    setIsLoading(true);
-    setError(null);
-    setSuccessInfo(null); // Clear previous success
-    setToast(null); // Clear previous toast
+
+    if (!isConnected) {
+      try {
+        // Try standard eth_requestAccounts first
+        await provider.request({ method: 'eth_requestAccounts' });
+      } catch (error) {
+        try {
+          // Fallback for older wallets
+          await provider.enable();
+        } catch (error) {
+          showToast('error', 'Please connect your wallet to create tokens');
+          return;
+        }
+      }
+    }
 
     try {
-      if (!window.ethereum) {
-        throw new Error("Please install MetaMask");
+      setIsLoading(true);
+      const ethersProvider = new BrowserProvider(provider);
+      const signer = await ethersProvider.getSigner();
+      const factoryAddress = getContractAddress(chainId, 'TokenFactory_v1');
+      
+      if (!factoryAddress) {
+        showToast('error', 'Contract not deployed on this network');
+        return;
       }
 
-      const provider = new BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      const userAddress = await signer.getAddress();
-      const chainId = Number(await window.ethereum.request({ method: 'eth_chainId' }));
-      
-      const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddress');
-      const factory = new Contract(factoryAddress, TokenFactoryABI, signer);
+      // First verify the contract exists and has the correct interface
+      const code = await ethersProvider.getCode(factoryAddress);
+      if (code === '0x') {
+        showToast('error', 'Contract not found at the specified address');
+        return;
+      }
 
-      // Get deployment fee
-      const fee = await factory.deploymentFee();
-      
-      // Convert supply to wei (with 18 decimals)
-      const initialSupplyWei = parseUnits(formData.initialSupply, TOKEN_DECIMALS);
-      const maxSupplyWei = parseUnits(formData.maxSupply, TOKEN_DECIMALS);
-
-      console.log('Creating token with parameters:', {
-        name: formData.name,
-        symbol: formData.symbol,
-        initialSupply: formData.initialSupply,
-        maxSupply: formData.maxSupply,
-        initialSupplyWei: initialSupplyWei.toString(),
-        maxSupplyWei: maxSupplyWei.toString(),
-        blacklistEnabled: formData.blacklistEnabled,
-        timeLockEnabled: formData.timeLockEnabled,
-        fee: formatUnits(fee, 'ether'),
-        owner: userAddress
-      });
-
-      // Create token
-      const tx = await factory.createToken(
-        formData.name,
-        formData.symbol,
-        initialSupplyWei,
-        maxSupplyWei,
-        formData.blacklistEnabled,
-        formData.timeLockEnabled,
-        { value: fee }
+      // Create contract instance
+      const factory = new Contract(
+        factoryAddress,
+        TokenFactory_v1.abi,
+        signer
       );
 
-      showToast('success', 'Transaction submitted! Waiting for confirmation...', `https://sepolia.etherscan.io/tx/${tx.hash}`);
-      
-      // Wait for transaction confirmation
-      const receipt = await tx.wait();
-      
-      // Find the TokenCreated event
-      const event = receipt.logs.find((log: any) => {
-        try {
-          return factory.interface.parseLog({
-            topics: log.topics,
-            data: log.data
-          })?.name === 'TokenCreated';
-        } catch {
-          return false;
+      // Enhanced contract verification
+      try {
+        // First check if there's any bytecode at the address
+        const bytecode = await ethersProvider.getCode(factoryAddress);
+        if (bytecode === '0x' || bytecode === '0x0') {
+          showToast('error', 'No contract found at this address');
+          return;
         }
-      });
 
-      if (event) {
-        const parsedEvent = factory.interface.parseLog({
-          topics: event.topics,
-          data: event.data
-        });
-        const tokenAddress = parsedEvent?.args?.tokenAddress;
-        
-        console.log('Token created successfully:', {
-          address: tokenAddress,
-          name: formData.name,
-          symbol: formData.symbol,
-          initialSupply: formData.initialSupply,
-          owner: userAddress
-        });
+        // Verify the contract interface
+        const createTokenFragment = factory.interface.getFunction('createToken');
+        if (!createTokenFragment) {
+          showToast('error', 'Contract does not have createToken function');
+          return;
+        }
 
-        // Set success info for persistent display
-        setSuccessInfo({
-          symbol: formData.symbol,
-          address: tokenAddress,
-          supply: formatUnits(initialSupplyWei, TOKEN_DECIMALS),
-          owner: userAddress
-        });
+        // Convert supply values to include decimals since contract will not multiply
+        const initialSupply = ethers.parseUnits(formData.initialSupply, TOKEN_DECIMALS);
+        const maxSupply = ethers.parseUnits(formData.maxSupply, TOKEN_DECIMALS);
 
-        showToast(
-          'success',
-          `Token ${formData.symbol} created successfully!\nInitial supply of ${formatUnits(initialSupplyWei, TOKEN_DECIMALS)} ${formData.symbol} sent to ${userAddress.slice(0, 6)}...${userAddress.slice(-4)}`,
-          `https://sepolia.etherscan.io/token/${tokenAddress}`
+        // Validate inputs
+        if (initialSupply > maxSupply) {
+          showToast('error', 'Initial supply cannot be greater than max supply');
+          return;
+        }
+
+        // Try to call a view function to verify interface
+        try {
+          const fee = await factory.DEPLOYMENT_FEE();
+          if (fee.toString() !== deploymentFee.toString()) {
+            showToast('error', `Unexpected deployment fee. Expected ${formatEther(deploymentFee)} ETH`);
+            return;
+          }
+
+          // Try a static call first to check if the transaction would succeed
+          await factory.createToken.staticCall(
+            formData.name,
+            formData.symbol,
+            initialSupply,
+            maxSupply,
+            formData.blacklistEnabled,
+            formData.timeLockEnabled,
+            { value: deploymentFee }
+          );
+        } catch (e: any) {
+          console.error('Failed to verify contract:', e);
+          const errorMessage = e.message || 'Transaction would fail';
+          if (errorMessage.toLowerCase().includes('insufficient funds')) {
+            showToast('error', 'Insufficient funds to deploy token');
+          } else if (errorMessage.includes('missing revert data')) {
+            showToast('error', 'Contract rejected the transaction - please verify your inputs');
+          } else {
+            showToast('error', `Transaction would fail: ${errorMessage}`);
+          }
+          return;
+        }
+
+        // Create transaction data with explicit gas limit
+        const txData = {
+          to: factoryAddress,
+          data: factory.interface.encodeFunctionData('createToken', [
+            formData.name,
+            formData.symbol,
+            initialSupply,
+            maxSupply,
+            formData.blacklistEnabled,
+            formData.timeLockEnabled
+          ]),
+          value: deploymentFee,
+          gasLimit: 3000000 // Set a reasonable gas limit
+        };
+
+        // Try low-level call first to get more detailed error
+        try {
+          console.log('Attempting low-level call to check transaction...');
+          const rawProvider = provider as any;
+          const result = await rawProvider.request({
+            method: 'eth_call',
+            params: [{
+              from: await signer.getAddress(),
+              to: factoryAddress,
+              data: txData.data,
+              value: ethers.toBeHex(deploymentFee)
+            }, 'latest']
+          });
+          console.log('Low-level call result:', result);
+        } catch (callError: any) {
+          console.error('Low-level call error:', callError);
+          // Try to extract error data from MetaMask format
+          const errorData = callError?.data;
+          if (errorData) {
+            try {
+              // Try to decode custom error if present
+              const decodedError = factory.interface.parseError(errorData);
+              if (decodedError) {
+                showToast('error', `Contract error: ${decodedError.name}`);
+                return;
+              }
+            } catch (e) {
+              // If we can't decode the error, continue with other methods
+              console.log('Could not decode error data:', e);
+            }
+          }
+        }
+
+        // Try gas estimation
+        let gasEstimate;
+        try {
+          console.log('Estimating gas for transaction...');
+          gasEstimate = await ethersProvider.estimateGas(txData);
+        } catch (error: any) {
+          console.error('Gas estimation error:', error);
+          
+          // Try to get a more detailed error using a direct call
+          try {
+            console.log('Attempting direct call to get more details...');
+            const result = await ethersProvider.call(txData);
+            console.log('Direct call result:', result);
+          } catch (callError: any) {
+            console.error('Direct call error:', callError);
+            
+            // Try to extract the revert reason from various error formats
+            const revertReason = 
+              // Try to get the revert reason from the error data
+              (callError.data && callError.data.replace('Reverted ', '')) ||
+              // Look for execution reverted message
+              (callError.message && callError.message.includes('execution reverted') && 
+               callError.message.split('execution reverted:')[1]?.trim()) ||
+              // Look for reason in the error object
+              (callError.reason) ||
+              // Look for custom error data
+              (callError.error?.data?.originalError?.data && 
+               ethers.toUtf8String(callError.error.data.originalError.data)) ||
+              // Look for MetaMask specific error format
+              (callError.error?.data?.originalError?.message) ||
+              // Default message
+              'Contract rejected the transaction - please verify your inputs';
+
+            showToast('error', `Transaction would fail: ${revertReason}`);
+            return;
+          }
+          
+          // If direct call succeeded but gas estimation failed, show a different error
+          showToast('error', 'Failed to estimate gas - the transaction may fail');
+          return;
+        }
+
+        // Add 20% buffer to gas estimate
+        const gasLimit = Math.floor(Number(gasEstimate) * 1.2);
+
+        try {
+          console.log('Sending transaction with gas limit:', gasLimit);
+          const tx = await signer.sendTransaction({
+            ...txData,
+            gasLimit
+          });
+
+          showToast('success', 'Transaction submitted...');
+          
+          const receipt = await tx.wait();
+          if (!receipt) {
+            throw new Error('Transaction failed - no receipt received');
+          }
+          
+          const parsedEvent = receipt?.logs
+            .map((log: Log) => {
+              try {
+                return factory.interface.parseLog({ topics: log.topics, data: log.data });
+              } catch (e) {
+                return null;
+              }
+            })
+            .find((event: ethers.LogDescription | null) => event?.name === 'TokenCreated');
+
+          const tokenAddress = parsedEvent?.args?.tokenAddress;
+          if (tokenAddress) {
+            showToast('success', `Token deployed at ${tokenAddress}`);
+            resetForm();
+          } else {
+            showToast('error', 'Token created but address not found in events');
+          }
+        } catch (error: any) {
+          console.error('Transaction error:', error);
+          const errorMessage = error.message || 'Failed to create token';
+          showToast('error', errorMessage.includes('insufficient funds') ? 
+            'Insufficient funds to create token' : 
+            errorMessage.includes('user rejected') ?
+            'Transaction was rejected' :
+            errorMessage.includes('missing revert data') ?
+            'Contract rejected the transaction - please check your inputs and try again' :
+            errorMessage
+          );
+        }
+      } catch (error: any) {
+        console.error('Error creating token:', error);
+        const errorMessage = error.message || 'Failed to create token';
+        showToast('error', errorMessage.includes('insufficient funds') ? 
+          'Insufficient funds to create token' : 
+          errorMessage.includes('user rejected') ?
+          'Transaction was rejected' :
+          errorMessage.includes('missing revert data') ?
+          'Contract rejected the transaction - please check your inputs and try again' :
+          errorMessage
         );
-
-        // Reset form to default values
-        setFormData({
-          name: "TokenFactory Test v1",
-          symbol: "TFT1",
-          initialSupply: "1000000",
-          maxSupply: "1000000",
-          blacklistEnabled: false,
-          timeLockEnabled: false,
-        });
       }
     } catch (error: any) {
       console.error('Error creating token:', error);
-      setError(error.message || 'Failed to create token');
-      setSuccessInfo(null);
+      const errorMessage = error.message || 'Failed to create token';
+      showToast('error', errorMessage.includes('insufficient funds') ? 
+        'Insufficient funds to create token' : 
+        errorMessage.includes('user rejected') ?
+        'Transaction was rejected' :
+        errorMessage.includes('missing revert data') ?
+        'Contract rejected the transaction - please check your inputs and try again' :
+        errorMessage
+      );
     } finally {
       setIsLoading(false);
     }

@@ -94,7 +94,7 @@ describe("TokenTemplate_v1.1.0", function () {
       await token.pause();
       const amount = ethers.parseEther("1000");
       await expect(token.transfer(addr1.address, amount))
-        .to.be.revertedWith("Pausable: paused");
+        .to.be.revertedWithCustomError(token, "EnforcedPause");
       
       await token.unpause();
       await expect(token.transfer(addr1.address, amount))
@@ -110,20 +110,12 @@ describe("TokenTemplate_v1.1.0", function () {
       
       // Original owner should no longer have privileges
       await expect(token.pause())
-        .to.be.revertedWith("Ownable: caller is not the owner");
+        .to.be.revertedWithCustomError(token, "OwnableUnauthorizedAccount")
+        .withArgs(owner.address);
       
       // New owner should have privileges
       await token.connect(addr1).pause();
       expect(await token.paused()).to.be.true;
-    });
-
-    it("Should allow two-step ownership transfer", async function () {
-      // Initiate transfer
-      await token.transferOwnership(addr1.address);
-      
-      // New owner must accept ownership
-      await token.connect(addr1).acceptOwnership();
-      expect(await token.owner()).to.equal(addr1.address);
     });
 
     it("Should allow owner to renounce ownership", async function () {
@@ -132,7 +124,8 @@ describe("TokenTemplate_v1.1.0", function () {
       
       // No one should have owner privileges after renouncing
       await expect(token.pause())
-        .to.be.revertedWith("Ownable: caller is not the owner");
+        .to.be.revertedWithCustomError(token, "OwnableUnauthorizedAccount")
+        .withArgs(owner.address);
     });
   });
 }); 

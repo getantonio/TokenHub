@@ -65,14 +65,17 @@ contract TokenFactory_v2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             TokenTemplate_v2_1_0.initialize.selector,
             name,
             symbol,
+            decimals,
             initialSupply,
+            msg.sender,
+            softCap,
             hardCap,
-            presaleRate,
-            startTime,
-            endTime,
             minContribution,
             maxContribution,
-            softCap
+            startTime,
+            endTime,
+            presaleRate,
+            whitelistEnabled
         );
 
         ERC1967Proxy proxy = new ERC1967Proxy(

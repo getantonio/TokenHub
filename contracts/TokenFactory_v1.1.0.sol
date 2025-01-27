@@ -29,6 +29,12 @@ contract TokenFactory_v1_1_0 is Initializable, OwnableUpgradeable, UUPSUpgradeab
         tokenImplementation = TokenTemplate_v1_1_0(_implementation);
     }
 
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    function initialize() initializer public {
+        __Ownable_init(msg.sender);
+        __UUPSUpgradeable_init();
+    }
+
     /**
      * @notice Creates a new token instance
      * @param name Token name

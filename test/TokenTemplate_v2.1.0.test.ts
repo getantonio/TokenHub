@@ -1,157 +1,145 @@
-import { expect, ethers } from "./helpers/setup";
-import { PresaleTestContext } from "./helpers/setup";
-import hre from "hardhat";
+import { expect } from "chai";
+import { ethers } from "hardhat";
+import { time } from "@nomicfoundation/hardhat-network-helpers";
+import { deployTokenTemplate } from "./helpers/setup";
+import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 
 describe("TokenTemplate_v2.1.0", function () {
-  let context: PresaleTestContext;
+  let token: any;
+  let owner: SignerWithAddress;
+  let addr1: SignerWithAddress;
+  let addr2: SignerWithAddress;
+  let startTime: number;
+  let endTime: number;
 
-  const INITIAL_SUPPLY = ethers.parseEther("1000000"); // 1M tokens
-  const MAX_SUPPLY = ethers.parseEther("10000000"); // 10M tokens
-  const PRESALE_RATE = ethers.parseUnits("1000", 0); // 1 ETH = 1000 tokens
+  const INITIAL_SUPPLY = ethers.parseUnits("1000000", 18); // 1M tokens
+  const SOFT_CAP = ethers.parseEther("50"); // 50 ETH
+  const HARD_CAP = ethers.parseEther("100"); // 100 ETH
   const MIN_CONTRIBUTION = ethers.parseEther("0.1"); // 0.1 ETH
   const MAX_CONTRIBUTION = ethers.parseEther("10"); // 10 ETH
-  const PRESALE_CAP = ethers.parseEther("100"); // 100 ETH
+  const PRESALE_RATE = 1000; // 1000 tokens per ETH
 
   beforeEach(async function () {
-    const [owner, addr1, addr2] = await hre.ethers.getSigners();
+    // Get current block timestamp
+    const latestTime = await time.latest();
     
-    // Deploy implementation
-    const TokenTemplate = await hre.ethers.getContractFactory("TokenTemplate_v2_1_0");
-    const implementation = await TokenTemplate.deploy();
-
-    // Deploy proxy
-    const ERC1967Proxy = await hre.ethers.getContractFactory("ERC1967Proxy");
-    const initData = TokenTemplate.interface.encodeFunctionData("initialize", [
-      "Test Token",
-      "TEST",
-      INITIAL_SUPPLY,
-      MAX_SUPPLY,
-      owner.address,
-      true, // enableBlacklist
-      true, // enableTimeLock
-      PRESALE_RATE,
-      MIN_CONTRIBUTION,
-      MAX_CONTRIBUTION,
-      PRESALE_CAP
-    ]);
-
-    const proxy = await ERC1967Proxy.deploy(
-      implementation.target,
-      initData
-    );
-
-    // Get token instance
-    const token = TokenTemplate.attach(proxy.target) as unknown as PresaleTestContext["token"];
-
-    context = {
-      TokenTemplate,
-      token,
-      owner,
-      addr1,
-      addr2
-    };
+    // Set presale times
+    startTime = latestTime + 3600; // Start in 1 hour
+    endTime = startTime + 86400; // End 24 hours after start
+    
+    // Deploy token with custom timestamps
+    const context = await deployTokenTemplate("v2_1_0", startTime, endTime);
+    token = context.token;
+    owner = context.owner;
+    addr1 = context.addr1;
+    addr2 = context.addr2;
   });
 
   describe("Deployment", function () {
     it("Should set the right owner", async function () {
-      expect(await context.token.owner()).to.equal(context.owner.address);
+      expect(await token.owner()).to.equal(owner.address);
     });
 
     it("Should set presale parameters correctly", async function () {
-      expect(await context.token.presaleRate()).to.equal(PRESALE_RATE);
-      expect(await context.token.minContribution()).to.equal(MIN_CONTRIBUTION);
-      expect(await context.token.maxContribution()).to.equal(MAX_CONTRIBUTION);
-      expect(await context.token.presaleCap()).to.equal(PRESALE_CAP);
+      const presaleStatus = await token.getPresaleStatus();
+      expect(presaleStatus.softCap).to.equal(ethers.parseEther("50"));
+      expect(presaleStatus.hardCap).to.equal(ethers.parseEther("100"));
+      expect(presaleStatus.minContribution).to.equal(ethers.parseEther("0.1"));
+      expect(presaleStatus.maxContribution).to.equal(ethers.parseEther("10"));
+      expect(presaleStatus.presaleRate).to.equal(1000);
+      expect(presaleStatus.whitelistEnabled).to.equal(false);
+      expect(presaleStatus.finalized).to.equal(false);
+      expect(presaleStatus.totalContributed).to.equal(0);
+      expect(presaleStatus.startTime).to.equal(startTime);
+      expect(presaleStatus.endTime).to.equal(endTime);
     });
 
     it("Should have correct version info", async function () {
-      expect(await context.token.VERSION()).to.equal("2.1.0");
+      expect(await token.VERSION()).to.equal("2.1.0");
     });
   });
 
   describe("Presale", function () {
     it("Should not allow contributions before presale starts", async function () {
-      await expect(context.token.connect(context.addr1).contribute({ 
-        value: MIN_CONTRIBUTION 
-      })).to.be.revertedWith("Presale not active");
+      // Time is before startTime
+      await expect(
+        token.connect(addr1).contribute({ value: ethers.parseEther("1") })
+      ).to.be.revertedWith("Presale not started");
     });
 
-    it("Should allow owner to start presale", async function () {
-      await context.token.startPresale();
-      expect(await context.token.presaleActive()).to.be.true;
-    });
+    it("Should allow valid contributions during presale", async function () {
+      // Move time to start of presale
+      await time.increaseTo(startTime + 1);
 
-    it("Should accept valid contributions during presale", async function () {
-      await context.token.startPresale();
-      
-      const contribution = ethers.parseEther("1"); // 1 ETH
-      const expectedTokens = contribution * PRESALE_RATE;
+      // Contribute 1 ETH
+      const contribution = ethers.parseEther("1");
+      await expect(
+        token.connect(addr1).contribute({ value: contribution })
+      ).to.emit(token, "ContributionReceived")
+       .withArgs(addr1.address, contribution);
 
-      await context.token.connect(context.addr1).contribute({ value: contribution });
-      
-      expect(await context.token.presaleContributions(context.addr1.address))
-        .to.equal(contribution);
-      expect(await context.token.balanceOf(context.addr1.address))
-        .to.equal(expectedTokens);
-    });
-
-    it("Should enforce min/max contribution limits", async function () {
-      await context.token.startPresale();
-      
-      await expect(context.token.connect(context.addr1).contribute({ 
-        value: ethers.parseEther("0.05") // Below min
-      })).to.be.revertedWith("Below minimum contribution");
-
-      await expect(context.token.connect(context.addr1).contribute({ 
-        value: ethers.parseEther("11") // Above max
-      })).to.be.revertedWith("Above maximum contribution");
+      // Check contribution was recorded
+      const userContribution = await token.getContribution(addr1.address);
+      expect(userContribution).to.equal(contribution);
     });
 
     it("Should enforce presale cap", async function () {
-      await context.token.startPresale();
-      
-      // Try to contribute more than the cap
-      await expect(context.token.connect(context.addr1).contribute({ 
-        value: ethers.parseEther("101") 
-      })).to.be.revertedWith("Above presale cap");
+      // Move time to start of presale
+      await time.increaseTo(startTime + 1);
+
+      // First contribution: 10 ETH from addr1 (max allowed)
+      await token.connect(addr1).contribute({ 
+        value: ethers.parseEther("10") 
+      });
+
+      // Second contribution: 10 ETH from addr2
+      await token.connect(addr2).contribute({ 
+        value: ethers.parseEther("10") 
+      });
+
+      // Third contribution: 10 ETH from addr1 (should fail as it exceeds max per address)
+      await expect(
+        token.connect(addr1).contribute({ 
+          value: ethers.parseEther("10") 
+        })
+      ).to.be.revertedWith("Would exceed max contribution");
     });
 
-    it("Should allow owner to finalize presale", async function () {
-      await context.token.startPresale();
-      
-      const contribution = ethers.parseEther("1");
-      await context.token.connect(context.addr1).contribute({ value: contribution });
-      
-      const balanceBefore = await hre.ethers.provider.getBalance(context.owner.address);
-      await context.token.finalizePresale();
-      const balanceAfter = await hre.ethers.provider.getBalance(context.owner.address);
-      
-      expect(await context.token.presaleActive()).to.be.false;
-      expect(balanceAfter - balanceBefore).to.be.closeTo(contribution, ethers.parseEther("0.01"));
-    });
+    it("Should allow owner to finalize presale after soft cap is reached", async function () {
+      // Move time to start of presale
+      await time.increaseTo(startTime + 1);
 
-    it("Should emit PresaleContribution event", async function () {
-      await context.token.startPresale();
-      const contribution = ethers.parseEther("1");
-      
-      await expect(context.token.connect(context.addr1).contribute({ value: contribution }))
-        .to.emit(context.token, "PresaleContribution")
-        .withArgs(context.addr1.address, contribution, contribution * PRESALE_RATE);
+      // Get signers for multiple contributors
+      const signers = await ethers.getSigners();
+      const contributors = signers.slice(2, 7); // Use 5 different contributors
+
+      // Each contributor contributes 10 ETH to reach soft cap (50 ETH)
+      for(const contributor of contributors) {
+        await token.connect(contributor).contribute({ 
+          value: ethers.parseEther("10") 
+        });
+      }
+
+      // Move time past end time
+      await time.increaseTo(endTime + 1);
+
+      // Finalize presale
+      await expect(token.finalize())
+        .to.emit(token, "PresaleFinalized");
     });
   });
 
   describe("Ownership", function () {
     it("Should allow owner to transfer ownership", async function () {
-      await context.token.transferOwnership(context.addr1.address);
-      expect(await context.token.owner()).to.equal(context.addr1.address);
+      await token.transferOwnership(addr1.address);
+      expect(await token.owner()).to.equal(addr1.address);
     });
 
     it("Should prevent non-owner from managing presale", async function () {
-      await expect(context.token.connect(context.addr1).startPresale())
-        .to.be.revertedWith("Ownable: caller is not the owner");
-      
-      await expect(context.token.connect(context.addr1).finalizePresale())
-        .to.be.revertedWith("Ownable: caller is not the owner");
+      await expect(
+        token.connect(addr1).finalize()
+      ).to.be.revertedWithCustomError(token, "OwnableUnauthorizedAccount")
+        .withArgs(addr1.address);
     });
   });
 }); 

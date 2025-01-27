@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import { useNetwork } from '../contexts/NetworkContext';
 import TokenFactory_v2 from '../contracts/abi/TokenFactory_v2.json';
+import TokenTemplate_v2 from '../contracts/abi/TokenTemplate_v2.json';
 import { getContractAddress } from '../config/networks';
 import type { MetaMaskInpageProvider } from "@metamask/providers";
 
@@ -79,22 +80,23 @@ export function TokenAdminV2({ isConnected }: TokenAdminV2Props) {
       }
 
       const factory = new ethers.Contract(factoryAddress, TokenFactory_v2.abi, signer);
-      const tokenAddresses = await factory.getDeployedTokens();
+      const tokenAddresses = await factory.getDeployedTokens(await signer.getAddress());
       
       const tokenPromises = tokenAddresses.map(async (address: string) => {
-        const token = await factory.getTokenInfo(address);
+        const token = new ethers.Contract(address, TokenTemplate_v2.abi, signer);
+        const info = await token.getPresaleInfo();
         return {
           address,
-          name: token.name,
-          symbol: token.symbol,
-          softCap: ethers.formatEther(token.softCap),
-          hardCap: ethers.formatEther(token.hardCap),
-          presaleRate: token.presaleRate.toString(),
-          startTime: Number(token.startTime),
-          endTime: Number(token.endTime),
-          totalContributed: ethers.formatEther(token.totalContributed),
-          isWhitelistEnabled: token.isWhitelistEnabled,
-          status: getPresaleStatus(Number(token.startTime), Number(token.endTime))
+          name: info.name,
+          symbol: info.symbol,
+          softCap: ethers.formatEther(info.softCap),
+          hardCap: ethers.formatEther(info.hardCap),
+          presaleRate: info.presaleRate.toString(),
+          startTime: Number(info.startTime),
+          endTime: Number(info.endTime),
+          totalContributed: ethers.formatEther(info.totalContributed),
+          isWhitelistEnabled: info.isWhitelistEnabled,
+          status: getPresaleStatus(Number(info.startTime), Number(info.endTime))
         };
       });
 
@@ -138,7 +140,6 @@ export function TokenAdminV2({ isConnected }: TokenAdminV2Props) {
                   {token.status.charAt(0).toUpperCase() + token.status.slice(1)}
                 </span>
               </div>
-              
               <div className="space-y-2">
                 <div className="flex justify-between">
                   <span className="text-text-secondary">Soft Cap:</span>
