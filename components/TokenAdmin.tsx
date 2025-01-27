@@ -52,16 +52,19 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
   };
 
   const loadTokens = async () => {
-    if (!isConnected || !window.ethereum) return;
+    if (!isConnected || !window.ethereum || !chainId) return;
 
     try {
       setIsLoading(true);
       const provider = new BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
-      const network = await provider.getNetwork();
-      const chainId = Number(network.chainId);
       const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddress');
       
+      if (!factoryAddress) {
+        showToast('error', 'Contract not deployed on this network');
+        return;
+      }
+
       const factory = new Contract(factoryAddress, TokenFactory.abi, signer);
       const userAddress = address || await signer.getAddress();
       const deployedTokens = await factory.getTokensByUser(userAddress);
@@ -177,10 +180,10 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
   };
 
   useEffect(() => {
-    if (isConnected) {
+    if (isConnected && chainId) {
       loadTokens();
     }
-  }, [isConnected, address]);
+  }, [isConnected, chainId, address]);
 
   useEffect(() => {
     if (isConnected && window.ethereum) {
@@ -213,11 +216,7 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
       {toast && <Toast type={toast.type} message={toast.message} />}
       
       {isExpanded && (
-        !isConnected ? (
-          <div className="mt-4">
-            <p className="text-text-secondary">Please connect your wallet to manage tokens.</p>
-          </div>
-        ) : isLoading ? (
+        isLoading ? (
           <div className="flex justify-center items-center py-8">
             <Spinner className="w-8 h-8 text-text-primary" />
           </div>
@@ -273,15 +272,13 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
                               />
                               <button
                                 onClick={() => handleBlacklist(token.address, blacklistAddress, true)}
-                                disabled={isLoading || !blacklistAddress}
-                                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-background-secondary disabled:text-text-secondary"
+                                className="px-3 py-1 rounded bg-red-500/20 text-red-500 hover:bg-red-500/30"
                               >
                                 Blacklist
                               </button>
                               <button
                                 onClick={() => handleBlacklist(token.address, blacklistAddress, false)}
-                                disabled={isLoading || !blacklistAddress}
-                                className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-background-secondary disabled:text-text-secondary"
+                                className="px-3 py-1 rounded bg-green-500/20 text-green-500 hover:bg-green-500/30"
                               >
                                 Unblacklist
                               </button>
@@ -312,25 +309,17 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
                               />
                               <button
                                 onClick={() => handleSetLockTime(token.address, lockInfo.address, lockInfo.duration)}
-                                disabled={isLoading || !lockInfo.address || lockInfo.duration <= 0}
-                                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-background-secondary disabled:text-text-secondary"
+                                className="px-3 py-1 rounded bg-blue-500/20 text-blue-500 hover:bg-blue-500/30"
                               >
-                                Set Lock
+                                Lock
                               </button>
                               <button
                                 onClick={() => checkLockTime(token.address, lockInfo.address)}
-                                disabled={isLoading || !lockInfo.address}
-                                className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-background-secondary disabled:text-text-secondary"
+                                className="px-3 py-1 rounded bg-yellow-500/20 text-yellow-500 hover:bg-yellow-500/30"
                               >
-                                Check Lock
+                                Check
                               </button>
                             </div>
-                            <p className="text-xs text-text-secondary mt-1">
-                              Enter an address to lock tokens or check current lock status. 
-                              {lockInfo.address.toLowerCase() === currentWallet.toLowerCase() && (
-                                <span className="text-red-500 ml-1">Warning: You are about to lock your own address!</span>
-                              )}
-                            </p>
                           </div>
                         )}
                       </>

@@ -1,0 +1,243 @@
+import { useState } from 'react';
+import { ethers } from 'ethers';
+import { useNetwork } from '../contexts/NetworkContext';
+import TokenFactory_v2 from '../contracts/abi/TokenFactory_v2.json';
+import { getContractAddress } from '../config/networks';
+
+interface TokenFormV2Props {
+  isConnected: boolean;
+}
+
+export function TokenFormV2({ isConnected }: TokenFormV2Props) {
+  const { chainId } = useNetwork();
+  const [loading, setLoading] = useState(false);
+
+  const defaultValues = {
+    name: 'Test Token',
+    symbol: 'TEST',
+    decimals: '18',
+    initialSupply: '1000000',
+    price: '0.001',
+    softCap: '100',
+    hardCap: '1000',
+    minContribution: '0.1',
+    maxContribution: '10',
+    presaleRate: '1000',
+    startTime: new Date(Date.now() + 3600000).toISOString().slice(0, 16),
+    endTime: new Date(Date.now() + 86400000).toISOString().slice(0, 16),
+    whitelistEnabled: false
+  };
+
+  const [formData, setFormData] = useState(defaultValues);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value, type, checked } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isConnected || !chainId) return;
+
+    setLoading(true);
+    try {
+      // Contract deployment logic here
+      console.log('Deploying token with:', formData);
+    } catch (error) {
+      console.error('Error deploying token:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="form-container">
+      <form onSubmit={handleSubmit} className="space-y-2">
+        {/* Token Information */}
+        <div className="space-y-1">
+          <h3 className="text-lg font-semibold text-text-primary mb-0">Token Information</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            <div className="form-group">
+              <label className="form-label">Token Name</label>
+              <input
+                type="text"
+                name="name"
+                value={formData.name}
+                onChange={handleChange}
+                className="form-input"
+                placeholder="My Token"
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Token Symbol</label>
+              <input
+                type="text"
+                name="symbol"
+                value={formData.symbol}
+                onChange={handleChange}
+                className="form-input"
+                placeholder="TKN"
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Decimals</label>
+              <input
+                type="number"
+                name="decimals"
+                value={formData.decimals}
+                onChange={handleChange}
+                className="form-input"
+                min="0"
+                max="18"
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Initial Supply</label>
+              <input
+                type="number"
+                name="initialSupply"
+                value={formData.initialSupply}
+                onChange={handleChange}
+                className="form-input"
+                min="1"
+                required
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Presale Settings */}
+        <div className="space-y-1">
+          <h3 className="text-lg font-semibold text-text-primary mb-1">Presale Settings</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            <div className="form-group">
+              <label className="form-label">Token Price (ETH/MATIC)</label>
+              <input
+                type="number"
+                name="price"
+                value={formData.price}
+                onChange={handleChange}
+                className="form-input"
+                min="0.000001"
+                step="0.000001"
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Presale Rate</label>
+              <input
+                type="number"
+                name="presaleRate"
+                value={formData.presaleRate}
+                onChange={handleChange}
+                className="form-input"
+                min="1"
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Soft Cap</label>
+              <input
+                type="number"
+                name="softCap"
+                value={formData.softCap}
+                onChange={handleChange}
+                className="form-input"
+                min="0.1"
+                step="0.1"
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Hard Cap</label>
+              <input
+                type="number"
+                name="hardCap"
+                value={formData.hardCap}
+                onChange={handleChange}
+                className="form-input"
+                min="0.1"
+                step="0.1"
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Min Contribution</label>
+              <input
+                type="number"
+                name="minContribution"
+                value={formData.minContribution}
+                onChange={handleChange}
+                className="form-input"
+                min="0.1"
+                step="0.1"
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Max Contribution</label>
+              <input
+                type="number"
+                name="maxContribution"
+                value={formData.maxContribution}
+                onChange={handleChange}
+                className="form-input"
+                min="0.1"
+                step="0.1"
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Start Time</label>
+              <input
+                type="datetime-local"
+                name="startTime"
+                value={formData.startTime}
+                onChange={handleChange}
+                className="form-input"
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">End Time</label>
+              <input
+                type="datetime-local"
+                name="endTime"
+                value={formData.endTime}
+                onChange={handleChange}
+                className="form-input"
+                required
+              />
+            </div>
+          </div>
+          <div className="form-group flex items-center mt-2">
+            <input
+              type="checkbox"
+              name="whitelistEnabled"
+              checked={formData.whitelistEnabled}
+              onChange={handleChange}
+              className="form-checkbox"
+            />
+            <label className="form-label mb-0 ml-2">Enable Whitelist</label>
+          </div>
+        </div>
+
+        <div className="flex justify-end mt-2">
+          <button
+            type="submit"
+            className={`btn btn-primary ${(!isConnected || loading) ? 'btn-disabled' : ''}`}
+            disabled={!isConnected || loading}
+          >
+            {loading ? 'Deploying...' : (isConnected ? 'Deploy Token' : 'Connect Wallet to Deploy')}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+} 

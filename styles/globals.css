@@ -3,29 +3,41 @@
 @tailwind utilities;
 
 @layer base {
-  html {
-    @apply bg-background-primary text-text-primary;
-  }
-  
   body {
-    @apply min-h-screen;
+    @apply bg-background-primary text-text-primary;
   }
 }
 
 @layer components {
+  .btn {
+    @apply px-4 py-2 rounded-md font-medium transition-colors duration-200;
+  }
+  
+  .btn-primary {
+    @apply bg-indigo-600 text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500;
+  }
+  
+  .btn-secondary {
+    @apply bg-background-secondary text-text-primary border border-border hover:bg-background-accent focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500;
+  }
+  
+  .btn-success {
+    @apply bg-green-400 text-black hover:bg-green-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500;
+  }
+  
+  .btn-disabled {
+    @apply opacity-50 cursor-not-allowed;
+  }
+  
+  .form-input {
+    @apply mt-1 block w-full h-9 rounded-md border-gray-700 bg-background-primary text-text-primary shadow-sm focus:border-indigo-500 focus:ring-indigo-500;
+  }
+  
+  .form-label {
+    @apply block text-sm font-medium text-text-primary;
+  }
+  
   .card {
-    @apply bg-background-secondary border border-border rounded-lg p-6 shadow-lg;
-  }
-  
-  .button-primary {
-    @apply bg-text-accent hover:bg-opacity-90 text-background-primary font-semibold py-2 px-4 rounded-md transition-all;
-  }
-  
-  .button-secondary {
-    @apply bg-background-accent hover:bg-opacity-90 text-text-primary font-semibold py-2 px-4 rounded-md transition-all border border-border-light;
-  }
-  
-  .input {
-    @apply bg-background-accent border border-border rounded-md px-4 py-2 text-text-primary focus:outline-none focus:ring-2 focus:ring-text-accent focus:border-transparent;
+    @apply bg-background-secondary p-6 rounded-lg shadow-lg hover:shadow-xl transition-shadow;
   }
 } 

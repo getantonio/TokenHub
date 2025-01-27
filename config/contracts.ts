@@ -1,34 +1,36 @@
-interface NetworkConfig {
-  factoryAddress: string;
-}
+import { ChainId } from './networks';
 
-interface NetworkConfigs {
-  [chainId: number]: NetworkConfig;
-}
-
-export const SUPPORTED_NETWORKS: NetworkConfigs = {
-  11155111: {  // Sepolia
-    factoryAddress: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V1 || ''
+const contractAddresses: { [key: number]: { [key: string]: string } } = {
+  [ChainId.MAINNET]: {
+    factoryAddress: process.env.NEXT_PUBLIC_MAINNET_FACTORY_ADDRESS || ''
   },
-  80002: {  // Polygon Amoy
+  [ChainId.SEPOLIA]: {
+    factoryAddress: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V1 || '',
+    factoryAddressV2: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V2 || ''
+  },
+  [ChainId.POLYGON_AMOY]: {
     factoryAddress: process.env.NEXT_PUBLIC_POLYGON_AMOY_FACTORY_ADDRESS_V1 || ''
   },
-  11155420: {  // Optimism Sepolia
+  [ChainId.OP_SEPOLIA]: {
     factoryAddress: process.env.NEXT_PUBLIC_OP_SEPOLIA_FACTORY_ADDRESS_V1 || ''
   },
-  421614: {  // Arbitrum Sepolia
+  [ChainId.ARBITRUM_SEPOLIA]: {
     factoryAddress: process.env.NEXT_PUBLIC_ARBITRUM_SEPOLIA_FACTORY_ADDRESS_V1 || ''
   }
 };
 
-export const isNetworkConfigured = (chainId: number): boolean => {
-  return chainId in SUPPORTED_NETWORKS && 
-    SUPPORTED_NETWORKS[chainId].factoryAddress !== '';
-};
-
-export const getNetworkContractAddress = (chainId: number, contractType: 'factoryAddress'): string => {
-  if (!isNetworkConfigured(chainId)) {
-    throw new Error(`Network configuration not found for chainId: ${chainId}`);
+export function getNetworkContractAddress(chainId: number, contractName: string): string {
+  const networkContracts = contractAddresses[chainId];
+  if (!networkContracts) {
+    console.warn(`Network configuration not found for chainId: ${chainId}`);
+    return '';
   }
-  return SUPPORTED_NETWORKS[chainId][contractType];
-}; 
+  
+  const address = networkContracts[contractName];
+  if (!address) {
+    console.warn(`Contract ${contractName} not found for chainId: ${chainId}`);
+    return '';
+  }
+  
+  return address;
+} 

@@ -1,42 +1,53 @@
-# TokenFactory
+# Token Factory
 
-A modern dApp for deploying and managing upgradeable ERC20 tokens on the Sepolia network.
+A comprehensive platform for creating and managing tokens across multiple networks.
 
-## Features
+## Overview
 
-- 🚀 One-click token deployment
-- 💼 Multi-wallet token distribution with time locks
-- 🔄 Upgradeable smart contracts
-- 🎨 Modern dark-themed UI
-- 🔒 Advanced token features (mintable, burnable, pausable)
-- 💰 Built-in transfer tax options
-- ⚡ Sepolia testnet support
+Token Factory is a decentralized platform that allows users to create and manage various types of tokens across multiple networks. The platform is being developed in multiple versions, each adding new features and capabilities.
 
-## Tech Stack
+## Versions
 
-- Next.js 14
-- TypeScript
-- Hardhat
-- OpenZeppelin
-- Ethers.js
-- TailwindCSS
-- Web3 Wallet Integration
+### Token Factory v1 (Current)
+- Basic ERC20 token creation
+- Security features:
+  - Blacklist capability
+  - Time lock mechanism
+- Multi-network support
+- Token management interface
+
+### Token Factory v2 (Coming Soon)
+- Simple presale functionality
+- Whitelist support
+- Timed presale rounds
+- Soft/Hard caps
+- Presale management interface
+
+### Token Factory v3 (Planned)
+- Auto liquidity pool creation
+- Initial price setting
+- Liquidity locking mechanism
+- Trading limits and restrictions
+
+### Token Factory v4 (Future)
+- Auto contract verification
+- Marketing features
+- Governance options
+- Cross-chain support
+
+## Supported Networks
+
+- Sepolia Testnet (Ethereum)
+- Arbitrum Sepolia
+- Optimism Sepolia
+- Polygon Amoy
 
 ## Getting Started
 
-### Prerequisites
-
-- Node.js >= 18
-- npm or yarn
-- MetaMask wallet
-- Sepolia testnet ETH
-
-### Installation
-
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/TokenFactory.git
-cd TokenFactory
+git clone https://github.com/yourusername/token-factory.git
+cd token-factory
 ```
 
 2. Install dependencies:
@@ -44,11 +55,10 @@ cd TokenFactory
 npm install
 ```
 
-3. Create a `.env` file in the root directory:
-```env
-SEPOLIA_RPC_URL=your_sepolia_rpc_url
-PRIVATE_KEY=your_wallet_private_key
-ETHERSCAN_API_KEY=your_etherscan_api_key
+3. Set up environment variables:
+```bash
+cp .env.example .env
+# Edit .env with your configuration
 ```
 
 4. Run the development server:
@@ -56,46 +66,40 @@ ETHERSCAN_API_KEY=your_etherscan_api_key
 npm run dev
 ```
 
-5. Open [http://localhost:3000](http://localhost:3000) in your browser.
-
-### Smart Contract Development
-
-1. Compile contracts:
+5. Build for production:
 ```bash
-npm run compile
+npm run build
 ```
 
-2. Run tests:
-```bash
-npm run test
-```
+## Development
 
-3. Deploy to Sepolia:
-```bash
-npm run deploy:contracts
+### Project Structure
 ```
-
-## Project Structure
-
-```
-TokenFactory/
+token-factory/
+├── contracts/           # Smart contracts
 ├── components/          # React components
-├── contracts/          # Solidity smart contracts
-├── pages/             # Next.js pages
-├── scripts/           # Deployment scripts
-├── styles/           # Global styles and Tailwind
-├── test/             # Contract test files
-├── types/            # TypeScript type definitions
-└── hooks/            # Custom React hooks
+├── pages/              # Next.js pages
+├── config/             # Configuration files
+├── scripts/            # Deployment scripts
+├── test/              # Test files
+└── types/             # TypeScript types
 ```
+
+### Key Technologies
+- Solidity
+- TypeScript
+- Next.js
+- Hardhat
+- Ethers.js
+- OpenZeppelin
 
 ## Contributing
 
 1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+2. Create your feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a new Pull Request
 
 ## License
 

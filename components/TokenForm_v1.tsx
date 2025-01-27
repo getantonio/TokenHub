@@ -182,20 +182,6 @@ export default function TokenForm_v1({ isConnected }: Props) {
     }));
   };
 
-  if (!isConnected) {
-    return (
-      <div className="rounded-md bg-yellow-900/20 p-4 border border-yellow-700">
-        <div className="flex">
-          <div className="ml-3">
-            <h3 className="text-sm font-medium text-yellow-500">
-              Please connect your wallet to create tokens
-            </h3>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       {successInfo && (
@@ -234,11 +220,6 @@ export default function TokenForm_v1({ isConnected }: Props) {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4 bg-background-secondary p-6 rounded-lg shadow-lg">
-        <div className="mb-6 text-center">
-          <h2 className="text-3xl font-bold text-text-primary mb-3">Token Factory Deploy v1</h2>
-          <p className="text-xl text-text-secondary">Create Your Own Token</p>
-        </div>
-
         {toast && (
           <Toast 
             type={toast.type} 
@@ -258,46 +239,46 @@ export default function TokenForm_v1({ isConnected }: Props) {
         )}
 
         <div>
-          <label htmlFor="name" className="block text-sm font-medium text-text-primary">Token Name</label>
+          <label htmlFor="name" className="form-label">Token Name</label>
           <input
             type="text"
             id="name"
             name="name"
             value={formData.name}
             onChange={handleChange}
-            className="mt-1 block w-full rounded-md border-gray-700 bg-background-primary text-text-primary shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+            className="form-input"
             placeholder="TokenFactory Test v1"
             required
           />
         </div>
 
         <div>
-          <label htmlFor="symbol" className="block text-sm font-medium text-text-primary">Token Symbol</label>
+          <label htmlFor="symbol" className="form-label">Token Symbol</label>
           <input
             type="text"
             id="symbol"
             name="symbol"
             value={formData.symbol}
             onChange={handleChange}
-            className="mt-1 block w-full rounded-md border-gray-700 bg-background-primary text-text-primary shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+            className="form-input"
             placeholder="TFT1"
             required
           />
         </div>
 
         <div>
-          <label htmlFor="initialSupply" className="block text-sm font-medium text-text-primary">
+          <label htmlFor="initialSupply" className="form-label">
             Initial Supply
             <span className="ml-1 text-xs text-text-secondary">(tokens will be sent to your wallet)</span>
           </label>
-          <div className="mt-1 relative rounded-md shadow-sm">
+          <div className="relative rounded-md shadow-sm">
             <input
               type="text"
               id="initialSupply"
               name="initialSupply"
               value={formData.initialSupply}
               onChange={handleChange}
-              className="block w-full rounded-md border-gray-700 bg-background-primary text-text-primary shadow-sm focus:border-indigo-500 focus:ring-indigo-500 pr-12"
+              className="form-input pr-12"
               placeholder="1000000"
               required
             />
@@ -309,18 +290,18 @@ export default function TokenForm_v1({ isConnected }: Props) {
         </div>
 
         <div>
-          <label htmlFor="maxSupply" className="block text-sm font-medium text-text-primary">
+          <label htmlFor="maxSupply" className="form-label">
             Max Supply
             <span className="ml-1 text-xs text-text-secondary">(maximum tokens that can ever exist)</span>
           </label>
-          <div className="mt-1 relative rounded-md shadow-sm">
+          <div className="relative rounded-md shadow-sm">
             <input
               type="text"
               id="maxSupply"
               name="maxSupply"
               value={formData.maxSupply}
               onChange={handleChange}
-              className="block w-full rounded-md border-gray-700 bg-background-primary text-text-primary shadow-sm focus:border-indigo-500 focus:ring-indigo-500 pr-12"
+              className="form-input pr-12"
               placeholder="1000000"
               required
             />
@@ -362,10 +343,10 @@ export default function TokenForm_v1({ isConnected }: Props) {
 
         <button
           type="submit"
-          disabled={isLoading}
-          className={`inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+          disabled={!isConnected || isLoading}
+          className={`inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${(!isConnected || isLoading) ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
-          {isLoading ? 'Creating...' : 'Create Token'}
+          {isLoading ? 'Creating...' : (isConnected ? 'Create Token' : 'Connect Wallet to Deploy')}
         </button>
       </form>
     </div>

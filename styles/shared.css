@@ -1,0 +1,109 @@
+/* Base Form Styles */
+.form-container {
+  @apply space-y-4 bg-background-secondary p-6 rounded-lg shadow-lg;
+}
+
+.form-group {
+  @apply mb-4;
+}
+
+.form-label {
+  @apply block text-text-primary mb-2 font-medium;
+}
+
+.form-input {
+  @apply w-full px-4 py-2 bg-background-primary border border-border rounded-md text-text-primary focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent;
+}
+
+.form-select {
+  @apply w-full px-4 py-2 bg-background-primary border border-border rounded-md text-text-primary focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent;
+}
+
+.form-checkbox {
+  @apply mr-2 rounded border-border text-indigo-600 focus:ring-indigo-500;
+}
+
+/* Button Styles */
+.btn {
+  @apply px-4 py-2 rounded-md font-medium transition-colors duration-200;
+}
+
+.btn-primary {
+  @apply bg-indigo-600 text-white hover:bg-indigo-700;
+}
+
+.btn-secondary {
+  @apply bg-background-secondary text-text-primary border border-border hover:bg-background-accent;
+}
+
+.btn-disabled {
+  @apply opacity-50 cursor-not-allowed;
+}
+
+/* Card Styles */
+.card {
+  @apply bg-background-secondary rounded-lg p-6 shadow-lg;
+}
+
+.card-header {
+  @apply text-xl font-bold text-text-primary mb-4;
+}
+
+.card-body {
+  @apply text-text-secondary;
+}
+
+/* Token List Styles */
+.token-list {
+  @apply grid gap-6 mt-6;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+}
+
+.token-card {
+  @apply bg-background-secondary p-6 rounded-lg shadow-lg border border-border hover:border-text-accent transition-colors duration-200;
+}
+
+/* Marketplace Styles */
+.marketplace-grid {
+  @apply grid gap-6 mt-6;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+}
+
+.presale-card {
+  @apply bg-background-secondary p-6 rounded-lg shadow-lg border border-border hover:border-text-accent transition-colors duration-200;
+}
+
+/* Status Indicators */
+.status-badge {
+  @apply px-3 py-1 rounded-full text-sm font-medium;
+}
+
+.status-active {
+  @apply bg-green-500/20 text-green-500;
+}
+
+.status-pending {
+  @apply bg-yellow-500/20 text-yellow-500;
+}
+
+.status-ended {
+  @apply bg-red-500/20 text-red-500;
+}
+
+/* Error Message */
+.error-message {
+  @apply rounded-md bg-red-900/20 p-4 border border-red-700;
+}
+
+.error-text {
+  @apply text-sm font-medium text-red-500;
+}
+
+/* Success Message */
+.success-message {
+  @apply rounded-md bg-green-900/20 p-4 border border-green-700;
+}
+
+.success-text {
+  @apply text-sm font-medium text-green-500;
+} 

@@ -1,131 +1,113 @@
+import { ethers } from 'ethers';
+
+export enum ChainId {
+  MAINNET = 1,
+  SEPOLIA = 11155111,
+  POLYGON_AMOY = 80002,
+  OP_SEPOLIA = 11155420,
+  ARBITRUM_SEPOLIA = 421614
+}
+
 export interface NetworkConfig {
   name: string;
-  chainId: number;
   rpcUrl: string;
+  chainId: ChainId;
   explorerUrl: string;
-  factoryAddressEnvKey: string;
-  isTestnet: boolean;
-  version: 'v1' | 'v2';
   currency: string;
-  gasSettings?: {
-    gasMultiplier?: number; // Multiplier for dynamic gas calculation
-    minGasPrice?: number; // Minimum gas price floor
-    maxGasPrice?: number; // Maximum gas price ceiling
-    baseGasLimit?: number; // Base gas limit that can be adjusted
+  isTestnet: boolean;
+  contracts: {
+    TokenFactory_v1?: string;
+    TokenFactory_v2?: string;
   };
 }
 
-export const SUPPORTED_NETWORKS: { [key: string]: NetworkConfig } = {
-  'sepolia': {
+export const SUPPORTED_NETWORKS: Record<ChainId, NetworkConfig> = {
+  [ChainId.MAINNET]: {
+    name: 'Ethereum',
+    rpcUrl: process.env.NEXT_PUBLIC_MAINNET_RPC_URL || 'https://eth.llamarpc.com',
+    chainId: ChainId.MAINNET,
+    explorerUrl: 'https://etherscan.io',
+    currency: 'ETH',
+    isTestnet: false,
+    contracts: {
+      TokenFactory_v1: process.env.NEXT_PUBLIC_MAINNET_FACTORY_ADDRESS || ''
+    }
+  },
+  [ChainId.SEPOLIA]: {
     name: 'Sepolia',
-    chainId: 11155111,
-    rpcUrl: 'https://sepolia.infura.io/v3/${INFURA_KEY}',
+    rpcUrl: process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL || 'https://rpc.sepolia.org',
+    chainId: ChainId.SEPOLIA,
     explorerUrl: 'https://sepolia.etherscan.io',
-    factoryAddressEnvKey: 'NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V1',
+    currency: 'ETH',
     isTestnet: true,
-    version: 'v1',
-    currency: 'ETH'
+    contracts: {
+      TokenFactory_v1: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V1 || '',
+      TokenFactory_v2: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V2 || ''
+    }
   },
-  'arbitrum-sepolia': {
-    name: 'Arbitrum Sepolia',
-    chainId: 421614,
-    rpcUrl: 'https://sepolia-rollup.arbitrum.io/rpc',
-    explorerUrl: 'https://sepolia.arbiscan.io',
-    factoryAddressEnvKey: 'NEXT_PUBLIC_ARBITRUM_SEPOLIA_FACTORY_ADDRESS_V1',
-    isTestnet: true,
-    version: 'v1',
-    currency: 'ETH'
-  },
-  'op-sepolia': {
-    name: 'Optimism Sepolia',
-    chainId: 11155420,
-    rpcUrl: 'https://sepolia.optimism.io',
-    explorerUrl: 'https://sepolia-optimism.etherscan.io',
-    factoryAddressEnvKey: 'NEXT_PUBLIC_OP_SEPOLIA_FACTORY_ADDRESS_V1',
-    isTestnet: true,
-    version: 'v1',
-    currency: 'ETH'
-  },
-  'polygon-amoy': {
+  [ChainId.POLYGON_AMOY]: {
     name: 'Polygon Amoy',
-    chainId: 80002,
-    rpcUrl: process.env.NEXT_PUBLIC_POLYGON_AMOY_RPC_URL || 'https://rpc-amoy.polygon.technology',
+    rpcUrl: process.env.NEXT_PUBLIC_POLYGON_AMOY_RPC_URL || 'https://rpc.amoy.testnet.polygon.com',
+    chainId: ChainId.POLYGON_AMOY,
     explorerUrl: 'https://www.oklink.com/amoy',
-    factoryAddressEnvKey: 'NEXT_PUBLIC_POLYGON_AMOY_FACTORY_ADDRESS_V1',
-    isTestnet: true,
-    version: 'v1',
     currency: 'MATIC',
-    gasSettings: {
-      gasMultiplier: 1.2, // 20% buffer on estimated gas
-      minGasPrice: 35000000000, // 35 gwei floor
-      maxGasPrice: 200000000000, // 200 gwei ceiling
-      baseGasLimit: 2500000 // Base limit that will be adjusted by estimation
+    isTestnet: true,
+    contracts: {
+      TokenFactory_v1: process.env.NEXT_PUBLIC_POLYGON_AMOY_FACTORY_ADDRESS_V1 || '',
+      TokenFactory_v2: process.env.NEXT_PUBLIC_POLYGON_AMOY_FACTORY_ADDRESS_V2 || ''
+    }
+  },
+  [ChainId.OP_SEPOLIA]: {
+    name: 'OP Sepolia',
+    rpcUrl: process.env.NEXT_PUBLIC_OP_SEPOLIA_RPC_URL || 'https://sepolia.optimism.io',
+    chainId: ChainId.OP_SEPOLIA,
+    explorerUrl: 'https://sepolia-optimism.etherscan.io',
+    currency: 'ETH',
+    isTestnet: true,
+    contracts: {
+      TokenFactory_v1: process.env.NEXT_PUBLIC_OP_SEPOLIA_FACTORY_ADDRESS_V1 || '',
+      TokenFactory_v2: process.env.NEXT_PUBLIC_OP_SEPOLIA_FACTORY_ADDRESS_V2 || ''
+    }
+  },
+  [ChainId.ARBITRUM_SEPOLIA]: {
+    name: 'Arbitrum Sepolia',
+    rpcUrl: process.env.NEXT_PUBLIC_ARBITRUM_SEPOLIA_RPC_URL || 'https://sepolia-rollup.arbitrum.io/rpc',
+    chainId: ChainId.ARBITRUM_SEPOLIA,
+    explorerUrl: 'https://sepolia.arbiscan.io',
+    currency: 'ETH',
+    isTestnet: true,
+    contracts: {
+      TokenFactory_v1: process.env.NEXT_PUBLIC_ARBITRUM_SEPOLIA_FACTORY_ADDRESS_V1 || '',
+      TokenFactory_v2: process.env.NEXT_PUBLIC_ARBITRUM_SEPOLIA_FACTORY_ADDRESS_V2 || ''
     }
   }
 };
 
-export const getNetworkConfig = (chainId: number): NetworkConfig | undefined => {
-  return Object.values(SUPPORTED_NETWORKS).find(network => network.chainId === chainId);
-};
-
-export const getNetworkByName = (name: string): NetworkConfig | undefined => {
-  return SUPPORTED_NETWORKS[name];
-};
-
-// Helper to get explorer URL for a transaction or address
-export const getExplorerUrl = (chainId: number, hash: string, type: 'tx' | 'address' | 'token' = 'tx'): string => {
-  const network = getNetworkConfig(chainId);
+export function getExplorerUrl(chainId: ChainId | null, address: string, type: 'token' | 'address' | 'tx' = 'address'): string {
+  if (!chainId) return '';
+  const network = SUPPORTED_NETWORKS[chainId];
   if (!network) return '';
-  
-  const baseUrl = network.explorerUrl;
-  if (network.chainId === 80002) { // Polygon Amoy uses OKLink
-    switch (type) {
-      case 'tx':
-        return `${baseUrl}/tx/${hash}`;
-      case 'token':
-        return `${baseUrl}/token/${hash}`;
-      case 'address':
-        return `${baseUrl}/address/${hash}`;
-    }
-  } else { // Other networks use Etherscan-like explorers
-    switch (type) {
-      case 'tx':
-        return `${baseUrl}/tx/${hash}`;
-      case 'address':
-      case 'token':
-        return `${baseUrl}/token/${hash}`;
-    }
+  return `${network.explorerUrl}/${type}/${address}`;
+}
+
+export function getContractAddress(chainId: ChainId | null, contractName: 'TokenFactory_v1' | 'TokenFactory_v2'): string {
+  if (!chainId) {
+    throw new Error('Chain ID is required');
   }
-  return '';
-};
-
-// Helper to get dynamic gas settings
-export const getDynamicGasSettings = async (provider: any, chainId: number) => {
-  const network = getNetworkConfig(chainId);
-  if (!network?.gasSettings) return {};
-
-  try {
-    // Get current network gas price
-    const gasPrice = await provider.getFeeData();
-    const settings = network.gasSettings;
-    
-    // Calculate gas price within bounds
-    const suggestedGasPrice = gasPrice.gasPrice || gasPrice.maxFeePerGas;
-    const adjustedGasPrice = Math.min(
-      Math.max(
-        Number(suggestedGasPrice) * (settings.gasMultiplier || 1),
-        settings.minGasPrice || 0
-      ),
-      settings.maxGasPrice || Number.MAX_SAFE_INTEGER
-    );
-
-    return {
-      maxFeePerGas: adjustedGasPrice,
-      maxPriorityFeePerGas: gasPrice.maxPriorityFeePerGas,
-      gasLimit: settings.baseGasLimit // This will be overridden by estimation
-    };
-  } catch (error) {
-    console.warn('Error getting dynamic gas settings:', error);
-    return {};
+  const network = SUPPORTED_NETWORKS[chainId];
+  if (!network) {
+    throw new Error(`Network not found for chain ID ${chainId}`);
   }
-}; 
+  const address = network.contracts[contractName];
+  if (!address) {
+    throw new Error(`Contract ${contractName} not found on network ${network.name}`);
+  }
+  return address;
+}
+
+export function getNetworkConfig(chainId: ChainId | null): NetworkConfig | null {
+  if (!chainId) return null;
+  return SUPPORTED_NETWORKS[chainId] || null;
+}
+
+export default SUPPORTED_NETWORKS; 

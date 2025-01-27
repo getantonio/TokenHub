@@ -1,44 +1,55 @@
 # Changelog
+
 All notable changes to the TokenFactory project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [1.0.0] - 2024-01-25
+## [Unreleased]
 
 ### Added
-- Initial implementation of upgradeable ERC20 token (BaseV1)
-- Basic token features:
-  - Name, symbol, decimals (18)
-  - Initial supply configuration
-  - Maximum supply limit
-  - Minting capability (owner only)
+- New landing page with version cards
+- Reorganized project structure for multiple versions
+- Moved v1 to its own route at `/v1`
+
+### Changed
+- Updated navigation to support multiple versions
+- Improved UI/UX for version selection
+
+## [1.0.0] - Initial Release
+
+### Features
+- Basic ERC20 token creation
+- Customizable token parameters:
+  - Name
+  - Symbol
+  - Initial Supply
+  - Maximum Supply
 - Security features:
-  - UUPS upgrade pattern
-  - Owner controls (OwnableUpgradeable)
-  - Address blacklisting
-  - Time-lock mechanism for token transfers
-- Comprehensive test suite covering all features
-- Gas-optimized implementation:
-  - Deployment: ~1.36M gas
-  - Transfer: ~61.7K gas
-  - Blacklist: ~51.3K gas
-  - Mint: ~65.3K gas
+  - Blacklist capability
+  - Time lock mechanism
+- Multi-network support:
+  - Sepolia Testnet
+  - Arbitrum Sepolia
+  - Optimism Sepolia
+  - Polygon Amoy
+- Network switching and management
+- Token management interface
 
-### Security
-- Implemented OpenZeppelin's secure contracts
-- Added transfer restrictions via blacklist
-- Added time-lock mechanism for token releases
-- Owner-only access control for critical functions
+## Upcoming Versions
 
-### Technical Details
-- Solidity version: 0.8.22
-- OpenZeppelin upgradeable contracts
-- Hardhat development environment
-- TypeScript/JavaScript testing framework
-- Ethers.js for blockchain interactions
+### Version 2 (Coming Soon)
+- Simple presale functionality
+- Whitelist support
+- Timed presale rounds
+- Soft/Hard caps
+- Presale management interface
 
-### Dependencies
-- @openzeppelin/contracts-upgradeable
-- @nomicfoundation/hardhat-toolbox
-- @openzeppelin/hardhat-upgrades 
+### Version 3 (Planned)
+- Auto liquidity pool creation
+- Initial price setting
+- Liquidity locking mechanism
+- Trading limits and restrictions
+
+### Version 4 (Future)
+- Auto contract verification
+- Marketing features
+- Governance options
+- Cross-chain support 

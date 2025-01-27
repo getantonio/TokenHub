@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNetwork } from '../contexts/NetworkContext';
 import { SUPPORTED_NETWORKS, NetworkConfig } from '../config/networks';
 
-export default function NetworkIndicator() {
+export function NetworkIndicator() {
   const { chainId, isSupported } = useNetwork();
   const [showNetworkMenu, setShowNetworkMenu] = useState(false);
   const [currentNetwork, setCurrentNetwork] = useState<NetworkConfig | undefined>();
