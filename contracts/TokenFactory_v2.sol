@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity 0.8.22;
 
-import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import "./TokenTemplate_v2.sol";
+import "./TokenTemplate_v2.1.0.sol";
 
 contract TokenFactory_v2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     address public implementation;
@@ -61,26 +61,23 @@ contract TokenFactory_v2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     ) external payable returns (address) {
         require(msg.value >= deploymentFee, "Insufficient deployment fee");
 
-        bytes memory initData = abi.encodeWithSelector(
-            TokenTemplate_v2.initialize.selector,
+        bytes memory initializeData = abi.encodeWithSelector(
+            TokenTemplate_v2_1_0.initialize.selector,
             name,
             symbol,
-            decimals,
             initialSupply,
-            msg.sender, // owner
-            softCap,
             hardCap,
-            minContribution,
-            maxContribution,
+            presaleRate,
             startTime,
             endTime,
-            presaleRate,
-            whitelistEnabled
+            minContribution,
+            maxContribution,
+            softCap
         );
 
         ERC1967Proxy proxy = new ERC1967Proxy(
             implementation,
-            initData
+            initializeData
         );
 
         address tokenAddress = address(proxy);

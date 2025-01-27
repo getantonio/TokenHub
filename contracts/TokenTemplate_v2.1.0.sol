@@ -1,20 +1,29 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.22;
+pragma solidity 0.8.22;
 
 import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20BurnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 
 /**
- * @title TokenTemplate_v3
+ * @title TokenTemplate_v2.1.0
  * @dev Template for creating new ERC20 tokens with presale functionality
  * @author TokenFactory
- * @notice Version: 3.0.0
+ * @notice Version: 2.1.0
  */
-contract TokenTemplate_v3 is Initializable, ERC20Upgradeable, OwnableUpgradeable, ReentrancyGuardUpgradeable {
+contract TokenTemplate_v2_1_0 is 
+    Initializable,
+    ERC20PausableUpgradeable,
+    OwnableUpgradeable,
+    UUPSUpgradeable,
+    ReentrancyGuardUpgradeable
+{
     // Version info
-    string public constant VERSION = "3.0.0";
+    string public constant VERSION = "2.1.0";
     bytes32 public constant VERSION_HASH = keccak256(abi.encodePacked(VERSION));
 
     struct PresaleInfo {
@@ -46,6 +55,8 @@ contract TokenTemplate_v3 is Initializable, ERC20Upgradeable, OwnableUpgradeable
     event ContributionReceived(address contributor, uint256 amount);
     event PresaleFinalized(uint256 totalContributed, uint256 tokensDistributed);
     event ContributionRefunded(address contributor, uint256 amount);
+
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
