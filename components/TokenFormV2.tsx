@@ -155,122 +155,100 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
 
       console.log("V2 Factory address:", factoryAddress);
 
+      // Create contract instance with proper ABI
       const factoryV2 = new Contract(factoryAddress, TokenFactory_v2.abi, signer);
 
-      // Log available methods
-      console.log("Available methods:", Object.keys(factoryV2.interface.fragments).filter(key => 
-        factoryV2.interface.getFunction(key) !== null
-      ));
+      // Get deployment fee first
+      const deploymentFee = await factoryV2.deploymentFee();
+      console.log("Deployment fee:", deploymentFee.toString());
 
       // Convert values to proper format
-      const initialSupplyWei = parseUnits(formData.initialSupply, 18);
-      const softCapWei = parseUnits(formData.softCap, 18);
-      const hardCapWei = parseUnits(formData.hardCap, 18);
-      const minContributionWei = parseUnits(formData.minContribution, 18);
-      const maxContributionWei = parseUnits(formData.maxContribution, 18);
-      const presaleRate = BigInt(formData.presaleRate);
+      const tokenDecimals = Number(formData.decimals);
+      if (isNaN(tokenDecimals) || tokenDecimals < 0 || tokenDecimals > 18) {
+        throw new Error('Invalid decimals value. Must be between 0 and 18.');
+      }
+
+      const initialSupplyAmount = parseUnits(formData.initialSupply, tokenDecimals);
+      const softCapAmount = parseUnits(formData.softCap, tokenDecimals);
+      const hardCapAmount = parseUnits(formData.hardCap, tokenDecimals);
+      const minContributionAmount = parseUnits(formData.minContribution, tokenDecimals);
+      const maxContributionAmount = parseUnits(formData.maxContribution, tokenDecimals);
+      const presaleRateAmount = parseUnits(formData.presaleRate, tokenDecimals);
       const startTime = BigInt(Math.floor(new Date(formData.startTime).getTime() / 1000));
       const endTime = BigInt(Math.floor(new Date(formData.endTime).getTime() / 1000));
 
-      // Log parameters for debugging
-      console.log("Creating token with parameters:", {
-        name: formData.name,
-        symbol: formData.symbol,
-        decimals: 18,
-        initialSupply: initialSupplyWei.toString(),
-        softCap: softCapWei.toString(),
-        hardCap: hardCapWei.toString(),
-        minContribution: minContributionWei.toString(),
-        maxContribution: maxContributionWei.toString(),
-        startTime: startTime.toString(),
-        endTime: endTime.toString(),
-        presaleRate: presaleRate.toString(),
-        whitelistEnabled: formData.whitelistEnabled
+      console.log("Converted amounts:", {
+        initialSupply: initialSupplyAmount.toString(),
+        softCap: softCapAmount.toString(),
+        hardCap: hardCapAmount.toString(),
+        minContribution: minContributionAmount.toString(),
+        maxContribution: maxContributionAmount.toString(),
+        presaleRate: presaleRateAmount.toString(),
+        decimals: tokenDecimals
       });
 
-      // Encode function data for verification
-      const functionData = factoryV2.interface.encodeFunctionData("deployToken", [
+      // Prepare transaction parameters
+      const params = [
         formData.name,
         formData.symbol,
-        18, // decimals
-        initialSupplyWei,
-        softCapWei,
-        hardCapWei,
-        minContributionWei,
-        maxContributionWei,
+        tokenDecimals,
+        initialSupplyAmount,
+        softCapAmount,
+        hardCapAmount,
+        minContributionAmount,
+        maxContributionAmount,
         startTime,
         endTime,
-        presaleRate,
+        presaleRateAmount,
         formData.whitelistEnabled
-      ]);
-      
-      console.log("Encoded function data:", functionData);
+      ];
 
-      // Try to estimate gas first
+      // Try to estimate gas with value parameter
       let gasLimit;
       try {
-        const gasEstimate = await factoryV2.deployToken.estimateGas(
-          formData.name,
-          formData.symbol,
-          18, // decimals
-          initialSupplyWei,
-          softCapWei,
-          hardCapWei,
-          minContributionWei,
-          maxContributionWei,
-          startTime,
-          endTime,
-          presaleRate,
-          formData.whitelistEnabled,
-          { value: await factoryV2.deploymentFee() }
-        );
-        console.log("Estimated gas:", gasEstimate.toString());
-        // Add 20% buffer to gas estimate
-        gasLimit = gasEstimate * BigInt(120) / BigInt(100);
-      } catch (error: any) {
-        console.error("Gas estimation failed:", {
-          error,
-          errorData: error.data,
-          errorArgs: error.errorArgs,
-          errorName: error.errorName,
-          errorSignature: error.errorSignature,
-          reason: error.reason
+        // First verify the contract interface is working
+        const encodedData = factoryV2.interface.encodeFunctionData('deployToken', params);
+        console.log("Encoded function data:", encodedData);
+
+        // Estimate gas with proper value parameter
+        const gasEstimate = await provider.estimateGas({
+          to: factoryAddress,
+          from: await signer.getAddress(),
+          value: deploymentFee,
+          data: encodedData
         });
-        // Use default gas limit if estimation fails
-        gasLimit = BigInt(8000000);
+
+        console.log("Estimated gas:", gasEstimate.toString());
+        // Increase buffer to 50% to ensure successful deployment
+        gasLimit = gasEstimate * BigInt(1500) / BigInt(1000);
+      } catch (error) {
+        console.error("Gas estimation failed:", error);
+        // Use higher conservative gas limit
+        gasLimit = BigInt(2000000); // 2M gas as fallback
       }
 
-      // Get current gas price with 20% buffer
-      const gasPrice = await provider.getFeeData();
-      const adjustedGasPrice = gasPrice.gasPrice! * BigInt(120) / BigInt(100);
+      // Get current gas price with higher buffer
+      const feeData = await provider.getFeeData();
+      const gasPrice = feeData.gasPrice || parseUnits('10', 'gwei'); // 10 gwei fallback
+
+      // Use legacy transaction format with higher gas settings
+      const txOptions = {
+        gasLimit,
+        value: deploymentFee,
+        gasPrice: gasPrice * BigInt(1500) / BigInt(1000), // 50% buffer
+        nonce: await provider.getTransactionCount(await signer.getAddress())
+      };
 
       console.log("Deployment parameters:", {
         gasLimit: gasLimit.toString(),
-        gasPrice: adjustedGasPrice.toString(),
-        deploymentFee: (await factoryV2.deploymentFee()).toString()
+        gasPrice: txOptions.gasPrice.toString(),
+        deploymentFee: deploymentFee.toString(),
+        nonce: txOptions.nonce
       });
 
-      // Create token with proper parameter order matching the contract
-      const tx = await factoryV2.deployToken(
-        formData.name,
-        formData.symbol,
-        18, // decimals
-        initialSupplyWei,
-        softCapWei,
-        hardCapWei,
-        minContributionWei,
-        maxContributionWei,
-        startTime,
-        endTime,
-        presaleRate,
-        formData.whitelistEnabled,
-        { 
-          gasLimit,
-          gasPrice: adjustedGasPrice,
-          value: await factoryV2.deploymentFee()
-        }
-      );
-
+      // Deploy token with optimized parameters
+      const tx = await factoryV2.deployToken(...params, txOptions);
+      
       setLoading(true);
       showToast('success', 'Transaction submitted. Waiting for confirmation...');
       
@@ -282,17 +260,35 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
           try {
             return factoryV2.interface.parseLog(log as any);
           } catch (e) {
-            console.error("Error parsing log:", e);
+            console.error("Failed to parse log:", e);
             return null;
           }
         })
-        .find((event: LogDescription | null) => event?.name === "TokenDeployed");
+        .find((event: LogDescription | null) => 
+          event?.name === "TokenDeployed"
+        );
 
       if (!event) {
-        throw new Error("Could not find token address in transaction logs");
+        throw new Error("Could not find TokenDeployed event in transaction logs");
       }
 
-      const tokenAddress = event.args.tokenAddress || event.args.token;
+      const tokenAddress = event.args.tokenAddress;
+      if (!tokenAddress) {
+        throw new Error("Token address not found in event");
+      }
+
+      console.log("Token deployed successfully:", {
+        deployer: event.args.deployer,
+        tokenAddress: tokenAddress,
+        name: event.args.name,
+        symbol: event.args.symbol,
+        decimals: event.args.decimals,
+        initialSupply: event.args.initialSupply.toString(),
+        softCap: event.args.softCap.toString(),
+        hardCap: event.args.hardCap.toString(),
+        presaleRate: event.args.presaleRate.toString()
+      });
+
       const explorerUrl = getExplorerUrl(chainId, tokenAddress, 'token');
       const userAddress = await signer.getAddress();
 
@@ -308,17 +304,7 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
       // Reset form
       setFormData(defaultValues);
     } catch (error: any) {
-      console.error("Error creating token:", {
-        error,
-        message: error.message,
-        data: error.data,
-        code: error.code,
-        errorName: error.errorName,
-        errorSignature: error.errorSignature,
-        reason: error.reason,
-        transaction: error.transaction,
-        receipt: error.receipt
-      });
+      console.error("Error creating token:", error);
       showToast('error', error.message || 'Failed to create token');
     } finally {
       setLoading(false);

@@ -10,6 +10,7 @@ import { useNetwork } from '../contexts/NetworkContext';
 import { Toast } from './ui/Toast';
 import { Spinner } from './ui/Spinner';
 import { ethers } from 'ethers';
+import { AbiCoder } from 'ethers';
 
 const TOKEN_DECIMALS = 18; // Standard ERC20 decimals
 const TEST_TOKEN_ADDRESS = '0x376e0B2A973f4ec5a7fB121865212E03cB4b7cA6'; // The token you just deployed
@@ -52,6 +53,8 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
   const [sortBy, setSortBy] = useState<'name' | 'totalSupply' | 'lastActivity'>('lastActivity');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [provider, setProvider] = useState<BrowserProvider | null>(null);
+  const [filterByWallet, setFilterByWallet] = useState(false);
+  const [expandedTokens, setExpandedTokens] = useState<Set<string>>(new Set());
 
   // Initialize provider when component mounts or wallet connection changes
   useEffect(() => {
@@ -98,7 +101,7 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
       type,
       message
     });
-    setTimeout(() => setToast(null), 5000);
+    setTimeout(() => setToast(null), 15000);
   };
 
   const loadTokens = async () => {
@@ -140,71 +143,73 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
       try {
         const factoryWithSigner = factoryV1.connect(signer) as Contract;
         
-        // Try to get tokens using deployedTokens array first
+        // Try to get all deployed tokens first
         try {
           const deployedTokens = await factoryWithSigner.deployedTokens();
           console.log("Found deployedTokens:", deployedTokens);
           
           if (deployedTokens && deployedTokens.length > 0) {
-            // Filter tokens owned by user
+            // Get info for all tokens
             const tokenPromises = deployedTokens.map(async (tokenAddr: string) => {
               try {
                 const token = new Contract(tokenAddr, TokenTemplateV1.abi, provider);
-                const owner = await token.owner();
-                return owner.toLowerCase() === userAddress.toLowerCase() ? tokenAddr : null;
+                const [name, symbol, totalSupply, owner] = await Promise.all([
+                  token.name(),
+                  token.symbol(),
+                  token.totalSupply(),
+                  token.owner()
+                ]);
+                return {
+                  address: tokenAddr,
+                  name,
+                  symbol,
+                  totalSupply: formatUnits(totalSupply, TOKEN_DECIMALS),
+                  owner,
+                  version: 'v1' as const,
+                  lastActivity: Date.now()
+                };
               } catch (error) {
                 console.log(`Error checking token ${tokenAddr}:`, error);
                 return null;
               }
             });
             const tokenResults = await Promise.all(tokenPromises);
-            v1Tokens = tokenResults.filter(Boolean);
-            console.log("Found user tokens from deployedTokens:", v1Tokens);
-          }
-        } catch (error) {
-          console.log("deployedTokens failed, trying userTokens...");
-          try {
-            // Then try userTokens mapping
-            v1Tokens = await factoryWithSigner.userTokens(userAddress);
-            console.log("Found tokens from userTokens:", v1Tokens);
-          } catch (error) {
-            console.log("userTokens failed, trying getTokensByUser...");
-            try {
-              // Finally try getTokensByUser method
-              v1Tokens = await factoryWithSigner.getTokensByUser(userAddress, {
-                gasLimit: 1000000 // Increased gas limit
-              });
-              console.log("Found tokens from getTokensByUser:", v1Tokens);
-            } catch (error) {
-              console.error("All direct token retrieval methods failed");
+            const validTokens = tokenResults.filter(Boolean);
+            console.log("Found valid tokens:", validTokens);
+            if (validTokens.length > 0) {
+              setTokens(validTokens as TokenInfo[]);
+              return;
             }
           }
+        } catch (error) {
+          console.log("deployedTokens failed, trying event logs...");
         }
-      } catch (error: any) {
-        console.error("V1 token retrieval failed:", {
-          error,
-          errorName: error.name,
-          errorCode: error.code,
-          errorMessage: error.message,
-          errorData: error.data,
-          transaction: error.transaction
-        });
 
         // Fallback to event logs with much wider range
         const currentBlock = await provider.getBlockNumber();
-        // Search from deployment block or last 500k blocks, whichever is less
-        const deploymentBlock = 7500000; // Approximate deployment block
-        const fromBlock = Math.max(deploymentBlock, currentBlock - 500000);
+        // Search from a much earlier block - approximately 1 year ago
+        const fromBlock = Math.max(0, currentBlock - 2500000);
 
         console.log(`\nSearching for events from block ${fromBlock} to ${currentBlock}`);
 
-        // Try both event signatures
+        // Try all possible event signatures
         const signatures = [
-          "TokenCreated(address,string,string,address,uint256,uint256,bool,bool)", // V1 new format
-          "TokenCreated(address,address,string,string,uint8,uint256)", // V1 old format
-          "TokenDeployed(address,address,string,string,uint8,uint256)", // Alternative name
-          "TokenCreated(address,string,string,uint8,uint256)" // Simplified format
+          // V1 formats - try basic format first since we know it works
+          "TokenCreated(address,string,string)", // Basic format that we know works
+          // Try other formats only if the basic one doesn't work
+          "TokenDeployed(address,string,string)",
+          "TokenCreated(address,string,string,address)",
+          "TokenCreated(address,string,string,uint256)",
+          "TokenCreated(address,string,string,uint8)",
+          "TokenCreated(address,string,string,uint8,uint256)",
+          "TokenCreated(address,address,string,string)",
+          "TokenCreated(address,string,string,address,uint256,uint256,bool,bool)",
+          "TokenDeployed(address,address,string,string,uint8,uint256)",
+          "TokenDeployed(address,string,string,address,uint256,uint256,bool,bool)"
         ];
+
+        const foundTokens: TokenInfo[] = [];
+        const processedAddresses = new Set<string>();
 
         for (const signature of signatures) {
           try {
@@ -231,40 +236,180 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
                   data: log.data
                 });
 
-                const parsedLog = factoryV1.interface.parseLog(log);
-                if (parsedLog) {
-                  console.log("Parsed log:", {
-                    name: parsedLog.name,
-                    args: parsedLog.args.map(arg => arg?.toString())
-                  });
+                // For TokenCreated(address,string,string) format
+                if (signature === "TokenCreated(address,string,string)") {
+                  // The data field contains the parameters packed together
+                  const abiCoder = new AbiCoder();
+                  try {
+                    // Decode the entire data field
+                    const [tokenAddr, name, symbol] = abiCoder.decode(
+                      ['address', 'string', 'string'],
+                      log.data
+                    );
 
-                  // Extract creator and token address based on event format
-                  let creator, tokenAddr;
-                  if (signature.includes("bool,bool")) {
-                    // New format
-                    creator = parsedLog.args[0];
-                    tokenAddr = parsedLog.args[3];
-                  } else if (signature.includes("address,address")) {
-                    // Old format with two addresses
-                    creator = parsedLog.args[0];
-                    tokenAddr = parsedLog.args[1];
-                  } else {
-                    // Simplified format
-                    creator = parsedLog.args[0];
-                    tokenAddr = parsedLog.args[1] || parsedLog.args[3];
-                  }
+                    console.log("ABI Decoded data:", {
+                      tokenAddr,
+                      name,
+                      symbol,
+                      rawData: log.data
+                    });
 
-                  if (creator && tokenAddr && creator.toLowerCase() === userAddress.toLowerCase()) {
-                    // Verify token contract exists
-                    const code = await provider.getCode(tokenAddr);
-                    if (code !== '0x') {
-                      console.log(`Found token created by user: ${tokenAddr}`);
-                      if (!v1Tokens.includes(tokenAddr)) {
-                        v1Tokens.push(tokenAddr);
-                      }
-                    } else {
-                      console.log(`Token contract not found at ${tokenAddr}`);
+                    if (!tokenAddr || !ethers.isAddress(tokenAddr)) {
+                      console.log("Invalid token address:", tokenAddr);
+                      continue;
                     }
+
+                    const normalizedAddr = tokenAddr.toLowerCase();
+                    
+                    if (processedAddresses.has(normalizedAddr)) {
+                      console.log("Already processed address:", normalizedAddr);
+                      continue;
+                    }
+
+                    // Verify it's a contract before proceeding
+                    const code = await provider.getCode(normalizedAddr);
+                    if (code === '0x') {
+                      console.log(`No contract at ${normalizedAddr} - Code: ${code}`);
+                      continue;
+                    }
+
+                    console.log("Contract verified at:", normalizedAddr);
+
+                    // Try to interact with it as a token
+                    const token = new Contract(normalizedAddr, TokenTemplateV1.abi, provider);
+                    
+                    // Get token info with proper error handling
+                    const [actualName, actualSymbol, totalSupply, decimals, owner] = await Promise.all([
+                      token.name().catch((e: Error) => {
+                        console.error("Error getting name:", e);
+                        return name;
+                      }),
+                      token.symbol().catch((e: Error) => {
+                        console.error("Error getting symbol:", e);
+                        return symbol;
+                      }),
+                      token.totalSupply().catch((e: Error) => {
+                        console.error("Error getting totalSupply:", e);
+                        return BigInt(0);
+                      }),
+                      token.decimals().catch((e: Error) => {
+                        console.error("Error getting decimals:", e);
+                        return 18;
+                      }),
+                      token.owner().catch((e: Error) => {
+                        console.error("Error getting owner:", e);
+                        return null;
+                      })
+                    ]);
+
+                    console.log("Token info retrieved:", {
+                      address: normalizedAddr,
+                      name: actualName,
+                      symbol: actualSymbol,
+                      totalSupply: totalSupply.toString(),
+                      decimals,
+                      owner
+                    });
+
+                    // Add to list if not already present
+                    if (!foundTokens.some(t => t.address.toLowerCase() === normalizedAddr)) {
+                      foundTokens.push({
+                        address: normalizedAddr,
+                        name: actualName,
+                        symbol: actualSymbol,
+                        totalSupply: formatUnits(totalSupply, decimals),
+                        owner,
+                        version: 'v1' as const,
+                        lastActivity: Date.now()
+                      });
+                      processedAddresses.add(normalizedAddr);
+                    }
+                  } catch (error) {
+                    console.error("Error decoding event data:", error);
+                    console.log("Raw log that failed decoding:", {
+                      data: log.data,
+                      topics: log.topics,
+                      blockNumber: log.blockNumber,
+                      transactionHash: log.transactionHash
+                    });
+                  }
+                  continue;
+                }
+
+                // Try all possible argument positions for token address
+                const possibleAddresses = log.topics
+                  .slice(1)  // Skip the event signature topic
+                  .map(topic => {
+                    // Extract address from the last 40 characters of the topic
+                    const addr = '0x' + topic.slice(-40).toLowerCase();
+                    console.log("Extracted address from topic:", addr);
+                    return addr;
+                  })
+                  .filter(addr => addr.startsWith('0x') && addr.length === 42);
+
+                // Also check data field for addresses
+                const data = log.data.slice(2); // Remove 0x prefix
+                for (let i = 0; i < data.length - 40; i += 64) {
+                  const potentialAddr = '0x' + data.slice(i + 24, i + 64).toLowerCase();
+                  if (potentialAddr.startsWith('0x') && potentialAddr.length === 42) {
+                    console.log("Extracted address from data:", potentialAddr);
+                    possibleAddresses.push(potentialAddr);
+                  }
+                }
+
+                console.log("All possible addresses:", possibleAddresses);
+
+                for (const addr of possibleAddresses) {
+                  if (processedAddresses.has(addr)) {
+                    console.log("Already processed address:", addr);
+                    continue;
+                  }
+                  
+                  try {
+                    // Verify it's a contract
+                    const code = await provider.getCode(addr);
+                    if (code === '0x') {
+                      console.log("No contract code at:", addr);
+                      continue;
+                    }
+
+                    console.log("Found contract at:", addr);
+                    
+                    // Create token contract instance
+                    const token = new Contract(addr, TokenTemplateV1.abi, provider);
+                    
+                    // Get token info
+                    const [name, symbol, totalSupply, decimals] = await Promise.all([
+                      token.name(),
+                      token.symbol(),
+                      token.totalSupply(),
+                      token.decimals()
+                    ]);
+
+                    console.log("Token info:", {
+                      address: addr,
+                      name,
+                      symbol,
+                      totalSupply: formatUnits(totalSupply, decimals),
+                    });
+
+                    // Add to list if not already present
+                    if (!foundTokens.some(t => t.address.toLowerCase() === addr.toLowerCase())) {
+                      foundTokens.push({
+                        address: addr,
+                        name,
+                        symbol,
+                        totalSupply: formatUnits(totalSupply, decimals),
+                        owner: await token.owner().catch(() => null),
+                        version: 'v1' as const,
+                        lastActivity: Date.now()
+                      });
+                    }
+
+                    processedAddresses.add(addr);
+                  } catch (error) {
+                    console.log("Error processing token at", addr, error);
+                    continue;
                   }
                 }
               } catch (error) {
@@ -276,49 +421,20 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
             console.error(`Error searching events with signature ${signature}:`, error);
           }
         }
-      }
 
-      // Get token info for V1 tokens
-      const tokenInfoPromises = v1Tokens.map(async (tokenAddress) => {
-        try {
-          const token = new Contract(tokenAddress, TokenTemplateV1.abi, provider);
-          
-          // Verify token contract exists
-          const tokenCode = await provider.getCode(tokenAddress);
-          if (tokenCode === '0x') {
-            console.error(`No contract found at token address: ${tokenAddress}`);
-            return null;
-          }
-
-          const [name, symbol, totalSupply, owner] = await Promise.all([
-            token.name(),
-            token.symbol(),
-            token.totalSupply(),
-            token.owner()
-          ]);
-
-          return {
-            address: tokenAddress,
-            name,
-            symbol,
-            totalSupply: formatUnits(totalSupply, TOKEN_DECIMALS),
-            owner,
-            version: 'v1' as const,
-            lastActivity: Date.now()
-          };
-        } catch (error) {
-          console.error(`Error getting info for token ${tokenAddress}:`, error);
-          return null;
+        if (foundTokens.length > 0) {
+          console.log("Found tokens from events:", foundTokens);
+          setTokens(foundTokens);
         }
-      });
-
-      const tokenInfos = (await Promise.all(tokenInfoPromises)).filter(Boolean);
-      setTokens(tokenInfos as TokenInfo[]);
+      } catch (error: any) {
+        console.error("Token retrieval failed:", error);
+        showToast('error', error.message || 'Failed to load tokens');
+      } finally {
+        setIsLoading(false);
+      }
     } catch (error: any) {
       console.error('Error loading tokens:', error);
       showToast('error', error.message || 'Failed to load tokens');
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -362,9 +478,23 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
     totalValue: tokens.reduce((acc, t) => acc + Number(t.totalSupply), 0).toLocaleString()
   };
 
+  const toggleTokenExpansion = (address: string) => {
+    setExpandedTokens(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(address)) {
+        newSet.delete(address);
+      } else {
+        newSet.add(address);
+      }
+      return newSet;
+    });
+  };
+
   const filteredAndSortedTokens = tokens
     .filter(token => {
+      // Apply all filters
       if (filterVersion !== 'all' && token.version !== filterVersion) return false;
+      if (filterByWallet && token.owner?.toLowerCase() !== address?.toLowerCase()) return false;
       if (searchTerm && !token.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
           !token.symbol.toLowerCase().includes(searchTerm.toLowerCase()) &&
           !token.address.toLowerCase().includes(searchTerm.toLowerCase())) return false;
@@ -621,125 +751,150 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
           </button>
         </div>
 
+        {/* Controls Section */}
+        <div className="flex flex-wrap gap-4 items-center justify-between bg-background-secondary p-4 rounded-lg">
+          <div className="flex flex-wrap gap-4 items-center">
+            <input
+              type="text"
+              placeholder="Search tokens..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="px-3 py-2 bg-background rounded border border-border focus:border-accent focus:ring-1 focus:ring-accent"
+            />
+            <select
+              value={filterVersion}
+              onChange={(e) => setFilterVersion(e.target.value as 'all' | 'v1' | 'v2')}
+              className="px-3 py-2 bg-background rounded border border-border focus:border-accent"
+            >
+              <option value="all">All Versions</option>
+              <option value="v1">V1 Only</option>
+              <option value="v2">V2 Only</option>
+            </select>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={filterByWallet}
+                onChange={(e) => setFilterByWallet(e.target.checked)}
+                className="form-checkbox"
+              />
+              <span>My Tokens Only</span>
+            </label>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setSortBy('lastActivity')}
+              className={`px-3 py-1 rounded ${sortBy === 'lastActivity' ? 'bg-accent text-white' : 'bg-background'}`}
+            >
+              Recent
+            </button>
+            <button
+              onClick={() => setSortBy('name')}
+              className={`px-3 py-1 rounded ${sortBy === 'name' ? 'bg-accent text-white' : 'bg-background'}`}
+            >
+              Name
+            </button>
+            <button
+              onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')}
+              className="px-3 py-1 rounded bg-background"
+            >
+              {sortDirection === 'asc' ? '↑' : '↓'}
+            </button>
+          </div>
+        </div>
+
         {/* Stats Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-background-accent p-4 rounded-lg shadow">
-            <h3 className="text-sm font-medium text-text-secondary">Total Tokens</h3>
-            <p className="text-2xl font-bold text-text-primary">{stats.totalTokens}</p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="stat-card">
+            <h4>Total Tokens</h4>
+            <p>{stats.totalTokens}</p>
           </div>
-          <div className="bg-background-accent p-4 rounded-lg shadow">
-            <h3 className="text-sm font-medium text-text-secondary">V1 Tokens</h3>
-            <p className="text-2xl font-bold text-text-primary">{stats.v1Tokens}</p>
+          <div className="stat-card">
+            <h4>V1 Tokens</h4>
+            <p>{stats.v1Tokens}</p>
           </div>
-          <div className="bg-background-accent p-4 rounded-lg shadow">
-            <h3 className="text-sm font-medium text-text-secondary">V2 Tokens</h3>
-            <p className="text-2xl font-bold text-text-primary">{stats.v2Tokens}</p>
+          <div className="stat-card">
+            <h4>V2 Tokens</h4>
+            <p>{stats.v2Tokens}</p>
           </div>
-          <div className="bg-background-accent p-4 rounded-lg shadow">
-            <h3 className="text-sm font-medium text-text-secondary">Total Supply</h3>
-            <p className="text-2xl font-bold text-text-primary">{stats.totalValue}</p>
+          <div className="stat-card">
+            <h4>Total Value</h4>
+            <p>{stats.totalValue}</p>
           </div>
         </div>
 
-        {/* Search and Filters */}
-        <div className="flex flex-col md:flex-row gap-4 bg-background-accent p-4 rounded-lg">
-          <input
-            type="text"
-            placeholder="Search tokens..."
-            className="flex-1 px-4 py-2 rounded border border-border bg-background-secondary text-text-primary"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-          <select
-            className="px-4 py-2 rounded border border-border bg-background-secondary text-text-primary"
-            value={filterVersion}
-            onChange={(e) => setFilterVersion(e.target.value as 'all' | 'v1' | 'v2')}
-          >
-            <option value="all">All Versions</option>
-            <option value="v1">Version 1</option>
-            <option value="v2">Version 2</option>
-          </select>
-          <select
-            className="px-4 py-2 rounded border border-border bg-background-secondary text-text-primary"
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as 'name' | 'totalSupply' | 'lastActivity')}
-          >
-            <option value="lastActivity">Last Activity</option>
-            <option value="name">Name</option>
-            <option value="totalSupply">Total Supply</option>
-          </select>
-          <button
-            className="px-4 py-2 rounded bg-background-secondary hover:bg-opacity-80 text-text-primary"
-            onClick={() => setSortDirection(d => d === 'asc' ? 'desc' : 'asc')}
-          >
-            {sortDirection === 'asc' ? '↑' : '↓'}
-          </button>
+        {/* Tokens List */}
+        <div className="space-y-2">
+          {isLoading ? (
+            <div className="flex justify-center p-8">
+              <Spinner />
+            </div>
+          ) : filteredAndSortedTokens.length === 0 ? (
+            <div className="text-center p-8 text-text-secondary">
+              No tokens found
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {filteredAndSortedTokens.map(token => (
+                <div key={token.address} className="bg-background-secondary rounded-lg overflow-hidden">
+                  {/* Token Row Header - Always visible */}
+                  <div className="p-4 flex items-center justify-between hover:bg-background-accent cursor-pointer"
+                       onClick={() => toggleTokenExpansion(token.address)}>
+                    <div className="flex items-center gap-4">
+                      <span className="text-sm text-text-secondary">{token.version.toUpperCase()}</span>
+                      <div>
+                        <h3 className="font-medium">{token.name}</h3>
+                        <p className="text-sm text-text-secondary">{token.symbol}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <p className="font-medium">{Number(token.totalSupply).toLocaleString()}</p>
+                        <p className="text-sm text-text-secondary">Supply</p>
+                      </div>
+                      <button className="text-text-accent">
+                        {expandedTokens.has(token.address) ? '▼' : '▶'}
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {/* Expanded Content */}
+                  {expandedTokens.has(token.address) && (
+                    <div className="p-4 border-t border-border bg-background/50">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-sm text-text-secondary">Contract Address</p>
+                          <p className="font-mono text-sm">{token.address}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-text-secondary">Owner</p>
+                          <p className="font-mono text-sm">{token.owner}</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-4 mt-4">
+                        <a
+                          href={getExplorerUrl(chainId || 0, `/token/${token.address}`)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-text-accent hover:text-opacity-80 text-sm"
+                        >
+                          View on Explorer ↗
+                        </a>
+                        {token.owner?.toLowerCase() === address?.toLowerCase() && (
+                          <button
+                            onClick={() => setSelectedToken(token.address)}
+                            className="text-text-accent hover:text-opacity-80 text-sm"
+                          >
+                            Manage Token
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-
-        {/* Token List */}
-        {isLoading ? (
-          <div className="flex justify-center items-center py-8">
-            <Spinner className="w-8 h-8 text-text-primary" />
-          </div>
-        ) : filteredAndSortedTokens.length === 0 ? (
-          <div className="bg-background-accent p-8 rounded-lg text-center">
-            <p className="text-text-secondary text-lg">No tokens found</p>
-            <p className="text-text-secondary mt-2">Deploy a new token to get started</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredAndSortedTokens.map(token => (
-              <div 
-                key={token.address}
-                className="bg-background-accent p-4 rounded-lg shadow-lg hover:shadow-xl transition-shadow duration-200"
-              >
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h3 className="font-bold text-lg text-text-primary">{token.name}</h3>
-                    <p className="text-sm text-text-accent">{token.symbol}</p>
-                  </div>
-                  <span className={`px-2 py-1 rounded text-xs ${
-                    token.version === 'v2' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
-                  }`}>
-                    {token.version.toUpperCase()}
-                  </span>
-                </div>
-                
-                <div className="space-y-2 mb-4">
-                  <div className="flex justify-between">
-                    <span className="text-text-secondary">Total Supply</span>
-                    <span className="text-text-primary font-medium">
-                      {Number(token.totalSupply).toLocaleString()} {token.symbol}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-text-secondary">Owner</span>
-                    <span className="text-text-primary font-medium">
-                      {token.owner.slice(0, 6)}...{token.owner.slice(-4)}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex justify-between items-center pt-4 border-t border-border">
-                  <button
-                    onClick={() => setSelectedToken(token.address)}
-                    className="text-text-accent hover:text-opacity-80 text-sm"
-                  >
-                    View Details
-                  </button>
-                  <a
-                    href={getExplorerUrl(chainId || 0, `/token/${token.address}`)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-text-accent hover:text-opacity-80 text-sm"
-                  >
-                    Explorer ↗
-                  </a>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
     </div>
   );
