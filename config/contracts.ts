@@ -48,4 +48,8 @@ export function getNetworkContractAddress(
   }
   
   return address;
-} 
+}
+
+// Ensure the V2 factory address is correctly retrieved for Sepolia
+const sepoliaV2Address = getNetworkContractAddress(ChainId.SEPOLIA, 'factoryAddressV2');
+console.log('Sepolia V2 Factory Address:', sepoliaV2Address); 
