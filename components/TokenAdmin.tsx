@@ -56,16 +56,38 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
         try {
           const newProvider = new BrowserProvider(window.ethereum);
           setProvider(newProvider);
-          return newProvider;
         } catch (error) {
           console.error("Error initializing provider:", error);
         }
       }
-      return null;
     };
 
     initProvider();
   }, [isConnected]);
+
+  // Load tokens when dependencies are available
+  useEffect(() => {
+    if (isConnected && chainId && provider && address) {
+      loadTokens();
+    }
+  }, [isConnected, chainId, provider, address]);
+
+  // Update current wallet
+  useEffect(() => {
+    const updateWallet = async () => {
+      if (isConnected && window.ethereum && provider) {
+        try {
+          const signer = await provider.getSigner();
+          const address = await signer.getAddress();
+          setCurrentWallet(address);
+        } catch (error) {
+          console.error("Error getting wallet address:", error);
+        }
+      }
+    };
+
+    updateWallet();
+  }, [isConnected, provider]);
 
   const showToast = (type: 'success' | 'error', message: string) => {
     setToast({ type, message });
@@ -95,6 +117,9 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
         return;
       }
 
+      console.log("Using factory address:", factoryV1Address);
+      console.log("User address:", userAddress);
+
       // Check V1 Factory
       const factoryV1 = new Contract(factoryV1Address, TokenFactoryV1.abi, provider);
       
@@ -108,10 +133,10 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
       try {
         const factoryWithSigner = factoryV1.connect(signer) as Contract;
         
-        // Try to get tokens by user first
+        // Try to get user's tokens first
         try {
           console.log("Attempting to get tokens by user...");
-          const userTokens = await factoryWithSigner.getTokensByUser(userAddress);
+          const userTokens = await factoryWithSigner.getTokensByUser(userAddress, { gasLimit: 500000 });
           console.log("User tokens:", userTokens);
           
           if (userTokens && userTokens.length > 0) {
@@ -157,9 +182,12 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
               setTokens(validTokens as TokenInfo[]);
               return;
             }
+          } else {
+            console.log("No user tokens found, trying deployedTokens...");
           }
         } catch (error) {
-          console.log("getTokensByUser failed, trying deployedTokens...");
+          console.log("getTokensByUser failed:", error);
+          console.log("Trying deployedTokens...");
         }
 
         // Try to get all deployed tokens if getTokensByUser fails
@@ -431,19 +459,6 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
       setIsLoading(false);
     }
   };
-
-  useEffect(() => {
-    if (isConnected && chainId) {
-      loadTokens();
-    }
-  }, [isConnected, chainId, address]);
-
-  useEffect(() => {
-    if (isConnected && window.ethereum) {
-      const provider = new BrowserProvider(window.ethereum);
-      provider.getSigner().then(signer => signer.getAddress()).then(setCurrentWallet);
-    }
-  }, [isConnected]);
 
   if (!isConnected) {
     return (
