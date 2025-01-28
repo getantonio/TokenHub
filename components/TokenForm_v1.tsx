@@ -2,9 +2,12 @@ import React, { useState } from 'react';
 import { BrowserProvider, Contract, parseUnits, formatUnits } from 'ethers';
 import { getNetworkContractAddress } from '../config/contracts';
 import TokenFactoryArtifact from '../contracts/abi/TokenFactory_v1.json';
+import TokenTemplateArtifact from '../contracts/abi/TokenTemplate_v1.json';
 import { Toast } from './ui/Toast';
+import { getExplorerUrl } from '../config/networks';
 
 const TokenFactoryABI = TokenFactoryArtifact.abi;
+const TokenTemplateABI = TokenTemplateArtifact.abi;
 const TOKEN_DECIMALS = 18; // Standard ERC20 decimals
 
 interface FormData {
@@ -39,10 +42,12 @@ export default function TokenForm_v1({ isConnected }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [successInfo, setSuccessInfo] = useState<{
+    message: string;
+    tokenAddress: string;
+    explorerUrl: string;
     symbol: string;
-    address: string;
-    supply: string;
-    owner: string;
+    initialSupply: string;
+    owner: string | null;
   } | null>(null);
 
   const showToast = (type: 'success' | 'error', message: string, link?: string) => {
@@ -79,7 +84,32 @@ export default function TokenForm_v1({ isConnected }: Props) {
       const factory = new Contract(factoryAddress, TokenFactoryABI, signer);
 
       // Get deployment fee
-      const fee = await factory.deploymentFee();
+      let fee;
+      try {
+        // Try to get version first
+        const version = await factory.VERSION();
+        console.log("Factory version:", version);
+        
+        // Get fee based on version
+        if (version.includes('1.1.0')) {
+          // V1.1.0 doesn't require a fee and is owner-only
+          fee = parseUnits('0', 'ether');
+          
+          // Check if user is owner
+          const owner = await factory.owner();
+          if (owner.toLowerCase() !== userAddress.toLowerCase()) {
+            throw new Error("Only owner can create tokens in V1.1.0");
+          }
+        } else {
+          fee = await factory.deploymentFee();
+        }
+        console.log("Deployment fee:", formatUnits(fee, 'ether'), "ETH");
+      } catch (error: any) {
+        console.error("Error getting deployment fee:", error);
+        showToast('error', error.message || 'Failed to get deployment fee');
+        setIsLoading(false);
+        return;
+      }
       
       // Convert supply to wei (with 18 decimals)
       const initialSupplyWei = parseUnits(formData.initialSupply, TOKEN_DECIMALS);
@@ -109,53 +139,81 @@ export default function TokenForm_v1({ isConnected }: Props) {
         { value: fee }
       );
 
-      showToast('success', 'Transaction submitted! Waiting for confirmation...', `https://sepolia.etherscan.io/tx/${tx.hash}`);
+      showToast('success', 'Transaction submitted. Waiting for confirmation...');
+      console.log('Transaction submitted:', tx.hash);
       
-      // Wait for transaction confirmation
       const receipt = await tx.wait();
-      
-      // Find the TokenCreated event
-      const event = receipt.logs.find((log: any) => {
+      console.log('Transaction confirmed:', receipt);
+
+      // Look for TokenCreated event in logs
+      let tokenAddress = null;
+      for (const log of receipt.logs) {
         try {
-          return factory.interface.parseLog({
-            topics: log.topics,
-            data: log.data
-          })?.name === 'TokenCreated';
-        } catch {
-          return false;
+          const parsed = factory.interface.parseLog(log as unknown as { topics: string[], data: string });
+          console.log("Parsed log:", parsed);
+          
+          if (parsed?.name === "TokenCreated") {
+            // V1.1.0 uses 'token', V1.0.0 uses 'tokenAddress'
+            tokenAddress = parsed.args.token || parsed.args.tokenAddress;
+            console.log("Found token address from event:", tokenAddress);
+            break;
+          }
+        } catch (e) {
+          console.log("Could not parse log, trying next one:", e);
+          continue;
         }
+      }
+
+      if (!tokenAddress) {
+        // Try to get the token address from raw logs
+        for (const log of receipt.logs) {
+          console.log("Raw log:", log);
+          // The token address is typically the first or second topic
+          const possibleAddress = log.topics[1] || log.topics[2];
+          if (possibleAddress && possibleAddress.length === 66) {
+            tokenAddress = "0x" + possibleAddress.slice(26);
+            console.log("Found token address from raw log:", tokenAddress);
+            break;
+          }
+        }
+      }
+
+      if (!tokenAddress) {
+        console.error("Could not find token address in transaction logs");
+        showToast("error", "Token created but could not get address. Check your wallet for the new token.");
+        setIsLoading(false);
+        return;
+      }
+
+      console.log("New token address:", tokenAddress);
+      
+      // Fix explorer URL construction
+      const explorerUrl = getExplorerUrl(chainId, tokenAddress, 'token');
+      
+      setSuccessInfo({
+        message: 'Token created successfully!',
+        tokenAddress,
+        explorerUrl,
+        symbol: formData.symbol,
+        initialSupply: formData.initialSupply,
+        owner: userAddress
       });
+      
+      showToast('success', 'Token created successfully!');
+      
+      // Get token info for success message
+      const token = new Contract(tokenAddress, TokenTemplateABI, signer);
+      try {
+        // Get token info using function calls
+        const [name, symbol, owner] = await Promise.all([
+          token.name(),
+          token.symbol(),
+          token.owner()
+        ]);
 
-      if (event) {
-        const parsedEvent = factory.interface.parseLog({
-          topics: event.topics,
-          data: event.data
-        });
-        const tokenAddress = parsedEvent?.args?.tokenAddress;
-        
-        console.log('Token created successfully:', {
-          address: tokenAddress,
-          name: formData.name,
-          symbol: formData.symbol,
-          initialSupply: formData.initialSupply,
-          owner: userAddress
-        });
+        console.log("Retrieved token info:", { name, symbol, owner });
 
-        // Set success info for persistent display
-        setSuccessInfo({
-          symbol: formData.symbol,
-          address: tokenAddress,
-          supply: formatUnits(initialSupplyWei, TOKEN_DECIMALS),
-          owner: userAddress
-        });
-
-        showToast(
-          'success',
-          `Token ${formData.symbol} created successfully!\nInitial supply of ${formatUnits(initialSupplyWei, TOKEN_DECIMALS)} ${formData.symbol} sent to ${userAddress.slice(0, 6)}...${userAddress.slice(-4)}`,
-          `https://sepolia.etherscan.io/token/${tokenAddress}`
-        );
-
-        // Reset form to default values
+        // Reset form and update success info with correct values
         setFormData({
           name: "TokenFactory Test v1",
           symbol: "TFT1",
@@ -164,11 +222,31 @@ export default function TokenForm_v1({ isConnected }: Props) {
           blacklistEnabled: false,
           timeLockEnabled: false,
         });
+
+        setSuccessInfo({
+          message: 'Token created successfully!',
+          tokenAddress,
+          explorerUrl,
+          symbol: symbol || formData.symbol, // Fallback to form data if needed
+          initialSupply: formData.initialSupply,
+          owner: owner || userAddress // Fallback to user address if needed
+        });
+      } catch (error) {
+        console.error("Could not get token info:", error);
+        // Use form data as fallback
+        setSuccessInfo({
+          message: 'Token created successfully!',
+          tokenAddress,
+          explorerUrl,
+          symbol: formData.symbol,
+          initialSupply: formData.initialSupply,
+          owner: userAddress
+        });
       }
+
     } catch (error: any) {
       console.error('Error creating token:', error);
-      setError(error.message || 'Failed to create token');
-      setSuccessInfo(null);
+      showToast('error', error.message || 'Failed to create token');
     } finally {
       setIsLoading(false);
     }
@@ -190,19 +268,19 @@ export default function TokenForm_v1({ isConnected }: Props) {
           <div className="space-y-2 text-sm text-green-400">
             <p>Token Symbol: {successInfo.symbol}</p>
             <p>Contract Address: <a 
-              href={`https://sepolia.etherscan.io/token/${successInfo.address}`}
+              href={successInfo.explorerUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="underline hover:text-green-300"
             >
-              {successInfo.address}
+              {successInfo.tokenAddress}
             </a></p>
-            <p>Initial Supply: {Number(successInfo.supply).toLocaleString()} {successInfo.symbol}</p>
-            <p>Owner: {successInfo.owner.slice(0, 6)}...{successInfo.owner.slice(-4)}</p>
+            <p>Initial Supply: {Number(successInfo.initialSupply).toLocaleString()} {successInfo.symbol}</p>
+            <p>Owner: {successInfo.owner?.slice(0, 6)}...{successInfo.owner?.slice(-4)}</p>
           </div>
           <div className="mt-4 flex gap-4">
             <a
-              href={`https://sepolia.etherscan.io/token/${successInfo.address}`}
+              href={successInfo.explorerUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-black bg-green-400 hover:bg-green-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"

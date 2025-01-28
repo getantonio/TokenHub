@@ -12,15 +12,15 @@
 }
 
 .form-input {
-  @apply w-full px-4 py-2 bg-background-primary border border-border rounded-md text-text-primary focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent;
+  @apply w-full px-4 py-2 bg-background-primary border border-border rounded-md text-text-primary focus:outline-none focus:ring-2 focus:ring-[#2FFA3A] focus:border-transparent;
 }
 
 .form-select {
-  @apply w-full px-4 py-2 bg-background-primary border border-border rounded-md text-text-primary focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent;
+  @apply w-full px-4 py-2 bg-background-primary border border-border rounded-md text-text-primary focus:outline-none focus:ring-2 focus:ring-[#2FFA3A] focus:border-transparent;
 }
 
 .form-checkbox {
-  @apply mr-2 rounded border-border text-indigo-600 focus:ring-indigo-500;
+  @apply mr-2 rounded border-border text-[#2FFA3A] focus:ring-[#2FFA3A];
 }
 
 /* Button Styles */
@@ -29,7 +29,7 @@
 }
 
 .btn-primary {
-  @apply bg-indigo-600 text-white hover:bg-indigo-700;
+  @apply bg-[#2FFA3A] text-black hover:bg-[#2FFA3A]/80;
 }
 
 .btn-secondary {
@@ -79,7 +79,7 @@
 }
 
 .status-active {
-  @apply bg-green-500/20 text-green-500;
+  @apply bg-[#2FFA3A]/20 text-[#2FFA3A];
 }
 
 .status-pending {
@@ -101,9 +101,9 @@
 
 /* Success Message */
 .success-message {
-  @apply rounded-md bg-green-900/20 p-4 border border-green-700;
+  @apply rounded-md bg-[#2FFA3A]/20 p-4 border border-[#2FFA3A];
 }
 
 .success-text {
-  @apply text-sm font-medium text-green-500;
+  @apply text-sm font-medium text-[#2FFA3A];
 } 

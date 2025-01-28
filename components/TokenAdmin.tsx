@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { BrowserProvider, Contract, formatUnits } from 'ethers';
-import TokenFactory from '../artifacts/contracts/TokenFactory_v1.sol/TokenFactory_v1.json';
-import TokenTemplate from '../artifacts/contracts/TokenTemplate_v1.sol/TokenTemplate_v1.json';
+import TokenFactoryV1 from '../contracts/abi/TokenFactory_v1.json';
+import TokenTemplateV1 from '../contracts/abi/TokenTemplate_v2.json';
 import { getNetworkContractAddress } from '../config/contracts';
 import { getExplorerUrl } from '../config/networks';
 import { useNetwork } from '../contexts/NetworkContext';
@@ -58,39 +58,117 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
       setIsLoading(true);
       const provider = new BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
+      const userAddress = address || await signer.getAddress();
+      console.log("Looking for tokens deployed by:", userAddress);
+      
       const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddress');
+      console.log("Factory address:", factoryAddress);
       
       if (!factoryAddress) {
         showToast('error', 'Contract not deployed on this network');
         return;
       }
 
-      const factory = new Contract(factoryAddress, TokenFactory.abi, signer);
-      const userAddress = address || await signer.getAddress();
-      const deployedTokens = await factory.getTokensByUser(userAddress);
-      
-      const tokenInfoPromises = deployedTokens.map(async (tokenAddress: string) => {
-        const token = new Contract(tokenAddress, TokenTemplate.abi, signer);
-        const [name, symbol, totalSupply, blacklistEnabled, timeLockEnabled] = await Promise.all([
-          token.name(),
-          token.symbol(),
-          token.totalSupply(),
-          token.blacklistEnabled(),
-          token.timeLockEnabled()
-        ]);
+      // Verify contract exists
+      const code = await provider.getCode(factoryAddress);
+      if (code === '0x') {
+        showToast('error', 'No contract found at factory address');
+        return;
+      }
 
-        return {
-          address: tokenAddress,
-          name,
-          symbol,
-          totalSupply: formatUnits(totalSupply, TOKEN_DECIMALS),
-          blacklistEnabled,
-          timeLockEnabled
-        };
+      const factory = new Contract(factoryAddress, TokenFactoryV1.abi, signer);
+      const version = await factory.VERSION();
+      console.log("Factory version:", version);
+
+      // Get tokens based on version
+      let deployedTokens: string[] = [];
+      if (version.includes("1.1.0")) {
+        try {
+          // Try to get token creation events
+          const filter = factory.filters.TokenCreated();
+          const currentBlock = await provider.getBlockNumber();
+          const fromBlock = Math.max(0, currentBlock - 1000000); // Look back ~1 month
+          console.log(`Searching for events from block ${fromBlock} to ${currentBlock}`);
+          
+          const events = await factory.queryFilter(filter, fromBlock);
+          console.log("Token creation events:", events);
+          
+          for (const event of events) {
+            try {
+              // V1.1.0 uses 'token', V1.0.0 uses 'tokenAddress'
+              const log = event as unknown as { args: { token?: string, tokenAddress?: string } };
+              const address = log.args?.token || log.args?.tokenAddress;
+              if (address) {
+                console.log("Found token address:", address);
+                deployedTokens.push(address);
+              }
+            } catch (error) {
+              console.error("Error parsing event:", error);
+            }
+          }
+          
+          console.log("Found tokens from events:", deployedTokens);
+        } catch (error) {
+          console.error("Error getting token events:", error);
+          // Try getting tokens directly from contract state
+          try {
+            const tokenCount = await factory.getTokenCount();
+            console.log("Total tokens:", tokenCount);
+            for (let i = 0; i < tokenCount; i++) {
+              try {
+                const tokenAddress = await factory.deployedTokens(i);
+                if (tokenAddress) {
+                  deployedTokens.push(tokenAddress);
+                }
+              } catch (e) {
+                console.error("Error getting token at index", i, e);
+              }
+            }
+          } catch (e) {
+            console.error("Error getting tokens from contract state:", e);
+          }
+        }
+      } else {
+        // V1.0.0 uses getTokensByUser
+        deployedTokens = await factory.getTokensByUser(userAddress);
+        console.log("User tokens:", deployedTokens);
+      }
+
+      // Process tokens
+      const tokenInfoPromises = deployedTokens.map(async (tokenAddress: string) => {
+        try {
+          console.log("Getting info for token:", tokenAddress);
+          const token = new Contract(tokenAddress, TokenTemplateV1.abi, signer);
+          const owner = await token.owner();
+          console.log("Token owner:", owner, "User:", userAddress);
+          
+          if (owner.toLowerCase() === userAddress.toLowerCase()) {
+            const [name, symbol, totalSupply, blacklistEnabled, timeLockEnabled] = await Promise.all([
+              token.name(),
+              token.symbol(),
+              token.totalSupply(),
+              token.blacklistEnabled(),
+              token.timeLockEnabled()
+            ]);
+
+            return {
+              address: tokenAddress,
+              name,
+              symbol,
+              totalSupply: formatUnits(totalSupply, TOKEN_DECIMALS),
+              blacklistEnabled,
+              timeLockEnabled
+            };
+          }
+          return null;
+        } catch (error) {
+          console.error('Error loading token info for', tokenAddress, error);
+          return null;
+        }
       });
 
-      const tokenInfos = await Promise.all(tokenInfoPromises);
-      setTokens(tokenInfos);
+      const tokenInfos = (await Promise.all(tokenInfoPromises)).filter(Boolean);
+      setTokens(tokenInfos as TokenInfo[]);
     } catch (error: any) {
       console.error('Error loading tokens:', error);
       showToast('error', error.message || 'Failed to load tokens');
@@ -106,7 +184,7 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
       setIsLoading(true);
       const provider = new BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
-      const token = new Contract(tokenAddress, TokenTemplate.abi, signer);
+      const token = new Contract(tokenAddress, TokenTemplateV1.abi, signer);
 
       const tx = await token[blacklist ? 'blacklist' : 'unblacklist'](addressToBlacklist);
       showToast('success', 'Transaction submitted...');
@@ -129,7 +207,7 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
       setIsLoading(true);
       const provider = new BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
-      const token = new Contract(tokenAddress, TokenTemplate.abi, signer);
+      const token = new Contract(tokenAddress, TokenTemplateV1.abi, signer);
 
       const lockTime = await token.getLockTime(addressToCheck);
       const currentTime = Math.floor(Date.now() / 1000);
@@ -161,7 +239,7 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
       setIsLoading(true);
       const provider = new BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
-      const token = new Contract(tokenAddress, TokenTemplate.abi, signer);
+      const token = new Contract(tokenAddress, TokenTemplateV1.abi, signer);
 
       const lockUntil = Math.floor(Date.now() / 1000) + (durationDays * 24 * 60 * 60);
       

@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import { useNetwork } from '../contexts/NetworkContext';
 import TokenFactory_v2 from '../contracts/abi/TokenFactory_v2.json';
-import { getContractAddress } from '../config/networks';
+import TokenTemplate_v2 from '../contracts/abi/TokenTemplate_v2.json';
+import { getNetworkContractAddress } from '../config/contracts';
 import type { MetaMaskInpageProvider } from "@metamask/providers";
 
 declare global {
@@ -71,35 +72,69 @@ export function TokenAdminV2({ isConnected }: TokenAdminV2Props) {
       }
       const provider = new ethers.BrowserProvider(window.ethereum as any);
       const signer = await provider.getSigner();
-      const factoryAddress = getContractAddress(chainId, 'TokenFactory_v2');
+      const userAddress = await signer.getAddress();
+      console.log("Looking for tokens deployed by:", userAddress);
+      
+      const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddressV2');
+      console.log("V2 Factory address:", factoryAddress);
       
       if (!factoryAddress) {
-        console.error('Factory not deployed on this network');
+        throw new Error('V2 Factory not deployed on this network');
+      }
+
+      // Verify contract exists
+      const code = await provider.getCode(factoryAddress);
+      if (code === '0x') {
+        console.error('No contract found at factory address');
         return;
       }
 
       const factory = new ethers.Contract(factoryAddress, TokenFactory_v2.abi, signer);
-      const tokenAddresses = await factory.getDeployedTokens();
+      
+      // Get factory version
+      const version = await factory.VERSION();
+      console.log("Factory version:", version);
+
+      // Get deployed tokens
+      const tokenAddresses = await factory.getDeployedTokens(userAddress);
+      console.log("Found tokens:", tokenAddresses);
       
       const tokenPromises = tokenAddresses.map(async (address: string) => {
-        const token = await factory.getTokenInfo(address);
-        return {
-          address,
-          name: token.name,
-          symbol: token.symbol,
-          softCap: ethers.formatEther(token.softCap),
-          hardCap: ethers.formatEther(token.hardCap),
-          presaleRate: token.presaleRate.toString(),
-          startTime: Number(token.startTime),
-          endTime: Number(token.endTime),
-          totalContributed: ethers.formatEther(token.totalContributed),
-          isWhitelistEnabled: token.isWhitelistEnabled,
-          status: getPresaleStatus(Number(token.startTime), Number(token.endTime))
-        };
+        try {
+          const token = new ethers.Contract(address, TokenTemplate_v2.abi, signer);
+          const [name, symbol, softCap, hardCap, presaleRate, startTime, endTime, totalContributed, isWhitelistEnabled] = await Promise.all([
+            token.name(),
+            token.symbol(),
+            token.softCap(),
+            token.hardCap(),
+            token.presaleRate(),
+            token.startTime(),
+            token.endTime(),
+            token.totalContributed(),
+            token.isWhitelistEnabled()
+          ]);
+
+          return {
+            address,
+            name,
+            symbol,
+            softCap: ethers.formatEther(softCap),
+            hardCap: ethers.formatEther(hardCap),
+            presaleRate: presaleRate.toString(),
+            startTime: Number(startTime),
+            endTime: Number(endTime),
+            totalContributed: ethers.formatEther(totalContributed),
+            isWhitelistEnabled,
+            status: getPresaleStatus(Number(startTime), Number(endTime))
+          };
+        } catch (error) {
+          console.error('Error loading token info for', address, error);
+          return null;
+        }
       });
 
-      const loadedTokens = await Promise.all(tokenPromises);
-      setTokens(loadedTokens);
+      const loadedTokens = (await Promise.all(tokenPromises)).filter(Boolean);
+      setTokens(loadedTokens as PresaleToken[]);
     } catch (error) {
       console.error('Error loading tokens:', error);
     } finally {

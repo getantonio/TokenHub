@@ -1,45 +1,45 @@
-const { expect } = require("chai");
-const { HardhatEthersSigner } = require("@nomicfoundation/hardhat-ethers/signers");
-const { Contract, ContractFactory, BaseContract } = require("ethers");
+import { expect } from "chai";
+import { BaseContract, Contract, ContractFactory } from "ethers";
+import type { HardhatEthersSigner } from '@nomicfoundation/hardhat-ethers/signers';
 const hre = require("hardhat");
 
 // Add Hardhat-specific matchers to Chai
 require("@nomicfoundation/hardhat-chai-matchers");
 
-// Define base token interface
+// Base token interface
 export interface TokenContract extends BaseContract {
-  owner(): Promise<string>;
-  balanceOf(address: string): Promise<bigint>;
-  totalSupply(): Promise<bigint>;
-  maxSupply(): Promise<bigint>;
-  blacklistEnabled(): Promise<boolean>;
-  timeLockEnabled(): Promise<boolean>;
-  VERSION(): Promise<string>;
-  mint(to: string, amount: bigint): Promise<any>;
-  transfer(to: string, amount: bigint): Promise<any>;
-  setBlacklistStatus(address: string, status: boolean): Promise<any>;
-  isBlacklisted(address: string): Promise<boolean>;
-  setLockTime(address: string, time: number): Promise<any>;
-  getLockTime(address: string): Promise<number>;
-  pause(): Promise<any>;
-  unpause(): Promise<any>;
-  paused(): Promise<boolean>;
-  transferOwnership(address: string): Promise<any>;
-  acceptOwnership(): Promise<any>;
-  renounceOwnership(): Promise<any>;
+  // View functions
+  name: () => Promise<string>;
+  symbol: () => Promise<string>;
+  decimals: () => Promise<number>;
+  totalSupply: () => Promise<bigint>;
+  maxSupply: () => Promise<bigint>;
+  owner: () => Promise<string>;
+  blacklistEnabled: () => Promise<boolean>;
+  timeLockEnabled: () => Promise<boolean>;
+  balanceOf: (account: string) => Promise<bigint>;
+  
+  // State-changing functions
+  transfer: (to: string, amount: bigint) => Promise<any>;
 }
 
 // Define presale token interface
 export interface PresaleTokenContract extends TokenContract {
-  presaleRate(): Promise<bigint>;
-  minContribution(): Promise<bigint>;
-  maxContribution(): Promise<bigint>;
-  presaleCap(): Promise<bigint>;
-  presaleActive(): Promise<boolean>;
-  presaleContributions(address: string): Promise<bigint>;
-  startPresale(): Promise<any>;
-  finalizePresale(): Promise<any>;
-  contribute(overrides?: { value: bigint }): Promise<any>;
+  // View functions
+  presaleRate: () => Promise<bigint>;
+  minContribution: () => Promise<bigint>;
+  maxContribution: () => Promise<bigint>;
+  presaleCap: () => Promise<bigint>;
+  presaleEnabled: () => Promise<boolean>;
+  whitelistEnabled: () => Promise<boolean>;
+  isWhitelisted: (account: string) => Promise<boolean>;
+  
+  // State-changing functions
+  addToWhitelist: (account: string) => Promise<any>;
+  removeFromWhitelist: (account: string) => Promise<any>;
+  startPresale: () => Promise<any>;
+  endPresale: () => Promise<any>;
+  buyTokens: () => Promise<any>;
 }
 
 export interface TestContext {
@@ -54,47 +54,21 @@ export interface PresaleTestContext extends TestContext {
   token: PresaleTokenContract;
 }
 
-async function deployTokenTemplate(version) {
-    const [owner, addr1, addr2] = await hre.ethers.getSigners();
-    
-    // Deploy implementation
-    const TokenTemplate = await hre.ethers.getContractFactory(`TokenTemplate_${version}`);
-    const implementation = await TokenTemplate.deploy();
-
-    // Deploy proxy
-    const ERC1967Proxy = await hre.ethers.getContractFactory("ERC1967Proxy");
-    const initData = TokenTemplate.interface.encodeFunctionData("initialize", [
-        "Test Token",
-        "TEST",
-        hre.ethers.parseEther("1000000"), // 1M initial supply
-        hre.ethers.parseEther("10000000"), // 10M max supply
-        owner.address,
-        true, // enableBlacklist
-        true  // enableTimeLock
-    ]);
-
-    const proxy = await ERC1967Proxy.deploy(
-        implementation.target,
-        initData
-    );
-
-    // Get token instance
-    const token = TokenTemplate.attach(proxy.target);
-
-    return {
-        TokenTemplate,
-        token,
-        owner,
-        addr1,
-        addr2
-    };
+// Helper function to deploy token template
+async function deployTokenTemplate(version: string): Promise<TokenContract> {
+  const TokenTemplate = await hre.ethers.getContractFactory(`TokenTemplate_${version}`);
+  const template = await TokenTemplate.deploy();
+  return template as unknown as TokenContract;
 }
+
+// Setup types
+export type TokenFactory = ContractFactory;
+export type Signer = HardhatEthersSigner;
 
 // Re-export what tests will need
 const ethers = hre.ethers;
+export { expect, ethers };
 
 module.exports = {
-    expect,
-    ethers,
     deployTokenTemplate
 }; 
