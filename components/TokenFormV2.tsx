@@ -207,6 +207,7 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
       console.log("Encoded function data:", functionData);
 
       // Try to estimate gas first
+      let gasLimit;
       try {
         const gasEstimate = await factoryV2.deployToken.estimateGas(
           formData.name,
@@ -220,9 +221,12 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
           startTime,
           endTime,
           presaleRate,
-          formData.whitelistEnabled
+          formData.whitelistEnabled,
+          { value: await factoryV2.deploymentFee() }
         );
         console.log("Estimated gas:", gasEstimate.toString());
+        // Add 20% buffer to gas estimate
+        gasLimit = gasEstimate * BigInt(120) / BigInt(100);
       } catch (error: any) {
         console.error("Gas estimation failed:", {
           error,
@@ -232,8 +236,19 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
           errorSignature: error.errorSignature,
           reason: error.reason
         });
-        // Continue with deployment anyway, with higher gas limit
+        // Use default gas limit if estimation fails
+        gasLimit = BigInt(8000000);
       }
+
+      // Get current gas price with 20% buffer
+      const gasPrice = await provider.getFeeData();
+      const adjustedGasPrice = gasPrice.gasPrice! * BigInt(120) / BigInt(100);
+
+      console.log("Deployment parameters:", {
+        gasLimit: gasLimit.toString(),
+        gasPrice: adjustedGasPrice.toString(),
+        deploymentFee: (await factoryV2.deploymentFee()).toString()
+      });
 
       // Create token with proper parameter order matching the contract
       const tx = await factoryV2.deployToken(
@@ -250,8 +265,9 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
         presaleRate,
         formData.whitelistEnabled,
         { 
-          gasLimit: 8000000, // Increased gas limit further
-          value: await factoryV2.deploymentFee() // Add deployment fee
+          gasLimit,
+          gasPrice: adjustedGasPrice,
+          value: await factoryV2.deploymentFee()
         }
       );
 

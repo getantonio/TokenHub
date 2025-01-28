@@ -192,14 +192,18 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
 
         // Fallback to event logs with much wider range
         const currentBlock = await provider.getBlockNumber();
-        const fromBlock = Math.max(0, currentBlock - 100000); // Search last 100k blocks
+        // Search from deployment block or last 500k blocks, whichever is less
+        const deploymentBlock = 7500000; // Approximate deployment block
+        const fromBlock = Math.max(deploymentBlock, currentBlock - 500000);
 
         console.log(`\nSearching for events from block ${fromBlock} to ${currentBlock}`);
 
         // Try both event signatures
         const signatures = [
-          "TokenCreated(address,string,string,address,uint256,uint256,bool,bool)",
-          "TokenCreated(address,address,string,string,uint8,uint256)"
+          "TokenCreated(address,string,string,address,uint256,uint256,bool,bool)", // V1 new format
+          "TokenCreated(address,address,string,string,uint8,uint256)", // V1 old format
+          "TokenDeployed(address,address,string,string,uint8,uint256)", // Alternative name
+          "TokenCreated(address,string,string,uint8,uint256)" // Simplified format
         ];
 
         for (const signature of signatures) {
@@ -220,12 +224,18 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
             
             for (const log of logs) {
               try {
-                console.log("\nRaw log:", log);
+                console.log("\nRaw log:", {
+                  blockNumber: log.blockNumber,
+                  transactionHash: log.transactionHash,
+                  topics: log.topics,
+                  data: log.data
+                });
+
                 const parsedLog = factoryV1.interface.parseLog(log);
                 if (parsedLog) {
                   console.log("Parsed log:", {
                     name: parsedLog.name,
-                    args: parsedLog.args
+                    args: parsedLog.args.map(arg => arg?.toString())
                   });
 
                   // Extract creator and token address based on event format
@@ -234,16 +244,26 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
                     // New format
                     creator = parsedLog.args[0];
                     tokenAddr = parsedLog.args[3];
-                  } else {
-                    // Old format
+                  } else if (signature.includes("address,address")) {
+                    // Old format with two addresses
                     creator = parsedLog.args[0];
                     tokenAddr = parsedLog.args[1];
+                  } else {
+                    // Simplified format
+                    creator = parsedLog.args[0];
+                    tokenAddr = parsedLog.args[1] || parsedLog.args[3];
                   }
 
                   if (creator && tokenAddr && creator.toLowerCase() === userAddress.toLowerCase()) {
-                    if (!v1Tokens.includes(tokenAddr)) {
+                    // Verify token contract exists
+                    const code = await provider.getCode(tokenAddr);
+                    if (code !== '0x') {
                       console.log(`Found token created by user: ${tokenAddr}`);
-                      v1Tokens.push(tokenAddr);
+                      if (!v1Tokens.includes(tokenAddr)) {
+                        v1Tokens.push(tokenAddr);
+                      }
+                    } else {
+                      console.log(`Token contract not found at ${tokenAddr}`);
                     }
                   }
                 }
