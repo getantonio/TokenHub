@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { BrowserProvider, Contract, formatUnits } from 'ethers';
 import TokenFactoryV1 from '../contracts/abi/TokenFactory_v1.json';
-import TokenTemplateV1 from '../contracts/abi/TokenTemplate_v2.json';
+import TokenTemplateV1 from '../contracts/abi/TokenTemplate_v1.json';
 import { getNetworkContractAddress } from '../config/contracts';
 import { getExplorerUrl } from '../config/networks';
 import { useNetwork } from '../contexts/NetworkContext';
@@ -84,7 +84,7 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
       let deployedTokens: string[] = [];
       if (version.includes("1.1.0")) {
         try {
-          // Try to get token creation events
+          // Get tokens from events
           const filter = factory.filters.TokenCreated();
           const currentBlock = await provider.getBlockNumber();
           const fromBlock = Math.max(0, currentBlock - 1000000); // Look back ~1 month
@@ -95,38 +95,25 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
           
           for (const event of events) {
             try {
-              // V1.1.0 uses 'token', V1.0.0 uses 'tokenAddress'
-              const log = event as unknown as { args: { token?: string, tokenAddress?: string } };
-              const address = log.args?.token || log.args?.tokenAddress;
-              if (address) {
-                console.log("Found token address:", address);
-                deployedTokens.push(address);
+              const log = event as any;
+              // Try to get token address from raw log first
+              if (log.args && (log.args.token || log.args.tokenAddress)) {
+                const tokenAddr = log.args.token || log.args.tokenAddress;
+                console.log("Found token address from args:", tokenAddr);
+                deployedTokens.push(tokenAddr);
+              } else if (log.address) {
+                // Fallback to using the log address
+                console.log("Found token address from log:", log.address);
+                deployedTokens.push(log.address);
               }
             } catch (error) {
               console.error("Error parsing event:", error);
             }
           }
           
-          console.log("Found tokens from events:", deployedTokens);
+          console.log("Total tokens found:", deployedTokens.length);
         } catch (error) {
           console.error("Error getting token events:", error);
-          // Try getting tokens directly from contract state
-          try {
-            const tokenCount = await factory.getTokenCount();
-            console.log("Total tokens:", tokenCount);
-            for (let i = 0; i < tokenCount; i++) {
-              try {
-                const tokenAddress = await factory.deployedTokens(i);
-                if (tokenAddress) {
-                  deployedTokens.push(tokenAddress);
-                }
-              } catch (e) {
-                console.error("Error getting token at index", i, e);
-              }
-            }
-          } catch (e) {
-            console.error("Error getting tokens from contract state:", e);
-          }
         }
       } else {
         // V1.0.0 uses getTokensByUser

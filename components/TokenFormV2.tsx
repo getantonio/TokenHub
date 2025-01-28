@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { BrowserProvider, Contract, parseUnits, Log } from 'ethers';
 import { useNetwork } from '../contexts/NetworkContext';
 import TokenFactory_v2 from '../contracts/abi/TokenFactory_v2.json';
@@ -20,6 +20,36 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
   const { chainId } = useNetwork();
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [v2Available, setV2Available] = useState<boolean>(false);
+
+  // Check if V2 is available on this network
+  useEffect(() => {
+    if (chainId) {
+      try {
+        const factoryAddress = getContractAddress(chainId, 'TokenFactory_v2');
+        setV2Available(!!factoryAddress);
+      } catch (error) {
+        setV2Available(false);
+      }
+    }
+  }, [chainId]);
+
+  // If V2 is not available, show message and disable form
+  if (!v2Available) {
+    return (
+      <div className="form-container">
+        <div className="rounded-md bg-yellow-900/20 p-4 border border-yellow-700">
+          <div className="flex">
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-yellow-500">
+                TokenFactory V2 is not yet deployed on this network. Please use V1 for now.
+              </h3>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const defaultValues = {
     name: 'Test Token',
@@ -68,13 +98,20 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
 
       const provider = new BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
-      const userAddress = await signer.getAddress();
       
       // Get factory address for V2
-      const factoryAddress = getContractAddress(chainId, 'TokenFactory_v2');
-      if (!factoryAddress) {
-        throw new Error("V2 Factory not deployed on this network");
+      let factoryAddress;
+      try {
+        factoryAddress = getContractAddress(chainId, 'TokenFactory_v2');
+      } catch (error) {
+        throw new Error("TokenFactory V2 is not yet deployed on this network. Please use V1 for now.");
       }
+
+      if (!factoryAddress) {
+        throw new Error("TokenFactory V2 is not yet deployed on this network. Please use V1 for now.");
+      }
+
+      console.log("V2 Factory address:", factoryAddress);
 
       const factory = new Contract(factoryAddress, TokenFactory_v2.abi, signer);
 
@@ -324,7 +361,7 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
         <div className="flex justify-end mt-2">
           <button
             type="submit"
-            className={`btn btn-primary ${(!isConnected || loading) ? 'btn-disabled' : ''}`}
+            className={`btn btn-secondary ${(!isConnected || loading) ? 'btn-disabled' : ''}`}
             disabled={!isConnected || loading}
           >
             {loading ? 'Deploying...' : (isConnected ? 'Deploy Token' : 'Connect Wallet to Deploy')}

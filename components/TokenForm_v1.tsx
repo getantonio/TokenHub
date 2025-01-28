@@ -153,8 +153,7 @@ export default function TokenForm_v1({ isConnected }: Props) {
           console.log("Parsed log:", parsed);
           
           if (parsed?.name === "TokenCreated") {
-            // V1.1.0 uses 'token', V1.0.0 uses 'tokenAddress'
-            tokenAddress = parsed.args.token || parsed.args.tokenAddress;
+            tokenAddress = parsed.args[0]; // First argument is the token address
             console.log("Found token address from event:", tokenAddress);
             break;
           }
@@ -168,10 +167,8 @@ export default function TokenForm_v1({ isConnected }: Props) {
         // Try to get the token address from raw logs
         for (const log of receipt.logs) {
           console.log("Raw log:", log);
-          // The token address is typically the first or second topic
-          const possibleAddress = log.topics[1] || log.topics[2];
-          if (possibleAddress && possibleAddress.length === 66) {
-            tokenAddress = "0x" + possibleAddress.slice(26);
+          if (log.address !== factoryAddress) {
+            tokenAddress = log.address; // The new token's address will be in the log's address field
             console.log("Found token address from raw log:", tokenAddress);
             break;
           }
@@ -204,6 +201,9 @@ export default function TokenForm_v1({ isConnected }: Props) {
       // Get token info for success message
       const token = new Contract(tokenAddress, TokenTemplateABI, signer);
       try {
+        // Wait for proxy initialization to complete
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
         // Get token info using function calls
         const [name, symbol, owner] = await Promise.all([
           token.name(),
@@ -297,15 +297,25 @@ export default function TokenForm_v1({ isConnected }: Props) {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-4 bg-background-secondary p-6 rounded-lg shadow-lg">
-        {toast && (
-          <Toast 
-            type={toast.type} 
-            message={toast.message}
-            link={toast.link}
-          />
-        )}
+      {toast && (
+        <div className={`fixed bottom-4 right-4 ${
+          toast.type === 'success' ? 'bg-green-500' : 'bg-red-500'
+        } text-white px-4 py-2 rounded shadow-lg`}>
+          <p>{toast.message}</p>
+          {toast.link && (
+            <a 
+              href={toast.link} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="underline hover:text-green-200"
+            >
+              View on Explorer
+            </a>
+          )}
+        </div>
+      )}
 
+      <form onSubmit={handleSubmit} className="space-y-4 bg-background-secondary p-6 rounded-lg shadow-lg">
         {error && (
           <div className="rounded-md bg-red-900/20 p-4 border border-red-700">
             <div className="flex">
