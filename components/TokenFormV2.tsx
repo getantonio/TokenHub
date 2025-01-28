@@ -4,6 +4,7 @@ import { useNetwork } from '../contexts/NetworkContext';
 import TokenFactory_v2 from '../contracts/abi/TokenFactory_v2.json';
 import { getExplorerUrl } from '../config/networks';
 import { getNetworkContractAddress } from '../config/contracts';
+import type { ContractAddresses } from '../config/contracts';
 import { LogDescription } from 'ethers';
 
 interface TokenFormV2Props {
@@ -134,6 +135,36 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
     setSuccessInfo(null);
 
     try {
+      // Validate parameters
+      const now = Math.floor(Date.now() / 1000);
+      const startTimeSeconds = Math.floor(new Date(formData.startTime).getTime() / 1000);
+      const endTimeSeconds = Math.floor(new Date(formData.endTime).getTime() / 1000);
+      
+      if (startTimeSeconds <= now) {
+        throw new Error('Start time must be in the future');
+      }
+      
+      if (endTimeSeconds <= startTimeSeconds) {
+        throw new Error('End time must be after start time');
+      }
+
+      const softCap = parseFloat(formData.softCap);
+      const hardCap = parseFloat(formData.hardCap);
+      const minContribution = parseFloat(formData.minContribution);
+      const maxContribution = parseFloat(formData.maxContribution);
+
+      if (hardCap <= softCap) {
+        throw new Error('Hard cap must be greater than soft cap');
+      }
+
+      if (maxContribution <= minContribution) {
+        throw new Error('Max contribution must be greater than min contribution');
+      }
+
+      if (minContribution <= 0 || maxContribution <= 0 || softCap <= 0 || hardCap <= 0) {
+        throw new Error('All amounts must be greater than 0');
+      }
+
       if (!window.ethereum) {
         throw new Error("Please install MetaMask");
       }
@@ -248,64 +279,71 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
 
       // Deploy token with optimized parameters
       const tx = await factoryV2.deployToken(...params, txOptions);
+      console.log("Transaction sent:", tx.hash);
       
-      setLoading(true);
-      showToast('success', 'Transaction submitted. Waiting for confirmation...');
-      
+      // Wait for transaction confirmation
       const receipt = await tx.wait();
-      
-      // Get token address from event
-      const event = receipt.logs
-        .map((log: Log) => {
+      console.log("Transaction confirmed:", receipt);
+
+      // Check for TokenCreated event
+      const tokenCreatedEvent = receipt.logs
+        .map((log: { topics: string[], data: string }) => {
           try {
-            return factoryV2.interface.parseLog(log as any);
+            return factoryV2.interface.parseLog({
+              topics: log.topics,
+              data: log.data
+            });
           } catch (e) {
-            console.error("Failed to parse log:", e);
             return null;
           }
         })
-        .find((event: LogDescription | null) => 
-          event?.name === "TokenDeployed"
-        );
+        .find((event: LogDescription | null) => event?.name === 'TokenCreated');
 
-      if (!event) {
-        throw new Error("Could not find TokenDeployed event in transaction logs");
+      if (!tokenCreatedEvent) {
+        throw new Error('Token creation event not found in transaction logs');
       }
 
-      const tokenAddress = event.args.tokenAddress;
-      if (!tokenAddress) {
-        throw new Error("Token address not found in event");
-      }
+      const tokenAddress = tokenCreatedEvent.args.tokenAddress;
+      console.log("New token deployed at:", tokenAddress);
 
-      console.log("Token deployed successfully:", {
-        deployer: event.args.deployer,
-        tokenAddress: tokenAddress,
-        name: event.args.name,
-        symbol: event.args.symbol,
-        decimals: event.args.decimals,
-        initialSupply: event.args.initialSupply.toString(),
-        softCap: event.args.softCap.toString(),
-        hardCap: event.args.hardCap.toString(),
-        presaleRate: event.args.presaleRate.toString()
-      });
-
-      const explorerUrl = getExplorerUrl(chainId, tokenAddress, 'token');
-      const userAddress = await signer.getAddress();
-
+      // Show success message with explorer link
+      const explorerUrl = getExplorerUrl(chainId, 'token');
       setSuccessInfo({
         message: 'Token created successfully!',
         tokenAddress,
-        explorerUrl,
+        explorerUrl: `${explorerUrl}/address/${tokenAddress}`,
         symbol: formData.symbol,
         initialSupply: formData.initialSupply,
-        owner: userAddress
+        owner: await signer.getAddress()
       });
+
+      showToast('success', 'Token created successfully!', `${explorerUrl}/tx/${tx.hash}`);
 
       // Reset form
       setFormData(defaultValues);
     } catch (error: any) {
       console.error("Error creating token:", error);
-      showToast('error', error.message || 'Failed to create token');
+      
+      // Extract revert reason if available
+      let errorMessage = error.message || 'Unknown error occurred';
+      if (error.data && window.ethereum) {
+        try {
+          // Get factory instance for error parsing
+          const provider = new BrowserProvider(window.ethereum);
+          const factoryAddress = getNetworkContractAddress(chainId!, 'factoryAddressV2');
+          if (factoryAddress) {
+            const factory = new Contract(factoryAddress, TokenFactory_v2.abi, provider);
+            const revertData = factory.interface.parseError(error.data);
+            if (revertData) {
+              errorMessage = `Contract reverted: ${revertData.name}`;
+            }
+          }
+        } catch (e) {
+          // If we can't parse the error, use the original message
+        }
+      }
+      
+      showToast('error', `Failed to create token: ${errorMessage}`);
     } finally {
       setLoading(false);
     }

@@ -1,6 +1,6 @@
 import { ChainId } from './networks';
 
-interface ContractAddresses {
+export interface ContractAddresses {
   factoryAddress?: string;
   factoryAddressV2?: string;
   tokenTemplateAddressV1?: string;
