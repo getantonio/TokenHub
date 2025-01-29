@@ -28,7 +28,7 @@ export default function Home() {
           {/* V1 Card */}
           <Link href="/v1" className="block">
             <div className="bg-background-secondary p-6 rounded-lg shadow-lg hover:shadow-xl transition-shadow h-full">
-              <div className="text-green-500 text-sm font-medium mb-2">CURRENT</div>
+              <div className="text-green-500 text-sm font-medium mb-2">STABLE</div>
               <h2 className="text-2xl font-bold text-text-primary mb-3">Token Factory v1</h2>
               <p className="text-text-secondary mb-4">Basic ERC20 token creation with:</p>
               <ul className="text-text-secondary text-sm space-y-1 mb-4">
@@ -44,7 +44,7 @@ export default function Home() {
           {/* V2 Card */}
           <Link href="/v2" className="block">
             <div className="bg-background-secondary p-6 rounded-lg shadow-lg hover:shadow-xl transition-shadow h-full">
-              <div className="text-yellow-500 text-sm font-medium mb-2">COMING SOON</div>
+              <div className="text-green-500 text-sm font-medium mb-2">NEW</div>
               <h2 className="text-2xl font-bold text-text-primary mb-3">Token Factory v2</h2>
               <p className="text-text-secondary mb-4">Presale functionality with:</p>
               <ul className="text-text-secondary text-sm space-y-1 mb-4">
@@ -53,7 +53,7 @@ export default function Home() {
                 <li>• Timed rounds</li>
                 <li>• Soft/Hard caps</li>
               </ul>
-              <div className="text-text-accent mt-auto">Coming Soon →</div>
+              <div className="text-text-accent mt-auto">Launch App →</div>
             </div>
           </Link>
 
@@ -92,4 +92,4 @@ export default function Home() {
       </div>
     </main>
   );
-} 
+}

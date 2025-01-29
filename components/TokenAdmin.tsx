@@ -462,20 +462,20 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
 
   if (!isConnected) {
     return (
-      <div className="p-6 bg-background-accent rounded-lg shadow-lg">
-        <h2 className="text-xl font-bold mb-6 text-text-primary">Token Management</h2>
-        <p className="text-text-secondary">Please connect your wallet to manage tokens.</p>
+      <div className="p-1 bg-gray-800 rounded-lg shadow-lg">
+        <h2 className="text-xs font-medium text-text-primary">Token Management (V1)</h2>
+        <p className="text-xs text-text-secondary">Please connect your wallet to manage tokens.</p>
       </div>
     );
   }
 
   return (
-    <div className="p-6 relative bg-background-accent rounded-lg shadow-lg">
-      <div 
-        className="flex justify-between items-center cursor-pointer" 
+    <div className="p-2 relative bg-gray-800 rounded-lg shadow-lg">
+      <div
+        className="flex justify-between items-center cursor-pointer py-0.5"
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <h2 className="text-xl font-bold text-text-primary">Token Management</h2>
+        <h2 className="text-xs font-medium text-text-primary">Token Management (V1)</h2>
         <button className="text-text-accent hover:text-blue-400">
           {isExpanded ? '▼' : '▶'}
         </button>
@@ -485,22 +485,22 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
       
       {isExpanded && (
         isLoading ? (
-          <div className="flex justify-center items-center py-8">
-            <Spinner className="w-8 h-8 text-text-primary" />
+          <div className="flex justify-center items-center py-1">
+            <Spinner className="w-4 h-4 text-text-primary" />
           </div>
         ) : tokens.length === 0 ? (
-          <div className="mt-4">
-            <p className="text-text-secondary">No tokens found. Deploy a new token to get started.</p>
+          <div className="mt-0.5">
+            <p className="text-xs text-text-secondary">No V1 tokens found. Deploy a new token to get started.</p>
           </div>
         ) : (
-          <div className="space-y-6 mt-6">
+          <div className="space-y-2 mt-1">
             {tokens.map(token => (
-              <div key={token.address} className="border border-border rounded-lg p-4 space-y-4 bg-background-secondary">
+              <div key={token.address} className="border border-border rounded-lg p-2 space-y-2 bg-background-secondary">
                 <div className="flex justify-between items-start">
                   <div>
-                    <h3 className="font-bold text-text-primary">{token.name} ({token.symbol})</h3>
-                    <p className="text-sm text-text-secondary">Address: {token.address}</p>
-                    <p className="text-sm text-text-secondary">Total Supply: {Number(token.totalSupply).toLocaleString()} {token.symbol}</p>
+                    <h3 className="text-sm font-bold text-text-primary">{token.name} ({token.symbol})</h3>
+                    <p className="text-xs text-text-secondary">Address: {token.address}</p>
+                    <p className="text-xs text-text-secondary">Total Supply: {Number(token.totalSupply).toLocaleString()} {token.symbol}</p>
                   </div>
                   <button
                     onClick={() => setSelectedToken(selectedToken === token.address ? null : token.address)}
@@ -511,26 +511,26 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
                 </div>
 
                 {selectedToken === token.address && (
-                  <div className="space-y-4 pt-4 border-t border-border">
-                    <div className="flex gap-2 mb-4">
+                  <div className="space-y-2 pt-1 border-t border-border">
+                    <div className="flex gap-1">
                       <a
                         href={getExplorerUrl(chainId || 0, token.address, 'token')}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-text-accent hover:text-blue-400"
+                        className="text-xs text-text-accent hover:text-blue-400"
                       >
-                        View on Explorer ↗
+                        View on Etherscan ↗
                       </a>
                     </div>
 
                     {!token.blacklistEnabled && !token.timeLockEnabled ? (
-                      <p className="text-text-secondary italic">This token was created without blacklist or timelock features.</p>
+                      <p className="text-xs text-text-secondary italic">This token was created without blacklist or timelock features.</p>
                     ) : (
                       <>
                         {token.blacklistEnabled && (
-                          <div className="space-y-2">
-                            <h4 className="font-medium text-text-primary">Blacklist Management</h4>
-                            <div className="flex gap-2">
+                          <div className="space-y-1">
+                            <h4 className="text-xs font-medium text-text-primary">Blacklist Management</h4>
+                            <div className="flex gap-1">
                               <input
                                 type="text"
                                 value={blacklistAddress}
