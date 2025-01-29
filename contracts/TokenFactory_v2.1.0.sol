@@ -20,7 +20,14 @@ contract TokenFactory_v2_1_0 is Initializable, OwnableUpgradeable, UUPSUpgradeab
     address[] public deployedTokens;
 
     // Events
-    event TokenCreated(address token, string name, string symbol);
+    event TokenCreated(
+        address token,
+        string name,
+        string symbol,
+        address owner,
+        uint256 startTime,
+        uint256 endTime
+    );
 
     // Template implementation
     TokenTemplate_v2_1_0 public immutable tokenImplementation;
@@ -41,6 +48,9 @@ contract TokenFactory_v2_1_0 is Initializable, OwnableUpgradeable, UUPSUpgradeab
      * @param minContribution Minimum contribution in ETH
      * @param maxContribution Maximum contribution in ETH
      * @param presaleCap Maximum ETH to raise in presale
+     * @param startTime Presale start time
+     * @param endTime Presale end time
+     * @param owner Token owner address (optional, defaults to msg.sender)
      * @return address The address of the newly created token
      */
     function createToken(
@@ -53,8 +63,20 @@ contract TokenFactory_v2_1_0 is Initializable, OwnableUpgradeable, UUPSUpgradeab
         uint256 presaleRate,
         uint256 minContribution,
         uint256 maxContribution,
-        uint256 presaleCap
-    ) external onlyOwner returns (address) {
+        uint256 presaleCap,
+        uint256 startTime,
+        uint256 endTime,
+        address owner
+    ) external payable returns (address) {
+        require(msg.value >= 0.0001 ether, "Insufficient deployment fee");
+        require(startTime > block.timestamp, "Start time must be in future");
+        require(endTime > startTime, "End time must be after start time");
+
+        // Set owner to msg.sender if not specified
+        if (owner == address(0)) {
+            owner = msg.sender;
+        }
+
         // Initialize data
         bytes memory initData = abi.encodeWithSelector(
             TokenTemplate_v2_1_0.initialize.selector,
@@ -62,13 +84,15 @@ contract TokenFactory_v2_1_0 is Initializable, OwnableUpgradeable, UUPSUpgradeab
             symbol,
             initialSupply,
             maxSupply,
-            msg.sender,
+            owner,
             enableBlacklist,
             enableTimeLock,
             presaleRate,
             minContribution,
             maxContribution,
-            presaleCap
+            presaleCap,
+            startTime,
+            endTime
         );
 
         // Deploy proxy
@@ -82,7 +106,14 @@ contract TokenFactory_v2_1_0 is Initializable, OwnableUpgradeable, UUPSUpgradeab
         deployedTokens.push(tokenAddress);
 
         // Emit event
-        emit TokenCreated(tokenAddress, name, symbol);
+        emit TokenCreated(
+            tokenAddress,
+            name,
+            symbol,
+            owner,
+            startTime,
+            endTime
+        );
 
         return tokenAddress;
     }
@@ -104,4 +135,13 @@ contract TokenFactory_v2_1_0 is Initializable, OwnableUpgradeable, UUPSUpgradeab
     function getDeployedTokens() external view returns (address[] memory) {
         return deployedTokens;
     }
-} 
+
+    /**
+     * @notice Withdraw collected fees
+     * @dev Only callable by owner
+     */
+    function withdrawFees() external onlyOwner {
+        (bool success, ) = msg.sender.call{value: address(this).balance}("");
+        require(success, "Transfer failed");
+    }
+}

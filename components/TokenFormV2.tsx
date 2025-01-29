@@ -1,11 +1,9 @@
 import { useState, useEffect } from 'react';
-import { BrowserProvider, Contract, parseUnits, Log } from 'ethers';
+import { BrowserProvider, Contract, parseUnits } from 'ethers';
 import { useNetwork } from '../contexts/NetworkContext';
-import TokenFactory_v2 from '../contracts/abi/TokenFactory_v2.json';
+import TokenFactory_v2_1_0 from '../contracts/abi/TokenFactory_v2.1.0.json';
 import { getExplorerUrl } from '../config/networks';
 import { getNetworkContractAddress } from '../config/contracts';
-import type { ContractAddresses } from '../config/contracts';
-import { LogDescription } from 'ethers';
 
 interface TokenFormV2Props {
   isConnected: boolean;
@@ -17,28 +15,56 @@ interface ToastMessage {
   link?: string;
 }
 
-const defaultValues = {
+interface FormData {
+  name: string;
+  symbol: string;
+  initialSupply: string;
+  maxSupply: string;
+  presaleRate: string;
+  minContribution: string;
+  maxContribution: string;
+  presaleCap: string;
+  startTime: string;
+  endTime: string;
+  enableBlacklist: boolean;
+  enableTimeLock: boolean;
+  customOwner: string;
+}
+
+// Set default times to be 1 hour from now and 24 hours from now
+const getDefaultTimes = () => {
+  const now = new Date();
+  const startTime = new Date(now.getTime() + 3600000); // 1 hour from now
+  const endTime = new Date(now.getTime() + 86400000);  // 24 hours from now
+  return {
+    startTime: startTime.toISOString().slice(0, 16),
+    endTime: endTime.toISOString().slice(0, 16)
+  };
+};
+
+const defaultValues: FormData = {
   name: 'Test Token',
   symbol: 'TEST',
-  decimals: '18',
   initialSupply: '1000000',
-  price: '0.001',
-  softCap: '100',
-  hardCap: '1000',
+  maxSupply: '2000000',
+  presaleRate: '1000',
   minContribution: '0.1',
   maxContribution: '10',
-  presaleRate: '1000',
-  startTime: new Date(Date.now() + 3600000).toISOString().slice(0, 16),
-  endTime: new Date(Date.now() + 86400000).toISOString().slice(0, 16),
-  whitelistEnabled: false
+  presaleCap: '100',
+  ...getDefaultTimes(),
+  enableBlacklist: false,
+  enableTimeLock: false,
+  customOwner: ''
 };
+
+const DEPLOYMENT_FEE = parseUnits('0.0001', 'ether'); // 0.0001 ETH deployment fee
 
 export function TokenFormV2({ isConnected }: TokenFormV2Props) {
   const { chainId } = useNetwork();
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [v2Available, setV2Available] = useState<boolean>(false);
-  const [formData, setFormData] = useState(defaultValues);
+  const [formData, setFormData] = useState<FormData>(defaultValues);
   const [successInfo, setSuccessInfo] = useState<{
     message: string;
     tokenAddress: string;
@@ -47,6 +73,14 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
     initialSupply: string;
     owner: string | null;
   } | null>(null);
+
+  // Reset form data when component mounts
+  useEffect(() => {
+    setFormData({
+      ...defaultValues,
+      ...getDefaultTimes()
+    });
+  }, []);
 
   // Check if V2 is available on this network
   useEffect(() => {
@@ -97,10 +131,10 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
           <div className="flex">
             <div className="ml-3">
               <h3 className="text-sm font-medium text-yellow-500">
-                TokenFactory V2 is not yet deployed on this network. Please use V1 for now.
+                TokenFactory V2.1.0 is not yet deployed on this network. Please use V1 for now.
               </h3>
               <p className="text-sm text-yellow-400 mt-2">
-                Note: V2 is currently only available on specific networks. Check the documentation for supported networks.
+                Note: V2.1.0 is currently only available on specific networks. Check the documentation for supported networks.
               </p>
             </div>
           </div>
@@ -148,23 +182,6 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
         throw new Error('End time must be after start time');
       }
 
-      const softCap = parseFloat(formData.softCap);
-      const hardCap = parseFloat(formData.hardCap);
-      const minContribution = parseFloat(formData.minContribution);
-      const maxContribution = parseFloat(formData.maxContribution);
-
-      if (hardCap <= softCap) {
-        throw new Error('Hard cap must be greater than soft cap');
-      }
-
-      if (maxContribution <= minContribution) {
-        throw new Error('Max contribution must be greater than min contribution');
-      }
-
-      if (minContribution <= 0 || maxContribution <= 0 || softCap <= 0 || hardCap <= 0) {
-        throw new Error('All amounts must be greater than 0');
-      }
-
       if (!window.ethereum) {
         throw new Error("Please install MetaMask");
       }
@@ -177,108 +194,65 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
       try {
         factoryAddress = getNetworkContractAddress(chainId, 'factoryAddressV2');
       } catch (error) {
-        throw new Error("TokenFactory V2 is not yet deployed on this network. Please use V1 for now.");
+        throw new Error("TokenFactory V2.1.0 is not yet deployed on this network. Please use V1 for now.");
       }
 
       if (!factoryAddress) {
-        throw new Error("TokenFactory V2 is not yet deployed on this network. Please use V1 for now.");
+        throw new Error("TokenFactory V2.1.0 is not yet deployed on this network. Please use V1 for now.");
       }
 
-      console.log("V2 Factory address:", factoryAddress);
+      console.log("V2.1.0 Factory address:", factoryAddress);
 
       // Create contract instance with proper ABI
-      const factoryV2 = new Contract(factoryAddress, TokenFactory_v2.abi, signer);
-
-      // Get deployment fee first
-      const deploymentFee = await factoryV2.deploymentFee();
-      console.log("Deployment fee:", deploymentFee.toString());
+      const factoryV2 = new Contract(factoryAddress, TokenFactory_v2_1_0.abi, signer);
 
       // Convert values to proper format
-      const tokenDecimals = Number(formData.decimals);
-      if (isNaN(tokenDecimals) || tokenDecimals < 0 || tokenDecimals > 18) {
-        throw new Error('Invalid decimals value. Must be between 0 and 18.');
-      }
+      const initialSupplyAmount = parseUnits(formData.initialSupply || '0', 18);
+      const maxSupplyAmount = parseUnits(formData.maxSupply || '0', 18);
+      const minContributionAmount = parseUnits(formData.minContribution || '0', 18);
+      const maxContributionAmount = parseUnits(formData.maxContribution || '0', 18);
+      const presaleRateAmount = parseUnits(formData.presaleRate || '0', 18);
+      const presaleCapAmount = parseUnits(formData.presaleCap || '0', 18);
 
-      const initialSupplyAmount = parseUnits(formData.initialSupply, tokenDecimals);
-      const softCapAmount = parseUnits(formData.softCap, tokenDecimals);
-      const hardCapAmount = parseUnits(formData.hardCap, tokenDecimals);
-      const minContributionAmount = parseUnits(formData.minContribution, tokenDecimals);
-      const maxContributionAmount = parseUnits(formData.maxContribution, tokenDecimals);
-      const presaleRateAmount = parseUnits(formData.presaleRate, tokenDecimals);
-      const startTime = BigInt(Math.floor(new Date(formData.startTime).getTime() / 1000));
-      const endTime = BigInt(Math.floor(new Date(formData.endTime).getTime() / 1000));
+      // Validate custom owner address if provided
+      let ownerAddress = "0x0000000000000000000000000000000000000000"; // Default to zero address
+      if (formData.customOwner) {
+        if (!formData.customOwner.match(/^0x[0-9a-fA-F]{40}$/)) {
+          throw new Error('Invalid owner address format');
+        }
+        ownerAddress = formData.customOwner;
+      }
 
       console.log("Converted amounts:", {
         initialSupply: initialSupplyAmount.toString(),
-        softCap: softCapAmount.toString(),
-        hardCap: hardCapAmount.toString(),
+        maxSupply: maxSupplyAmount.toString(),
         minContribution: minContributionAmount.toString(),
         maxContribution: maxContributionAmount.toString(),
         presaleRate: presaleRateAmount.toString(),
-        decimals: tokenDecimals
-      });
-
-      // Prepare transaction parameters
-      const params = [
-        formData.name,
-        formData.symbol,
-        tokenDecimals,
-        initialSupplyAmount,
-        softCapAmount,
-        hardCapAmount,
-        minContributionAmount,
-        maxContributionAmount,
-        startTime,
-        endTime,
-        presaleRateAmount,
-        formData.whitelistEnabled
-      ];
-
-      // Try to estimate gas with value parameter
-      let gasLimit;
-      try {
-        // First verify the contract interface is working
-        const encodedData = factoryV2.interface.encodeFunctionData('deployToken', params);
-        console.log("Encoded function data:", encodedData);
-
-        // Estimate gas with proper value parameter
-        const gasEstimate = await provider.estimateGas({
-          to: factoryAddress,
-          from: await signer.getAddress(),
-          value: deploymentFee,
-          data: encodedData
-        });
-
-        console.log("Estimated gas:", gasEstimate.toString());
-        // Increase buffer to 50% to ensure successful deployment
-        gasLimit = gasEstimate * BigInt(1500) / BigInt(1000);
-      } catch (error) {
-        console.error("Gas estimation failed:", error);
-        // Use higher conservative gas limit
-        gasLimit = BigInt(2000000); // 2M gas as fallback
-      }
-
-      // Get current gas price with higher buffer
-      const feeData = await provider.getFeeData();
-      const gasPrice = feeData.gasPrice || parseUnits('10', 'gwei'); // 10 gwei fallback
-
-      // Use legacy transaction format with higher gas settings
-      const txOptions = {
-        gasLimit,
-        value: deploymentFee,
-        gasPrice: gasPrice * BigInt(1500) / BigInt(1000), // 50% buffer
-        nonce: await provider.getTransactionCount(await signer.getAddress())
-      };
-
-      console.log("Deployment parameters:", {
-        gasLimit: gasLimit.toString(),
-        gasPrice: txOptions.gasPrice.toString(),
-        deploymentFee: deploymentFee.toString(),
-        nonce: txOptions.nonce
+        presaleCap: presaleCapAmount.toString(),
+        startTime: startTimeSeconds,
+        endTime: endTimeSeconds,
+        owner: ownerAddress
       });
 
       // Deploy token with optimized parameters
-      const tx = await factoryV2.deployToken(...params, txOptions);
+      const tx = await factoryV2.createToken(
+        formData.name,
+        formData.symbol,
+        initialSupplyAmount,
+        maxSupplyAmount,
+        formData.enableBlacklist,
+        formData.enableTimeLock,
+        presaleRateAmount,
+        minContributionAmount,
+        maxContributionAmount,
+        presaleCapAmount,
+        BigInt(startTimeSeconds),
+        BigInt(endTimeSeconds),
+        ownerAddress,
+        { value: DEPLOYMENT_FEE }
+      );
+      
       console.log("Transaction sent:", tx.hash);
       
       // Wait for transaction confirmation
@@ -287,7 +261,7 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
 
       // Check for TokenCreated event
       const tokenCreatedEvent = receipt.logs
-        .map((log: { topics: string[], data: string }) => {
+        .map((log: any) => {
           try {
             return factoryV2.interface.parseLog({
               topics: log.topics,
@@ -297,13 +271,13 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
             return null;
           }
         })
-        .find((event: LogDescription | null) => event?.name === 'TokenCreated');
+        .find((event: any) => event?.name === 'TokenCreated');
 
       if (!tokenCreatedEvent) {
         throw new Error('Token creation event not found in transaction logs');
       }
 
-      const tokenAddress = tokenCreatedEvent.args.tokenAddress;
+      const tokenAddress = tokenCreatedEvent.args.token;
       console.log("New token deployed at:", tokenAddress);
 
       // Show success message with explorer link
@@ -314,36 +288,19 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
         explorerUrl: `${explorerUrl}/address/${tokenAddress}`,
         symbol: formData.symbol,
         initialSupply: formData.initialSupply,
-        owner: await signer.getAddress()
+        owner: tokenCreatedEvent.args.owner
       });
 
       showToast('success', 'Token created successfully!', `${explorerUrl}/tx/${tx.hash}`);
 
-      // Reset form
-      setFormData(defaultValues);
+      // Reset form with new default times
+      setFormData({
+        ...defaultValues,
+        ...getDefaultTimes()
+      });
     } catch (error: any) {
       console.error("Error creating token:", error);
-      
-      // Extract revert reason if available
-      let errorMessage = error.message || 'Unknown error occurred';
-      if (error.data && window.ethereum) {
-        try {
-          // Get factory instance for error parsing
-          const provider = new BrowserProvider(window.ethereum);
-          const factoryAddress = getNetworkContractAddress(chainId!, 'factoryAddressV2');
-          if (factoryAddress) {
-            const factory = new Contract(factoryAddress, TokenFactory_v2.abi, provider);
-            const revertData = factory.interface.parseError(error.data);
-            if (revertData) {
-              errorMessage = `Contract reverted: ${revertData.name}`;
-            }
-          }
-        } catch (e) {
-          // If we can't parse the error, use the original message
-        }
-      }
-      
-      showToast('error', `Failed to create token: ${errorMessage}`);
+      showToast('error', `Failed to create token: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -408,7 +365,7 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
                       rel="noopener noreferrer"
                       className="text-sm text-blue-500 hover:text-blue-400"
                     >
-                      View on Etherscan
+                      View on Explorer
                     </a>
                   )}
                 </div>
@@ -454,24 +411,23 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">Decimals</label>
-                <input
-                  type="number"
-                  name="decimals"
-                  value={formData.decimals}
-                  onChange={handleChange}
-                  className="form-input"
-                  min="0"
-                  max="18"
-                  required
-                />
-              </div>
-              <div className="form-group">
                 <label className="form-label">Initial Supply</label>
                 <input
                   type="number"
                   name="initialSupply"
                   value={formData.initialSupply}
+                  onChange={handleChange}
+                  className="form-input"
+                  min="1"
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Max Supply</label>
+                <input
+                  type="number"
+                  name="maxSupply"
+                  value={formData.maxSupply}
                   onChange={handleChange}
                   className="form-input"
                   min="1"
@@ -486,19 +442,6 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
             <h3 className="text-lg font-semibold text-text-primary mb-1">Presale Settings</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
               <div className="form-group">
-                <label className="form-label">Token Price (ETH/MATIC)</label>
-                <input
-                  type="number"
-                  name="price"
-                  value={formData.price}
-                  onChange={handleChange}
-                  className="form-input"
-                  min="0.000001"
-                  step="0.000001"
-                  required
-                />
-              </div>
-              <div className="form-group">
                 <label className="form-label">Presale Rate</label>
                 <input
                   type="number"
@@ -507,32 +450,6 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
                   onChange={handleChange}
                   className="form-input"
                   min="1"
-                  required
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Soft Cap</label>
-                <input
-                  type="number"
-                  name="softCap"
-                  value={formData.softCap}
-                  onChange={handleChange}
-                  className="form-input"
-                  min="0.1"
-                  step="0.1"
-                  required
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Hard Cap</label>
-                <input
-                  type="number"
-                  name="hardCap"
-                  value={formData.hardCap}
-                  onChange={handleChange}
-                  className="form-input"
-                  min="0.1"
-                  step="0.1"
                   required
                 />
               </div>
@@ -563,6 +480,21 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
                 />
               </div>
               <div className="form-group">
+                <label className="form-label">Presale Cap</label>
+                <input
+                  type="number"
+                  name="presaleCap"
+                  value={formData.presaleCap}
+                  onChange={handleChange}
+                  className="form-input"
+                  min="0.1"
+                  step="0.1"
+                  required
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <div className="form-group">
                 <label className="form-label">Start Time</label>
                 <input
                   type="datetime-local"
@@ -585,15 +517,46 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
                 />
               </div>
             </div>
-            <div className="form-group flex items-center mt-2">
-              <input
-                type="checkbox"
-                name="whitelistEnabled"
-                checked={formData.whitelistEnabled}
-                onChange={handleChange}
-                className="form-checkbox"
-              />
-              <label className="form-label mb-0 ml-2">Enable Whitelist</label>
+          </div>
+
+          {/* Advanced Settings */}
+          <div className="space-y-1">
+            <h3 className="text-lg font-semibold text-text-primary mb-1">Advanced Settings</h3>
+            <div className="grid grid-cols-1 gap-2">
+              <div className="form-group">
+                <label className="form-label">Custom Owner Address (Optional)</label>
+                <input
+                  type="text"
+                  name="customOwner"
+                  value={formData.customOwner}
+                  onChange={handleChange}
+                  className="form-input"
+                  placeholder="0x..."
+                />
+                <p className="text-sm text-gray-500 mt-1">Leave empty to use connected wallet address</p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <div className="form-group flex items-center mt-2">
+                  <input
+                    type="checkbox"
+                    name="enableBlacklist"
+                    checked={formData.enableBlacklist}
+                    onChange={handleChange}
+                    className="form-checkbox"
+                  />
+                  <label className="form-label mb-0 ml-2">Enable Blacklist</label>
+                </div>
+                <div className="form-group flex items-center mt-2">
+                  <input
+                    type="checkbox"
+                    name="enableTimeLock"
+                    checked={formData.enableTimeLock}
+                    onChange={handleChange}
+                    className="form-checkbox"
+                  />
+                  <label className="form-label mb-0 ml-2">Enable Time Lock</label>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -610,4 +573,4 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
       </div>
     </div>
   );
-} 
+}

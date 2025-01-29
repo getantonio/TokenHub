@@ -17,6 +17,8 @@ import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol
  */
 contract TokenTemplate_v2_1_0 is 
     Initializable,
+    ERC20Upgradeable,
+    ERC20BurnableUpgradeable,
     ERC20PausableUpgradeable,
     OwnableUpgradeable,
     UUPSUpgradeable,
@@ -42,7 +44,11 @@ contract TokenTemplate_v2_1_0 is
     PresaleInfo public presaleInfo;
     mapping(address => bool) public whitelist;
     mapping(address => uint256) public contributions;
-    uint8 private _decimals;
+    uint256 public maxSupply;
+    bool public blacklistEnabled;
+    bool public timeLockEnabled;
+    mapping(address => bool) public blacklist;
+    mapping(address => uint256) public timeLocks;
 
     event PresaleStarted(
         uint256 softCap,
@@ -52,6 +58,8 @@ contract TokenTemplate_v2_1_0 is
         uint256 presaleRate
     );
     event WhitelistUpdated(address[] addresses, bool status);
+    event BlacklistUpdated(address[] addresses, bool status);
+    event TimeLockSet(address account, uint256 unlockTime);
     event ContributionReceived(address contributor, uint256 amount);
     event PresaleFinalized(uint256 totalContributed, uint256 tokensDistributed);
     event ContributionRefunded(address contributor, uint256 amount);
@@ -66,50 +74,53 @@ contract TokenTemplate_v2_1_0 is
     function initialize(
         string memory name_,
         string memory symbol_,
-        uint8 decimals_,
         uint256 initialSupply_,
+        uint256 maxSupply_,
         address owner_,
-        // Presale parameters
-        uint256 softCap_,
-        uint256 hardCap_,
+        bool enableBlacklist_,
+        bool enableTimeLock_,
+        uint256 presaleRate_,
         uint256 minContribution_,
         uint256 maxContribution_,
+        uint256 presaleCap_,
         uint256 startTime_,
-        uint256 endTime_,
-        uint256 presaleRate_,
-        bool whitelistEnabled_
+        uint256 endTime_
     ) public initializer {
         __ERC20_init(name_, symbol_);
+        __ERC20Burnable_init();
+        __ERC20Pausable_init();
         __Ownable_init(owner_);
         __ReentrancyGuard_init();
 
-        _decimals = decimals_;
-        _mint(owner_, initialSupply_ * 10**decimals_);
+        require(maxSupply_ >= initialSupply_, "Max supply must be >= initial supply");
+        require(startTime_ > block.timestamp, "Start time must be in future");
+        require(endTime_ > startTime_, "End time must be after start time");
+
+        maxSupply = maxSupply_;
+        blacklistEnabled = enableBlacklist_;
+        timeLockEnabled = enableTimeLock_;
+        _mint(owner_, initialSupply_);
 
         presaleInfo = PresaleInfo({
-            softCap: softCap_,
-            hardCap: hardCap_,
+            softCap: presaleCap_ / 2, // Set soft cap to 50% of presale cap
+            hardCap: presaleCap_,
             minContribution: minContribution_,
             maxContribution: maxContribution_,
             startTime: startTime_,
             endTime: endTime_,
             presaleRate: presaleRate_,
-            whitelistEnabled: whitelistEnabled_,
+            whitelistEnabled: false, // Start with whitelist disabled
             finalized: false,
             totalContributed: 0
         });
 
         emit PresaleStarted(
-            softCap_,
-            hardCap_,
+            presaleInfo.softCap,
+            presaleInfo.hardCap,
             startTime_,
             endTime_,
             presaleRate_
         );
-    }
-
-    function decimals() public view virtual override returns (uint8) {
-        return _decimals;
     }
 
     function updateWhitelist(address[] calldata addresses, bool status) external onlyOwner {
@@ -118,6 +129,37 @@ contract TokenTemplate_v2_1_0 is
             whitelist[addresses[i]] = status;
         }
         emit WhitelistUpdated(addresses, status);
+    }
+
+    function updateBlacklist(address[] calldata addresses, bool status) external onlyOwner {
+        require(blacklistEnabled, "Blacklist not enabled");
+        for (uint256 i = 0; i < addresses.length; i++) {
+            blacklist[addresses[i]] = status;
+        }
+        emit BlacklistUpdated(addresses, status);
+    }
+
+    function setTimeLock(address account, uint256 unlockTime) external onlyOwner {
+        require(timeLockEnabled, "Time lock not enabled");
+        require(unlockTime > block.timestamp, "Unlock time must be in future");
+        timeLocks[account] = unlockTime;
+        emit TimeLockSet(account, unlockTime);
+    }
+
+    function _update(
+        address from,
+        address to,
+        uint256 value
+    ) internal virtual override(ERC20Upgradeable, ERC20PausableUpgradeable) whenNotPaused {
+        super._update(from, to, value);
+
+        if (blacklistEnabled) {
+            require(!blacklist[from] && !blacklist[to], "Address is blacklisted");
+        }
+
+        if (timeLockEnabled && from != address(0)) {
+            require(block.timestamp >= timeLocks[from], "Tokens are time-locked");
+        }
     }
 
     function contribute() external payable nonReentrant {
@@ -216,4 +258,20 @@ contract TokenTemplate_v2_1_0 is
     function isWhitelisted(address account) external view returns (bool) {
         return whitelist[account];
     }
-} 
+
+    function isBlacklisted(address account) external view returns (bool) {
+        return blacklist[account];
+    }
+
+    function getTimeLock(address account) external view returns (uint256) {
+        return timeLocks[account];
+    }
+
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    function unpause() external onlyOwner {
+        _unpause();
+    }
+}

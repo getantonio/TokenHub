@@ -4,7 +4,11 @@ const nextConfig = {
   output: 'export',
   images: {
     unoptimized: true
+  },
+  swcMinify: false,
+  compiler: {
+    styledComponents: true
   }
 }
 
-module.exports = nextConfig 
+module.exports = nextConfig
