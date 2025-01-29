@@ -1,4 +1,4 @@
-npm run devimport type { MetaMaskInpageProvider } from '@metamask/providers';
+import type { MetaMaskInpageProvider } from '@metamask/providers';
 import TokenForm_v1 from '../components/TokenForm_v1';
 import TokenAdmin from '../components/TokenAdmin';
 import { useNetwork } from '../contexts/NetworkContext';

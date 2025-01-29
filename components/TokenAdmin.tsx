@@ -536,17 +536,17 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
                                 value={blacklistAddress}
                                 onChange={(e) => setBlacklistAddress(e.target.value)}
                                 placeholder="Address to blacklist/unblacklist"
-                                className="flex-1 p-2 rounded bg-background-primary border border-border hover:border-border-light focus:border-text-accent text-text-primary placeholder-text-secondary"
+                                className="flex-1 p-1 text-xs rounded bg-background-primary border border-border hover:border-border-light focus:border-text-accent text-text-primary placeholder-text-secondary"
                               />
                               <button
                                 onClick={() => handleBlacklist(token.address, blacklistAddress, true)}
-                                className="px-3 py-1 rounded bg-red-500/20 text-red-500 hover:bg-red-500/30"
+                                className="px-2 py-0.5 text-xs rounded bg-red-500/20 text-red-500 hover:bg-red-500/30"
                               >
                                 Blacklist
                               </button>
                               <button
                                 onClick={() => handleBlacklist(token.address, blacklistAddress, false)}
-                                className="px-3 py-1 rounded bg-green-500/20 text-green-500 hover:bg-green-500/30"
+                                className="px-2 py-0.5 text-xs rounded bg-green-500/20 text-green-500 hover:bg-green-500/30"
                               >
                                 Unblacklist
                               </button>
@@ -555,16 +555,16 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
                         )}
 
                         {token.timeLockEnabled && (
-                          <div className="space-y-2">
-                            <h4 className="font-medium text-text-primary">Time Lock Management</h4>
-                            <p className="text-sm text-text-secondary mb-2">Lock token transfers for a specific address for a set duration.</p>
-                            <div className="flex gap-2">
+                          <div className="space-y-1">
+                            <h4 className="text-xs font-medium text-text-primary">Time Lock Management</h4>
+                            <p className="text-xs text-text-secondary">Lock token transfers for a specific address for a set duration.</p>
+                            <div className="flex gap-1">
                               <input
                                 type="text"
                                 value={lockInfo.address}
                                 onChange={(e) => setLockInfo({ ...lockInfo, address: e.target.value })}
                                 placeholder="Address to lock/check"
-                                className="flex-1 p-2 rounded bg-background-primary border border-border hover:border-border-light focus:border-text-accent text-text-primary placeholder-text-secondary"
+                                className="flex-1 p-1 text-xs rounded bg-background-primary border border-border hover:border-border-light focus:border-text-accent text-text-primary placeholder-text-secondary"
                               />
                               <input
                                 type="number"
@@ -573,17 +573,17 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
                                 min="1"
                                 max="365"
                                 placeholder="Days"
-                                className="w-24 p-2 rounded bg-background-primary border border-border hover:border-border-light focus:border-text-accent text-text-primary"
+                                className="w-16 p-1 text-xs rounded bg-background-primary border border-border hover:border-border-light focus:border-text-accent text-text-primary"
                               />
                               <button
                                 onClick={() => handleSetLockTime(token.address, lockInfo.address, lockInfo.duration)}
-                                className="px-3 py-1 rounded bg-blue-500/20 text-blue-500 hover:bg-blue-500/30"
+                                className="px-2 py-0.5 text-xs rounded bg-blue-500/20 text-blue-500 hover:bg-blue-500/30"
                               >
                                 Lock
                               </button>
                               <button
                                 onClick={() => checkLockTime(token.address, lockInfo.address)}
-                                className="px-3 py-1 rounded bg-yellow-500/20 text-yellow-500 hover:bg-yellow-500/30"
+                                className="px-2 py-0.5 text-xs rounded bg-yellow-500/20 text-yellow-500 hover:bg-yellow-500/30"
                               >
                                 Check
                               </button>

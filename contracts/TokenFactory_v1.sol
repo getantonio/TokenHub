@@ -82,8 +82,8 @@ contract TokenFactory_v1 is Ownable, ReentrancyGuard {
         uint256 cost
     );
 
-    constructor(uint256 initialFee) Ownable(msg.sender) {
-        deploymentFee = initialFee;
+    constructor() Ownable(msg.sender) {
+        deploymentFee = 0.0001 ether;
         tokenImplementation = new TokenTemplate_v1();
     }
 
@@ -98,7 +98,10 @@ contract TokenFactory_v1 is Ownable, ReentrancyGuard {
         bool enableBlacklist,
         bool enableTimeLock
     ) public payable nonReentrant {
-        require(msg.value >= deploymentFee, "Insufficient deployment fee");
+        // Owner deploys for free, others pay fee
+        if (msg.sender != owner()) {
+            require(msg.value >= deploymentFee, "Insufficient deployment fee");
+        }
         
         // Deploy new token proxy
         bytes memory initData = abi.encodeWithSelector(

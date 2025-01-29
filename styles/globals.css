@@ -30,7 +30,7 @@
   }
   
   .form-input {
-    @apply mt-1 block w-full h-9 rounded-md border-gray-700 bg-background-primary text-text-primary shadow-sm focus:border-indigo-500 focus:ring-indigo-500;
+    @apply mt-1 block w-full h-7 rounded-md border-gray-700 bg-background-primary text-text-primary shadow-sm focus:border-indigo-500 focus:ring-indigo-500;
   }
   
   .form-label {

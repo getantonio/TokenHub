@@ -231,105 +231,105 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2">
       {successInfo && (
-        <div className="rounded-md bg-green-900/20 p-4 border border-green-700">
-          <h3 className="text-lg font-medium text-green-500">🎉 Token Created Successfully!</h3>
-          <div className="space-y-2 text-sm text-green-400">
+        <div className="rounded-md bg-green-900/20 p-2 border border-green-700">
+          <h3 className="text-sm font-medium text-green-500">🎉 Token Created Successfully!</h3>
+          <div className="space-y-1 text-xs text-green-400">
             <p>Token Symbol: {successInfo.symbol}</p>
             <p>Contract Address: <a href={successInfo.explorerUrl} target="_blank" rel="noopener noreferrer" className="underline hover:text-green-300">{successInfo.tokenAddress}</a></p>
             <p>Initial Supply: {Number(successInfo.initialSupply).toLocaleString()} {successInfo.symbol}</p>
             <p>Owner: {successInfo.owner?.slice(0, 6)}...{successInfo.owner?.slice(-4)}</p>
           </div>
-          <div className="mt-4 flex gap-4">
-            <a href={successInfo.explorerUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-black bg-green-400 hover:bg-green-500">View on Etherscan</a>
-            <button onClick={() => setSuccessInfo(null)} className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-green-400 hover:bg-green-900/30">Clear</button>
+          <div className="mt-2 flex gap-2">
+            <a href={successInfo.explorerUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center px-2 py-1 text-xs border border-transparent rounded-md shadow-sm text-black bg-green-400 hover:bg-green-500">View on Etherscan</a>
+            <button onClick={() => setSuccessInfo(null)} className="inline-flex items-center px-2 py-1 text-xs border border-transparent rounded-md text-green-400 hover:bg-green-900/30">Clear</button>
           </div>
         </div>
       )}
       {toast && (
-        <div className={`p-4 rounded-lg border ${toast.type === 'success' ? 'bg-green-900/20 border-green-500 text-green-500' : 'bg-red-900/20 border-red-500 text-red-500'}`}>
+        <div className={`p-2 rounded-lg border ${toast.type === 'success' ? 'bg-green-900/20 border-green-500 text-green-500' : 'bg-red-900/20 border-red-500 text-red-500'}`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center">
               {toast.type === 'success' ? '🎉' : '⚠️'}
-              <div className="ml-2">
-                <p className="text-sm font-medium">{toast.message}</p>
-                {toast.link && <a href={toast.link} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-500 hover:text-blue-400">View on Etherscan</a>}
+              <div className="ml-1">
+                <p className="text-xs">{toast.message}</p>
+                {toast.link && <a href={toast.link} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:text-blue-400">View on Etherscan</a>}
               </div>
             </div>
-            <button onClick={() => setToast(null)} className="text-sm opacity-70 hover:opacity-100">Clear</button>
+            <button onClick={() => setToast(null)} className="text-xs opacity-70 hover:opacity-100">Clear</button>
           </div>
         </div>
       )}
-      <form onSubmit={handleSubmit} className="space-y-4 bg-background-secondary p-6 rounded-lg shadow-lg">
+      <form onSubmit={handleSubmit} className="space-y-2 bg-background-secondary p-3 rounded-lg shadow-lg">
         <div>
-          <h3 className="text-sm font-semibold text-text-primary mb-2">Token Information</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <h3 className="text-xs font-semibold text-text-primary mb-1">Token Information</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             <div>
-              <label className="form-label text-sm">Token Name</label>
+              <label className="text-xs text-text-secondary">Token Name</label>
               <input type="text" name="name" value={formData.name} onChange={handleChange} className="form-input" placeholder="My Token" required />
             </div>
             <div>
-              <label className="form-label text-sm">Token Symbol</label>
+              <label className="text-xs text-text-secondary">Token Symbol</label>
               <input type="text" name="symbol" value={formData.symbol} onChange={handleChange} className="form-input" placeholder="TKN" required />
             </div>
             <div>
-              <label className="form-label text-sm">Initial Supply</label>
+              <label className="text-xs text-text-secondary">Initial Supply</label>
               <input type="number" name="initialSupply" value={formData.initialSupply} onChange={handleChange} className="form-input" min="1" required />
             </div>
             <div>
-              <label className="form-label text-sm">Max Supply</label>
+              <label className="text-xs text-text-secondary">Max Supply</label>
               <input type="number" name="maxSupply" value={formData.maxSupply} onChange={handleChange} className="form-input" min="1" required />
             </div>
           </div>
         </div>
         <div>
-          <h3 className="text-sm font-semibold text-text-primary mb-2">Presale Settings</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <h3 className="text-xs font-semibold text-text-primary mb-1">Presale Settings</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             <div>
-              <label className="form-label text-sm">Presale Rate</label>
+              <label className="text-xs text-text-secondary">Presale Rate</label>
               <input type="number" name="presaleRate" value={formData.presaleRate} onChange={handleChange} className="form-input" min="1" required />
             </div>
             <div>
-              <label className="form-label text-sm">Min Contribution</label>
+              <label className="text-xs text-text-secondary">Min Contribution</label>
               <input type="number" name="minContribution" value={formData.minContribution} onChange={handleChange} className="form-input" min="0.1" step="0.1" required />
             </div>
             <div>
-              <label className="form-label text-sm">Max Contribution</label>
+              <label className="text-xs text-text-secondary">Max Contribution</label>
               <input type="number" name="maxContribution" value={formData.maxContribution} onChange={handleChange} className="form-input" min="0.1" step="0.1" required />
             </div>
             <div>
-              <label className="form-label text-sm">Presale Cap</label>
+              <label className="text-xs text-text-secondary">Presale Cap</label>
               <input type="number" name="presaleCap" value={formData.presaleCap} onChange={handleChange} className="form-input" min="0.1" step="0.1" required />
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
             <div>
-              <label className="form-label text-sm">Start Time</label>
+              <label className="text-xs text-text-secondary">Start Time</label>
               <input type="datetime-local" name="startTime" value={formData.startTime} onChange={handleChange} className="form-input" required />
             </div>
             <div>
-              <label className="form-label text-sm">End Time</label>
+              <label className="text-xs text-text-secondary">End Time</label>
               <input type="datetime-local" name="endTime" value={formData.endTime} onChange={handleChange} className="form-input" required />
             </div>
           </div>
         </div>
         <div>
-          <h3 className="text-sm font-semibold text-text-primary mb-2">Advanced Settings</h3>
+          <h3 className="text-xs font-semibold text-text-primary mb-1">Advanced Settings</h3>
           <div>
             <div>
-              <label className="form-label text-sm">Custom Owner Address (Optional)</label>
+              <label className="text-xs text-text-secondary">Custom Owner Address (Optional)</label>
               <input type="text" name="customOwner" value={formData.customOwner} onChange={handleChange} className="form-input" placeholder="0x..." />
-              <p className="text-xs text-gray-500 mt-1">Leave empty to use connected wallet address</p>
+              <p className="text-xs text-gray-500 mt-0.5">Leave empty to use connected wallet address</p>
             </div>
-            <div className="grid grid-cols-2 gap-4 mt-4">
+            <div className="grid grid-cols-2 gap-2 mt-2">
               <div className="flex items-center">
                 <input type="checkbox" name="enableBlacklist" checked={formData.enableBlacklist} onChange={handleChange} className="h-4 w-4 rounded border-gray-700 bg-background-primary text-indigo-600 focus:ring-indigo-500" />
-                <label className="ml-2 text-sm text-text-primary">Enable Blacklist</label>
+                <label className="ml-2 text-xs text-text-secondary">Enable Blacklist</label>
               </div>
               <div className="flex items-center">
                 <input type="checkbox" name="enableTimeLock" checked={formData.enableTimeLock} onChange={handleChange} className="h-4 w-4 rounded border-gray-700 bg-background-primary text-indigo-600 focus:ring-indigo-500" />
-                <label className="ml-2 text-sm text-text-primary">Enable Time Lock</label>
+                <label className="ml-2 text-xs text-text-secondary">Enable Time Lock</label>
               </div>
             </div>
           </div>
@@ -340,7 +340,7 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
             disabled={!isConnected || loading}
             className={`inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${(!isConnected || loading) ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
-            {loading ? 'Creating...' : (isConnected ? 'Create Token' : 'Connect Wallet')}
+            {loading ? 'Creating...' : (isConnected ? 'Create Token' : 'Connect Wallet to Deploy')}
           </button>
         </div>
       </form>

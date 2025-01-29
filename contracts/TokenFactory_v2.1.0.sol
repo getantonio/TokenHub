@@ -68,7 +68,10 @@ contract TokenFactory_v2_1_0 is Initializable, OwnableUpgradeable, UUPSUpgradeab
         uint256 endTime,
         address owner
     ) external payable returns (address) {
-        require(msg.value >= 0.0001 ether, "Insufficient deployment fee");
+        // Owner deploys for free, others pay 0.0001 ETH
+        if (msg.sender != owner()) {
+            require(msg.value >= 0.0001 ether, "Insufficient deployment fee");
+        }
         require(startTime > block.timestamp, "Start time must be in future");
         require(endTime > startTime, "End time must be after start time");
 

@@ -449,13 +449,15 @@ export default function TokenForm_v1({ isConnected }: Props) {
             </label>
           </div>
 
-          <button
-            type="submit"
-            disabled={!isConnected || isLoading}
-            className={`inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${(!isConnected || isLoading) ? 'opacity-50 cursor-not-allowed' : ''}`}
-          >
-            {isLoading ? 'Creating...' : (isConnected ? 'Create Token' : 'Connect Wallet to Deploy')}
-          </button>
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              disabled={!isConnected || isLoading}
+              className={`inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${(!isConnected || isLoading) ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              {isLoading ? 'Creating...' : (isConnected ? 'Create Token' : 'Connect Wallet to Deploy')}
+            </button>
+          </div>
         </form>
       </div>
     </div>
