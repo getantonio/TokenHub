@@ -281,17 +281,19 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
       console.log("New token deployed at:", tokenAddress);
 
       // Show success message with explorer link
-      const explorerUrl = getExplorerUrl(chainId, 'token');
+      const explorerUrl = getExplorerUrl(chainId, tokenAddress, 'token');
+      const txExplorerUrl = getExplorerUrl(chainId, tx.hash, 'tx');
+
       setSuccessInfo({
         message: 'Token created successfully!',
         tokenAddress,
-        explorerUrl: `${explorerUrl}/address/${tokenAddress}`,
+        explorerUrl,
         symbol: formData.symbol,
         initialSupply: formData.initialSupply,
-        owner: tokenCreatedEvent.args.owner
+        owner: tokenCreatedEvent.args.owner || await signer.getAddress()
       });
 
-      showToast('success', 'Token created successfully!', `${explorerUrl}/tx/${tx.hash}`);
+      showToast('success', 'Token created successfully!', txExplorerUrl);
 
       // Reset form with new default times
       setFormData({
@@ -331,7 +333,7 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
               rel="noopener noreferrer"
               className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-black bg-green-400 hover:bg-green-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
             >
-              View on Explorer
+              View on Etherscan
             </a>
             <button
               onClick={() => setSuccessInfo(null)}
@@ -365,7 +367,7 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
                       rel="noopener noreferrer"
                       className="text-sm text-blue-500 hover:text-blue-400"
                     >
-                      View on Explorer
+                      View on Etherscan
                     </a>
                   )}
                 </div>
