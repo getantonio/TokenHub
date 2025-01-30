@@ -47,7 +47,7 @@ const defaultValues: FormData = {
   initialSupply: '1000000',
   maxSupply: '2000000',
   presaleRate: '100',
-  minContribution: '0.01',
+  minContribution: '0.1',
   maxContribution: '1',
   presaleCap: '10',
   ...getDefaultTimes(),

@@ -419,7 +419,7 @@ export default function TokenAdminV2({ isConnected, address }: TokenAdminV2Props
   }
 
   return (
-    <div className="p-1 relative bg-gray-800 rounded-lg shadow-lg">
+    <div className="p-2 relative bg-gray-800 rounded-lg shadow-lg">
       <div 
         className="flex justify-between items-center cursor-pointer py-0.5" 
         onClick={() => setIsExpanded(!isExpanded)}

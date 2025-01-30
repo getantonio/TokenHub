@@ -64,6 +64,11 @@ logs
 *.log
 firebase-debug.log*
 firebase-debug.*.log*
+functions/node_modules
+functions/.runtimeconfig.json
+functions/lib
+functions/.env
+functions/*.log
 
 # Contract artifacts
 /deployments

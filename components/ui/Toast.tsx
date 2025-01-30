@@ -10,26 +10,25 @@ export function Toast({ type, message, link }: ToastProps) {
   const textColor = type === 'success' ? 'text-green-500' : 'text-red-500';
 
   return (
-    <div className={`rounded-md ${bgColor} p-4 border ${borderColor} mb-4`}>
-      <div className="flex">
-        <div className="ml-3">
-          <h3 className={`text-sm font-medium ${textColor}`}>
-            {message}
-            {link && (
-              <a 
-                href={link} 
-                target="_blank" 
-                rel="noopener noreferrer" 
-                className="ml-2 underline hover:text-opacity-80"
-              >
-                View on Etherscan →
-              </a>
-            )}
-          </h3>
-        </div>
+    <div className={`rounded-md ${bgColor} p-2 border ${borderColor} mb-4`}>
+      <div className="flex items-center">
+        <span className="mr-2">{type === 'success' ? '🎉' : '⚠️'}</span>
+        <h3 className={`text-sm font-medium ${textColor}`}>
+          {message}
+          {link && (
+            <a 
+              href={link} 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="ml-2 underline hover:text-opacity-80"
+            >
+              View on Etherscan →
+            </a>
+          )}
+        </h3>
       </div>
     </div>
   );
 }
 
-export type { ToastProps }; 
+export type { ToastProps };
