@@ -1,18 +1,19 @@
-import Link from 'next/link';
+import { useState } from 'react';
+import { Card } from './ui/Card';
 
 interface FactoryFeatureCardProps {
   version: string;
-  status: 'STABLE' | 'NEW' | 'PLANNED' | 'FUTURE';
+  status: 'ACTIVE' | 'PLANNED' | 'FUTURE';
   title: string;
   description: string;
   features: string[];
   details: {
-    deploymentFee?: string;
-    networks?: string[];
-    audited?: boolean;
-    upgradeable?: boolean;
+    deploymentFee: string;
+    networks: string[];
+    audited: boolean;
+    upgradeable: boolean;
   };
-  link?: string;
+  link: string;
   action: string;
 }
 
@@ -26,101 +27,92 @@ export function FactoryFeatureCard({
   link,
   action
 }: FactoryFeatureCardProps) {
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'STABLE':
-        return 'text-green-500';
-      case 'NEW':
-        return 'text-green-500';
-      case 'PLANNED':
-        return 'text-blue-500';
-      case 'FUTURE':
-        return 'text-purple-500';
-      default:
-        return 'text-gray-500';
-    }
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  const statusColors = {
+    ACTIVE: 'bg-green-500/20 text-green-500',
+    PLANNED: 'bg-yellow-500/20 text-yellow-500',
+    FUTURE: 'bg-blue-500/20 text-blue-500'
   };
 
   return (
-    <div className="bg-gray-800 p-3 rounded-lg shadow-lg hover:shadow-xl transition-shadow h-full relative">
-      <div className="flex justify-between items-start mb-2">
-        <div>
-          <div className={`text-xs font-medium ${getStatusColor(status)} mb-1`}>{status}</div>
-          <h2 className="text-base font-bold text-white">{title}</h2>
-        </div>
-        <div className="text-xs text-gray-400">v{version}</div>
-      </div>
-
-      <p className="text-xs text-gray-400 mb-2">{description}</p>
-
-      <div className="grid grid-cols-2 gap-2 mb-2">
-        <div>
-          <ul className="text-xs text-gray-400 space-y-0.5">
-            {features.slice(0, Math.ceil(features.length / 2)).map((feature, index) => (
-              <li key={index} className="flex items-center">
-                <span className="text-blue-500 mr-1">•</span>
-                {feature}
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div>
-          <ul className="text-xs text-gray-400 space-y-0.5">
-            {features.slice(Math.ceil(features.length / 2)).map((feature, index) => (
-              <li key={index} className="flex items-center">
-                <span className="text-blue-500 mr-1">•</span>
-                {feature}
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
-
-      <div className="border-t border-gray-700 pt-2 mt-2">
-        <div className="grid grid-cols-2 gap-2 text-xs text-gray-400 mb-2">
-          {details.deploymentFee && (
-            <div>
-              <span className="opacity-75">Fee:</span> {details.deploymentFee}
+    <Card className="bg-gray-800 border-gray-700 hover:border-gray-600 transition-colors">
+      <div className="p-2 space-y-2">
+        {/* Header */}
+        <div className="flex justify-between items-start">
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-white">{title}</h3>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${statusColors[status]}`}>
+                {status}
+              </span>
             </div>
-          )}
-          {details.networks && (
-            <div>
-              <span className="opacity-75">Networks:</span> {details.networks.join(', ')}
-            </div>
-          )}
-          {(details.audited || details.upgradeable) && (
-            <div className="col-span-2 flex space-x-3">
-              {details.audited && (
-                <span className="text-green-500 flex items-center">
-                  <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                  </svg>
-                  Audited
-                </span>
-              )}
-              {details.upgradeable && (
-                <span className="text-blue-500 flex items-center">
-                  <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
-                  </svg>
-                  Upgradeable
-                </span>
-              )}
-            </div>
-          )}
+            <p className="text-xs text-gray-400 mt-0.5">{description}</p>
+          </div>
+          <button 
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="text-xs text-blue-400 hover:text-blue-300"
+          >
+            {isExpanded ? 'Show Less' : 'Show More'}
+          </button>
         </div>
-        <div className="flex justify-end">
+
+        {/* Quick Info */}
+        <div className="flex justify-between text-xs text-gray-400">
+          <div>Fee: {details.deploymentFee}</div>
+          <div>Networks: {details.networks.join(', ')}</div>
+        </div>
+
+        {/* Expandable Content */}
+        {isExpanded && (
+          <>
+            {/* Features */}
+            <div className="pt-3 border-t border-gray-700">
+              <h4 className="text-sm font-medium text-white mb-2">Features</h4>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                {features.map((feature, index) => (
+                  <div key={index} className="text-sm text-gray-300">• {feature}</div>
+                ))}
+              </div>
+            </div>
+
+            {/* Details */}
+            <div className="pt-3 border-t border-gray-700">
+              <div className="flex justify-between text-sm">
+                <div className="text-gray-300">
+                  Audited: <span className={details.audited ? 'text-green-500' : 'text-yellow-500'}>
+                    {details.audited ? 'Yes' : 'Pending'}
+                  </span>
+                </div>
+                <div className="text-gray-300">
+                  Upgradeable: <span className={details.upgradeable ? 'text-green-500' : 'text-red-500'}>
+                    {details.upgradeable ? 'Yes' : 'No'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Action Button */}
+        <div className="flex justify-end pt-2">
           {link ? (
-            <Link href={link}>
-              <button className="w-32 py-1.5 px-3 bg-[#1B4D3E] hover:bg-[#2C614F] text-white rounded text-sm transition-colors duration-200 font-medium">
-                {action}
-              </button>
-            </Link>
+            <a
+              href={link}
+              className="w-1/3 text-center py-1.5 px-3 text-sm font-medium rounded-md bg-[#1B4D3E] text-white hover:bg-[#2C614F] transition-colors"
+            >
+              {action}
+            </a>
           ) : (
-            <div className="text-gray-400 text-sm">{action} →</div>
+            <button
+              disabled
+              className="w-1/3 py-1.5 px-3 text-sm font-medium rounded-md bg-gray-700 text-gray-400 cursor-not-allowed"
+            >
+              {action}
+            </button>
           )}
         </div>
       </div>
-    </div>
+    </Card>
   );
 }

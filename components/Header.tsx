@@ -103,7 +103,9 @@ export function Header() {
   const navLinks = [
     { href: '/', label: 'Home' },
     { href: '/v1', label: 'V1' },
-    { href: '/v2', label: 'V2' }
+    { href: '/v2', label: 'V2' },
+    { href: '/presale', label: 'Presale' },
+    { href: '/admin', label: 'Admin' }
   ];
 
   return (
@@ -118,26 +120,45 @@ export function Header() {
             </Link>
 
             {/* Desktop Navigation */}
-            <nav className="hidden md:flex space-x-4">
-              {navLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className={`px-3 py-2 rounded-md text-sm font-medium ${
-                    router.pathname === link.href
-                      ? 'bg-gray-900 text-white'
-                      : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                  }`}
+            <div className="hidden md:flex items-center">
+              <div className="relative">
+                <button
+                  onClick={() => setShowMobileMenu(!showMobileMenu)}
+                  className="px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700 hover:text-white flex items-center"
                 >
-                  {link.label}
-                </Link>
-              ))}
-            </nav>
+                  <span>Token Factory</span>
+                  <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+
+                {showMobileMenu && (
+                  <div className="absolute left-0 mt-2 w-48 rounded-md shadow-lg bg-gray-700 ring-1 ring-black ring-opacity-5">
+                    <div className="py-1" role="menu">
+                      {navLinks.map((link) => (
+                        <Link
+                          key={link.href}
+                          href={link.href}
+                          onClick={() => setShowMobileMenu(false)}
+                          className={`block px-4 py-2 text-sm ${
+                            router.pathname === link.href
+                              ? 'bg-gray-600 text-white'
+                              : 'text-gray-300 hover:bg-gray-600'
+                          }`}
+                        >
+                          {link.label}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="flex items-center space-x-4">
             {/* Network Switcher */}
-            <div className="relative">
+            <div className="relative z-50">
               <button
                 onClick={() => setShowNetworkMenu(!showNetworkMenu)}
                 className="flex items-center space-x-2 px-3 py-2 rounded-md bg-gray-700 hover:bg-gray-600 text-white"
@@ -203,28 +224,6 @@ export function Header() {
             </div>
           </div>
         </div>
-
-        {/* Mobile Navigation Dropdown */}
-        {showMobileMenu && (
-          <div className="md:hidden absolute left-0 right-0 bg-gray-800 border-b border-gray-700 shadow-lg z-50">
-            <div className="px-2 pt-2 pb-3 space-y-1">
-              {navLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  onClick={() => setShowMobileMenu(false)}
-                  className={`block px-3 py-2 rounded-md text-base font-medium ${
-                    router.pathname === link.href
-                      ? 'bg-gray-900 text-white'
-                      : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                  }`}
-                >
-                  {link.label}
-                </Link>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     </header>
   );

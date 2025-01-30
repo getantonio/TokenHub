@@ -67,6 +67,12 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
 
   useEffect(() => {
     if (isConnected && chainId && provider && address) {
+      console.log("Dependencies changed, reloading tokens:", {
+        isConnected,
+        chainId,
+        hasProvider: !!provider,
+        address
+      });
       loadTokens();
     }
   }, [isConnected, chainId, provider, address]);
@@ -101,7 +107,6 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
     try {
       setIsLoading(true);
       const signer = await provider.getSigner();
-      const userAddress = address || await signer.getAddress();
       
       const factoryV1Address = getNetworkContractAddress(chainId, 'factoryAddress');
       if (!factoryV1Address) {
@@ -110,7 +115,6 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
       }
 
       console.log("Using factory address:", factoryV1Address);
-      console.log("User address:", userAddress);
 
       const factoryV1 = new Contract(factoryV1Address, TokenFactoryV1.abi, provider);
       
@@ -121,12 +125,10 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
       }
 
       try {
-        const factoryWithSigner = factoryV1.connect(signer) as Contract;
-        
         // Try to get all deployed tokens
         try {
           console.log("Attempting to get all deployed tokens...");
-          const deployedTokens = await factoryWithSigner.getDeployedTokens();
+          const deployedTokens = await factoryV1.getDeployedTokens();
           console.log("Found deployedTokens:", deployedTokens);
           
           if (deployedTokens && deployedTokens.length > 0) {
@@ -167,7 +169,7 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
 
         // Fallback to event logs
         const currentBlock = await provider.getBlockNumber();
-        const fromBlock = Math.max(0, currentBlock - 2500000);
+        const fromBlock = Math.max(0, currentBlock - 100000); // Reduced block range for faster loading
 
         console.log(`\nSearching for events from block ${fromBlock} to ${currentBlock}`);
 

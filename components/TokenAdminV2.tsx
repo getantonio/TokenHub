@@ -127,7 +127,6 @@ export default function TokenAdminV2({ isConnected, address }: TokenAdminV2Props
     try {
       setIsLoading(true);
       const signer = await provider.getSigner();
-      const userAddress = address || await signer.getAddress();
       
       const factoryV2Address = getNetworkContractAddress(chainId, 'factoryAddressV2');
       if (!factoryV2Address) {
@@ -137,8 +136,7 @@ export default function TokenAdminV2({ isConnected, address }: TokenAdminV2Props
 
       console.log("Loading tokens for:", {
         chainId,
-        factoryV2Address,
-        userAddress
+        factoryV2Address
       });
       const factoryV2 = new Contract(factoryV2Address, TokenFactoryV2.abi, provider);
       
@@ -252,15 +250,6 @@ export default function TokenAdminV2({ isConnected, address }: TokenAdminV2Props
             token.timeLockEnabled(),
             token.getPresaleStatus()
           ]);
-
-          console.log("Token contract info:", {
-            name,
-            symbol,
-            totalSupply: formatUnits(totalSupply, TOKEN_DECIMALS),
-            blacklistEnabled,
-            timeLockEnabled,
-            presaleStatus
-          });
 
           if (!foundTokens.some(t => t.address.toLowerCase() === normalizedAddr)) {
             foundTokens.push({

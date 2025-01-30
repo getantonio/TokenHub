@@ -546,12 +546,10 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
             validationErrors={[]}
           />
           
-          {successInfo && (
-            <TokenAdminV2
-              isConnected={isConnected}
-              address={successInfo.tokenAddress}
-            />
-          )}
+          <TokenAdminV2
+            isConnected={isConnected}
+            address={successInfo?.tokenAddress}
+          />
         </div>
       </div>
     </div>

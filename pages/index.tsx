@@ -64,6 +64,54 @@ const FACTORY_FEATURES = [
     },
     link: "/v2",
     action: "Launch App"
+  },
+  {
+    version: "3.0.0",
+    status: 'PLANNED' as const,
+    title: "Token Factory v3",
+    description: "Advanced DeFi token creation with built-in DEX and staking",
+    features: [
+      "Built-in DEX pool",
+      "Staking mechanism",
+      "Yield farming",
+      "Governance",
+      "Multi-token rewards",
+      "Cross-chain bridge",
+      "DAO integration",
+      "Advanced analytics"
+    ],
+    details: {
+      deploymentFee: "Coming soon",
+      networks: ["ETH", "BSC", "Polygon", "Arbitrum", "Optimism"],
+      audited: false,
+      upgradeable: true
+    },
+    link: "",
+    action: "Coming Soon"
+  },
+  {
+    version: "4.0.0",
+    status: 'FUTURE' as const,
+    title: "Token Factory v4",
+    description: "Next-gen token platform with AI-powered features",
+    features: [
+      "AI trading bot",
+      "Market prediction",
+      "Smart rebalancing",
+      "Risk analysis",
+      "Portfolio optimization",
+      "Automated compliance",
+      "ML price feeds",
+      "Smart treasury"
+    ],
+    details: {
+      deploymentFee: "TBA",
+      networks: ["All EVM chains"],
+      audited: false,
+      upgradeable: true
+    },
+    link: "",
+    action: "In Development"
   }
 ];
 
@@ -88,9 +136,9 @@ const SAMPLE_TOKENS: TokenListing[] = [
     },
     progress: 50,
     status: 'live',
-    startTime: new Date(Date.now() + 86400000).toISOString(),
-    endTime: new Date(Date.now() + 172800000).toISOString(),
-    listedDate: new Date().toISOString(),
+    startTime: '2024-01-01T00:00:00.000Z',
+    endTime: '2024-02-01T00:00:00.000Z',
+    listedDate: '2024-01-01T00:00:00.000Z',
     factoryVersion: 'v1',
     trending: true,
     isNew: true
@@ -115,9 +163,9 @@ const SAMPLE_TOKENS: TokenListing[] = [
     },
     progress: 0,
     status: 'upcoming',
-    startTime: new Date(Date.now() + 86400000).toISOString(),
-    endTime: new Date(Date.now() + 172800000).toISOString(),
-    listedDate: new Date().toISOString(),
+    startTime: '2024-02-01T00:00:00.000Z',
+    endTime: '2024-03-01T00:00:00.000Z',
+    listedDate: '2024-02-01T00:00:00.000Z',
     factoryVersion: 'v2',
     trending: false,
     isNew: true
@@ -142,9 +190,9 @@ const SAMPLE_TOKENS: TokenListing[] = [
     },
     progress: 100,
     status: 'ended',
-    startTime: new Date(Date.now() - 172800000).toISOString(),
-    endTime: new Date(Date.now() - 86400000).toISOString(),
-    listedDate: new Date(Date.now() - 172800000).toISOString(),
+    startTime: '2023-12-01T00:00:00.000Z',
+    endTime: '2024-01-01T00:00:00.000Z',
+    listedDate: '2023-12-01T00:00:00.000Z',
     factoryVersion: 'v1',
     trending: true,
     isNew: false
@@ -198,7 +246,7 @@ export default function Home() {
               <InfoIcon />
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4">
               {FACTORY_FEATURES.map((feature, index) => (
                 <FactoryFeatureCard
                   key={index}

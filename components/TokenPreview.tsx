@@ -49,6 +49,23 @@ export function TokenPreview({ config, isValid, validationErrors }: TokenPreview
     Number(config.marketingAllocation) +
     Number(config.developerAllocation);
 
+  // Set default allocations for v1 and v2
+  const defaultAllocations = {
+    presaleAllocation: 50,
+    liquidityAllocation: 40,
+    teamAllocation: 0,
+    marketingAllocation: 0,
+    developerAllocation: 10
+  };
+
+  const allocations = {
+    presaleAllocation: defaultAllocations.presaleAllocation,
+    liquidityAllocation: defaultAllocations.liquidityAllocation,
+    teamAllocation: defaultAllocations.teamAllocation,
+    marketingAllocation: defaultAllocations.marketingAllocation,
+    developerAllocation: defaultAllocations.developerAllocation
+  };
+
   // Calculate USD price
   const getUsdPrice = () => {
     if (!config.initialPrice || !ethPrice) return null;
@@ -58,31 +75,31 @@ export function TokenPreview({ config, isValid, validationErrors }: TokenPreview
 
   return (
     <Card className="w-full bg-gray-800 border-gray-700">
-      <CardHeader className="py-3 border-b border-gray-700">
-        <CardTitle className="text-lg font-semibold text-white">Token Preview</CardTitle>
+      <CardHeader className="py-2 border-b border-gray-700">
+        <CardTitle className="text-sm font-semibold text-white">Token Preview</CardTitle>
       </CardHeader>
-      <CardContent className="p-4 space-y-6">
+      <CardContent className="p-2 space-y-3">
         {/* Basic Info */}
-        <div className="space-y-3">
-          <div className="grid grid-cols-[120px_1fr] gap-2 items-center">
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="grid grid-cols-[80px_1fr] gap-1 items-center">
             <span className="text-gray-400">Name:</span>
             <span className="text-white font-medium">{config.name || '-'}</span>
           </div>
-          <div className="grid grid-cols-[120px_1fr] gap-2 items-center">
+          <div className="grid grid-cols-[80px_1fr] gap-1 items-center">
             <span className="text-gray-400">Symbol:</span>
             <span className="text-white font-medium">{config.symbol || '-'}</span>
           </div>
-          <div className="grid grid-cols-[120px_1fr] gap-2 items-center">
-            <span className="text-gray-400">Total Supply:</span>
+          <div className="grid grid-cols-[80px_1fr] gap-1 items-center">
+            <span className="text-gray-400">Supply:</span>
             <span className="text-white font-medium">{config.totalSupply ? formatNumber(Number(config.totalSupply)) : '-'}</span>
           </div>
-          <div className="grid grid-cols-[120px_1fr] gap-2 items-center">
-            <span className="text-gray-400">Initial Price:</span>
+          <div className="grid grid-cols-[80px_1fr] gap-1 items-center">
+            <span className="text-gray-400">Price:</span>
             <span className="text-white font-medium">
               {config.initialPrice ? (
                 <>
                   {config.initialPrice} ETH
-                  <span className="text-gray-400 ml-2">
+                  <span className="text-gray-400 ml-1">
                     (${getUsdPrice()})
                   </span>
                 </>
@@ -92,52 +109,54 @@ export function TokenPreview({ config, isValid, validationErrors }: TokenPreview
         </div>
 
         {/* Distribution Graph */}
-        <div className="space-y-2">
-          <h3 className="text-sm font-medium">Token Distribution</h3>
-          <div className="grid grid-cols-5 gap-2 text-xs text-gray-300">
-            <div>Presale ({config.presaleAllocation}%)</div>
-            <div>Liquidity ({config.liquidityAllocation}%)</div>
-            <div>Team ({config.teamAllocation}%)</div>
-            <div>Marketing ({config.marketingAllocation}%)</div>
-            <div>Creator ({config.developerAllocation}%)</div>
+        <div className="space-y-1">
+          <div className="flex justify-between items-center text-xs">
+            <h3 className="font-medium">Token Distribution</h3>
+            <div className="text-gray-400">Total: 100%</div>
           </div>
-          <div className="text-xs text-gray-400">Total: {totalAllocation}%</div>
+          <div className="grid grid-cols-5 gap-1 text-[10px] text-gray-300">
+            <div>Presale ({allocations.presaleAllocation}%)</div>
+            <div>Liquidity ({allocations.liquidityAllocation}%)</div>
+            <div>Team ({allocations.teamAllocation}%)</div>
+            <div>Marketing ({allocations.marketingAllocation}%)</div>
+            <div>Creator ({allocations.developerAllocation}%)</div>
+          </div>
           
           {/* Distribution Bar */}
-          <div className="h-4 w-full flex rounded overflow-hidden">
+          <div className="h-2 w-full flex rounded overflow-hidden">
             <div 
               className="bg-blue-500" 
-              style={{ width: `${config.presaleAllocation}%` }}
-              title={`Presale: ${config.presaleAllocation}%`}
+              style={{ width: `${allocations.presaleAllocation}%` }}
+              title={`Presale: ${allocations.presaleAllocation}%`}
             />
             <div 
               className="bg-green-500" 
-              style={{ width: `${config.liquidityAllocation}%` }}
-              title={`Liquidity: ${config.liquidityAllocation}%`}
+              style={{ width: `${allocations.liquidityAllocation}%` }}
+              title={`Liquidity: ${allocations.liquidityAllocation}%`}
             />
             <div 
               className="bg-yellow-500" 
-              style={{ width: `${config.teamAllocation}%` }}
-              title={`Team: ${config.teamAllocation}%`}
+              style={{ width: `${allocations.teamAllocation}%` }}
+              title={`Team: ${allocations.teamAllocation}%`}
             />
             <div 
               className="bg-purple-500" 
-              style={{ width: `${config.marketingAllocation}%` }}
-              title={`Marketing: ${config.marketingAllocation}%`}
+              style={{ width: `${allocations.marketingAllocation}%` }}
+              title={`Marketing: ${allocations.marketingAllocation}%`}
             />
             <div 
               className="bg-red-500" 
-              style={{ width: `${config.developerAllocation}%` }}
-              title={`Creator: ${config.developerAllocation}%`}
+              style={{ width: `${allocations.developerAllocation}%` }}
+              title={`Creator: ${allocations.developerAllocation}%`}
             />
           </div>
         </div>
 
         {/* Validation Errors */}
         {!isValid && validationErrors.length > 0 && (
-          <div className="mt-4 p-3 bg-red-900/50 rounded-lg border border-red-700">
-            <h4 className="text-sm font-medium text-red-400 mb-2">Validation Errors:</h4>
-            <ul className="text-sm space-y-1">
+          <div className="mt-2 p-2 bg-red-900/50 rounded-lg border border-red-700">
+            <h4 className="text-xs font-medium text-red-400 mb-1">Validation Errors:</h4>
+            <ul className="text-xs space-y-0.5">
               {validationErrors.map((error, i) => (
                 <li key={i} className="text-red-300">• {error}</li>
               ))}

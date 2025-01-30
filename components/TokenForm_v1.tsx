@@ -388,12 +388,10 @@ export default function TokenForm_v1({ isConnected }: Props) {
             validationErrors={[]}
           />
           
-          {successInfo && (
-            <TokenAdmin
-              isConnected={isConnected}
-              address={successInfo.tokenAddress}
-            />
-          )}
+          <TokenAdmin
+            isConnected={isConnected}
+            address={successInfo?.tokenAddress}
+          />
         </div>
       </div>
     </div>
