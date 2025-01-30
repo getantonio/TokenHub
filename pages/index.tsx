@@ -2,8 +2,13 @@ import { useState } from 'react';
 import type { MetaMaskInpageProvider } from '@metamask/providers';
 import { NetworkIndicator } from '../components/NetworkIndicator';
 import { useNetwork } from '../contexts/NetworkContext';
+import { TokenSaleCard } from '../components/TokenSaleCard';
+import { TokenCategoryFilter, Category } from '../components/TokenCategoryFilter';
+import { FactoryFeatureCard } from '../components/FactoryFeatureCard';
+import { InfoIcon } from '../components/ui/InfoIcon';
+import { Header } from '../components/Header';
 import Head from 'next/head';
-import Link from 'next/link';
+import { TokenListing } from '../types/token-listing';
 
 declare global {
   interface Window {
@@ -11,85 +16,219 @@ declare global {
   }
 }
 
+const FACTORY_FEATURES = [
+  {
+    version: "1.1.0",
+    status: 'STABLE' as const,
+    title: "Token Factory v1",
+    description: "Production-ready ERC20 token creation with essential features",
+    features: [
+      "Basic ERC20 features",
+      "Blacklist capability",
+      "Time lock mechanism",
+      "Multi-network support",
+      "Role-based access",
+      "Pausable transfers",
+      "Burnable tokens",
+      "Snapshot support"
+    ],
+    details: {
+      deploymentFee: "0.0001 ETH",
+      networks: ["ETH", "BSC", "Polygon"],
+      audited: true,
+      upgradeable: false
+    },
+    link: "/v1",
+    action: "Launch App"
+  },
+  {
+    version: "2.1.0",
+    status: 'NEW' as const,
+    title: "Token Factory v2",
+    description: "Advanced token creation with built-in presale functionality",
+    features: [
+      "Simple presale setup",
+      "Whitelist support",
+      "Timed rounds",
+      "Soft/Hard caps",
+      "Auto liquidity",
+      "Vesting schedules",
+      "Anti-bot measures",
+      "Fair launch options"
+    ],
+    details: {
+      deploymentFee: "0.0002 ETH",
+      networks: ["ETH", "BSC", "Polygon", "Arbitrum"],
+      audited: true,
+      upgradeable: true
+    },
+    link: "/v2",
+    action: "Launch App"
+  }
+];
+
+const SAMPLE_TOKENS: TokenListing[] = [
+  {
+    name: 'Sample Token 1',
+    symbol: 'ST1',
+    description: 'A sample token for demonstration',
+    price: {
+      eth: '0.001',
+      usd: '2.50',
+      change24h: 5.5
+    },
+    marketCap: '1000000',
+    supply: {
+      total: '1000000',
+      forSale: '500000'
+    },
+    raised: {
+      current: '100',
+      target: '200'
+    },
+    progress: 50,
+    status: 'live',
+    startTime: new Date(Date.now() + 86400000).toISOString(),
+    endTime: new Date(Date.now() + 172800000).toISOString(),
+    listedDate: new Date().toISOString(),
+    factoryVersion: 'v1',
+    trending: true,
+    isNew: true
+  },
+  {
+    name: 'Sample Token 2',
+    symbol: 'ST2',
+    description: 'Another sample token for demonstration',
+    price: {
+      eth: '0.002',
+      usd: '5.00',
+      change24h: -2.3
+    },
+    marketCap: '2000000',
+    supply: {
+      total: '2000000',
+      forSale: '1000000'
+    },
+    raised: {
+      current: '0',
+      target: '500'
+    },
+    progress: 0,
+    status: 'upcoming',
+    startTime: new Date(Date.now() + 86400000).toISOString(),
+    endTime: new Date(Date.now() + 172800000).toISOString(),
+    listedDate: new Date().toISOString(),
+    factoryVersion: 'v2',
+    trending: false,
+    isNew: true
+  },
+  {
+    name: 'Sample Token 3',
+    symbol: 'ST3',
+    description: 'A completed token sale',
+    price: {
+      eth: '0.003',
+      usd: '7.50',
+      change24h: 15.7
+    },
+    marketCap: '3000000',
+    supply: {
+      total: '3000000',
+      forSale: '1500000'
+    },
+    raised: {
+      current: '300',
+      target: '300'
+    },
+    progress: 100,
+    status: 'ended',
+    startTime: new Date(Date.now() - 172800000).toISOString(),
+    endTime: new Date(Date.now() - 86400000).toISOString(),
+    listedDate: new Date(Date.now() - 172800000).toISOString(),
+    factoryVersion: 'v1',
+    trending: true,
+    isNew: false
+  }
+];
+
 export default function Home() {
+  const [activeCategory, setActiveCategory] = useState<Category>('all');
+
+  const filteredTokens = SAMPLE_TOKENS.filter(token => {
+    switch (activeCategory) {
+      case 'live':
+        return token.status === 'live';
+      case 'upcoming':
+        return token.status === 'upcoming';
+      case 'ended':
+        return token.status === 'ended';
+      case 'trending':
+        return token.trending;
+      case 'new':
+        return token.isNew;
+      default:
+        return true;
+    }
+  });
+
   return (
-    <main className="min-h-screen bg-background-primary">
+    <div className="min-h-screen bg-gray-900">
       <Head>
-        <title>Token Factory</title>
-        <meta name="description" content="Create and manage your own tokens with Token Factory" />
+        <title>TokenHub.dev - Create and Manage Tokens</title>
+        <meta name="description" content="Create and manage your own tokens with TokenHub.dev" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
       
-      <div className="max-w-6xl mx-auto p-8">
-        <h1 className="text-4xl font-bold text-text-primary text-center mb-2">Token Factory</h1>
-        <p className="text-text-secondary text-center mb-8">Create and manage tokens across multiple networks</p>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {/* V1 Card */}
-          <Link href="/v1" className="block">
-            <div className="bg-background-secondary p-6 rounded-lg shadow-lg hover:shadow-xl transition-shadow h-full">
-              <div className="text-green-500 text-sm font-medium mb-2">STABLE</div>
-              <h2 className="text-2xl font-bold text-text-primary mb-3">Token Factory v1</h2>
-              <p className="text-text-secondary mb-4">Basic ERC20 token creation with:</p>
-              <ul className="text-text-secondary text-sm space-y-1 mb-4">
-                <li>• Basic ERC20 features</li>
-                <li>• Blacklist capability</li>
-                <li>• Time lock mechanism</li>
-                <li>• Multi-network support</li>
-              </ul>
-              <div className="text-text-accent mt-auto">Launch App →</div>
+      <Header />
+      
+      <main className="container mx-auto px-4 py-8">
+        <div className="max-w-6xl mx-auto space-y-12">
+          {/* Feature Cards Section */}
+          <section>
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h2 className="text-3xl font-bold text-white">Token Hub Features</h2>
+                <p className="text-gray-400 mt-2">
+                  Create and Deploy Your Token<br />
+                  <span className="text-sm">
+                    Launch your own token with customizable features, vesting schedules, and token sales in minutes.
+                  </span>
+                </p>
+              </div>
+              <InfoIcon />
             </div>
-          </Link>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {FACTORY_FEATURES.map((feature, index) => (
+                <FactoryFeatureCard
+                  key={index}
+                  {...feature}
+                />
+              ))}
+            </div>
+          </section>
 
-          {/* V2 Card */}
-          <Link href="/v2" className="block">
-            <div className="bg-background-secondary p-6 rounded-lg shadow-lg hover:shadow-xl transition-shadow h-full">
-              <div className="text-green-500 text-sm font-medium mb-2">NEW</div>
-              <h2 className="text-2xl font-bold text-text-primary mb-3">Token Factory v2</h2>
-              <p className="text-text-secondary mb-4">Presale functionality with:</p>
-              <ul className="text-text-secondary text-sm space-y-1 mb-4">
-                <li>• Simple presale setup</li>
-                <li>• Whitelist support</li>
-                <li>• Timed rounds</li>
-                <li>• Soft/Hard caps</li>
-              </ul>
-              <div className="text-text-accent mt-auto">Launch App →</div>
+          {/* Token Sale Cards Section */}
+          <section>
+            <h2 className="text-3xl font-bold text-white text-center mb-2">Featured Tokens</h2>
+            <p className="text-gray-400 text-center mb-4">Explore our latest token offerings</p>
+            
+            <TokenCategoryFilter
+              activeCategory={activeCategory}
+              onCategoryChange={setActiveCategory}
+            />
+            
+            <div className="space-y-2 mt-4">
+              {filteredTokens.map((token, index) => (
+                <TokenSaleCard
+                  key={index}
+                  {...token}
+                />
+              ))}
             </div>
-          </Link>
-
-          {/* V3 Card */}
-          <div className="block">
-            <div className="bg-background-secondary p-6 rounded-lg shadow-lg opacity-75 h-full">
-              <div className="text-blue-500 text-sm font-medium mb-2">PLANNED</div>
-              <h2 className="text-2xl font-bold text-text-primary mb-3">Token Factory v3</h2>
-              <p className="text-text-secondary mb-4">Liquidity features with:</p>
-              <ul className="text-text-secondary text-sm space-y-1 mb-4">
-                <li>• Auto liquidity pool</li>
-                <li>• Initial price setting</li>
-                <li>• Liquidity locking</li>
-                <li>• Trading limits</li>
-              </ul>
-              <div className="text-text-secondary mt-auto">In Development →</div>
-            </div>
-          </div>
-
-          {/* V4 Card */}
-          <div className="block">
-            <div className="bg-background-secondary p-6 rounded-lg shadow-lg opacity-75 h-full">
-              <div className="text-purple-500 text-sm font-medium mb-2">FUTURE</div>
-              <h2 className="text-2xl font-bold text-text-primary mb-3">Token Factory v4</h2>
-              <p className="text-text-secondary mb-4">Advanced features with:</p>
-              <ul className="text-text-secondary text-sm space-y-1 mb-4">
-                <li>• Auto verification</li>
-                <li>• Marketing features</li>
-                <li>• Governance options</li>
-                <li>• Cross-chain support</li>
-              </ul>
-              <div className="text-text-secondary mt-auto">Coming Later →</div>
-            </div>
-          </div>
+          </section>
         </div>
-      </div>
-    </main>
+      </main>
+    </div>
   );
 }

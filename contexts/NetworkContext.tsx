@@ -5,12 +5,14 @@ interface NetworkContextType {
   chainId: number | null;
   isSupported: boolean;
   networkError: string | null;
+  setChainId: (chainId: number) => void;
 }
 
 const NetworkContext = createContext<NetworkContextType>({
   chainId: null,
   isSupported: false,
   networkError: null,
+  setChainId: () => {},
 });
 
 export function NetworkProvider({ children }: { children: React.ReactNode }) {
@@ -38,17 +40,15 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
     checkNetwork();
 
     if (window.ethereum) {
-      const handleChainChanged = (chainIdHex: unknown) => {
-        if (typeof chainIdHex === 'string') {
-          setChainId(parseInt(chainIdHex, 16));
-        }
+      const handleChainChanged = (chainIdHex: string) => {
+        setChainId(parseInt(chainIdHex, 16));
       };
 
-      window.ethereum.on('chainChanged', handleChainChanged);
+      window.ethereum.on('chainChanged', handleChainChanged as (...args: unknown[]) => void);
 
       return () => {
         if (window.ethereum?.removeListener) {
-          window.ethereum.removeListener('chainChanged', handleChainChanged);
+          window.ethereum.removeListener('chainChanged', handleChainChanged as (...args: unknown[]) => void);
         }
       };
     }
@@ -63,6 +63,7 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
       chainId,
       isSupported,
       networkError,
+      setChainId: (id: number) => setChainId(id),
     }}>
       {children}
     </NetworkContext.Provider>
@@ -71,4 +72,4 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
 
 export function useNetwork() {
   return useContext(NetworkContext);
-} 
+}

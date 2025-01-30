@@ -4,7 +4,7 @@
 
 @layer base {
   body {
-    @apply bg-background-primary text-text-primary;
+    @apply bg-gray-900 text-white;
   }
 }
 
@@ -14,11 +14,11 @@
   }
   
   .btn-primary {
-    @apply bg-indigo-600 text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500;
+    @apply bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500;
   }
   
   .btn-secondary {
-    @apply bg-background-secondary text-text-primary border border-border hover:bg-background-accent focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500;
+    @apply bg-gray-800 text-white border border-gray-700 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500;
   }
   
   .btn-success {
@@ -30,14 +30,31 @@
   }
   
   .form-input {
-    @apply mt-1 block w-full h-7 rounded-md border-gray-700 bg-background-primary text-text-primary shadow-sm focus:border-indigo-500 focus:ring-indigo-500;
+    @apply mt-1 block w-full h-7 rounded-md border-gray-700 bg-gray-800 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500;
   }
   
   .form-label {
-    @apply block text-sm font-medium text-text-primary;
+    @apply block text-sm font-medium text-white;
   }
   
   .card {
-    @apply bg-background-secondary p-6 rounded-lg shadow-lg hover:shadow-xl transition-shadow;
+    @apply bg-gray-800 p-6 rounded-lg shadow-lg hover:shadow-xl transition-shadow;
   }
-} 
+
+  /* Animation classes for token cards */
+  .token-card-enter {
+    @apply transform transition-all duration-300 ease-out;
+  }
+  
+  .token-card-enter-active {
+    @apply translate-y-0 opacity-100;
+  }
+  
+  .token-card-exit {
+    @apply transform transition-all duration-300 ease-in;
+  }
+  
+  .token-card-exit-active {
+    @apply -translate-y-2 opacity-0;
+  }
+}

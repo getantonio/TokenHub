@@ -4,15 +4,14 @@ import { useNetwork } from '../contexts/NetworkContext';
 import TokenFactory_v2_1_0 from '../contracts/abi/TokenFactory_v2.1.0.json';
 import { getExplorerUrl } from '../config/networks';
 import { getNetworkContractAddress } from '../config/contracts';
+import { Toast } from './ui/Toast';
+import { TokenPreview } from './TokenPreview';
+import TokenAdminV2 from './TokenAdminV2';
+import { InfoIcon } from './ui/InfoIcon';
+import { TokenConfig } from './types';
 
 interface TokenFormV2Props {
   isConnected: boolean;
-}
-
-interface ToastMessage {
-  type: 'success' | 'error';
-  message: string;
-  link?: string;
 }
 
 interface FormData {
@@ -20,6 +19,7 @@ interface FormData {
   symbol: string;
   initialSupply: string;
   maxSupply: string;
+  initialPrice: string;
   presaleRate: string;
   minContribution: string;
   maxContribution: string;
@@ -29,6 +29,12 @@ interface FormData {
   enableBlacklist: boolean;
   enableTimeLock: boolean;
   customOwner: string;
+}
+
+interface ToastMessage {
+  type: 'success' | 'error';
+  message: string;
+  link?: string;
 }
 
 const getDefaultTimes = () => {
@@ -46,6 +52,7 @@ const defaultValues: FormData = {
   symbol: 'TEST',
   initialSupply: '1000000',
   maxSupply: '2000000',
+  initialPrice: '0.001',
   presaleRate: '100',
   minContribution: '0.1',
   maxContribution: '1',
@@ -72,14 +79,63 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
     owner: string | null;
   } | null>(null);
 
-  useEffect(() => {
-    setFormData({
-      ...defaultValues,
-      ...getDefaultTimes()
-    });
-  }, []);
+  const [previewConfig, setPreviewConfig] = useState<TokenConfig>({
+    name: formData.name,
+    symbol: formData.symbol,
+    totalSupply: formData.maxSupply,
+    initialPrice: formData.initialPrice,
+    presaleAllocation: 40,
+    liquidityAllocation: 30,
+    teamAllocation: 10,
+    marketingAllocation: 10,
+    developerAllocation: 10
+  });
 
-  // Fetch deployment fee from contract
+  // Update preview whenever form data changes
+  useEffect(() => {
+    setPreviewConfig({
+      ...previewConfig,
+      name: formData.name,
+      symbol: formData.symbol,
+      totalSupply: formData.maxSupply,
+      initialPrice: formData.initialPrice
+    });
+  }, [formData]);
+
+  // Check V2 availability
+  useEffect(() => {
+    const checkV2Availability = async () => {
+      if (!chainId) {
+        setV2Available(false);
+        return;
+      }
+
+      try {
+        const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddressV2');
+        if (!factoryAddress || factoryAddress === '') {
+          setV2Available(false);
+          return;
+        }
+
+        if (window.ethereum) {
+          const provider = new BrowserProvider(window.ethereum);
+          try {
+            const code = await provider.getCode(factoryAddress);
+            const hasCode = code !== '0x' && code !== '0x0';
+            setV2Available(hasCode);
+          } catch (error) {
+            setV2Available(false);
+          }
+        }
+      } catch (error) {
+        setV2Available(false);
+      }
+    };
+
+    checkV2Availability();
+  }, [chainId]);
+
+  // Fetch deployment fee
   useEffect(() => {
     const fetchDeploymentFee = async () => {
       if (!window.ethereum || !chainId) {
@@ -113,60 +169,9 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
     fetchDeploymentFee();
   }, [chainId]);
 
-  useEffect(() => {
-    const checkV2Availability = async () => {
-      if (!chainId) {
-        setV2Available(false);
-        return;
-      }
-
-      try {
-        const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddressV2');
-        if (!factoryAddress || factoryAddress === '') {
-          setV2Available(false);
-          return;
-        }
-
-        if (window.ethereum) {
-          const provider = new BrowserProvider(window.ethereum);
-          try {
-            const code = await provider.getCode(factoryAddress);
-            const hasCode = code !== '0x' && code !== '0x0';
-            setV2Available(hasCode);
-          } catch (error) {
-            setV2Available(false);
-          }
-        }
-      } catch (error) {
-        setV2Available(false);
-      }
-    };
-
-    checkV2Availability();
-  }, [chainId]);
-
-  if (!v2Available) {
-    return (
-      <div className="p-2 bg-background-secondary rounded-lg shadow-lg">
-        <div className="rounded-md bg-yellow-900/20 p-2 border border-yellow-700">
-          <h3 className="text-sm font-medium text-yellow-500">TokenFactory V2.1.0 is not yet deployed on this network.</h3>
-          <p className="text-xs text-yellow-400">Note: V2.1.0 is currently only available on specific networks.</p>
-        </div>
-      </div>
-    );
-  }
-
   const showToast = (type: 'success' | 'error', message: string, link?: string) => {
     setToast({ type, message, link });
     setTimeout(() => setToast(null), 5000);
-  };
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value, type, checked } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value
-    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -209,38 +214,31 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
       }
 
       // Convert amounts to BigInt with proper decimals and scaling
-      // Token amounts use 18 decimals
       const initialSupplyAmount = parseUnits(formData.initialSupply || '0', 18);
       const hardCapAmount = parseUnits(formData.maxSupply || '0', 18);
-
-      // Presale rate is tokens per ETH/MATIC (whole number)
       const presaleRateAmount = BigInt(formData.presaleRate || '0');
-
-      // Contribution amounts in ETH/MATIC
       const minContribAmount = parseUnits(formData.minContribution || '0', 18);
       const maxContribAmount = parseUnits(formData.maxContribution || '0', 18);
       const presaleCapAmount = parseUnits(formData.presaleCap || '0', 18);
-
-      // Convert timestamps to BigInt
       const startTimeBigInt = BigInt(startTimeSeconds);
       const endTimeBigInt = BigInt(endTimeSeconds);
 
-      // Call createToken with exact parameter order from the contract
+      // Create token
       const tx = await factoryV2.createToken(
-        formData.name,           // string name
-        formData.symbol,         // string symbol
-        initialSupplyAmount,     // uint256 initialSupply
-        hardCapAmount,          // uint256 maxSupply
-        formData.enableBlacklist, // bool enableBlacklist
-        formData.enableTimeLock,  // bool enableTimeLock
-        presaleRateAmount,      // uint256 presaleRate
-        minContribAmount,       // uint256 minContribution
-        maxContribAmount,       // uint256 maxContribution
-        presaleCapAmount,       // uint256 presaleCap
-        startTimeBigInt,        // uint256 startTime
-        endTimeBigInt,          // uint256 endTime
-        ownerAddress, // address owner (custom or 0x0 for msg.sender)
-        { value: BigInt(fee) }  // transaction value
+        formData.name,
+        formData.symbol,
+        initialSupplyAmount,
+        hardCapAmount,
+        formData.enableBlacklist,
+        formData.enableTimeLock,
+        presaleRateAmount,
+        minContribAmount,
+        maxContribAmount,
+        presaleCapAmount,
+        startTimeBigInt,
+        endTimeBigInt,
+        ownerAddress,
+        { value: BigInt(fee) }
       );
       
       const receipt = await tx.wait();
@@ -282,136 +280,280 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
     }
   };
 
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value, type, checked } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+  };
+
+  if (!v2Available) {
+    return (
+      <div className="p-2 bg-gray-800 rounded-lg shadow-lg">
+        <div className="rounded-md bg-yellow-900/20 p-2 border border-yellow-700">
+          <h3 className="text-sm font-medium text-yellow-500">TokenFactory V2.1.0 is not yet deployed on this network.</h3>
+          <p className="text-xs text-yellow-400">Note: V2.1.0 is currently only available on specific networks.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-2">
+    <div className="space-y-6">
+      {toast && (
+        <Toast {...toast} />
+      )}
+
       {successInfo && (
-        <div className="rounded-md bg-green-900/20 p-2 border border-green-700">
-          <h3 className="text-sm font-medium text-green-500">🎉 Token Created Successfully!</h3>
-          <div className="space-y-1 text-xs text-green-400">
+        <div className="rounded-md bg-green-900/20 p-6 border border-green-700 mb-6">
+          <h3 className="text-lg font-medium text-green-500 mb-2">🎉 Token Created Successfully!</h3>
+          <div className="space-y-2 text-sm text-green-400">
             <p>Token Symbol: {successInfo.symbol}</p>
-            <p>Contract Address: <a href={successInfo.explorerUrl} target="_blank" rel="noopener noreferrer" className="underline hover:text-green-300">{successInfo.tokenAddress}</a></p>
+            <p>Contract Address: <a 
+              href={successInfo.explorerUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-green-300"
+            >
+              {successInfo.tokenAddress}
+            </a></p>
             <p>Initial Supply: {Number(successInfo.initialSupply).toLocaleString()} {successInfo.symbol}</p>
             <p>Owner: {successInfo.owner?.slice(0, 6)}...{successInfo.owner?.slice(-4)}</p>
           </div>
-          <div className="mt-2 flex gap-2">
-            <a href={successInfo.explorerUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center px-2 py-1 text-xs border border-transparent rounded-md shadow-sm text-black bg-green-400 hover:bg-green-500">View on Etherscan</a>
-            <button onClick={() => setSuccessInfo(null)} className="inline-flex items-center px-2 py-1 text-xs border border-transparent rounded-md text-green-400 hover:bg-green-900/30">Clear</button>
+          <div className="mt-4 flex gap-4">
+            <a
+              href={successInfo.explorerUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-black bg-green-400 hover:bg-green-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+            >
+              View on Explorer
+            </a>
+            <button
+              onClick={() => setSuccessInfo(null)}
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-green-400 bg-transparent hover:bg-green-900/30 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+            >
+              Clear Message
+            </button>
           </div>
         </div>
       )}
-      {toast && (
-        <div className={`p-2 rounded-lg border ${toast.type === 'success' ? 'bg-green-900/20 border-green-500 text-green-500' : 'bg-red-900/20 border-red-500 text-red-500'}`}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              {toast.type === 'success' ? '🎉' : '⚠️'}
-              <div className="ml-1">
-                <p className="text-xs">{toast.message}</p>
-                {toast.link && <a href={toast.link} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:text-blue-400">View on Etherscan</a>}
-              </div>
-            </div>
-            <button onClick={() => setToast(null)} className="text-xs opacity-70 hover:opacity-100">Clear</button>
-          </div>
-        </div>
-      )}
-      <form onSubmit={handleSubmit} className="space-y-2 bg-background-secondary p-3 rounded-lg shadow-lg">
-        <div className="rounded-md bg-blue-900/20 p-2 border border-blue-700 mb-2">
-          <p className="text-xs text-blue-400">
-            Deployment Fee: {deploymentFee ? (
-              deploymentFee === 'Not available on this network' ? (
-                <span className="text-red-400">{deploymentFee}</span>
-              ) : (
-                <span>{deploymentFee} ETH</span>
-              )
-            ) : 'Loading...'}
-          </p>
-          <p className="text-xs text-blue-400/70 mt-0.5">
-            {deploymentFee === 'Not available on this network'
-              ? 'Please switch to a supported network'
-              : 'This amount will be required to deploy your token'}
-          </p>
-        </div>
-        <div>
-          <h3 className="text-xs font-semibold text-text-primary mb-1">Token Information</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Form Section */}
+        <form onSubmit={handleSubmit} className="space-y-4 bg-gray-800 p-6 rounded-lg shadow-lg">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="text-xs text-text-secondary">Token Name</label>
-              <input type="text" name="name" value={formData.name} onChange={handleChange} className="form-input" placeholder="My Token" required />
+              <label className="block text-sm font-medium text-white">Token Name</label>
+              <input
+                type="text"
+                name="name"
+                value={formData.name}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-md border-gray-700 bg-gray-900 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                placeholder="My Token"
+                required
+              />
             </div>
             <div>
-              <label className="text-xs text-text-secondary">Token Symbol</label>
-              <input type="text" name="symbol" value={formData.symbol} onChange={handleChange} className="form-input" placeholder="TKN" required />
+              <label className="block text-sm font-medium text-white">Token Symbol</label>
+              <input
+                type="text"
+                name="symbol"
+                value={formData.symbol}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-md border-gray-700 bg-gray-900 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                placeholder="TKN"
+                required
+              />
             </div>
             <div>
-              <label className="text-xs text-text-secondary">Initial Supply</label>
-              <input type="number" name="initialSupply" value={formData.initialSupply} onChange={handleChange} className="form-input" min="1" required />
+              <label className="block text-sm font-medium text-white">Initial Supply</label>
+              <input
+                type="number"
+                name="initialSupply"
+                value={formData.initialSupply}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-md border-gray-700 bg-gray-900 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                min="1"
+                required
+              />
             </div>
             <div>
-              <label className="text-xs text-text-secondary">Max Supply</label>
-              <input type="number" name="maxSupply" value={formData.maxSupply} onChange={handleChange} className="form-input" min="1" required />
-            </div>
-          </div>
-        </div>
-        <div>
-          <h3 className="text-xs font-semibold text-text-primary mb-1">Presale Settings</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            <div>
-              <label className="text-xs text-text-secondary">Presale Rate</label>
-              <input type="number" name="presaleRate" value={formData.presaleRate} onChange={handleChange} className="form-input" min="1" required />
-            </div>
-            <div>
-              <label className="text-xs text-text-secondary">Min Contribution</label>
-              <input type="number" name="minContribution" value={formData.minContribution} onChange={handleChange} className="form-input" min="0.1" step="0.1" required />
-            </div>
-            <div>
-              <label className="text-xs text-text-secondary">Max Contribution</label>
-              <input type="number" name="maxContribution" value={formData.maxContribution} onChange={handleChange} className="form-input" min="0.1" step="0.1" required />
-            </div>
-            <div>
-              <label className="text-xs text-text-secondary">Presale Cap</label>
-              <input type="number" name="presaleCap" value={formData.presaleCap} onChange={handleChange} className="form-input" min="0.1" step="0.1" required />
+              <label className="block text-sm font-medium text-white">Max Supply</label>
+              <input
+                type="number"
+                name="maxSupply"
+                value={formData.maxSupply}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-md border-gray-700 bg-gray-900 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                min="1"
+                required
+              />
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
-            <div>
-              <label className="text-xs text-text-secondary">Start Time</label>
-              <input type="datetime-local" name="startTime" value={formData.startTime} onChange={handleChange} className="form-input" required />
-            </div>
-            <div>
-              <label className="text-xs text-text-secondary">End Time</label>
-              <input type="datetime-local" name="endTime" value={formData.endTime} onChange={handleChange} className="form-input" required />
-            </div>
-          </div>
-        </div>
-        <div>
-          <h3 className="text-xs font-semibold text-text-primary mb-1">Advanced Settings</h3>
+
           <div>
-            <div>
-              <label className="text-xs text-text-secondary">Custom Owner Address (Optional)</label>
-              <input type="text" name="customOwner" value={formData.customOwner} onChange={handleChange} className="form-input" placeholder="0x..." />
-              <p className="text-xs text-gray-500 mt-0.5">Leave empty to use connected wallet address</p>
-            </div>
-            <div className="grid grid-cols-2 gap-2 mt-2">
-              <div className="flex items-center">
-                <input type="checkbox" name="enableBlacklist" checked={formData.enableBlacklist} onChange={handleChange} className="h-4 w-4 rounded border-gray-700 bg-background-primary text-indigo-600 focus:ring-indigo-500" />
-                <label className="ml-2 text-xs text-text-secondary">Enable Blacklist</label>
+            <h3 className="text-sm font-semibold text-white mb-3">Presale Settings</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-white">Initial Price (ETH)</label>
+                <input
+                  type="number"
+                  name="initialPrice"
+                  value={formData.initialPrice}
+                  onChange={handleChange}
+                  className="mt-1 block w-full rounded-md border-gray-700 bg-gray-900 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  min="0.0001"
+                  step="0.0001"
+                  required
+                />
               </div>
-              <div className="flex items-center">
-                <input type="checkbox" name="enableTimeLock" checked={formData.enableTimeLock} onChange={handleChange} className="h-4 w-4 rounded border-gray-700 bg-background-primary text-indigo-600 focus:ring-indigo-500" />
-                <label className="ml-2 text-xs text-text-secondary">Enable Time Lock</label>
+              <div>
+                <label className="block text-sm font-medium text-white">Presale Rate (Tokens/ETH)</label>
+                <input
+                  type="number"
+                  name="presaleRate"
+                  value={formData.presaleRate}
+                  onChange={handleChange}
+                  className="mt-1 block w-full rounded-md border-gray-700 bg-gray-900 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  min="1"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-white">Min Contribution (ETH)</label>
+                <input
+                  type="number"
+                  name="minContribution"
+                  value={formData.minContribution}
+                  onChange={handleChange}
+                  className="mt-1 block w-full rounded-md border-gray-700 bg-gray-900 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  min="0.1"
+                  step="0.1"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-white">Max Contribution (ETH)</label>
+                <input
+                  type="number"
+                  name="maxContribution"
+                  value={formData.maxContribution}
+                  onChange={handleChange}
+                  className="mt-1 block w-full rounded-md border-gray-700 bg-gray-900 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  min="0.1"
+                  step="0.1"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-white">Presale Cap (ETH)</label>
+                <input
+                  type="number"
+                  name="presaleCap"
+                  value={formData.presaleCap}
+                  onChange={handleChange}
+                  className="mt-1 block w-full rounded-md border-gray-700 bg-gray-900 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  min="0.1"
+                  step="0.1"
+                  required
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+              <div>
+                <label className="block text-sm font-medium text-white">Start Time</label>
+                <input
+                  type="datetime-local"
+                  name="startTime"
+                  value={formData.startTime}
+                  onChange={handleChange}
+                  className="mt-1 block w-full rounded-md border-gray-700 bg-gray-900 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-white">End Time</label>
+                <input
+                  type="datetime-local"
+                  name="endTime"
+                  value={formData.endTime}
+                  onChange={handleChange}
+                  className="mt-1 block w-full rounded-md border-gray-700 bg-gray-900 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  required
+                />
               </div>
             </div>
           </div>
+
+          <div>
+            <h3 className="text-sm font-semibold text-white mb-3">Advanced Settings</h3>
+            <div>
+              <label className="block text-sm font-medium text-white">Custom Owner Address (Optional)</label>
+              <input
+                type="text"
+                name="customOwner"
+                value={formData.customOwner}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-md border-gray-700 bg-gray-900 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                placeholder="0x..."
+              />
+              <p className="mt-1 text-xs text-gray-400">Leave empty to use connected wallet address</p>
+            </div>
+            <div className="grid grid-cols-2 gap-4 mt-4">
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  name="enableBlacklist"
+                  checked={formData.enableBlacklist}
+                  onChange={handleChange}
+                  className="h-4 w-4 rounded border-gray-700 bg-gray-900 text-blue-600 focus:ring-blue-500"
+                />
+                <label className="ml-2 text-sm text-white">Enable Blacklist</label>
+              </div>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  name="enableTimeLock"
+                  checked={formData.enableTimeLock}
+                  onChange={handleChange}
+                  className="h-4 w-4 rounded border-gray-700 bg-gray-900 text-blue-600 focus:ring-blue-500"
+                />
+                <label className="ml-2 text-sm text-white">Enable Time Lock</label>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end items-center space-x-2">
+            <InfoIcon />
+            <button
+              type="submit"
+              disabled={!isConnected || loading}
+              className={`inline-flex justify-center rounded-md border border-transparent bg-[#1B4D3E] py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-[#2C614F] focus:outline-none focus:ring-2 focus:ring-[#2C614F] focus:ring-offset-2 ${(!isConnected || loading) ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              {loading ? 'Creating...' : (isConnected ? 'Create Token' : 'Connect Wallet to Deploy')}
+            </button>
+          </div>
+        </form>
+
+        {/* Preview Section */}
+        <div className="space-y-6">
+          <TokenPreview
+            config={previewConfig}
+            isValid={true}
+            validationErrors={[]}
+          />
+          
+          {successInfo && (
+            <TokenAdminV2
+              isConnected={isConnected}
+              address={successInfo.tokenAddress}
+            />
+          )}
         </div>
-        <div className="flex justify-end">
-          <button
-            type="submit"
-            disabled={!isConnected || loading}
-            className={`inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${(!isConnected || loading) ? 'opacity-50 cursor-not-allowed' : ''}`}
-          >
-            {loading ? 'Creating...' : (isConnected ? 'Create Token' : 'Connect Wallet to Deploy')}
-          </button>
-        </div>
-      </form>
+      </div>
     </div>
   );
 }

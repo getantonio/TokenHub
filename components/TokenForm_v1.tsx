@@ -2,13 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { BrowserProvider, Contract, parseUnits, formatUnits } from 'ethers';
 import { getNetworkContractAddress } from '../config/contracts';
 import TokenFactoryArtifact from '../contracts/abi/TokenFactory_v1.1.0.json';
-import TokenTemplateArtifact from '../contracts/abi/TokenTemplate_v1.1.0.json';
 import { Toast } from './ui/Toast';
 import { getExplorerUrl } from '../config/networks';
+import { TokenPreview } from './TokenPreview';
+import TokenAdmin from './TokenAdmin';
+import { InfoIcon } from './ui/InfoIcon';
+import { TokenConfig } from './types';
 
 const TokenFactoryABI = TokenFactoryArtifact.abi;
-const TokenTemplateABI = TokenTemplateArtifact.abi;
-const TOKEN_DECIMALS = 18; // Standard ERC20 decimals
+const TOKEN_DECIMALS = 18;
 
 interface FormData {
   name: string;
@@ -38,10 +40,41 @@ export default function TokenForm_v1({ isConnected }: Props) {
     blacklistEnabled: false,
     timeLockEnabled: false,
   });
+
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [deploymentFee, setDeploymentFee] = useState<string | null>(null);
+  const [successInfo, setSuccessInfo] = useState<{
+    message: string;
+    tokenAddress: string;
+    explorerUrl: string;
+    symbol: string;
+    initialSupply: string;
+    owner: string | null;
+  } | null>(null);
+
+  const [previewConfig, setPreviewConfig] = useState<TokenConfig>({
+    name: formData.name,
+    symbol: formData.symbol,
+    totalSupply: formData.initialSupply,
+    initialPrice: "0.001",
+    presaleAllocation: 40,
+    liquidityAllocation: 30,
+    teamAllocation: 10,
+    marketingAllocation: 10,
+    developerAllocation: 10
+  });
+
+  // Update preview whenever form data changes
+  useEffect(() => {
+    setPreviewConfig({
+      ...previewConfig,
+      name: formData.name,
+      symbol: formData.symbol,
+      totalSupply: formData.initialSupply
+    });
+  }, [formData]);
 
   // Fetch deployment fee when component mounts
   useEffect(() => {
@@ -60,15 +93,8 @@ export default function TokenForm_v1({ isConnected }: Props) {
         }
         
         const factory = new Contract(factoryAddress, TokenFactoryABI, signer);
-        
-        // Get the required fee
         const fee = await factory.getDeploymentFee(userAddress);
-        
-        // Check if user is owner for display purposes
-        const owner = await factory.owner();
-        const isOwner = owner.toLowerCase() === userAddress.toLowerCase();
-        
-        setDeploymentFee(formatUnits(fee, 'ether') + (isOwner ? ' (Owner)' : ''));
+        setDeploymentFee(formatUnits(fee, 'ether'));
       } catch (error) {
         console.error('Error fetching deployment fee:', error);
       }
@@ -76,21 +102,9 @@ export default function TokenForm_v1({ isConnected }: Props) {
 
     fetchDeploymentFee();
   }, [isConnected]);
-  const [successInfo, setSuccessInfo] = useState<{
-    message: string;
-    tokenAddress: string;
-    explorerUrl: string;
-    symbol: string;
-    initialSupply: string;
-    owner: string | null;
-  } | null>(null);
 
   const showToast = (type: 'success' | 'error', message: string, link?: string) => {
-    setToast({
-      type,
-      message,
-      link
-    });
+    setToast({ type, message, link });
     setTimeout(() => setToast(null), 5000);
   };
 
@@ -103,8 +117,8 @@ export default function TokenForm_v1({ isConnected }: Props) {
     
     setIsLoading(true);
     setError(null);
-    setSuccessInfo(null); // Clear previous success
-    setToast(null); // Clear previous toast
+    setSuccessInfo(null);
+    setToast(null);
 
     try {
       if (!window.ethereum) {
@@ -117,51 +131,16 @@ export default function TokenForm_v1({ isConnected }: Props) {
       const chainId = Number(await window.ethereum.request({ method: 'eth_chainId' }));
       
       const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddress');
-      const factory = new Contract(factoryAddress, TokenFactoryABI, signer);
-
-      // Get deployment fee
-      let fee;
-      try {
-        const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddress');
-        if (!factoryAddress) {
-          throw new Error(`Contract not deployed on network ${chainId}`);
-        }
-        
-        const factory = new Contract(factoryAddress, TokenFactoryABI, signer);
-        
-        // Always get the required fee
-        fee = await factory.getDeploymentFee(userAddress);
-        
-        // Check if user is owner for display purposes
-        const owner = await factory.owner();
-        const isOwner = owner.toLowerCase() === userAddress.toLowerCase();
-        
-        console.log("Deployment fee:", formatUnits(fee, 'ether'), "ETH", isOwner ? "(Owner)" : "");
-      } catch (error: any) {
-        console.error("Error getting deployment fee:", error);
-        showToast('error', error.message || 'Failed to get deployment fee');
-        setIsLoading(false);
-        return;
+      if (!factoryAddress) {
+        throw new Error("TokenFactory is not yet deployed on this network.");
       }
+
+      const factory = new Contract(factoryAddress, TokenFactoryABI, signer);
+      const fee = await factory.getDeploymentFee(userAddress);
       
-      // Convert supply to wei (with 18 decimals)
       const initialSupplyWei = parseUnits(formData.initialSupply, TOKEN_DECIMALS);
       const maxSupplyWei = parseUnits(formData.maxSupply, TOKEN_DECIMALS);
 
-      console.log('Creating token with parameters:', {
-        name: formData.name,
-        symbol: formData.symbol,
-        initialSupply: formData.initialSupply,
-        maxSupply: formData.maxSupply,
-        initialSupplyWei: initialSupplyWei.toString(),
-        maxSupplyWei: maxSupplyWei.toString(),
-        blacklistEnabled: formData.blacklistEnabled,
-        timeLockEnabled: formData.timeLockEnabled,
-        fee: formatUnits(fee, 'ether'),
-        owner: userAddress
-      });
-
-      // Create token
       const tx = await factory.createToken(
         formData.name,
         formData.symbol,
@@ -173,53 +152,38 @@ export default function TokenForm_v1({ isConnected }: Props) {
       );
 
       showToast('success', 'Transaction submitted. Waiting for confirmation...');
-      console.log('Transaction submitted:', tx.hash);
       
       const receipt = await tx.wait();
-      console.log('Transaction confirmed:', receipt);
-
-      // Look for TokenCreated event in logs
       let tokenAddress = null;
+      
       for (const log of receipt.logs) {
         try {
           const parsed = factory.interface.parseLog(log as unknown as { topics: string[], data: string });
-          console.log("Parsed log:", parsed);
-          
           if (parsed?.name === "TokenCreated") {
-            tokenAddress = parsed.args[0]; // First argument is the token address
-            console.log("Found token address from event:", tokenAddress);
+            tokenAddress = parsed.args[0];
             break;
           }
         } catch (e) {
-          console.log("Could not parse log, trying next one:", e);
           continue;
         }
       }
 
       if (!tokenAddress) {
-        // Try to get the token address from raw logs
         for (const log of receipt.logs) {
-          console.log("Raw log:", log);
           if (log.address !== factoryAddress) {
-            tokenAddress = log.address; // The new token's address will be in the log's address field
-            console.log("Found token address from raw log:", tokenAddress);
+            tokenAddress = log.address;
             break;
           }
         }
       }
 
       if (!tokenAddress) {
-        console.error("Could not find token address in transaction logs");
-        showToast("error", "Token created but could not get address. Check your wallet for the new token.");
-        setIsLoading(false);
-        return;
+        throw new Error("Could not find token address in transaction logs");
       }
 
-      console.log("New token address:", tokenAddress);
-      
-      // Fix explorer URL construction
       const explorerUrl = getExplorerUrl(chainId, tokenAddress, 'token');
-      
+      const txExplorerUrl = getExplorerUrl(chainId, tx.hash, 'tx');
+
       setSuccessInfo({
         message: 'Token created successfully!',
         tokenAddress,
@@ -228,54 +192,8 @@ export default function TokenForm_v1({ isConnected }: Props) {
         initialSupply: formData.initialSupply,
         owner: userAddress
       });
-      
-      showToast('success', 'Token created successfully!');
-      
-      // Get token info for success message
-      const token = new Contract(tokenAddress, TokenTemplateABI, signer);
-      try {
-        // Wait for proxy initialization to complete
-        await new Promise(resolve => setTimeout(resolve, 2000));
 
-        // Get token info using function calls
-        const [name, symbol, owner] = await Promise.all([
-          token.name(),
-          token.symbol(),
-          token.owner()
-        ]);
-
-        console.log("Retrieved token info:", { name, symbol, owner });
-
-        // Reset form and update success info with correct values
-        setFormData({
-          name: "TokenFactory Test v1",
-          symbol: "TFT1",
-          initialSupply: "1000000",
-          maxSupply: "1000000",
-          blacklistEnabled: false,
-          timeLockEnabled: false,
-        });
-
-        setSuccessInfo({
-          message: 'Token created successfully!',
-          tokenAddress,
-          explorerUrl,
-          symbol: symbol || formData.symbol, // Fallback to form data if needed
-          initialSupply: formData.initialSupply,
-          owner: owner || userAddress // Fallback to user address if needed
-        });
-      } catch (error) {
-        console.error("Could not get token info:", error);
-        // Use form data as fallback
-        setSuccessInfo({
-          message: 'Token created successfully!',
-          tokenAddress,
-          explorerUrl,
-          symbol: formData.symbol,
-          initialSupply: formData.initialSupply,
-          owner: userAddress
-        });
-      }
+      showToast('success', 'Token created successfully!', txExplorerUrl);
 
     } catch (error: any) {
       console.error('Error creating token:', error);
@@ -294,98 +212,49 @@ export default function TokenForm_v1({ isConnected }: Props) {
   };
 
   return (
-    <div className="relative">
+    <div className="space-y-6">
       {toast && (
-        <div className={`mb-4 p-4 rounded-lg border ${
-          toast.type === 'success' 
-            ? 'bg-green-900/20 border-green-500 text-green-500' 
-            : 'bg-red-900/20 border-red-500 text-red-500'
-        }`}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              {toast.type === 'success' ? (
-                <span className="text-green-500 mr-2">🎉</span>
-              ) : (
-                <span className="text-red-500 mr-2">⚠️</span>
-              )}
-              <div>
-                <p className="text-sm font-medium">{toast.message}</p>
-                {toast.link && (
-                  <a 
-                    href={toast.link} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="text-sm text-blue-500 hover:text-blue-400"
-                  >
-                    View on Etherscan
-                  </a>
-                )}
-              </div>
-            </div>
-            <button 
-              onClick={() => setToast(null)}
-              className="text-sm opacity-70 hover:opacity-100"
+        <Toast {...toast} />
+      )}
+
+      {successInfo && (
+        <div className="rounded-md bg-green-900/20 p-6 border border-green-700 mb-6">
+          <h3 className="text-lg font-medium text-green-500 mb-2">🎉 Token Created Successfully!</h3>
+          <div className="space-y-2 text-sm text-green-400">
+            <p>Token Symbol: {successInfo.symbol}</p>
+            <p>Contract Address: <a 
+              href={successInfo.explorerUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-green-300"
+            >
+              {successInfo.tokenAddress}
+            </a></p>
+            <p>Initial Supply: {Number(successInfo.initialSupply).toLocaleString()} {successInfo.symbol}</p>
+            <p>Owner: {successInfo.owner?.slice(0, 6)}...{successInfo.owner?.slice(-4)}</p>
+          </div>
+          <div className="mt-4 flex gap-4">
+            <a
+              href={successInfo.explorerUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-black bg-green-400 hover:bg-green-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+            >
+              View on Explorer
+            </a>
+            <button
+              onClick={() => setSuccessInfo(null)}
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-green-400 bg-transparent hover:bg-green-900/30 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
             >
               Clear Message
             </button>
           </div>
         </div>
       )}
-      <div className="space-y-6">
-        {successInfo && (
-          <div className="rounded-md bg-green-900/20 p-6 border border-green-700 mb-6">
-            <h3 className="text-lg font-medium text-green-500 mb-2">🎉 Token Created Successfully!</h3>
-            <div className="space-y-2 text-sm text-green-400">
-              <p>Token Symbol: {successInfo.symbol}</p>
-              <p>Contract Address: <a 
-                href={successInfo.explorerUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:text-green-300"
-              >
-                {successInfo.tokenAddress}
-              </a></p>
-              <p>Initial Supply: {Number(successInfo.initialSupply).toLocaleString()} {successInfo.symbol}</p>
-              <p>Owner: {successInfo.owner?.slice(0, 6)}...{successInfo.owner?.slice(-4)}</p>
-            </div>
-            <div className="mt-4 flex gap-4">
-              <a
-                href={successInfo.explorerUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-black bg-green-400 hover:bg-green-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-              >
-                View on Etherscan
-              </a>
-              <button
-                onClick={() => setSuccessInfo(null)}
-                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-green-400 bg-transparent hover:bg-green-900/30 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-              >
-                Clear Message
-              </button>
-            </div>
-          </div>
-        )}
 
-        <form onSubmit={handleSubmit} className="space-y-4 bg-background-secondary p-6 rounded-lg shadow-lg">
-          <div className="rounded-md bg-blue-900/20 p-4 border border-blue-700 mb-4">
-           <p className="text-sm text-blue-400">
-             Deployment Fee: {deploymentFee ? (
-               deploymentFee === 'Not available on this network' ? (
-                 <span className="text-red-400">{deploymentFee}</span>
-               ) : (
-                 <span>{deploymentFee} {deploymentFee !== '0 (Owner)' ? 'ETH' : ''}</span>
-               )
-             ) : 'Loading...'}
-           </p>
-           <p className="text-xs text-blue-400/70 mt-1">
-             {deploymentFee === 'Not available on this network'
-               ? 'Please switch to a supported network'
-               : deploymentFee === '0 (Owner)'
-                 ? 'No fee required for contract owner'
-                 : 'This amount will be required to deploy your token'}
-           </p>
-         </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Form Section */}
+        <form onSubmit={handleSubmit} className="space-y-4 bg-gray-800 p-6 rounded-lg shadow-lg">
           {error && (
             <div className="rounded-md bg-red-900/20 p-4 border border-red-700">
               <div className="flex">
@@ -397,37 +266,37 @@ export default function TokenForm_v1({ isConnected }: Props) {
           )}
 
           <div>
-            <label htmlFor="name" className="form-label">Token Name</label>
+            <label htmlFor="name" className="block text-sm font-medium text-white">Token Name</label>
             <input
               type="text"
               id="name"
               name="name"
               value={formData.name}
               onChange={handleChange}
-              className="form-input"
+              className="mt-1 block w-full rounded-md border-gray-700 bg-gray-900 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
               placeholder="TokenFactory Test v1"
               required
             />
           </div>
 
           <div>
-            <label htmlFor="symbol" className="form-label">Token Symbol</label>
+            <label htmlFor="symbol" className="block text-sm font-medium text-white">Token Symbol</label>
             <input
               type="text"
               id="symbol"
               name="symbol"
               value={formData.symbol}
               onChange={handleChange}
-              className="form-input"
+              className="mt-1 block w-full rounded-md border-gray-700 bg-gray-900 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
               placeholder="TFT1"
               required
             />
           </div>
 
           <div>
-            <label htmlFor="initialSupply" className="form-label">
+            <label htmlFor="initialSupply" className="block text-sm font-medium text-white">
               Initial Supply
-              <span className="ml-1 text-xs text-text-secondary">(tokens will be sent to your wallet)</span>
+              <span className="ml-1 text-xs text-gray-400">(tokens will be sent to your wallet)</span>
             </label>
             <div className="relative rounded-md shadow-sm">
               <input
@@ -436,21 +305,21 @@ export default function TokenForm_v1({ isConnected }: Props) {
                 name="initialSupply"
                 value={formData.initialSupply}
                 onChange={handleChange}
-                className="form-input pr-12"
+                className="mt-1 block w-full rounded-md border-gray-700 bg-gray-900 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                 placeholder="1000000"
                 required
               />
               <div className="absolute inset-y-0 right-0 flex items-center pr-3">
-                <span className="text-text-secondary sm:text-sm">{formData.symbol}</span>
+                <span className="text-gray-400 sm:text-sm">{formData.symbol}</span>
               </div>
             </div>
-            <p className="mt-1 text-xs text-text-secondary">Each token has {TOKEN_DECIMALS} decimals</p>
+            <p className="mt-1 text-xs text-gray-400">Each token has {TOKEN_DECIMALS} decimals</p>
           </div>
 
           <div>
-            <label htmlFor="maxSupply" className="form-label">
+            <label htmlFor="maxSupply" className="block text-sm font-medium text-white">
               Max Supply
-              <span className="ml-1 text-xs text-text-secondary">(maximum tokens that can ever exist)</span>
+              <span className="ml-1 text-xs text-gray-400">(maximum tokens that can ever exist)</span>
             </label>
             <div className="relative rounded-md shadow-sm">
               <input
@@ -459,12 +328,12 @@ export default function TokenForm_v1({ isConnected }: Props) {
                 name="maxSupply"
                 value={formData.maxSupply}
                 onChange={handleChange}
-                className="form-input pr-12"
+                className="mt-1 block w-full rounded-md border-gray-700 bg-gray-900 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                 placeholder="1000000"
                 required
               />
               <div className="absolute inset-y-0 right-0 flex items-center pr-3">
-                <span className="text-text-secondary sm:text-sm">{formData.symbol}</span>
+                <span className="text-gray-400 sm:text-sm">{formData.symbol}</span>
               </div>
             </div>
           </div>
@@ -476,11 +345,11 @@ export default function TokenForm_v1({ isConnected }: Props) {
               name="blacklistEnabled"
               checked={formData.blacklistEnabled}
               onChange={handleChange}
-              className="h-4 w-4 rounded border-gray-700 bg-background-primary text-indigo-600 focus:ring-indigo-500"
+              className="h-4 w-4 rounded border-gray-700 bg-gray-900 text-blue-600 focus:ring-blue-500"
             />
-            <label htmlFor="blacklistEnabled" className="ml-2 block text-sm text-text-primary">
+            <label htmlFor="blacklistEnabled" className="ml-2 block text-sm text-white">
               Enable Blacklist
-              <span className="ml-1 text-xs text-text-secondary">(ability to block specific addresses)</span>
+              <span className="ml-1 text-xs text-gray-400">(ability to block specific addresses)</span>
             </label>
           </div>
 
@@ -491,25 +360,42 @@ export default function TokenForm_v1({ isConnected }: Props) {
               name="timeLockEnabled"
               checked={formData.timeLockEnabled}
               onChange={handleChange}
-              className="h-4 w-4 rounded border-gray-700 bg-background-primary text-indigo-600 focus:ring-indigo-500"
+              className="h-4 w-4 rounded border-gray-700 bg-gray-900 text-blue-600 focus:ring-blue-500"
             />
-            <label htmlFor="timeLockEnabled" className="ml-2 block text-sm text-text-primary">
+            <label htmlFor="timeLockEnabled" className="ml-2 block text-sm text-white">
               Enable Time Lock
-              <span className="ml-1 text-xs text-text-secondary">(ability to lock tokens for a period)</span>
+              <span className="ml-1 text-xs text-gray-400">(ability to lock tokens for a period)</span>
             </label>
           </div>
 
-          <div className="flex justify-end">
+          <div className="flex justify-end items-center space-x-2">
+            <InfoIcon />
             <button
               type="submit"
               disabled={!isConnected || isLoading || deploymentFee === 'Not available on this network'}
-              className={`inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${(!isConnected || isLoading || deploymentFee === 'Not available on this network') ? 'opacity-50 cursor-not-allowed' : ''}`}
+              className={`inline-flex justify-center rounded-md border border-transparent bg-[#1B4D3E] py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-[#2C614F] focus:outline-none focus:ring-2 focus:ring-[#2C614F] focus:ring-offset-2 ${(!isConnected || isLoading || deploymentFee === 'Not available on this network') ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               {isLoading ? 'Creating...' : !isConnected ? 'Connect Wallet to Deploy' : deploymentFee === 'Not available on this network' ? 'Not Available on this Network' : 'Create Token'}
             </button>
           </div>
         </form>
+
+        {/* Preview Section */}
+        <div className="space-y-6">
+          <TokenPreview
+            config={previewConfig}
+            isValid={true}
+            validationErrors={[]}
+          />
+          
+          {successInfo && (
+            <TokenAdmin
+              isConnected={isConnected}
+              address={successInfo.tokenAddress}
+            />
+          )}
+        </div>
       </div>
     </div>
   );
-} 
+}
