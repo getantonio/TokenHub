@@ -196,7 +196,8 @@ async function deployAndVerify(version: string) {
 
       // Initialize factory
       console.log('Initializing factory...');
-      await factory.initialize(defaultFee);
+      const initTx = await factory.initialize(defaultFee);
+      await initTx.wait();
       console.log(`Factory initialized with default fee: ${ethers.formatEther(defaultFee)} ETH`);
 
       await verifyContract(templateAddress);
@@ -258,8 +259,7 @@ async function deployAndVerify(version: string) {
 }
 
 async function main() {
-  // Deploy only the latest versions
-  await deployAndVerify('v1.1.0');
+  // Deploy v2.1.0 with proper initialization
   await deployAndVerify('v2.1.0');
 }
 

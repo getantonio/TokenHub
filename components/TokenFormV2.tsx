@@ -46,10 +46,10 @@ const defaultValues: FormData = {
   symbol: 'TEST',
   initialSupply: '1000000',
   maxSupply: '2000000',
-  presaleRate: '1000',
-  minContribution: '0.1',
-  maxContribution: '10',
-  presaleCap: '100',
+  presaleRate: '100',
+  minContribution: '0.01',
+  maxContribution: '1',
+  presaleCap: '10',
   ...getDefaultTimes(),
   enableBlacklist: false,
   enableTimeLock: false,
@@ -97,11 +97,16 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
         const provider = new BrowserProvider(window.ethereum);
         const signer = await provider.getSigner();
         const factoryV2 = new Contract(factoryAddress, TokenFactory_v2_1_0.abi, signer);
-        const fee = await factoryV2.getDeploymentFee(await signer.getAddress());
-        setDeploymentFee(formatUnits(fee, 'ether'));
+        const userAddress = await signer.getAddress();
+        const fee = await factoryV2.getDeploymentFee(userAddress);
+        if (!fee) {
+          setDeploymentFee('0');
+        } else {
+          setDeploymentFee(formatUnits(fee, 'ether'));
+        }
       } catch (error) {
         console.error('Error fetching deployment fee:', error);
-        setDeploymentFee('Error fetching fee');
+        setDeploymentFee('Error fetching fee. Please try again.');
       }
     };
 
@@ -190,7 +195,11 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
       const factoryV2 = new Contract(factoryAddress, TokenFactory_v2_1_0.abi, signer);
 
       // Get required deployment fee
-      const fee = await factoryV2.getDeploymentFee(await signer.getAddress());
+      const userAddress = await signer.getAddress();
+      const fee = await factoryV2.getDeploymentFee(userAddress);
+      if (!fee) {
+        throw new Error('Failed to get deployment fee');
+      }
 
       // Handle custom owner address
       let ownerAddress = "0x0000000000000000000000000000000000000000";
@@ -200,13 +209,17 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
       }
 
       // Convert amounts to BigInt with proper decimals and scaling
-      const decimals = 18;
-      const initialSupplyAmount = parseUnits(formData.initialSupply || '0', decimals);
-      const softCapAmount = initialSupplyAmount / BigInt(2); // 50% of initial supply
-      const hardCapAmount = parseUnits(formData.maxSupply || '0', decimals);
-      const minContribAmount = parseUnits(formData.minContribution || '0', decimals);
-      const maxContribAmount = parseUnits(formData.maxContribution || '0', decimals);
-      const presaleRateAmount = parseUnits(formData.presaleRate || '0', decimals);
+      // Token amounts use 18 decimals
+      const initialSupplyAmount = parseUnits(formData.initialSupply || '0', 18);
+      const hardCapAmount = parseUnits(formData.maxSupply || '0', 18);
+
+      // Presale rate is tokens per ETH/MATIC (whole number)
+      const presaleRateAmount = BigInt(formData.presaleRate || '0');
+
+      // Contribution amounts in ETH/MATIC
+      const minContribAmount = parseUnits(formData.minContribution || '0', 18);
+      const maxContribAmount = parseUnits(formData.maxContribution || '0', 18);
+      const presaleCapAmount = parseUnits(formData.presaleCap || '0', 18);
 
       // Convert timestamps to BigInt
       const startTimeBigInt = BigInt(startTimeSeconds);
@@ -223,7 +236,7 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
         presaleRateAmount,      // uint256 presaleRate
         minContribAmount,       // uint256 minContribution
         maxContribAmount,       // uint256 maxContribution
-        softCapAmount,          // uint256 presaleCap
+        presaleCapAmount,       // uint256 presaleCap
         startTimeBigInt,        // uint256 startTime
         endTimeBigInt,          // uint256 endTime
         ownerAddress, // address owner (custom or 0x0 for msg.sender)

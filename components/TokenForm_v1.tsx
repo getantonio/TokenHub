@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserProvider, Contract, parseUnits, formatUnits } from 'ethers';
 import { getNetworkContractAddress } from '../config/contracts';
-import TokenFactoryArtifact from '../contracts/abi/TokenFactory_v1.json';
-import TokenTemplateArtifact from '../contracts/abi/TokenTemplate_v1.json';
+import TokenFactoryArtifact from '../contracts/abi/TokenFactory_v1.1.0.json';
+import TokenTemplateArtifact from '../contracts/abi/TokenTemplate_v1.1.0.json';
 import { Toast } from './ui/Toast';
 import { getExplorerUrl } from '../config/networks';
 
@@ -62,7 +62,7 @@ export default function TokenForm_v1({ isConnected }: Props) {
         const factory = new Contract(factoryAddress, TokenFactoryABI, signer);
         
         // Get the required fee
-        const fee = await factory.deploymentFee();
+        const fee = await factory.getDeploymentFee(userAddress);
         
         // Check if user is owner for display purposes
         const owner = await factory.owner();
@@ -130,7 +130,7 @@ export default function TokenForm_v1({ isConnected }: Props) {
         const factory = new Contract(factoryAddress, TokenFactoryABI, signer);
         
         // Always get the required fee
-        fee = await factory.deploymentFee();
+        fee = await factory.getDeploymentFee(userAddress);
         
         // Check if user is owner for display purposes
         const owner = await factory.owner();
@@ -169,7 +169,7 @@ export default function TokenForm_v1({ isConnected }: Props) {
         maxSupplyWei,
         formData.blacklistEnabled,
         formData.timeLockEnabled,
-        { value: fee }
+        { value: BigInt(fee) }
       );
 
       showToast('success', 'Transaction submitted. Waiting for confirmation...');
