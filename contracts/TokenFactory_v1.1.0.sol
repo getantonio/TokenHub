@@ -16,17 +16,62 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 contract TokenFactory_v1_1_0 is Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuard {
     string public constant VERSION = "1.1.0";
 
+    // Deployment fee configuration
+    uint256 public deploymentFee;
+    mapping(address => uint256) public customDeploymentFees;
+    
     // Array to track all deployed tokens
     address[] public deployedTokens;
 
     // Events
     event TokenCreated(address token, string name, string symbol);
+    event DeploymentFeeUpdated(uint256 newFee);
+    event CustomDeploymentFeeSet(address indexed user, uint256 fee);
 
     // Template implementation
     TokenTemplate_v1_1_0 public immutable tokenImplementation;
 
     constructor(address _implementation) {
         tokenImplementation = TokenTemplate_v1_1_0(_implementation);
+    }
+
+    function initialize(uint256 _deploymentFee) public initializer {
+        __Ownable_init(msg.sender);
+        __UUPSUpgradeable_init();
+        deploymentFee = _deploymentFee;
+        emit DeploymentFeeUpdated(_deploymentFee);
+    }
+
+    /**
+     * @dev Updates the deployment fee
+     */
+    function setDeploymentFee(uint256 newFee) public onlyOwner {
+        deploymentFee = newFee;
+        emit DeploymentFeeUpdated(newFee);
+    }
+
+    /**
+     * @dev Sets a custom deployment fee for a specific address
+     * @param user Address to set custom fee for
+     * @param fee Custom fee in wei (0 for free deployment)
+     */
+    function setCustomDeploymentFee(address user, uint256 fee) external onlyOwner {
+        customDeploymentFees[user] = fee;
+        emit CustomDeploymentFeeSet(user, fee);
+    }
+
+    /**
+     * @dev Gets the deployment fee for a specific address
+     * @param user Address to check
+     * @return fee The deployment fee in wei
+     */
+    function getDeploymentFee(address user) public view returns (uint256) {
+        // Check if user has a custom fee
+        uint256 customFee = customDeploymentFees[user];
+        if (customFee > 0 || (customFee == 0 && customDeploymentFees[user] != 0)) {
+            return customFee;
+        }
+        return deploymentFee;
     }
 
     /**
@@ -46,7 +91,11 @@ contract TokenFactory_v1_1_0 is Initializable, OwnableUpgradeable, UUPSUpgradeab
         uint256 maxSupply,
         bool enableBlacklist,
         bool enableTimeLock
-    ) external onlyOwner returns (address) {
+    ) external payable nonReentrant returns (address) {
+        // Check deployment fee
+        uint256 requiredFee = getDeploymentFee(msg.sender);
+        require(msg.value >= requiredFee, "Insufficient deployment fee");
+
         // Initialize data
         bytes memory initData = abi.encodeWithSelector(
             TokenTemplate_v1_1_0.initialize.selector,
@@ -92,4 +141,15 @@ contract TokenFactory_v1_1_0 is Initializable, OwnableUpgradeable, UUPSUpgradeab
     function getDeployedTokens() external view returns (address[] memory) {
         return deployedTokens;
     }
-} 
+
+    /**
+     * @notice Withdraw collected fees
+     * @dev Only callable by owner
+     */
+    function withdrawFees() external onlyOwner {
+        uint256 balance = address(this).balance;
+        require(balance > 0, "No fees to withdraw");
+        (bool success, ) = msg.sender.call{value: balance}("");
+        require(success, "Transfer failed");
+    }
+}

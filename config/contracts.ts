@@ -18,16 +18,22 @@ export const contractAddresses: Record<number, ContractAddresses> = {
     tokenTemplateAddressV2: process.env.NEXT_PUBLIC_SEPOLIA_TOKEN_TEMPLATE_ADDRESS_V2 || '',
   },
   [ChainId.POLYGON_AMOY]: {
-    factoryAddress: process.env.NEXT_PUBLIC_POLYGON_AMOY_FACTORY_ADDRESS_V1 || '',
-    tokenTemplateAddressV1: process.env.NEXT_PUBLIC_POLYGON_AMOY_TOKEN_TEMPLATE_ADDRESS_V1 || ''
+    factoryAddress: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V1 || '',
+    factoryAddressV2: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V2 || '',
+    tokenTemplateAddressV1: process.env.NEXT_PUBLIC_POLYGONAMOY_TOKEN_TEMPLATE_ADDRESS_V1 || '',
+    tokenTemplateAddressV2: process.env.NEXT_PUBLIC_POLYGONAMOY_TOKEN_TEMPLATE_ADDRESS_V2 || ''
   },
   [ChainId.OP_SEPOLIA]: {
-    factoryAddress: process.env.NEXT_PUBLIC_OP_SEPOLIA_FACTORY_ADDRESS_V1 || '',
-    tokenTemplateAddressV1: process.env.NEXT_PUBLIC_OP_SEPOLIA_TOKEN_TEMPLATE_ADDRESS_V1 || ''
+    factoryAddress: process.env.NEXT_PUBLIC_OPSEPOLIA_FACTORY_ADDRESS_V1 || '',
+    factoryAddressV2: process.env.NEXT_PUBLIC_OPSEPOLIA_FACTORY_ADDRESS_V2 || '',
+    tokenTemplateAddressV1: process.env.NEXT_PUBLIC_OPSEPOLIA_TOKEN_TEMPLATE_ADDRESS_V1 || '',
+    tokenTemplateAddressV2: process.env.NEXT_PUBLIC_OPSEPOLIA_TOKEN_TEMPLATE_ADDRESS_V2 || ''
   },
   [ChainId.ARBITRUM_SEPOLIA]: {
-    factoryAddress: process.env.NEXT_PUBLIC_ARBITRUM_SEPOLIA_FACTORY_ADDRESS_V1 || '',
-    tokenTemplateAddressV1: process.env.NEXT_PUBLIC_ARBITRUM_SEPOLIA_TOKEN_TEMPLATE_ADDRESS_V1 || ''
+    factoryAddress: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V1 || '',
+    factoryAddressV2: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V2 || '',
+    tokenTemplateAddressV1: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_TOKEN_TEMPLATE_ADDRESS_V1 || '',
+    tokenTemplateAddressV2: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_TOKEN_TEMPLATE_ADDRESS_V2 || ''
   }
 };
 

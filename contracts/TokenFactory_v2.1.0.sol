@@ -16,8 +16,16 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 contract TokenFactory_v2_1_0 is Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuard {
     string public constant VERSION = "2.1.0";
 
+    // Deployment fee configuration
+    uint256 public deploymentFee;
+    mapping(address => uint256) public customDeploymentFees;
+    
     // Array to track all deployed tokens
     address[] public deployedTokens;
+
+    // Events
+    event DeploymentFeeUpdated(uint256 newFee);
+    event CustomDeploymentFeeSet(address indexed user, uint256 fee);
 
     // Events
     event TokenCreated(
@@ -34,6 +42,46 @@ contract TokenFactory_v2_1_0 is Initializable, OwnableUpgradeable, UUPSUpgradeab
 
     constructor(address _implementation) {
         tokenImplementation = TokenTemplate_v2_1_0(_implementation);
+    }
+
+    function initialize(uint256 _deploymentFee) public initializer {
+        __Ownable_init(msg.sender);
+        __UUPSUpgradeable_init();
+        deploymentFee = _deploymentFee;
+        emit DeploymentFeeUpdated(_deploymentFee);
+    }
+
+    /**
+     * @notice Set the default deployment fee
+     * @param _fee New deployment fee in wei
+     */
+    function setDeploymentFee(uint256 _fee) external onlyOwner {
+        deploymentFee = _fee;
+        emit DeploymentFeeUpdated(_fee);
+    }
+
+    /**
+     * @notice Set a custom deployment fee for a specific address
+     * @param _user Address to set custom fee for
+     * @param _fee Custom fee in wei (0 for free deployment)
+     */
+    function setCustomDeploymentFee(address _user, uint256 _fee) external onlyOwner {
+        customDeploymentFees[_user] = _fee;
+        emit CustomDeploymentFeeSet(_user, _fee);
+    }
+
+    /**
+     * @notice Get the deployment fee for a specific address
+     * @param _user Address to check
+     * @return fee The deployment fee in wei
+     */
+    function getDeploymentFee(address _user) public view returns (uint256) {
+        // Check if user has a custom fee
+        uint256 customFee = customDeploymentFees[_user];
+        if (customFee > 0 || (customFee == 0 && customDeploymentFees[_user] != 0)) {
+            return customFee;
+        }
+        return deploymentFee;
     }
 
     /**
@@ -68,10 +116,9 @@ contract TokenFactory_v2_1_0 is Initializable, OwnableUpgradeable, UUPSUpgradeab
         uint256 endTime,
         address owner
     ) external payable returns (address) {
-        // Owner deploys for free, others pay 0.0001 ETH
-        if (msg.sender != owner()) {
-            require(msg.value >= 0.0001 ether, "Insufficient deployment fee");
-        }
+        // Check deployment fee
+        uint256 requiredFee = getDeploymentFee(msg.sender);
+        require(msg.value >= requiredFee, "Insufficient deployment fee");
         require(startTime > block.timestamp, "Start time must be in future");
         require(endTime > startTime, "End time must be after start time");
 

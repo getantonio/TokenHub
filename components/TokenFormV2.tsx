@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { BrowserProvider, Contract, parseUnits } from 'ethers';
+import { BrowserProvider, Contract, parseUnits, formatUnits } from 'ethers';
 import { useNetwork } from '../contexts/NetworkContext';
 import TokenFactory_v2_1_0 from '../contracts/abi/TokenFactory_v2.1.0.json';
 import { getExplorerUrl } from '../config/networks';
@@ -56,13 +56,12 @@ const defaultValues: FormData = {
   customOwner: ''
 };
 
-const DEPLOYMENT_FEE = parseUnits('0.0001', 'ether');
-
 export function TokenFormV2({ isConnected }: TokenFormV2Props) {
   const { chainId } = useNetwork();
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [v2Available, setV2Available] = useState<boolean>(false);
+  const [deploymentFee, setDeploymentFee] = useState<string | null>(null);
   const [formData, setFormData] = useState<FormData>(defaultValues);
   const [successInfo, setSuccessInfo] = useState<{
     message: string;
@@ -79,6 +78,35 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
       ...getDefaultTimes()
     });
   }, []);
+
+  // Fetch deployment fee from contract
+  useEffect(() => {
+    const fetchDeploymentFee = async () => {
+      if (!window.ethereum || !chainId) {
+        setDeploymentFee('Not available on this network');
+        return;
+      }
+
+      try {
+        const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddressV2');
+        if (!factoryAddress) {
+          setDeploymentFee('Not available on this network');
+          return;
+        }
+
+        const provider = new BrowserProvider(window.ethereum);
+        const signer = await provider.getSigner();
+        const factoryV2 = new Contract(factoryAddress, TokenFactory_v2_1_0.abi, signer);
+        const fee = await factoryV2.getDeploymentFee(await signer.getAddress());
+        setDeploymentFee(formatUnits(fee, 'ether'));
+      } catch (error) {
+        console.error('Error fetching deployment fee:', error);
+        setDeploymentFee('Error fetching fee');
+      }
+    };
+
+    fetchDeploymentFee();
+  }, [chainId]);
 
   useEffect(() => {
     const checkV2Availability = async () => {
@@ -161,38 +189,49 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
 
       const factoryV2 = new Contract(factoryAddress, TokenFactory_v2_1_0.abi, signer);
 
-      const initialSupplyAmount = parseUnits(formData.initialSupply || '0', 18);
-      const maxSupplyAmount = parseUnits(formData.maxSupply || '0', 18);
-      const minContributionAmount = parseUnits(formData.minContribution || '0', 18);
-      const maxContributionAmount = parseUnits(formData.maxContribution || '0', 18);
-      const presaleRateAmount = parseUnits(formData.presaleRate || '0', 18);
-      const presaleCapAmount = parseUnits(formData.presaleCap || '0', 18);
+      // Get required deployment fee
+      const fee = await factoryV2.getDeploymentFee(await signer.getAddress());
 
+      // Handle custom owner address
       let ownerAddress = "0x0000000000000000000000000000000000000000";
       if (formData.customOwner) {
         if (!formData.customOwner.match(/^0x[0-9a-fA-F]{40}$/)) throw new Error('Invalid owner address format');
         ownerAddress = formData.customOwner;
       }
 
+      // Convert amounts to BigInt with proper decimals and scaling
+      const decimals = 18;
+      const initialSupplyAmount = parseUnits(formData.initialSupply || '0', decimals);
+      const softCapAmount = initialSupplyAmount / BigInt(2); // 50% of initial supply
+      const hardCapAmount = parseUnits(formData.maxSupply || '0', decimals);
+      const minContribAmount = parseUnits(formData.minContribution || '0', decimals);
+      const maxContribAmount = parseUnits(formData.maxContribution || '0', decimals);
+      const presaleRateAmount = parseUnits(formData.presaleRate || '0', decimals);
+
+      // Convert timestamps to BigInt
+      const startTimeBigInt = BigInt(startTimeSeconds);
+      const endTimeBigInt = BigInt(endTimeSeconds);
+
+      // Call createToken with exact parameter order from the contract
       const tx = await factoryV2.createToken(
-        formData.name,
-        formData.symbol,
-        initialSupplyAmount,
-        maxSupplyAmount,
-        formData.enableBlacklist,
-        formData.enableTimeLock,
-        presaleRateAmount,
-        minContributionAmount,
-        maxContributionAmount,
-        presaleCapAmount,
-        BigInt(startTimeSeconds),
-        BigInt(endTimeSeconds),
-        ownerAddress,
-        { value: DEPLOYMENT_FEE }
+        formData.name,           // string name
+        formData.symbol,         // string symbol
+        initialSupplyAmount,     // uint256 initialSupply
+        hardCapAmount,          // uint256 maxSupply
+        formData.enableBlacklist, // bool enableBlacklist
+        formData.enableTimeLock,  // bool enableTimeLock
+        presaleRateAmount,      // uint256 presaleRate
+        minContribAmount,       // uint256 minContribution
+        maxContribAmount,       // uint256 maxContribution
+        softCapAmount,          // uint256 presaleCap
+        startTimeBigInt,        // uint256 startTime
+        endTimeBigInt,          // uint256 endTime
+        ownerAddress, // address owner (custom or 0x0 for msg.sender)
+        { value: BigInt(fee) }  // transaction value
       );
       
       const receipt = await tx.wait();
-      const tokenCreatedEvent = receipt.logs
+      const tokenDeployedEvent = receipt.logs
         .map((log: any) => {
           try {
             return factoryV2.interface.parseLog({
@@ -205,9 +244,9 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
         })
         .find((event: any) => event?.name === 'TokenCreated');
 
-      if (!tokenCreatedEvent) throw new Error('Token creation event not found in transaction logs');
+      if (!tokenDeployedEvent) throw new Error('Token deployment event not found in transaction logs');
 
-      const tokenAddress = tokenCreatedEvent.args.token;
+      const tokenAddress = tokenDeployedEvent.args.token;
       const explorerUrl = getExplorerUrl(chainId, tokenAddress, 'token');
       const txExplorerUrl = getExplorerUrl(chainId, tx.hash, 'tx');
 
@@ -217,7 +256,7 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
         explorerUrl,
         symbol: formData.symbol,
         initialSupply: formData.initialSupply,
-        owner: tokenCreatedEvent.args.owner || await signer.getAddress()
+        owner: tokenDeployedEvent.args.owner
       });
 
       showToast('success', 'Token created successfully!', txExplorerUrl);
@@ -262,6 +301,22 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
         </div>
       )}
       <form onSubmit={handleSubmit} className="space-y-2 bg-background-secondary p-3 rounded-lg shadow-lg">
+        <div className="rounded-md bg-blue-900/20 p-2 border border-blue-700 mb-2">
+          <p className="text-xs text-blue-400">
+            Deployment Fee: {deploymentFee ? (
+              deploymentFee === 'Not available on this network' ? (
+                <span className="text-red-400">{deploymentFee}</span>
+              ) : (
+                <span>{deploymentFee} ETH</span>
+              )
+            ) : 'Loading...'}
+          </p>
+          <p className="text-xs text-blue-400/70 mt-0.5">
+            {deploymentFee === 'Not available on this network'
+              ? 'Please switch to a supported network'
+              : 'This amount will be required to deploy your token'}
+          </p>
+        </div>
         <div>
           <h3 className="text-xs font-semibold text-text-primary mb-1">Token Information</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">

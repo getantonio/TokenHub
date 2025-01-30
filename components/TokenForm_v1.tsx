@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserProvider, Contract, parseUnits, formatUnits } from 'ethers';
 import { getNetworkContractAddress } from '../config/contracts';
 import TokenFactoryArtifact from '../contracts/abi/TokenFactory_v1.json';
@@ -41,6 +41,41 @@ export default function TokenForm_v1({ isConnected }: Props) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [deploymentFee, setDeploymentFee] = useState<string | null>(null);
+
+  // Fetch deployment fee when component mounts
+  useEffect(() => {
+    async function fetchDeploymentFee() {
+      if (!window.ethereum || !isConnected) return;
+      
+      try {
+        const provider = new BrowserProvider(window.ethereum);
+        const signer = await provider.getSigner();
+        const userAddress = await signer.getAddress();
+        const chainId = Number(await window.ethereum.request({ method: 'eth_chainId' }));
+        const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddress');
+        if (!factoryAddress) {
+          setDeploymentFee('Not available on this network');
+          return;
+        }
+        
+        const factory = new Contract(factoryAddress, TokenFactoryABI, signer);
+        
+        // Get the required fee
+        const fee = await factory.deploymentFee();
+        
+        // Check if user is owner for display purposes
+        const owner = await factory.owner();
+        const isOwner = owner.toLowerCase() === userAddress.toLowerCase();
+        
+        setDeploymentFee(formatUnits(fee, 'ether') + (isOwner ? ' (Owner)' : ''));
+      } catch (error) {
+        console.error('Error fetching deployment fee:', error);
+      }
+    }
+
+    fetchDeploymentFee();
+  }, [isConnected]);
   const [successInfo, setSuccessInfo] = useState<{
     message: string;
     tokenAddress: string;
@@ -87,24 +122,21 @@ export default function TokenForm_v1({ isConnected }: Props) {
       // Get deployment fee
       let fee;
       try {
-        // Try to get version first
-        const version = await factory.VERSION();
-        console.log("Factory version:", version);
-        
-        // Get fee based on version
-        if (version.includes('1.1.0')) {
-          // V1.1.0 doesn't require a fee and is owner-only
-          fee = parseUnits('0', 'ether');
-          
-          // Check if user is owner
-          const owner = await factory.owner();
-          if (owner.toLowerCase() !== userAddress.toLowerCase()) {
-            throw new Error("Only owner can create tokens in V1.1.0");
-          }
-        } else {
-          fee = await factory.deploymentFee();
+        const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddress');
+        if (!factoryAddress) {
+          throw new Error(`Contract not deployed on network ${chainId}`);
         }
-        console.log("Deployment fee:", formatUnits(fee, 'ether'), "ETH");
+        
+        const factory = new Contract(factoryAddress, TokenFactoryABI, signer);
+        
+        // Always get the required fee
+        fee = await factory.deploymentFee();
+        
+        // Check if user is owner for display purposes
+        const owner = await factory.owner();
+        const isOwner = owner.toLowerCase() === userAddress.toLowerCase();
+        
+        console.log("Deployment fee:", formatUnits(fee, 'ether'), "ETH", isOwner ? "(Owner)" : "");
       } catch (error: any) {
         console.error("Error getting deployment fee:", error);
         showToast('error', error.message || 'Failed to get deployment fee');
@@ -336,6 +368,24 @@ export default function TokenForm_v1({ isConnected }: Props) {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4 bg-background-secondary p-6 rounded-lg shadow-lg">
+          <div className="rounded-md bg-blue-900/20 p-4 border border-blue-700 mb-4">
+           <p className="text-sm text-blue-400">
+             Deployment Fee: {deploymentFee ? (
+               deploymentFee === 'Not available on this network' ? (
+                 <span className="text-red-400">{deploymentFee}</span>
+               ) : (
+                 <span>{deploymentFee} {deploymentFee !== '0 (Owner)' ? 'ETH' : ''}</span>
+               )
+             ) : 'Loading...'}
+           </p>
+           <p className="text-xs text-blue-400/70 mt-1">
+             {deploymentFee === 'Not available on this network'
+               ? 'Please switch to a supported network'
+               : deploymentFee === '0 (Owner)'
+                 ? 'No fee required for contract owner'
+                 : 'This amount will be required to deploy your token'}
+           </p>
+         </div>
           {error && (
             <div className="rounded-md bg-red-900/20 p-4 border border-red-700">
               <div className="flex">
@@ -452,10 +502,10 @@ export default function TokenForm_v1({ isConnected }: Props) {
           <div className="flex justify-end">
             <button
               type="submit"
-              disabled={!isConnected || isLoading}
-              className={`inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${(!isConnected || isLoading) ? 'opacity-50 cursor-not-allowed' : ''}`}
+              disabled={!isConnected || isLoading || deploymentFee === 'Not available on this network'}
+              className={`inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${(!isConnected || isLoading || deploymentFee === 'Not available on this network') ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
-              {isLoading ? 'Creating...' : (isConnected ? 'Create Token' : 'Connect Wallet to Deploy')}
+              {isLoading ? 'Creating...' : !isConnected ? 'Connect Wallet to Deploy' : deploymentFee === 'Not available on this network' ? 'Not Available on this Network' : 'Create Token'}
             </button>
           </div>
         </form>
