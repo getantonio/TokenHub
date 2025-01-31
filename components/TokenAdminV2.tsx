@@ -409,14 +409,25 @@ export default function TokenAdminV2({ isConnected, address }: TokenAdminV2Props
 
   return (
     <div className="p-2 relative bg-gray-800 rounded-lg shadow-lg">
-      <div 
-        className="flex justify-between items-center cursor-pointer py-0.5" 
+      <div
+        className="flex justify-between items-center cursor-pointer py-0.5"
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <h2 className="text-xs font-medium text-text-primary">Token Management (V2)</h2>
-        <button className="text-text-accent hover:text-blue-400">
-          {isExpanded ? '▼' : '▶'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              loadTokens();
+            }}
+            className="text-xs px-2 py-1 rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30"
+          >
+            Refresh
+          </button>
+          <button className="text-text-accent hover:text-blue-400">
+            {isExpanded ? '▼' : '▶'}
+          </button>
+        </div>
       </div>
       
       {toast && <Toast type={toast.type} message={toast.message} />}

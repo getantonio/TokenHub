@@ -19,7 +19,7 @@ declare global {
 const FACTORY_FEATURES = [
   {
     version: "1.1.0",
-    status: 'STABLE' as const,
+    status: 'ACTIVE' as const,
     title: "Token Factory v1",
     description: "Production-ready ERC20 token creation with essential features",
     features: [
@@ -43,7 +43,7 @@ const FACTORY_FEATURES = [
   },
   {
     version: "2.1.0",
-    status: 'NEW' as const,
+    status: 'ACTIVE' as const,
     title: "Token Factory v2",
     description: "Advanced token creation with built-in presale functionality",
     features: [

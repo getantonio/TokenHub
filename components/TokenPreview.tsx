@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/Card";
 import { TokenConfig } from './types';
 import { formatNumber } from '../lib/utils';
 import { Tooltip } from './ui/tooltip';
@@ -109,46 +109,21 @@ export function TokenPreview({ config, isValid, validationErrors }: TokenPreview
         </div>
 
         {/* Distribution Graph */}
-        <div className="space-y-1">
-          <div className="flex justify-between items-center text-xs">
-            <h3 className="font-medium">Token Distribution</h3>
-            <div className="text-gray-400">Total: 100%</div>
-          </div>
-          <div className="grid grid-cols-5 gap-1 text-[10px] text-gray-300">
-            <div>Presale ({allocations.presaleAllocation}%)</div>
-            <div>Liquidity ({allocations.liquidityAllocation}%)</div>
-            <div>Team ({allocations.teamAllocation}%)</div>
-            <div>Marketing ({allocations.marketingAllocation}%)</div>
-            <div>Creator ({allocations.developerAllocation}%)</div>
-          </div>
-          
-          {/* Distribution Bar */}
-          <div className="h-2 w-full flex rounded overflow-hidden">
-            <div 
-              className="bg-blue-500" 
-              style={{ width: `${allocations.presaleAllocation}%` }}
-              title={`Presale: ${allocations.presaleAllocation}%`}
-            />
-            <div 
-              className="bg-green-500" 
-              style={{ width: `${allocations.liquidityAllocation}%` }}
-              title={`Liquidity: ${allocations.liquidityAllocation}%`}
-            />
-            <div 
-              className="bg-yellow-500" 
-              style={{ width: `${allocations.teamAllocation}%` }}
-              title={`Team: ${allocations.teamAllocation}%`}
-            />
-            <div 
-              className="bg-purple-500" 
-              style={{ width: `${allocations.marketingAllocation}%` }}
-              title={`Marketing: ${allocations.marketingAllocation}%`}
-            />
-            <div 
-              className="bg-red-500" 
-              style={{ width: `${allocations.developerAllocation}%` }}
-              title={`Creator: ${allocations.developerAllocation}%`}
-            />
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
+            <h3 className="text-lg font-bold text-text-primary">Token Distribution</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm text-text-secondary">Total Supply</p>
+                <p className="text-lg font-bold text-text-primary">{Number(config.totalSupply).toLocaleString()} {config.symbol}</p>
+              </div>
+              {/* Temporarily disabled until wallet distribution is implemented
+              <div>
+                <p className="text-sm text-text-secondary">Distribution</p>
+                <p className="text-lg font-bold text-text-primary">100% to Creator</p>
+              </div>
+              */}
+            </div>
           </div>
         </div>
 

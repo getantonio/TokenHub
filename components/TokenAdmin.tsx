@@ -99,143 +99,67 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
   };
 
   const loadTokens = async () => {
-    if (!isConnected || !window.ethereum || !chainId || !provider) {
-      console.error("Missing dependencies");
+    if (!isConnected || !chainId || !provider) {
+      console.log("Missing dependencies:", { isConnected, chainId, hasProvider: !!provider });
       return;
     }
 
     try {
       setIsLoading(true);
-      const signer = await provider.getSigner();
+      console.log("Loading V1 tokens from factory at:", address);
       
-      const factoryV1Address = getNetworkContractAddress(chainId, 'factoryAddress');
-      if (!factoryV1Address) {
-        showToast('error', 'No V1 factory deployed on this network');
+      if (!address) {
+        console.error("No factory address provided");
         return;
       }
 
-      console.log("Using factory address:", factoryV1Address);
-
-      const factoryV1 = new Contract(factoryV1Address, TokenFactoryV1.abi, provider);
+      const factory = new Contract(address, TokenFactoryV1.abi, provider);
+      console.log("Factory contract initialized at:", address);
       
-      const code = await provider.getCode(factoryV1Address);
-      if (code === '0x') {
-        showToast('error', 'Factory contract not found at specified address');
+      console.log("Attempting to get deployed tokens from contract...");
+      const deployedTokens = await factory.getDeployedTokens();
+      console.log("Found deployed tokens:", deployedTokens);
+
+      if (!deployedTokens || deployedTokens.length === 0) {
+        setTokens([]);
         return;
       }
 
-      try {
-        // Try to get all deployed tokens
+      console.log("Processing", deployedTokens.length, "tokens...");
+      const tokenPromises = deployedTokens.map(async (tokenAddr: string) => {
+        console.log("Checking token at:", tokenAddr);
         try {
-          console.log("Attempting to get all deployed tokens...");
-          const deployedTokens = await factoryV1.getDeployedTokens();
-          console.log("Found deployedTokens:", deployedTokens);
-          
-          if (deployedTokens && deployedTokens.length > 0) {
-            const tokenPromises = deployedTokens.map(async (tokenAddr: string) => {
-              try {
-                const token = new Contract(tokenAddr, TokenTemplateV1.abi, provider);
-                const [name, symbol, totalSupply, blacklistEnabled, timeLockEnabled] = await Promise.all([
-                  token.name(),
-                  token.symbol(),
-                  token.totalSupply(),
-                  token.blacklistEnabled(),
-                  token.timeLockEnabled()
-                ]);
+          const token = new Contract(tokenAddr, TokenTemplateV1.abi, provider);
+          const [name, symbol, totalSupply, blacklistEnabled, timeLockEnabled] = await Promise.all([
+            token.name().catch(() => 'Unknown'),
+            token.symbol().catch(() => 'UNK'),
+            token.totalSupply().catch(() => '0'),
+            token.blacklistEnabled().catch(() => false),
+            token.timeLockEnabled().catch(() => false)
+          ]);
 
-                return {
-                  address: tokenAddr,
-                  name,
-                  symbol,
-                  totalSupply: formatUnits(totalSupply, TOKEN_DECIMALS),
-                  blacklistEnabled,
-                  timeLockEnabled
-                };
-              } catch (error) {
-                console.log(`Error checking token ${tokenAddr}:`, error);
-                return null;
-              }
-            });
-            const tokenResults = await Promise.all(tokenPromises);
-            const validTokens = tokenResults.filter(Boolean);
-            if (validTokens.length > 0) {
-              setTokens(validTokens as TokenInfo[]);
-              return;
-            }
-          }
+          const tokenInfo = {
+            address: tokenAddr,
+            name,
+            symbol,
+            totalSupply: formatUnits(totalSupply, 18),
+            blacklistEnabled,
+            timeLockEnabled
+          };
+          console.log("Token info loaded:", tokenInfo);
+          return tokenInfo;
         } catch (error) {
-          console.log("deployedTokens failed, trying event logs...");
+          console.error("Error loading token info for", tokenAddr, ":", error);
+          return null;
         }
+      });
 
-        // Fallback to event logs
-        const currentBlock = await provider.getBlockNumber();
-        const fromBlock = Math.max(0, currentBlock - 100000); // Reduced block range for faster loading
-
-        console.log(`\nSearching for events from block ${fromBlock} to ${currentBlock}`);
-
-        const foundTokens: TokenInfo[] = [];
-        const processedAddresses = new Set<string>();
-
-        const filter = {
-          address: factoryV1Address,
-          fromBlock,
-          toBlock: currentBlock,
-          topics: [ethers.id("TokenCreated(address,string,string)")]
-        };
-
-        const logs = await provider.getLogs(filter);
-        
-        for (const log of logs) {
-          try {
-            const abiCoder = new AbiCoder();
-            const [tokenAddr, name, symbol] = abiCoder.decode(
-              ['address', 'string', 'string'],
-              log.data
-            );
-
-            if (!tokenAddr || !ethers.isAddress(tokenAddr)) continue;
-
-            const normalizedAddr = tokenAddr.toLowerCase();
-            if (processedAddresses.has(normalizedAddr)) continue;
-
-            const code = await provider.getCode(normalizedAddr);
-            if (code === '0x') continue;
-
-            const token = new Contract(normalizedAddr, TokenTemplateV1.abi, provider);
-            const [actualName, actualSymbol, totalSupply, blacklistEnabled, timeLockEnabled] = await Promise.all([
-              token.name().catch(() => name),
-              token.symbol().catch(() => symbol),
-              token.totalSupply().catch(() => BigInt(0)),
-              token.blacklistEnabled().catch(() => false),
-              token.timeLockEnabled().catch(() => false)
-            ]);
-
-            if (!foundTokens.some(t => t.address.toLowerCase() === normalizedAddr)) {
-              foundTokens.push({
-                address: normalizedAddr,
-                name: actualName,
-                symbol: actualSymbol,
-                totalSupply: formatUnits(totalSupply, TOKEN_DECIMALS),
-                blacklistEnabled,
-                timeLockEnabled
-              });
-              processedAddresses.add(normalizedAddr);
-            }
-          } catch (error) {
-            console.error("Error processing log:", error);
-          }
-        }
-
-        if (foundTokens.length > 0) {
-          setTokens(foundTokens);
-        }
-      } catch (error: any) {
-        console.error("Token retrieval failed:", error);
-        showToast('error', error.message || 'Failed to load tokens');
-      }
-    } catch (error: any) {
-      console.error('Error loading tokens:', error);
-      showToast('error', error.message || 'Failed to load tokens');
+      const loadedTokens = (await Promise.all(tokenPromises)).filter(Boolean);
+      console.log("Setting tokens:", loadedTokens);
+      setTokens(loadedTokens as TokenInfo[]);
+    } catch (error) {
+      console.error("Error loading tokens:", error);
+      showToast('error', 'Failed to load tokens');
     } finally {
       setIsLoading(false);
     }
@@ -337,9 +261,20 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <h2 className="text-xs font-medium text-text-primary">Token Management (V1)</h2>
-        <button className="text-text-accent hover:text-blue-400">
-          {isExpanded ? '▼' : '▶'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              loadTokens();
+            }}
+            className="text-xs px-2 py-1 rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30"
+          >
+            Refresh
+          </button>
+          <button className="text-text-accent hover:text-blue-400">
+            {isExpanded ? '▼' : '▶'}
+          </button>
+        </div>
       </div>
       
       {toast && <Toast type={toast.type} message={toast.message} link={toast.link} />}
