@@ -99,7 +99,7 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
   };
 
   const loadTokens = async () => {
-    if (!isConnected || !window.ethereum || !chainId || !provider) {
+    if (!isConnected || !window.ethereum || !chainId || !provider || !address) {
       console.error("Missing dependencies");
       return;
     }
@@ -107,6 +107,7 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
     try {
       setIsLoading(true);
       const signer = await provider.getSigner();
+      const userAddress = await signer.getAddress();
       
       const factoryV1Address = getNetworkContractAddress(chainId, 'factoryAddress');
       if (!factoryV1Address) {
@@ -115,6 +116,7 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
       }
 
       console.log("Using factory address:", factoryV1Address);
+      console.log("User address:", userAddress);
 
       const factoryV1 = new Contract(factoryV1Address, TokenFactoryV1.abi, provider);
       
@@ -124,114 +126,78 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
         return;
       }
 
+      // Get current block and calculate a reasonable block range (last 10k blocks)
+      const currentBlock = await provider.getBlockNumber();
+      const fromBlock = Math.max(0, currentBlock - 10000);
+
+      console.log(`\nSearching for events from block ${fromBlock} to ${currentBlock}`);
+
+      const foundTokens: TokenInfo[] = [];
+      const processedAddresses = new Set<string>();
+
+      const filter = {
+        address: factoryV1Address,
+        fromBlock,
+        toBlock: currentBlock,
+        topics: [ethers.id("TokenCreated(address,string,string)")]
+      };
+
       try {
-        // Try to get all deployed tokens
-        try {
-          console.log("Attempting to get all deployed tokens...");
-          const deployedTokens = await factoryV1.getDeployedTokens();
-          console.log("Found deployedTokens:", deployedTokens);
-          
-          if (deployedTokens && deployedTokens.length > 0) {
-            const tokenPromises = deployedTokens.map(async (tokenAddr: string) => {
-              try {
-                const token = new Contract(tokenAddr, TokenTemplateV1.abi, provider);
-                const [name, symbol, totalSupply, blacklistEnabled, timeLockEnabled] = await Promise.all([
-                  token.name(),
-                  token.symbol(),
-                  token.totalSupply(),
-                  token.blacklistEnabled(),
-                  token.timeLockEnabled()
-                ]);
-
-                return {
-                  address: tokenAddr,
-                  name,
-                  symbol,
-                  totalSupply: formatUnits(totalSupply, TOKEN_DECIMALS),
-                  blacklistEnabled,
-                  timeLockEnabled
-                };
-              } catch (error) {
-                console.log(`Error checking token ${tokenAddr}:`, error);
-                return null;
-              }
-            });
-            const tokenResults = await Promise.all(tokenPromises);
-            const validTokens = tokenResults.filter(Boolean);
-            if (validTokens.length > 0) {
-              setTokens(validTokens as TokenInfo[]);
-              return;
-            }
-          }
-        } catch (error) {
-          console.log("deployedTokens failed, trying event logs...");
-        }
-
-        // Fallback to event logs
-        const currentBlock = await provider.getBlockNumber();
-        const fromBlock = Math.max(0, currentBlock - 100000); // Reduced block range for faster loading
-
-        console.log(`\nSearching for events from block ${fromBlock} to ${currentBlock}`);
-
-        const foundTokens: TokenInfo[] = [];
-        const processedAddresses = new Set<string>();
-
-        const filter = {
-          address: factoryV1Address,
-          fromBlock,
-          toBlock: currentBlock,
-          topics: [ethers.id("TokenCreated(address,string,string)")]
-        };
-
         const logs = await provider.getLogs(filter);
+        console.log("Found logs:", logs.length);
         
         for (const log of logs) {
           try {
-            const abiCoder = new AbiCoder();
-            const [tokenAddr, name, symbol] = abiCoder.decode(
-              ['address', 'string', 'string'],
-              log.data
-            );
+            const parsedLog = factoryV1.interface.parseLog({
+              topics: log.topics || [],
+              data: log.data
+            });
+            
+            if (!parsedLog || parsedLog.name !== 'TokenCreated') continue;
 
+            const tokenAddr = parsedLog.args[0] as string;
             if (!tokenAddr || !ethers.isAddress(tokenAddr)) continue;
 
             const normalizedAddr = tokenAddr.toLowerCase();
             if (processedAddresses.has(normalizedAddr)) continue;
 
-            const code = await provider.getCode(normalizedAddr);
-            if (code === '0x') continue;
-
             const token = new Contract(normalizedAddr, TokenTemplateV1.abi, provider);
-            const [actualName, actualSymbol, totalSupply, blacklistEnabled, timeLockEnabled] = await Promise.all([
-              token.name().catch(() => name),
-              token.symbol().catch(() => symbol),
-              token.totalSupply().catch(() => BigInt(0)),
-              token.blacklistEnabled().catch(() => false),
-              token.timeLockEnabled().catch(() => false)
-            ]);
+            try {
+              const tokenOwner = await token.owner();
+              if (tokenOwner.toLowerCase() !== userAddress.toLowerCase()) continue;
 
-            if (!foundTokens.some(t => t.address.toLowerCase() === normalizedAddr)) {
+              const [name, symbol, totalSupply, blacklistEnabled, timeLockEnabled] = await Promise.all([
+                token.name(),
+                token.symbol(),
+                token.totalSupply(),
+                token.blacklistEnabled(),
+                token.timeLockEnabled()
+              ]);
+
               foundTokens.push({
                 address: normalizedAddr,
-                name: actualName,
-                symbol: actualSymbol,
+                name,
+                symbol,
                 totalSupply: formatUnits(totalSupply, TOKEN_DECIMALS),
                 blacklistEnabled,
                 timeLockEnabled
               });
               processedAddresses.add(normalizedAddr);
+            } catch (error) {
+              console.error("Error processing token:", error);
             }
           } catch (error) {
-            console.error("Error processing log:", error);
+            console.error("Error processing token:", error);
           }
         }
 
         if (foundTokens.length > 0) {
+          console.log("Setting found tokens:", foundTokens);
           setTokens(foundTokens);
         }
-      } catch (error: any) {
-        console.error("Token retrieval failed:", error);
-        showToast('error', error.message || 'Failed to load tokens');
+      } catch (error) {
+        console.error("Error fetching logs:", error);
+        showToast('error', 'Failed to fetch token logs');
       }
     } catch (error: any) {
       console.error('Error loading tokens:', error);

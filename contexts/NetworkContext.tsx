@@ -1,22 +1,27 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { SUPPORTED_NETWORKS, getNetworkConfig } from '../config/networks';
+import { BrowserProvider } from 'ethers';
 
-interface NetworkContextType {
+export interface NetworkContextType {
   chainId: number | null;
-  isSupported: boolean;
-  networkError: string | null;
-  setChainId: (chainId: number) => void;
+  isConnected: boolean;
+  provider: BrowserProvider | null;
+  connectWallet: () => Promise<void>;
+  switchNetwork: (chainId: number) => Promise<void>;
 }
 
 const NetworkContext = createContext<NetworkContextType>({
   chainId: null,
-  isSupported: false,
-  networkError: null,
-  setChainId: () => {},
+  isConnected: false,
+  provider: null,
+  connectWallet: async () => {},
+  switchNetwork: async () => {}
 });
 
-export function NetworkProvider({ children }: { children: React.ReactNode }) {
+export function NetworkProvider({ children }: { children: ReactNode }) {
   const [chainId, setChainId] = useState<number | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const [provider, setProvider] = useState<BrowserProvider | null>(null);
   const [networkError, setNetworkError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -61,9 +66,14 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
   return (
     <NetworkContext.Provider value={{
       chainId,
-      isSupported,
-      networkError,
-      setChainId: (id: number) => setChainId(id),
+      isConnected,
+      provider,
+      connectWallet: async () => {
+        // Implementation of connectWallet
+      },
+      switchNetwork: async (id: number) => {
+        // Implementation of switchNetwork
+      }
     }}>
       {children}
     </NetworkContext.Provider>

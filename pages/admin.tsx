@@ -2,13 +2,14 @@ import { useState, useEffect } from 'react';
 import { useNetwork } from '../contexts/NetworkContext';
 import { BrowserProvider, Contract } from 'ethers';
 import { Header } from '../components/Header';
-import { Card } from '../components/ui/Card';
+import { Card } from '../components/ui/card';
 import { Toast } from '../components/ui/Toast';
 import { Spinner } from '../components/ui/Spinner';
 import TokenFactoryV1 from '../contracts/abi/TokenFactory_v1.1.0.json';
 import TokenFactoryV2 from '../contracts/abi/TokenFactory_v2.1.0.json';
 import { getNetworkContractAddress } from '../config/contracts';
 import Head from 'next/head';
+import { ethers } from 'ethers';
 
 interface ToastMessage {
   type: 'success' | 'error';
@@ -25,63 +26,11 @@ interface FactoryInfo {
 }
 
 export default function AdminPage() {
-  const { chainId } = useNetwork();
-  const [isConnected, setIsConnected] = useState(false);
-  const [currentWallet, setCurrentWallet] = useState<string>('');
+  const { isConnected, provider, chainId } = useNetwork();
+  const [factoryV1Info, setFactoryV1Info] = useState<FactoryInfo | null>(null);
+  const [factoryV2Info, setFactoryV2Info] = useState<FactoryInfo | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [toast, setToast] = useState<ToastMessage | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [factoryInfo, setFactoryInfo] = useState<FactoryInfo[]>([]);
-  const [newFee, setNewFee] = useState<string>('');
-  const [provider, setProvider] = useState<BrowserProvider | null>(null);
-
-  useEffect(() => {
-    const checkConnection = async () => {
-      if (window.ethereum) {
-        try {
-          const accounts = await window.ethereum.request<string[]>({ 
-            method: 'eth_accounts' 
-          });
-          setIsConnected(Array.isArray(accounts) && accounts.length > 0);
-
-          // Listen for account changes
-          const handleAccountsChanged = (accounts: unknown) => {
-            setIsConnected(Array.isArray(accounts) && accounts.length > 0);
-          };
-
-          window.ethereum.on('accountsChanged', handleAccountsChanged);
-
-          return () => {
-            window.ethereum?.removeListener('accountsChanged', handleAccountsChanged);
-          };
-        } catch (error) {
-          console.error('Error checking wallet connection:', error);
-        }
-      }
-    };
-
-    checkConnection();
-  }, []);
-
-  useEffect(() => {
-    const initProvider = async () => {
-      if (window.ethereum && isConnected) {
-        try {
-          const newProvider = new BrowserProvider(window.ethereum);
-          setProvider(newProvider);
-        } catch (error) {
-          console.error("Error initializing provider:", error);
-        }
-      }
-    };
-
-    initProvider();
-  }, [isConnected]);
-
-  useEffect(() => {
-    if (isConnected && chainId && provider) {
-      loadFactoryInfo();
-    }
-  }, [isConnected, chainId, provider]);
 
   const showToast = (type: 'success' | 'error', message: string) => {
     setToast({ type, message });
@@ -89,170 +38,106 @@ export default function AdminPage() {
   };
 
   const loadFactoryInfo = async () => {
-    if (!isConnected || !window.ethereum || !chainId || !provider) {
-      console.error("Missing dependencies");
+    if (!isConnected || !provider || !chainId) {
+      setIsLoading(false);
       return;
     }
 
     try {
       setIsLoading(true);
       const signer = await provider.getSigner();
-      const currentAddress = await signer.getAddress();
-      setCurrentWallet(currentAddress);
+      const userAddress = await signer.getAddress();
 
-      const factories: FactoryInfo[] = [];
+      // Load V1 Factory
+      const factoryV1Address = getNetworkContractAddress(chainId, 'factoryAddress');
+      if (factoryV1Address) {
+        try {
+          const factoryV1 = new Contract(factoryV1Address, TokenFactoryV1.abi, provider);
+          const code = await provider.getCode(factoryV1Address);
+          
+          if (code !== '0x') {
+            console.log("Loading V1 factory at:", factoryV1Address);
+            const [owner, fee, paused] = await Promise.all([
+              factoryV1.owner(),
+              factoryV1.deploymentFee(),
+              factoryV1.paused()
+            ]);
 
-      // Load V1 Factory Info
-      const v1Address = getNetworkContractAddress(chainId, 'factoryAddress');
-      if (v1Address) {
-        const v1Factory = new Contract(v1Address, TokenFactoryV1.abi, provider);
-        const [owner, deploymentFee, totalTokens, paused] = await Promise.all([
-          v1Factory.owner(),
-          v1Factory.deploymentFee(),
-          v1Factory.getDeployedTokens().then((tokens: string[]) => tokens.length),
-          v1Factory.paused()
-        ]);
+            // Get total tokens from events
+            const currentBlock = await provider.getBlockNumber();
+            const fromBlock = Math.max(0, currentBlock - 10000);
+            const filter = {
+              address: factoryV1Address,
+              fromBlock,
+              toBlock: currentBlock,
+              topics: [ethers.id("TokenCreated(address,string,string)")]
+            };
+            const logs = await provider.getLogs(filter);
 
-        factories.push({
-          version: 'v1',
-          address: v1Address,
-          owner,
-          deploymentFee: deploymentFee.toString(),
-          totalTokens,
-          paused
-        });
+            setFactoryV1Info({
+              version: '1.0',
+              address: factoryV1Address,
+              owner,
+              deploymentFee: fee.toString(),
+              totalTokens: logs.length,
+              paused
+            });
+          }
+        } catch (error) {
+          console.error("Error loading V1 factory:", error);
+        }
       }
 
-      // Load V2 Factory Info
-      const v2Address = getNetworkContractAddress(chainId, 'factoryAddressV2');
-      if (v2Address) {
-        const v2Factory = new Contract(v2Address, TokenFactoryV2.abi, provider);
-        const [owner, deploymentFee, totalTokens, paused] = await Promise.all([
-          v2Factory.owner(),
-          v2Factory.deploymentFee(),
-          v2Factory.getDeployedTokens().then((tokens: string[]) => tokens.length),
-          v2Factory.paused()
-        ]);
+      // Load V2 Factory
+      const factoryV2Address = getNetworkContractAddress(chainId, 'factoryAddressV2');
+      if (factoryV2Address) {
+        try {
+          const factoryV2 = new Contract(factoryV2Address, TokenFactoryV2.abi, provider);
+          const code = await provider.getCode(factoryV2Address);
+          
+          if (code !== '0x') {
+            console.log("Loading V2 factory at:", factoryV2Address);
+            const [owner, fee, paused] = await Promise.all([
+              factoryV2.owner(),
+              factoryV2.deploymentFee(),
+              factoryV2.paused()
+            ]);
 
-        factories.push({
-          version: 'v2',
-          address: v2Address,
-          owner,
-          deploymentFee: deploymentFee.toString(),
-          totalTokens,
-          paused
-        });
+            // Get total tokens from events
+            const currentBlock = await provider.getBlockNumber();
+            const fromBlock = Math.max(0, currentBlock - 10000);
+            const filter = {
+              address: factoryV2Address,
+              fromBlock,
+              toBlock: currentBlock,
+              topics: [ethers.id("TokenCreated(address,string,string,address)")]
+            };
+            const logs = await provider.getLogs(filter);
+
+            setFactoryV2Info({
+              version: '2.0',
+              address: factoryV2Address,
+              owner,
+              deploymentFee: fee.toString(),
+              totalTokens: logs.length,
+              paused
+            });
+          }
+        } catch (error) {
+          console.error("Error loading V2 factory:", error);
+        }
       }
-
-      setFactoryInfo(factories);
-    } catch (error: any) {
-      console.error('Error loading factory info:', error);
-      showToast('error', error.message || 'Failed to load factory info');
+    } catch (error) {
+      console.error("Error loading factory info:", error);
+      showToast('error', 'Failed to load factory information');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleSetFee = async (version: string, fee: string) => {
-    if (!isConnected || !window.ethereum || !chainId || !provider) return;
-
-    try {
-      setIsLoading(true);
-      const signer = await provider.getSigner();
-      const factoryAddress = getNetworkContractAddress(chainId, version === 'v1' ? 'factoryAddress' : 'factoryAddressV2');
-      
-      if (!factoryAddress) {
-        showToast('error', `No ${version} factory deployed on this network`);
-        return;
-      }
-
-      const factory = new Contract(
-        factoryAddress,
-        version === 'v1' ? TokenFactoryV1.abi : TokenFactoryV2.abi,
-        signer
-      );
-
-      const tx = await factory.setDeploymentFee(fee);
-      showToast('success', 'Transaction submitted...');
-      
-      await tx.wait();
-      showToast('success', 'Deployment fee updated successfully');
-      loadFactoryInfo();
-    } catch (error: any) {
-      console.error('Error setting fee:', error);
-      showToast('error', error.message || 'Failed to set fee');
-    } finally {
-      setIsLoading(false);
-      setNewFee('');
-    }
-  };
-
-  const handleTogglePause = async (version: string) => {
-    if (!isConnected || !window.ethereum || !chainId || !provider) return;
-
-    try {
-      setIsLoading(true);
-      const signer = await provider.getSigner();
-      const factoryAddress = getNetworkContractAddress(chainId, version === 'v1' ? 'factoryAddress' : 'factoryAddressV2');
-      
-      if (!factoryAddress) {
-        showToast('error', `No ${version} factory deployed on this network`);
-        return;
-      }
-
-      const factory = new Contract(
-        factoryAddress,
-        version === 'v1' ? TokenFactoryV1.abi : TokenFactoryV2.abi,
-        signer
-      );
-
-      const isPaused = await factory.paused();
-      const tx = await factory[isPaused ? 'unpause' : 'pause']();
-      showToast('success', 'Transaction submitted...');
-      
-      await tx.wait();
-      showToast('success', `Factory ${isPaused ? 'unpaused' : 'paused'} successfully`);
-      loadFactoryInfo();
-    } catch (error: any) {
-      console.error('Error toggling pause:', error);
-      showToast('error', error.message || 'Failed to toggle pause');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleTransferOwnership = async (version: string, newOwner: string) => {
-    if (!isConnected || !window.ethereum || !chainId || !provider) return;
-
-    try {
-      setIsLoading(true);
-      const signer = await provider.getSigner();
-      const factoryAddress = getNetworkContractAddress(chainId, version === 'v1' ? 'factoryAddress' : 'factoryAddressV2');
-      
-      if (!factoryAddress) {
-        showToast('error', `No ${version} factory deployed on this network`);
-        return;
-      }
-
-      const factory = new Contract(
-        factoryAddress,
-        version === 'v1' ? TokenFactoryV1.abi : TokenFactoryV2.abi,
-        signer
-      );
-
-      const tx = await factory.transferOwnership(newOwner);
-      showToast('success', 'Transaction submitted...');
-      
-      await tx.wait();
-      showToast('success', 'Ownership transferred successfully');
-      loadFactoryInfo();
-    } catch (error: any) {
-      console.error('Error transferring ownership:', error);
-      showToast('error', error.message || 'Failed to transfer ownership');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  useEffect(() => {
+    loadFactoryInfo();
+  }, [isConnected, provider, chainId]);
 
   if (!isConnected) {
     return (
@@ -268,9 +153,8 @@ export default function AdminPage() {
         <main className="container mx-auto px-4 py-8">
           <div className="max-w-4xl mx-auto">
             <Card className="bg-gray-800 border-gray-700">
-              <div className="p-4">
-                <h1 className="text-xl font-bold text-white mb-2">Factory Admin Panel</h1>
-                <p className="text-gray-400">Please connect your wallet to access the admin panel.</p>
+              <div className="p-6 text-center text-gray-400">
+                Please connect your wallet to access the admin panel
               </div>
             </Card>
           </div>
@@ -283,7 +167,7 @@ export default function AdminPage() {
     <div className="min-h-screen bg-gray-900">
       <Head>
         <title>TokenHub.dev - Admin Panel</title>
-        <meta name="description" content="TokenHub.dev admin panel for factory management" />
+        <meta name="description" content="Manage token factory settings and configurations" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
       
@@ -291,123 +175,72 @@ export default function AdminPage() {
       
       <main className="container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto space-y-6">
-          <Card className="bg-gray-800 border-gray-700">
-            <div className="p-4">
-              <h1 className="text-xl font-bold text-white mb-2">Factory Admin Panel</h1>
-              <p className="text-gray-400">Manage token factory settings and configurations.</p>
-            </div>
-          </Card>
-
-          {toast && <Toast type={toast.type} message={toast.message} />}
+          <div className="flex justify-between items-center">
+            <h1 className="text-2xl font-bold text-white">Factory Admin Panel</h1>
+            <p className="text-sm text-gray-400">Manage token factory settings and configurations</p>
+          </div>
 
           {isLoading ? (
-            <div className="flex justify-center items-center py-8">
-              <Spinner className="w-8 h-8 text-blue-500" />
+            <div className="flex justify-center py-8">
+              <Spinner />
             </div>
-          ) : factoryInfo.length === 0 ? (
+          ) : !factoryV1Info && !factoryV2Info ? (
             <Card className="bg-gray-800 border-gray-700">
-              <div className="p-4">
-                <p className="text-gray-400">No factory contracts found on this network.</p>
+              <div className="p-6 text-center text-gray-400">
+                No factory contracts found on this network
               </div>
             </Card>
           ) : (
-            factoryInfo.map((factory) => (
-              <Card key={factory.version} className="bg-gray-800 border-gray-700">
-                <div className="p-4 space-y-4">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h2 className="text-lg font-bold text-white">Token Factory {factory.version}</h2>
-                      <p className="text-sm text-gray-400">Address: {factory.address}</p>
-                      <p className="text-sm text-gray-400">Owner: {factory.owner}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm text-gray-400">Total Tokens: {factory.totalTokens}</p>
-                      <p className="text-sm text-gray-400">
-                        Status: <span className={factory.paused ? 'text-red-500' : 'text-green-500'}>
-                          {factory.paused ? 'Paused' : 'Active'}
-                        </span>
-                      </p>
-                    </div>
-                  </div>
-
-                  {factory.owner.toLowerCase() === currentWallet.toLowerCase() ? (
-                    <div className="space-y-4 pt-4 border-t border-gray-700">
-                      {/* Deployment Fee Management */}
-                      <div>
-                        <h3 className="text-sm font-medium text-white mb-2">Deployment Fee</h3>
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            value={newFee}
-                            onChange={(e) => setNewFee(e.target.value)}
-                            placeholder={`Current: ${factory.deploymentFee} Wei`}
-                            className="flex-1 px-2 py-1 text-sm rounded bg-gray-900 border border-gray-700 text-white placeholder-gray-500 focus:border-blue-500 focus:ring-blue-500"
-                          />
-                          <button
-                            onClick={() => handleSetFee(factory.version, newFee)}
-                            className="px-3 py-1 text-sm font-medium rounded bg-blue-500 text-white hover:bg-blue-600"
-                          >
-                            Update Fee
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Pause/Unpause */}
-                      <div>
-                        <h3 className="text-sm font-medium text-white mb-2">Factory Control</h3>
-                        <button
-                          onClick={() => handleTogglePause(factory.version)}
-                          className={`px-3 py-1 text-sm font-medium rounded ${
-                            factory.paused
-                              ? 'bg-green-500/20 text-green-500 hover:bg-green-500/30'
-                              : 'bg-red-500/20 text-red-500 hover:bg-red-500/30'
-                          }`}
-                        >
-                          {factory.paused ? 'Unpause Factory' : 'Pause Factory'}
-                        </button>
-                      </div>
-
-                      {/* Transfer Ownership */}
-                      <div>
-                        <h3 className="text-sm font-medium text-white mb-2">Transfer Ownership</h3>
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            placeholder="New owner address"
-                            className="flex-1 px-2 py-1 text-sm rounded bg-gray-900 border border-gray-700 text-white placeholder-gray-500 focus:border-blue-500 focus:ring-blue-500"
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                handleTransferOwnership(factory.version, e.currentTarget.value);
-                                e.currentTarget.value = '';
-                              }
-                            }}
-                          />
-                          <button
-                            onClick={() => {
-                              const input = document.querySelector('input[placeholder="New owner address"]') as HTMLInputElement;
-                              if (input) {
-                                handleTransferOwnership(factory.version, input.value);
-                                input.value = '';
-                              }
-                            }}
-                            className="px-3 py-1 text-sm font-medium rounded bg-yellow-500/20 text-yellow-500 hover:bg-yellow-500/30"
-                          >
-                            Transfer
-                          </button>
-                        </div>
+            <>
+              {factoryV1Info && (
+                <div className="space-y-4">
+                  <h2 className="text-xl font-semibold text-white">Factory V1</h2>
+                  <Card className="bg-gray-800 border-gray-700">
+                    <div className="p-4">
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div className="text-gray-400">Address: <span className="text-white">{factoryV1Info.address}</span></div>
+                        <div className="text-gray-400">Owner: <span className="text-white">{factoryV1Info.owner}</span></div>
+                        <div className="text-gray-400">Deployment Fee: <span className="text-white">{factoryV1Info.deploymentFee} ETH</span></div>
+                        <div className="text-gray-400">Total Tokens: <span className="text-white">{factoryV1Info.totalTokens}</span></div>
+                        <div className="text-gray-400">Status: <span className={factoryV1Info.paused ? 'text-red-500' : 'text-green-500'}>
+                          {factoryV1Info.paused ? 'Paused' : 'Active'}
+                        </span></div>
                       </div>
                     </div>
-                  ) : (
-                    <p className="text-sm text-gray-400 pt-4 border-t border-gray-700">
-                      You are not the owner of this factory contract.
-                    </p>
-                  )}
+                  </Card>
                 </div>
-              </Card>
-            ))
+              )}
+
+              {factoryV2Info && (
+                <div className="space-y-4">
+                  <h2 className="text-xl font-semibold text-white">Factory V2</h2>
+                  <Card className="bg-gray-800 border-gray-700">
+                    <div className="p-4">
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div className="text-gray-400">Address: <span className="text-white">{factoryV2Info.address}</span></div>
+                        <div className="text-gray-400">Owner: <span className="text-white">{factoryV2Info.owner}</span></div>
+                        <div className="text-gray-400">Deployment Fee: <span className="text-white">{factoryV2Info.deploymentFee} ETH</span></div>
+                        <div className="text-gray-400">Total Tokens: <span className="text-white">{factoryV2Info.totalTokens}</span></div>
+                        <div className="text-gray-400">Status: <span className={factoryV2Info.paused ? 'text-red-500' : 'text-green-500'}>
+                          {factoryV2Info.paused ? 'Paused' : 'Active'}
+                        </span></div>
+                      </div>
+                    </div>
+                  </Card>
+                </div>
+              )}
+            </>
           )}
         </div>
       </main>
+
+      {toast && (
+        <Toast
+          type={toast.type}
+          message={toast.message}
+          onClose={() => setToast(null)}
+        />
+      )}
     </div>
   );
 } 

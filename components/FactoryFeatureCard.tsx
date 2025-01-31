@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Card } from './ui/Card';
+import { Card } from './ui/card';
 
 interface FactoryFeatureCardProps {
   version: string;
@@ -16,6 +16,30 @@ interface FactoryFeatureCardProps {
   link: string;
   action: string;
 }
+
+const NetworkIcon = ({ network }: { network: string }) => {
+  const icons = {
+    ETH: '⟠',
+    Polygon: '⬡',
+    Arbitrum: '◊',
+    Optimism: '○'
+  };
+  return <span className="text-xs opacity-70">{icons[network as keyof typeof icons]}</span>;
+};
+
+const InfoGraphic = () => (
+  <div className="flex items-center justify-start h-[34px] px-3 rounded bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/20">
+    <div className="flex items-center gap-2">
+      <span className="text-xs font-medium text-blue-400">One Click Deployment</span>
+      <div className="flex items-center gap-1 ml-2">
+        <NetworkIcon network="ETH" />
+        <NetworkIcon network="Polygon" />
+        <NetworkIcon network="Arbitrum" />
+        <NetworkIcon network="Optimism" />
+      </div>
+    </div>
+  </div>
+);
 
 export function FactoryFeatureCard({
   version,
@@ -95,7 +119,8 @@ export function FactoryFeatureCard({
         )}
 
         {/* Action Button */}
-        <div className="flex justify-end pt-2">
+        <div className="flex justify-end items-center gap-3 pt-2">
+          <InfoGraphic />
           {link ? (
             <a
               href={link}

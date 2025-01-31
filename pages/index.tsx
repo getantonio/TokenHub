@@ -18,47 +18,47 @@ declare global {
 
 const FACTORY_FEATURES = [
   {
-    version: "1.1.0",
-    status: 'STABLE' as const,
+    version: "1.0.0",
+    status: 'ACTIVE' as const,
     title: "Token Factory v1",
-    description: "Production-ready ERC20 token creation with essential features",
+    description: "Basic token creation with essential features",
     features: [
-      "Basic ERC20 features",
-      "Blacklist capability",
-      "Time lock mechanism",
-      "Multi-network support",
-      "Role-based access",
-      "Pausable transfers",
-      "Burnable tokens",
-      "Snapshot support"
+      "Fixed supply",
+      "Burnable",
+      "Blacklist",
+      "Time lock",
+      "Ownership",
+      "Pausable",
+      "Access control",
+      "Upgradeable"
     ],
     details: {
-      deploymentFee: "0.0001 ETH",
-      networks: ["ETH", "BSC", "Polygon"],
+      deploymentFee: "0.1 ETH",
+      networks: ["ETH", "BSC", "Polygon", "Arbitrum", "Optimism"],
       audited: true,
-      upgradeable: false
+      upgradeable: true
     },
     link: "/v1",
     action: "Launch App"
   },
   {
-    version: "2.1.0",
-    status: 'NEW' as const,
+    version: "2.0.0",
+    status: 'ACTIVE' as const,
     title: "Token Factory v2",
-    description: "Advanced token creation with built-in presale functionality",
+    description: "Advanced token creation with presale and vesting",
     features: [
-      "Simple presale setup",
-      "Whitelist support",
-      "Timed rounds",
-      "Soft/Hard caps",
+      "All v1 features",
+      "Built-in presale",
+      "Vesting schedule",
+      "Whitelist",
       "Auto liquidity",
-      "Vesting schedules",
-      "Anti-bot measures",
-      "Fair launch options"
+      "Max transaction",
+      "Anti-bot",
+      "Trading limits"
     ],
     details: {
-      deploymentFee: "0.0002 ETH",
-      networks: ["ETH", "BSC", "Polygon", "Arbitrum"],
+      deploymentFee: "0.2 ETH",
+      networks: ["ETH", "BSC", "Polygon", "Arbitrum", "Optimism"],
       audited: true,
       upgradeable: true
     },
@@ -106,7 +106,7 @@ const FACTORY_FEATURES = [
     ],
     details: {
       deploymentFee: "TBA",
-      networks: ["All EVM chains"],
+      networks: ["ETH", "BSC", "Polygon", "Arbitrum", "Optimism"],
       audited: false,
       upgradeable: true
     },
