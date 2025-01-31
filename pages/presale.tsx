@@ -20,7 +20,7 @@ interface PresaleToken {
 }
 
 export default function PresalePage() {
-  const { chainId, isSupported } = useNetwork();
+  const { chainId } = useNetwork();
   const [presaleTokens, setPresaleTokens] = useState<PresaleToken[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -29,7 +29,7 @@ export default function PresalePage() {
   }, [chainId]);
 
   async function loadPresaleTokens() {
-    if (!chainId || !isSupported) {
+    if (!chainId) {
       setPresaleTokens([]);
       setLoading(false);
       return;
@@ -81,11 +81,7 @@ export default function PresalePage() {
       <main className="container mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold text-text-primary mb-8">Presale Marketplace</h1>
         
-        {!isSupported ? (
-          <div className="card">
-            <p className="text-text-secondary">Please connect to a supported network to view presale tokens.</p>
-          </div>
-        ) : loading ? (
+        {loading ? (
           <div className="card">
             <p className="text-text-secondary">Loading presale tokens...</p>
           </div>
