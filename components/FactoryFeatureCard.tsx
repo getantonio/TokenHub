@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Card } from './ui/Card';
+import Link from 'next/link';
 
 interface FactoryFeatureCardProps {
   version: string;
@@ -7,13 +8,8 @@ interface FactoryFeatureCardProps {
   title: string;
   description: string;
   features: string[];
-  details: {
-    deploymentFee: string;
-    networks: string[];
-    audited: boolean;
-    upgradeable: boolean;
-  };
-  link: string;
+  details: string;
+  link?: string;
   action: string;
 }
 
@@ -30,7 +26,7 @@ export function FactoryFeatureCard({
   const [isExpanded, setIsExpanded] = useState(false);
 
   const statusColors = {
-    ACTIVE: 'bg-green-500/20 text-green-500',
+    ACTIVE: 'bg-blue-500/20 text-blue-500',
     PLANNED: 'bg-yellow-500/20 text-yellow-500',
     FUTURE: 'bg-blue-500/20 text-blue-500'
   };
@@ -57,52 +53,37 @@ export function FactoryFeatureCard({
           </button>
         </div>
 
-        {/* Quick Info */}
-        <div className="flex justify-between text-xs text-gray-400">
-          <div>Fee: {details.deploymentFee}</div>
-          <div>Networks: {details.networks.join(', ')}</div>
+        {/* Features */}
+        <div className={`space-y-4 transition-all duration-300 ${isExpanded ? 'block' : 'hidden'}`}>
+          <div className="space-y-2">
+            <h4 className="text-sm font-medium text-gray-300">Key Features:</h4>
+            <ul className="text-sm text-gray-400 space-y-2">
+              {features.map((feature, index) => (
+                <li key={index} className="flex items-start">
+                  <span className="mr-2 text-blue-400">•</span>
+                  <span>{feature}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="space-y-2">
+            <h4 className="text-sm font-medium text-gray-300">Details:</h4>
+            <div className="text-sm leading-relaxed text-gray-400 bg-gray-800/50 p-4 rounded-lg">
+              {details}
+            </div>
+          </div>
         </div>
-
-        {/* Expandable Content */}
-        {isExpanded && (
-          <>
-            {/* Features */}
-            <div className="pt-3 border-t border-gray-700">
-              <h4 className="text-sm font-medium text-white mb-2">Features</h4>
-              <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-                {features.map((feature, index) => (
-                  <div key={index} className="text-sm text-gray-300">• {feature}</div>
-                ))}
-              </div>
-            </div>
-
-            {/* Details */}
-            <div className="pt-3 border-t border-gray-700">
-              <div className="flex justify-between text-sm">
-                <div className="text-gray-300">
-                  Audited: <span className={details.audited ? 'text-green-500' : 'text-yellow-500'}>
-                    {details.audited ? 'Yes' : 'Pending'}
-                  </span>
-                </div>
-                <div className="text-gray-300">
-                  Upgradeable: <span className={details.upgradeable ? 'text-green-500' : 'text-red-500'}>
-                    {details.upgradeable ? 'Yes' : 'No'}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </>
-        )}
 
         {/* Action Button */}
         <div className="flex justify-end pt-2">
           {link ? (
-            <a
+            <Link
               href={link}
-              className="w-1/3 text-center py-1.5 px-3 text-sm font-medium rounded-md bg-[#1B4D3E] text-white hover:bg-[#2C614F] transition-colors"
+              className="btn-blue w-1/3 text-center"
             >
               {action}
-            </a>
+            </Link>
           ) : (
             <button
               disabled

@@ -9,6 +9,7 @@ import { InfoIcon } from '../components/ui/InfoIcon';
 import { Header } from '../components/Header';
 import Head from 'next/head';
 import { TokenListing } from '../types/token-listing';
+import Link from 'next/link';
 
 declare global {
   interface Window {
@@ -32,12 +33,7 @@ const FACTORY_FEATURES = [
       "Burnable tokens",
       "Snapshot support"
     ],
-    details: {
-      deploymentFee: "0.0001 ETH",
-      networks: ["ETH", "BSC", "Polygon"],
-      audited: true,
-      upgradeable: false
-    },
+    details: "Create your own ERC20 token with essential security features. The V1 factory provides a solid foundation for basic token creation with built-in security measures. Deployment fee is 0.0001 ETH. Supported networks include ETH, BSC, and Polygon. Contract is fully audited but not upgradeable.",
     link: "/v1",
     action: "Launch App"
   },
@@ -56,12 +52,7 @@ const FACTORY_FEATURES = [
       "Anti-bot measures",
       "Fair launch options"
     ],
-    details: {
-      deploymentFee: "0.0002 ETH",
-      networks: ["ETH", "BSC", "Polygon", "Arbitrum"],
-      audited: true,
-      upgradeable: true
-    },
+    details: "Advanced token creation platform with integrated presale capabilities. The V2 factory introduces sophisticated features perfect for professional token launches. Deployment fee is 0.0002 ETH. Supported networks include ETH, BSC, Polygon, and Arbitrum. Contract is audited and upgradeable.",
     link: "/v2",
     action: "Launch App"
   },
@@ -69,23 +60,18 @@ const FACTORY_FEATURES = [
     version: "3.0.0",
     status: 'PLANNED' as const,
     title: "Token Factory v3",
-    description: "Advanced DeFi token creation with built-in DEX and staking",
+    description: "Next-generation token platform with DAO and governance features",
     features: [
-      "Built-in DEX pool",
-      "Staking mechanism",
-      "Yield farming",
-      "Governance",
-      "Multi-token rewards",
-      "Cross-chain bridge",
-      "DAO integration",
+      "Built-in DAO functionality",
+      "Governance token creation",
+      "Proposal system",
+      "Voting mechanisms",
+      "Treasury management",
+      "Multi-sig support",
+      "Cross-chain bridges",
       "Advanced analytics"
     ],
-    details: {
-      deploymentFee: "Coming soon",
-      networks: ["ETH", "BSC", "Polygon", "Arbitrum", "Optimism"],
-      audited: false,
-      upgradeable: true
-    },
+    details: "The upcoming V3 platform will revolutionize token creation with integrated DAO and governance features. Planned deployment fee of 0.0003 ETH. Will support all major EVM chains including Layer 2 solutions. Enhanced security features and complete decentralization options. Expected release: Q3 2024.",
     link: "",
     action: "Coming Soon"
   },
@@ -93,23 +79,18 @@ const FACTORY_FEATURES = [
     version: "4.0.0",
     status: 'FUTURE' as const,
     title: "Token Factory v4",
-    description: "Next-gen token platform with AI-powered features",
+    description: "AI-powered token creation and management platform",
     features: [
-      "AI trading bot",
-      "Market prediction",
-      "Smart rebalancing",
-      "Risk analysis",
-      "Portfolio optimization",
-      "Automated compliance",
-      "ML price feeds",
-      "Smart treasury"
+      "AI-driven token optimization",
+      "Automated market making",
+      "Smart contract analysis",
+      "Risk assessment",
+      "Predictive analytics",
+      "Cross-chain interoperability",
+      "Zero-knowledge proofs",
+      "Advanced security features"
     ],
-    details: {
-      deploymentFee: "TBA",
-      networks: ["All EVM chains"],
-      audited: false,
-      upgradeable: true
-    },
+    details: "The future of token creation with AI-powered features and advanced automation. Will include revolutionary features like automated market making and intelligent contract optimization. Planned integration with all major blockchain networks and Layer 2 solutions. Target release: 2025.",
     link: "",
     action: "In Development"
   }
@@ -246,7 +227,7 @@ export default function Home() {
               <InfoIcon />
             </div>
             
-            <div className="grid grid-cols-1 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {FACTORY_FEATURES.map((feature, index) => (
                 <FactoryFeatureCard
                   key={index}

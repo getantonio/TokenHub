@@ -78,6 +78,7 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
     initialSupply: string;
     owner: string | null;
   } | null>(null);
+  const [provider, setProvider] = useState<BrowserProvider | null>(null);
 
   const [previewConfig, setPreviewConfig] = useState<TokenConfig>({
     name: formData.name,
@@ -168,6 +169,13 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
 
     fetchDeploymentFee();
   }, [chainId]);
+
+  useEffect(() => {
+    if (window.ethereum && isConnected) {
+      const provider = new BrowserProvider(window.ethereum);
+      setProvider(provider);
+    }
+  }, [isConnected]);
 
   const showToast = (type: 'success' | 'error', message: string, link?: string) => {
     setToast({ type, message, link });
@@ -549,6 +557,7 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
           <TokenAdminV2
             isConnected={isConnected}
             address={successInfo?.tokenAddress}
+            provider={provider}
           />
         </div>
       </div>

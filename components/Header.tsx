@@ -12,35 +12,42 @@ export function Header() {
   const [showNetworkMenu, setShowNetworkMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const router = useRouter();
+  const [address, setAddress] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
-    checkConnection();
-  }, []);
-
-  const checkConnection = async () => {
-    if (window.ethereum) {
-      try {
-        const accounts = await window.ethereum.request<string[]>({ 
-          method: 'eth_accounts' 
-        });
-        setIsConnected(Array.isArray(accounts) && accounts.length > 0);
-
-        window.ethereum.on('accountsChanged', handleAccountsChanged as (...args: unknown[]) => void);
-        window.ethereum.on('chainChanged', handleChainChanged as (...args: unknown[]) => void);
-        
-        return () => {
-          window.ethereum?.removeListener('accountsChanged', handleAccountsChanged as (...args: unknown[]) => void);
-          window.ethereum?.removeListener('chainChanged', handleChainChanged as (...args: unknown[]) => void);
-        };
-      } catch (error) {
-        console.error('Error checking wallet connection:', error);
-      }
+    if (typeof window !== 'undefined') {
+      setMounted(true);
+      // Check for mobile device
+      setIsMobile(/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent));
+      
+      // Check connection status on page load and after returning from MetaMask
+      const checkInitialConnection = async () => {
+        if (window.ethereum) {
+          try {
+            const accounts = await window.ethereum.request<string[]>({
+              method: 'eth_accounts'
+            });
+            handleAccountsChanged(accounts as string[]);
+            
+            // Also check chain ID
+            const chainId = await window.ethereum.request({
+              method: 'eth_chainId'
+            });
+            handleChainChanged(chainId as string);
+          } catch (error) {
+            console.error('Error checking initial connection:', error);
+          }
+        }
+      };
+      
+      checkInitialConnection();
     }
-  };
+  }, []);
 
   const handleAccountsChanged = (accounts: string[]) => {
     setIsConnected(Array.isArray(accounts) && accounts.length > 0);
+    setAddress(accounts && accounts.length > 0 ? accounts[0] : null);
   };
 
   const handleChainChanged = (chainId: string) => {
@@ -48,17 +55,55 @@ export function Header() {
   };
 
   const connectWallet = async () => {
+    if (typeof window === 'undefined') return;
+    
+    try {
+      if (window.ethereum) {
+        try {
+          // First try to enable the ethereum provider
+          const accounts = await window.ethereum.request<string[]>({
+            method: 'eth_requestAccounts'
+          });
+          
+          if (accounts && accounts.length > 0) {
+            handleAccountsChanged(accounts as string[]);
+            return; // Successfully connected
+          }
+        } catch (error: any) {
+          console.error('Error requesting accounts:', error);
+          // If user rejected or there was an error, try deep linking on mobile
+          if (isMobile) {
+            const currentUrl = encodeURIComponent(window.location.href);
+            // Use WalletConnect format for better mobile handling
+            const metamaskAppDeepLink = `https://metamask.app.link/wc?url=${currentUrl}`;
+            window.location.href = metamaskAppDeepLink;
+          }
+        }
+      } else if (isMobile) {
+        // Mobile device without MetaMask
+        const currentUrl = encodeURIComponent(window.location.href);
+        const metamaskAppDeepLink = `https://metamask.app.link/wc?url=${currentUrl}`;
+        window.location.href = metamaskAppDeepLink;
+      } else {
+        // Desktop without MetaMask
+        window.open('https://metamask.io/download/', '_blank');
+      }
+    } catch (error) {
+      console.error('Error connecting wallet:', error);
+    }
+  };
+
+  const disconnect = async () => {
     if (window.ethereum) {
       try {
         await window.ethereum.request({
-          method: 'eth_requestAccounts'
+          method: 'eth_logout'
         });
-        setIsConnected(true);
+        setIsConnected(false);
+        setAddress(null);
       } catch (error) {
-        console.error('Error connecting wallet:', error);
+        console.error('Error disconnecting wallet:', error);
       }
-    } else {
-      alert('Please install MetaMask to use this feature');
     }
   };
 
@@ -107,6 +152,55 @@ export function Header() {
     { href: '/presale', label: 'Presale' },
     { href: '/admin', label: 'Admin' }
   ];
+
+  // Check connection status whenever the component mounts or window.ethereum changes
+  useEffect(() => {
+    if (mounted && typeof window !== 'undefined') {
+      const checkConnection = async () => {
+        if (window.ethereum) {
+          try {
+            const accounts = await window.ethereum.request<string[]>({
+              method: 'eth_accounts'
+            });
+            handleAccountsChanged(accounts as string[]);
+
+            // Also check chain ID after connection
+            const chainId = await window.ethereum.request({
+              method: 'eth_chainId'
+            });
+            handleChainChanged(chainId as string);
+          } catch (error) {
+            console.error('Error checking connection:', error);
+          }
+        }
+      };
+      
+      checkConnection();
+      
+      // Set up event listeners
+      if (window.ethereum) {
+        const handleAccountsChangedCallback = (...args: unknown[]) => {
+          const accounts = args[0] as string[];
+          handleAccountsChanged(accounts);
+        };
+        const handleChainChangedCallback = (...args: unknown[]) => {
+          const chainId = args[0] as string;
+          handleChainChanged(chainId);
+        };
+        
+        window.ethereum.on('accountsChanged', handleAccountsChangedCallback);
+        window.ethereum.on('chainChanged', handleChainChangedCallback);
+        
+        return () => {
+          window.ethereum?.removeListener('accountsChanged', handleAccountsChangedCallback);
+          window.ethereum?.removeListener('chainChanged', handleChainChangedCallback);
+        };
+      }
+    }
+  }, [mounted]);
+
+  // Don't render anything until mounted
+  if (!mounted) return null;
 
   return (
     <header className="bg-gray-800 border-b border-gray-700">
@@ -196,16 +290,28 @@ export function Header() {
             </div>
             
             {/* Connect Wallet Button */}
-            <button
-              onClick={connectWallet}
-              className={`px-4 py-2 rounded-md text-sm font-medium text-white ${
-                isConnected
-                  ? 'bg-[#1B4D3E] hover:bg-[#2C614F]'
-                  : 'bg-[#1B4D3E] hover:bg-[#2C614F]'
-              }`}
-            >
-              {isConnected ? 'Connected' : 'Connect Wallet'}
-            </button>
+            <div className="flex items-center gap-4">
+              {isConnected ? (
+                <button
+                  onClick={disconnect}
+                  className="btn-blue-outline"
+                >
+                  Disconnect {address?.slice(0, 6)}...{address?.slice(-4)}
+                </button>
+              ) : (
+                <button
+                  onClick={connectWallet}
+                  className="btn-blue"
+                >
+                  <span className="flex items-center gap-2">
+                    <span>Connect Wallet</span>
+                    {isMobile && !window.ethereum && (
+                      <span className="text-xs opacity-75">(Open in MetaMask)</span>
+                    )}
+                  </span>
+                </button>
+              )}
+            </div>
 
             {/* Mobile Menu Button */}
             <div className="md:hidden">

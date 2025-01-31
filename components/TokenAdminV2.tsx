@@ -14,6 +14,7 @@ const TOKEN_DECIMALS = 18;
 interface TokenAdminV2Props {
   isConnected: boolean;
   address?: string;
+  provider: BrowserProvider | null;
 }
 
 interface TokenInfo {
@@ -48,7 +49,7 @@ interface LockInfo {
   lockUntil?: number;
 }
 
-export default function TokenAdminV2({ isConnected, address }: TokenAdminV2Props) {
+export default function TokenAdminV2({ isConnected, address, provider: externalProvider }: TokenAdminV2Props) {
   const { chainId } = useNetwork();
   const [tokens, setTokens] = useState<TokenInfo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -58,50 +59,24 @@ export default function TokenAdminV2({ isConnected, address }: TokenAdminV2Props
   const [lockInfo, setLockInfo] = useState<LockInfo>({ address: '', duration: 30 });
   const [currentWallet, setCurrentWallet] = useState<string>('');
   const [isExpanded, setIsExpanded] = useState(false);
-  const [provider, setProvider] = useState<BrowserProvider | null>(null);
 
   useEffect(() => {
-    const initProvider = async () => {
-      if (window.ethereum && isConnected) {
-        try {
-          const newProvider = new BrowserProvider(window.ethereum);
-          setProvider(newProvider);
-        } catch (error) {
-          console.error("Error initializing provider:", error);
-        }
-      }
-    };
-
-    initProvider();
-  }, [isConnected]);
-
-  useEffect(() => {
-    if (isConnected && chainId && provider && address) {
+    if (isConnected && chainId && externalProvider && address) {
       console.log("Dependencies changed, reloading tokens:", {
         isConnected,
         chainId,
-        hasProvider: !!provider,
+        hasProvider: !!externalProvider,
         address
       });
       loadTokens();
     }
-  }, [isConnected, chainId, provider, address]);
-
-  // Reload tokens periodically to catch new ones
-  useEffect(() => {
-    if (isConnected && chainId && provider && address) {
-      const interval = setInterval(() => {
-        loadTokens();
-      }, 30000); // Every 30 seconds
-      return () => clearInterval(interval);
-    }
-  }, [isConnected, chainId, provider, address]);
+  }, [isConnected, chainId, externalProvider, address]);
 
   useEffect(() => {
     const updateWallet = async () => {
-      if (isConnected && window.ethereum && provider) {
+      if (isConnected && window.ethereum && externalProvider) {
         try {
-          const signer = await provider.getSigner();
+          const signer = await externalProvider.getSigner();
           const address = await signer.getAddress();
           setCurrentWallet(address);
         } catch (error) {
@@ -111,7 +86,7 @@ export default function TokenAdminV2({ isConnected, address }: TokenAdminV2Props
     };
 
     updateWallet();
-  }, [isConnected, provider]);
+  }, [isConnected, externalProvider]);
 
   const showToast = (type: 'success' | 'error', message: string) => {
     setToast({ type, message });
@@ -119,14 +94,14 @@ export default function TokenAdminV2({ isConnected, address }: TokenAdminV2Props
   };
 
   const loadTokens = async () => {
-    if (!isConnected || !window.ethereum || !chainId || !provider) {
+    if (!isConnected || !window.ethereum || !chainId || !externalProvider) {
       console.error("Missing dependencies");
       return;
     }
 
     try {
       setIsLoading(true);
-      const signer = await provider.getSigner();
+      const signer = await externalProvider.getSigner();
       
       const factoryV2Address = getNetworkContractAddress(chainId, 'factoryAddressV2');
       if (!factoryV2Address) {
@@ -138,7 +113,7 @@ export default function TokenAdminV2({ isConnected, address }: TokenAdminV2Props
         chainId,
         factoryV2Address
       });
-      const factoryV2 = new Contract(factoryV2Address, TokenFactoryV2.abi, provider);
+      const factoryV2 = new Contract(factoryV2Address, TokenFactoryV2.abi, externalProvider);
       
       // Try to get all deployed tokens first
       try {
@@ -148,7 +123,7 @@ export default function TokenAdminV2({ isConnected, address }: TokenAdminV2Props
         if (deployedTokens && deployedTokens.length > 0) {
           const tokenPromises = deployedTokens.map(async (tokenAddr: string) => {
             try {
-              const token = new Contract(tokenAddr, TokenTemplateV2.abi, provider);
+              const token = new Contract(tokenAddr, TokenTemplateV2.abi, externalProvider);
               const [name, symbol, totalSupply, blacklistEnabled, timeLockEnabled, presaleStatus] = await Promise.all([
                 token.name(),
                 token.symbol(),
@@ -196,14 +171,14 @@ export default function TokenAdminV2({ isConnected, address }: TokenAdminV2Props
       }
 
       // Fallback to event logs
-      const currentBlock = await provider.getBlockNumber();
+      const currentBlock = await externalProvider.getBlockNumber();
       // Search last 100,000 blocks instead of 2.5M to speed up the search
       const fromBlock = Math.max(0, currentBlock - 100000);
 
       console.log(`\nSearching for events from block ${fromBlock} to ${currentBlock}`);
 
       // Get all logs from the factory contract since no parameters are indexed
-      const logs = await provider.getLogs({
+      const logs = await externalProvider.getLogs({
         address: factoryV2Address,
         fromBlock,
         toBlock: currentBlock
@@ -237,11 +212,11 @@ export default function TokenAdminV2({ isConnected, address }: TokenAdminV2Props
           const normalizedAddr = tokenAddr.toLowerCase();
           if (processedAddresses.has(normalizedAddr)) continue;
 
-          const code = await provider.getCode(normalizedAddr);
+          const code = await externalProvider.getCode(normalizedAddr);
           if (code === '0x') continue;
 
           console.log("Checking token contract at:", normalizedAddr);
-          const token = new Contract(normalizedAddr, TokenTemplateV2.abi, provider);
+          const token = new Contract(normalizedAddr, TokenTemplateV2.abi, externalProvider);
           const [name, symbol, totalSupply, blacklistEnabled, timeLockEnabled, presaleStatus] = await Promise.all([
             token.name(),
             token.symbol(),

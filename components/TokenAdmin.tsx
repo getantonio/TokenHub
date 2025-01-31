@@ -15,6 +15,7 @@ const TOKEN_DECIMALS = 18; // Standard ERC20 decimals
 interface TokenAdminProps {
   isConnected: boolean;
   address?: string;
+  provider: BrowserProvider | null;
 }
 
 interface TokenInfo {
@@ -38,7 +39,7 @@ interface LockInfo {
   lockUntil?: number;
 }
 
-export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
+export default function TokenAdmin({ isConnected, address, provider: externalProvider }: TokenAdminProps) {
   const { chainId } = useNetwork();
   const [tokens, setTokens] = useState<TokenInfo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -48,40 +49,24 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
   const [lockInfo, setLockInfo] = useState<LockInfo>({ address: '', duration: 30 });
   const [currentWallet, setCurrentWallet] = useState<string>('');
   const [isExpanded, setIsExpanded] = useState(false);
-  const [provider, setProvider] = useState<BrowserProvider | null>(null);
 
   useEffect(() => {
-    const initProvider = async () => {
-      if (window.ethereum && isConnected) {
-        try {
-          const newProvider = new BrowserProvider(window.ethereum);
-          setProvider(newProvider);
-        } catch (error) {
-          console.error("Error initializing provider:", error);
-        }
-      }
-    };
-
-    initProvider();
-  }, [isConnected]);
-
-  useEffect(() => {
-    if (isConnected && chainId && provider && address) {
+    if (isConnected && chainId && externalProvider && address) {
       console.log("Dependencies changed, reloading tokens:", {
         isConnected,
         chainId,
-        hasProvider: !!provider,
+        hasProvider: !!externalProvider,
         address
       });
       loadTokens();
     }
-  }, [isConnected, chainId, provider, address]);
+  }, [isConnected, chainId, externalProvider, address]);
 
   useEffect(() => {
     const updateWallet = async () => {
-      if (isConnected && window.ethereum && provider) {
+      if (isConnected && window.ethereum && externalProvider) {
         try {
-          const signer = await provider.getSigner();
+          const signer = await externalProvider.getSigner();
           const address = await signer.getAddress();
           setCurrentWallet(address);
         } catch (error) {
@@ -91,7 +76,7 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
     };
 
     updateWallet();
-  }, [isConnected, provider]);
+  }, [isConnected, externalProvider]);
 
   const showToast = (type: 'success' | 'error', message: string, link?: string) => {
     setToast({ type, message, link });
@@ -99,66 +84,219 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
   };
 
   const loadTokens = async () => {
-    if (!isConnected || !chainId || !provider) {
-      console.log("Missing dependencies:", { isConnected, chainId, hasProvider: !!provider });
+    if (!isConnected || !chainId || !externalProvider) {
+      console.log("Missing dependencies:", { isConnected, chainId, hasProvider: !!externalProvider });
       return;
     }
 
     try {
       setIsLoading(true);
-      console.log("Loading V1 tokens from factory at:", address);
+      console.log("Loading V1 tokens with params:", {
+        chainId,
+        address,
+        isConnected,
+        hasProvider: !!externalProvider
+      });
       
       if (!address) {
         console.error("No factory address provided");
         return;
       }
 
-      const factory = new Contract(address, TokenFactoryV1.abi, provider);
+      const factory = new Contract(address, TokenFactoryV1.abi, externalProvider);
       console.log("Factory contract initialized at:", address);
-      
-      console.log("Attempting to get deployed tokens from contract...");
-      const deployedTokens = await factory.getDeployedTokens();
-      console.log("Found deployed tokens:", deployedTokens);
 
-      if (!deployedTokens || deployedTokens.length === 0) {
-        setTokens([]);
-        return;
+      // First try direct method
+      try {
+        console.log("Attempting to get deployed tokens directly...");
+        const deployedTokens = await factory.getDeployedTokens();
+        console.log("Raw deployed tokens response:", deployedTokens);
+
+        if (deployedTokens && deployedTokens.length > 0) {
+          console.log("Processing", deployedTokens.length, "tokens");
+          const tokenPromises = deployedTokens.map(async (tokenAddr: string) => {
+            try {
+              console.log("Checking token contract at:", tokenAddr);
+              const token = new Contract(tokenAddr, TokenTemplateV1.abi, externalProvider);
+              
+              // Check if contract exists
+              const code = await externalProvider.getCode(tokenAddr);
+              if (code === '0x') {
+                console.log("No contract code found at:", tokenAddr);
+                return null;
+              }
+
+              // First try to get basic token info
+              const [name, symbol, totalSupply] = await Promise.all([
+                token.name().catch((e: Error) => {
+                  console.error("Error getting name:", e);
+                  return 'Unknown';
+                }),
+                token.symbol().catch((e: Error) => {
+                  console.error("Error getting symbol:", e);
+                  return 'UNK';
+                }),
+                token.totalSupply().catch((e: Error) => {
+                  console.error("Error getting totalSupply:", e);
+                  return '0';
+                })
+              ]);
+
+              // Then try to get optional features
+              let blacklistEnabled = false;
+              let timeLockEnabled = false;
+
+              try {
+                // Check if the contract has these functions by calling them
+                await token.blacklistEnabled();
+                blacklistEnabled = true;
+              } catch (e) {
+                console.log("blacklistEnabled not supported for token:", tokenAddr);
+              }
+
+              try {
+                await token.timeLockEnabled();
+                timeLockEnabled = true;
+              } catch (e) {
+                console.log("timeLockEnabled not supported for token:", tokenAddr);
+              }
+
+              const tokenInfo = {
+                address: tokenAddr,
+                name,
+                symbol,
+                totalSupply: formatUnits(totalSupply, TOKEN_DECIMALS),
+                blacklistEnabled,
+                timeLockEnabled
+              };
+              console.log("Successfully loaded token info:", tokenInfo);
+              return tokenInfo;
+            } catch (error) {
+              console.error("Error loading token info for", tokenAddr, ":", error);
+              return null;
+            }
+          });
+
+          const loadedTokens = (await Promise.all(tokenPromises)).filter(Boolean);
+          if (loadedTokens.length > 0) {
+            console.log("Setting tokens from direct method:", loadedTokens);
+            setTokens(loadedTokens as TokenInfo[]);
+            return;
+          }
+        }
+      } catch (error) {
+        console.error("Direct token loading failed, trying event logs...", error);
       }
 
-      console.log("Processing", deployedTokens.length, "tokens...");
-      const tokenPromises = deployedTokens.map(async (tokenAddr: string) => {
-        console.log("Checking token at:", tokenAddr);
+      // Fallback to event logs
+      const currentBlock = await externalProvider.getBlockNumber();
+      const fromBlock = Math.max(0, currentBlock - 200000); // Look back further
+
+      console.log(`\nSearching for events from block ${fromBlock} to ${currentBlock}`);
+      console.log("Using factory address:", address);
+
+      const filter = {
+        address,
+        fromBlock,
+        toBlock: currentBlock,
+        topics: [ethers.id("TokenCreated(address,string,string)")]
+      };
+
+      console.log("Event filter:", filter);
+      const logs = await externalProvider.getLogs(filter);
+      console.log("Found logs:", logs.length);
+
+      const foundTokens: TokenInfo[] = [];
+      const processedAddresses = new Set<string>();
+
+      for (const log of logs) {
         try {
-          const token = new Contract(tokenAddr, TokenTemplateV1.abi, provider);
-          const [name, symbol, totalSupply, blacklistEnabled, timeLockEnabled] = await Promise.all([
+          console.log("Processing log:", log);
+          const parsedLog = factory.interface.parseLog({
+            topics: log.topics || [],
+            data: log.data
+          });
+
+          if (!parsedLog || parsedLog.name !== 'TokenCreated') {
+            console.log("Skipping non-TokenCreated log:", parsedLog?.name);
+            continue;
+          }
+
+          console.log("Parsed TokenCreated event:", parsedLog);
+          const tokenAddr = parsedLog.args[0] as string;
+          if (!tokenAddr || !ethers.isAddress(tokenAddr)) {
+            console.log("Invalid token address:", tokenAddr);
+            continue;
+          }
+
+          const normalizedAddr = tokenAddr.toLowerCase();
+          if (processedAddresses.has(normalizedAddr)) {
+            console.log("Already processed token:", normalizedAddr);
+            continue;
+          }
+
+          // Verify contract exists
+          const code = await externalProvider.getCode(normalizedAddr);
+          if (code === '0x') {
+            console.log("No contract code found at:", normalizedAddr);
+            continue;
+          }
+
+          console.log("Loading token data for:", normalizedAddr);
+          const token = new Contract(normalizedAddr, TokenTemplateV1.abi, externalProvider);
+          
+          // First try to get basic token info
+          const [name, symbol, totalSupply] = await Promise.all([
             token.name().catch(() => 'Unknown'),
             token.symbol().catch(() => 'UNK'),
-            token.totalSupply().catch(() => '0'),
-            token.blacklistEnabled().catch(() => false),
-            token.timeLockEnabled().catch(() => false)
+            token.totalSupply().catch(() => '0')
           ]);
 
-          const tokenInfo = {
-            address: tokenAddr,
-            name,
-            symbol,
-            totalSupply: formatUnits(totalSupply, 18),
-            blacklistEnabled,
-            timeLockEnabled
-          };
-          console.log("Token info loaded:", tokenInfo);
-          return tokenInfo;
-        } catch (error) {
-          console.error("Error loading token info for", tokenAddr, ":", error);
-          return null;
-        }
-      });
+          // Then try to get optional features
+          let blacklistEnabled = false;
+          let timeLockEnabled = false;
 
-      const loadedTokens = (await Promise.all(tokenPromises)).filter(Boolean);
-      console.log("Setting tokens:", loadedTokens);
-      setTokens(loadedTokens as TokenInfo[]);
+          try {
+            await token.blacklistEnabled();
+            blacklistEnabled = true;
+          } catch (e) {
+            console.log("blacklistEnabled not supported for token:", normalizedAddr);
+          }
+
+          try {
+            await token.timeLockEnabled();
+            timeLockEnabled = true;
+          } catch (e) {
+            console.log("timeLockEnabled not supported for token:", normalizedAddr);
+          }
+
+          if (!foundTokens.some(t => t.address.toLowerCase() === normalizedAddr)) {
+            const tokenInfo = {
+              address: normalizedAddr,
+              name,
+              symbol,
+              totalSupply: formatUnits(totalSupply, TOKEN_DECIMALS),
+              blacklistEnabled,
+              timeLockEnabled
+            };
+            console.log("Adding token to list:", tokenInfo);
+            foundTokens.push(tokenInfo);
+            processedAddresses.add(normalizedAddr);
+          }
+        } catch (error) {
+          console.error("Error processing log:", error);
+        }
+      }
+
+      if (foundTokens.length > 0) {
+        console.log("Setting tokens from event logs:", foundTokens);
+        setTokens(foundTokens);
+      } else {
+        console.log("No tokens found");
+        setTokens([]);
+      }
     } catch (error) {
-      console.error("Error loading tokens:", error);
+      console.error("Error in loadTokens:", error);
       showToast('error', 'Failed to load tokens');
     } finally {
       setIsLoading(false);

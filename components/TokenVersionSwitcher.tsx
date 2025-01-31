@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import TokenAdmin from './TokenAdmin';
 import TokenAdminV2 from './TokenAdminV2';
+import { BrowserProvider } from 'ethers';
 
 interface TokenVersionSwitcherProps {
   isConnected: boolean;
   address?: string;
+  provider: BrowserProvider | null;
 }
 
-export default function TokenVersionSwitcher({ isConnected, address }: TokenVersionSwitcherProps) {
+export default function TokenVersionSwitcher({ isConnected, address, provider }: TokenVersionSwitcherProps) {
   const [selectedVersion, setSelectedVersion] = useState<'v1' | 'v2'>('v2');
 
   return (
@@ -15,20 +17,20 @@ export default function TokenVersionSwitcher({ isConnected, address }: TokenVers
       <div className="flex justify-start gap-4 mb-6">
         <button
           onClick={() => setSelectedVersion('v1')}
-          className={`px-4 py-2 rounded-lg ${
+          className={`btn-blue ${
             selectedVersion === 'v1'
-              ? 'bg-blue-500 text-white'
-              : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              ? ''
+              : 'opacity-60 hover:opacity-80'
           }`}
         >
           Version 1
         </button>
         <button
           onClick={() => setSelectedVersion('v2')}
-          className={`px-4 py-2 rounded-lg ${
+          className={`btn-blue ${
             selectedVersion === 'v2'
-              ? 'bg-blue-500 text-white'
-              : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              ? ''
+              : 'opacity-60 hover:opacity-80'
           }`}
         >
           Version 2
@@ -36,9 +38,9 @@ export default function TokenVersionSwitcher({ isConnected, address }: TokenVers
       </div>
 
       {selectedVersion === 'v1' ? (
-        <TokenAdmin isConnected={isConnected} address={address} />
+        <TokenAdmin isConnected={isConnected} address={address} provider={provider} />
       ) : (
-        <TokenAdminV2 isConnected={isConnected} address={address} />
+        <TokenAdminV2 isConnected={isConnected} address={address} provider={provider} />
       )}
     </div>
   );

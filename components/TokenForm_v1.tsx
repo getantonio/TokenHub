@@ -2,14 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { BrowserProvider, Contract, parseUnits, formatUnits } from 'ethers';
 import { getNetworkContractAddress } from '../config/contracts';
 import TokenFactoryArtifact from '../contracts/abi/TokenFactory_v1.1.0.json';
+import TokenTemplateArtifact from '../contracts/abi/TokenTemplate_v1.1.0.json';
 import { Toast } from './ui/Toast';
 import { getExplorerUrl } from '../config/networks';
 import { TokenPreview } from './TokenPreview';
 import TokenAdmin from './TokenAdmin';
 import { InfoIcon } from './ui/InfoIcon';
 import { TokenConfig } from './types';
+import { useNetwork } from '../contexts/NetworkContext';
+import { ethers } from 'ethers';
 
 const TokenFactoryABI = TokenFactoryArtifact.abi;
+const TokenTemplateABI = TokenTemplateArtifact.abi;
 const TOKEN_DECIMALS = 18;
 
 interface FormData {
@@ -17,6 +21,15 @@ interface FormData {
   symbol: string;
   initialSupply: string;
   maxSupply: string;
+  blacklistEnabled: boolean;
+  timeLockEnabled: boolean;
+}
+
+interface TokenInfo {
+  address: string;
+  name: string;
+  symbol: string;
+  totalSupply: string;
   blacklistEnabled: boolean;
   timeLockEnabled: boolean;
 }
@@ -41,6 +54,7 @@ export default function TokenForm_v1({ isConnected }: Props) {
     timeLockEnabled: false,
   });
 
+  const [tokens, setTokens] = useState<TokenInfo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -65,6 +79,25 @@ export default function TokenForm_v1({ isConnected }: Props) {
     marketingAllocation: 10,
     developerAllocation: 10
   });
+
+  const [provider, setProvider] = useState<BrowserProvider | null>(null);
+  const { chainId } = useNetwork();
+  const [factoryAddress, setFactoryAddress] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.ethereum && isConnected) {
+      const provider = new BrowserProvider(window.ethereum);
+      setProvider(provider);
+    }
+  }, [isConnected]);
+
+  useEffect(() => {
+    if (chainId) {
+      const address = getNetworkContractAddress(chainId, 'factoryAddress');
+      setFactoryAddress(address || undefined);
+      console.log("V1 Factory address set to:", address);
+    }
+  }, [chainId]);
 
   // Update preview whenever form data changes
   useEffect(() => {
@@ -209,6 +242,152 @@ export default function TokenForm_v1({ isConnected }: Props) {
       ...prev,
       [name]: type === 'checkbox' ? checked : value
     }));
+  };
+
+  const loadTokens = async () => {
+    if (!isConnected || !chainId || !provider || typeof window === 'undefined') {
+      console.log("Missing dependencies:", { isConnected, chainId, hasProvider: !!provider, isBrowser: typeof window !== 'undefined' });
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      console.log("Loading V1 tokens from factory at:", factoryAddress);
+      
+      if (!factoryAddress) {
+        console.error("No factory address provided");
+        return;
+      }
+
+      const factory = new Contract(factoryAddress, TokenFactoryABI, provider);
+      console.log("Factory contract initialized");
+
+      // Try to get all deployed tokens first
+      try {
+        const deployedTokens = await factory.getDeployedTokens();
+        console.log("Found deployedTokens:", deployedTokens);
+        
+        if (deployedTokens && deployedTokens.length > 0) {
+          const tokenPromises = deployedTokens.map(async (tokenAddr: string) => {
+            try {
+              const token = new Contract(tokenAddr, TokenTemplateABI, provider);
+              const [name, symbol, totalSupply, blacklistEnabled, timeLockEnabled] = await Promise.all([
+                token.name(),
+                token.symbol(),
+                token.totalSupply(),
+                token.blacklistEnabled(),
+                token.timeLockEnabled()
+              ]);
+
+              return {
+                address: tokenAddr,
+                name,
+                symbol,
+                totalSupply: formatUnits(totalSupply, TOKEN_DECIMALS),
+                blacklistEnabled,
+                timeLockEnabled
+              };
+            } catch (error) {
+              console.error(`Error checking token ${tokenAddr}:`, error);
+              return null;
+            }
+          });
+
+          const tokenResults = await Promise.all(tokenPromises);
+          const validTokens = tokenResults.filter(Boolean);
+          if (validTokens.length > 0) {
+            console.log("Setting tokens from direct method:", validTokens);
+            setTokens(validTokens as TokenInfo[]);
+            return;
+          }
+        }
+      } catch (error) {
+        console.error("deployedTokens failed, trying event logs...", error);
+      }
+
+      // Fallback to event logs
+      const currentBlock = await provider.getBlockNumber();
+      const fromBlock = Math.max(0, currentBlock - 200000); // Look back further
+
+      console.log(`\nSearching for events from block ${fromBlock} to ${currentBlock}`);
+
+      // Get all logs from the factory contract
+      const logs = await provider.getLogs({
+        address: factoryAddress,
+        fromBlock,
+        toBlock: currentBlock
+      });
+      console.log("Found logs:", logs.length);
+
+      const foundTokens: TokenInfo[] = [];
+      const processedAddresses = new Set<string>();
+
+      for (const log of logs) {
+        try {
+          const parsedLog = factory.interface.parseLog({
+            topics: log.topics || [],
+            data: log.data
+          });
+
+          if (!parsedLog || parsedLog.name !== 'TokenCreated') {
+            console.log("Skipping non-TokenCreated log:", parsedLog?.name);
+            continue;
+          }
+
+          console.log("Processing TokenCreated event:", {
+            token: parsedLog.args[0],
+            name: parsedLog.args[1],
+            symbol: parsedLog.args[2]
+          });
+
+          const tokenAddr = parsedLog.args[0] as string;
+          if (!tokenAddr || !ethers.isAddress(tokenAddr)) continue;
+
+          const normalizedAddr = tokenAddr.toLowerCase();
+          if (processedAddresses.has(normalizedAddr)) continue;
+
+          const code = await provider.getCode(normalizedAddr);
+          if (code === '0x') continue;
+
+          console.log("Checking token contract at:", normalizedAddr);
+          const token = new Contract(normalizedAddr, TokenTemplateABI, provider);
+          const [name, symbol, totalSupply, blacklistEnabled, timeLockEnabled] = await Promise.all([
+            token.name(),
+            token.symbol(),
+            token.totalSupply(),
+            token.blacklistEnabled(),
+            token.timeLockEnabled()
+          ]);
+
+          if (!foundTokens.some(t => t.address.toLowerCase() === normalizedAddr)) {
+            foundTokens.push({
+              address: normalizedAddr,
+              name,
+              symbol,
+              totalSupply: formatUnits(totalSupply, TOKEN_DECIMALS),
+              blacklistEnabled,
+              timeLockEnabled
+            });
+            processedAddresses.add(normalizedAddr);
+          }
+        } catch (error) {
+          console.error("Error processing log:", error);
+        }
+      }
+
+      if (foundTokens.length > 0) {
+        console.log("Setting found tokens:", foundTokens);
+        setTokens(foundTokens);
+      } else {
+        console.log("No tokens found");
+        setTokens([]);
+      }
+    } catch (error) {
+      console.error("Error in loadTokens:", error);
+      showToast('error', 'Failed to load tokens');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -373,7 +552,7 @@ export default function TokenForm_v1({ isConnected }: Props) {
             <button
               type="submit"
               disabled={!isConnected || isLoading || deploymentFee === 'Not available on this network'}
-              className={`inline-flex justify-center rounded-md border border-transparent bg-[#1B4D3E] py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-[#2C614F] focus:outline-none focus:ring-2 focus:ring-[#2C614F] focus:ring-offset-2 ${(!isConnected || isLoading || deploymentFee === 'Not available on this network') ? 'opacity-50 cursor-not-allowed' : ''}`}
+              className={`inline-flex justify-center rounded-md border border-transparent bg-blue-500/20 py-2 px-4 text-sm font-medium text-blue-400 shadow-sm hover:bg-blue-500/30 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:ring-offset-2 ${(!isConnected || isLoading || deploymentFee === 'Not available on this network') ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               {isLoading ? 'Creating...' : !isConnected ? 'Connect Wallet to Deploy' : deploymentFee === 'Not available on this network' ? 'Not Available on this Network' : 'Create Token'}
             </button>
@@ -390,7 +569,8 @@ export default function TokenForm_v1({ isConnected }: Props) {
           
           <TokenAdmin
             isConnected={isConnected}
-            address={successInfo?.tokenAddress}
+            address={factoryAddress || undefined}
+            provider={provider}
           />
         </div>
       </div>
