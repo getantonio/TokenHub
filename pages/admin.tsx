@@ -7,6 +7,8 @@ import { Toast } from '../components/ui/Toast';
 import { Spinner } from '../components/ui/Spinner';
 import TokenFactoryV1 from '../contracts/abi/TokenFactory_v1.1.0.json';
 import TokenFactoryV2 from '../contracts/abi/TokenFactory_v2.1.0.json';
+import TokenAdmin from '../components/TokenAdmin';
+import TokenAdminV2 from '../components/TokenAdminV2';
 import { getNetworkContractAddress } from '../config/contracts';
 import Head from 'next/head';
 import { ethers } from 'ethers';
@@ -31,6 +33,23 @@ export default function AdminPage() {
   const [factoryV2Info, setFactoryV2Info] = useState<FactoryInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [walletAddress, setWalletAddress] = useState<string>();
+
+  useEffect(() => {
+    const getWalletAddress = async () => {
+      if (isConnected && provider) {
+        try {
+          const signer = await provider.getSigner();
+          const address = await signer.getAddress();
+          setWalletAddress(address);
+        } catch (error) {
+          console.error("Error getting wallet address:", error);
+        }
+      }
+    };
+
+    getWalletAddress();
+  }, [isConnected, provider]);
 
   const showToast = (type: 'success' | 'error', message: string) => {
     setToast({ type, message });
@@ -191,7 +210,8 @@ export default function AdminPage() {
               </div>
             </Card>
           ) : (
-            <>
+            <div className="space-y-6">
+              {/* Factory Information */}
               {factoryV1Info && (
                 <div className="space-y-4">
                   <h2 className="text-xl font-semibold text-white">Factory V1</h2>
@@ -229,7 +249,16 @@ export default function AdminPage() {
                   </Card>
                 </div>
               )}
-            </>
+
+              {/* Token Management */}
+              <div className="space-y-4">
+                <h2 className="text-xl font-semibold text-white">Token Management</h2>
+                <div className="space-y-4">
+                  <TokenAdmin isConnected={isConnected} address={walletAddress} />
+                  <TokenAdminV2 isConnected={isConnected} address={walletAddress} />
+                </div>
+              </div>
+            </div>
           )}
         </div>
       </main>

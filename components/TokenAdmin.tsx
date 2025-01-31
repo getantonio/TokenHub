@@ -29,7 +29,6 @@ interface TokenInfo {
 interface ToastMessage {
   type: 'success' | 'error';
   message: string;
-  link?: string;
 }
 
 interface LockInfo {
@@ -77,6 +76,16 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
     }
   }, [isConnected, chainId, provider, address]);
 
+  // Reload tokens periodically to catch new ones
+  useEffect(() => {
+    if (isConnected && chainId && provider && address) {
+      const interval = setInterval(() => {
+        loadTokens();
+      }, 30000); // Every 30 seconds
+      return () => clearInterval(interval);
+    }
+  }, [isConnected, chainId, provider, address]);
+
   useEffect(() => {
     const updateWallet = async () => {
       if (isConnected && window.ethereum && provider) {
@@ -93,8 +102,8 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
     updateWallet();
   }, [isConnected, provider]);
 
-  const showToast = (type: 'success' | 'error', message: string, link?: string) => {
-    setToast({ type, message, link });
+  const showToast = (type: 'success' | 'error', message: string) => {
+    setToast({ type, message });
     setTimeout(() => setToast(null), 5000);
   };
 
@@ -308,7 +317,7 @@ export default function TokenAdmin({ isConnected, address }: TokenAdminProps) {
         </button>
       </div>
       
-      {toast && <Toast type={toast.type} message={toast.message} link={toast.link} />}
+      {toast && <Toast type={toast.type} message={toast.message} />}
       
       {isExpanded && (
         isLoading ? (

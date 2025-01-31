@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Header } from '../components/Header';
 import { useNetwork } from '../contexts/NetworkContext';
-import { getContractAddress } from '../config/networks';
-import TokenFactory_v2 from '../contracts/abi/TokenFactory_v2.json';
+import { getNetworkContractAddress } from '../config/contracts';
+import TokenFactory_v2 from '../contracts/abi/TokenFactory_v2.1.0.json';
 import { ethers } from 'ethers';
 
 interface PresaleToken {
