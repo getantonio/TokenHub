@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { formatUnits } from 'viem';
 
 interface PresaleCountdownProps {
   endTime: number;
@@ -82,7 +81,7 @@ export function PresaleCountdown({
       {/* Progress Bar */}
       <div className="space-y-1">
         <div className="flex justify-between text-xs text-gray-400">
-          <span>Progress ({progress.toFixed(2)}%)</span>
+          <span>Progress: {progress.toFixed(2)}%</span>
           <span>{totalContributed} / {softCap} ETH</span>
         </div>
         <div className="w-full bg-gray-700 rounded-full h-2.5">

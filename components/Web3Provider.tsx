@@ -25,7 +25,10 @@ const polygonAmoy = {
   testnet: true,
 } as const satisfies Chain;
 
-const projectId = 'YOUR_PROJECT_ID'; // Get this from WalletConnect Cloud
+const projectId = process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID;
+if (!projectId) {
+  throw new Error('Missing NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID environment variable');
+}
 
 const { wallets } = getDefaultWallets({
   appName: 'TokenHub.dev',

@@ -63,8 +63,7 @@ export default function TokenAdminV2({ isConnected, address, provider: externalP
   const [isOwner, setIsOwner] = useState(false);
   const [ownerControls, setOwnerControls] = useState({
     newOwner: '',
-    newFee: '',
-    newMinLiquidity: ''
+    newFee: ''
   });
 
   useEffect(() => {
@@ -432,21 +431,14 @@ export default function TokenAdminV2({ isConnected, address, provider: externalP
             showToast('error', 'Invalid fee amount');
             return;
           }
-          tx = await factory.setFee(ethers.parseEther(ownerControls.newFee));
-          break;
-        case 'setMinLiquidity':
-          if (!ownerControls.newMinLiquidity || isNaN(Number(ownerControls.newMinLiquidity))) {
-            showToast('error', 'Invalid minimum liquidity amount');
-            return;
-          }
-          tx = await factory.setMinLiquidity(ethers.parseEther(ownerControls.newMinLiquidity));
+          tx = await factory.setDeploymentFee(ethers.parseEther(ownerControls.newFee));
           break;
       }
 
       showToast('success', 'Transaction submitted...');
       await tx.wait();
       showToast('success', 'Transaction completed successfully');
-      setOwnerControls({ newOwner: '', newFee: '', newMinLiquidity: '' });
+      setOwnerControls({ newOwner: '', newFee: '' });
     } catch (error: any) {
       console.error('Error executing owner action:', error);
       showToast('error', error.message || 'Transaction failed');
@@ -543,21 +535,6 @@ export default function TokenAdminV2({ isConnected, address, provider: externalP
                       className="px-2 py-1 text-xs rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30"
                     >
                       Set Fee
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={ownerControls.newMinLiquidity}
-                      onChange={(e) => setOwnerControls({ ...ownerControls, newMinLiquidity: e.target.value })}
-                      placeholder="New min liquidity (ETH)"
-                      className="flex-1 p-1 text-xs rounded bg-background-primary border border-border"
-                    />
-                    <button
-                      onClick={() => handleOwnerAction('setMinLiquidity')}
-                      className="px-2 py-1 text-xs rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30"
-                    >
-                      Set Min Liquidity
                     </button>
                   </div>
                 </div>

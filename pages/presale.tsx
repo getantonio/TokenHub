@@ -283,10 +283,6 @@ export default function PresalePage() {
                                 <span className="text-xs text-gray-400">Rate:</span>
                                 <span className="text-xs text-white">{token.presaleRate} tokens/ETH</span>
                               </div>
-                              <div className="flex items-center space-x-1">
-                                <span className="text-xs text-gray-400">Progress:</span>
-                                <span className="text-xs text-white">{progress.toFixed(1)}%</span>
-                              </div>
                             </div>
                           </div>
                         </div>
@@ -328,7 +324,6 @@ export default function PresalePage() {
                       
                       {/* Progress info - always visible */}
                       <div className="flex justify-between items-center px-4 py-1 text-xs">
-                        <span className="text-gray-400">Progress: {progress.toFixed(1)}%</span>
                         <div className="flex items-center space-x-2">
                           <span className={`${getStatusBadgeClass(token.status)} px-2 py-0.5 rounded-full`}>
                             {token.status.charAt(0).toUpperCase() + token.status.slice(1)}
@@ -367,6 +362,11 @@ export default function PresalePage() {
                                   ? `Ends ${new Date(token.endTime * 1000).toLocaleDateString()}`
                                   : 'Presale Ended'}
                               </p>
+                              {token.status === 'active' && Number(token.totalContributed) < Number(token.softCap) && (
+                                <p className="text-xs text-yellow-400">
+                                  Soft cap not reached yet. Current: {token.totalContributed} ETH / Required: {token.softCap} ETH
+                                </p>
+                              )}
                             </div>
                             <div className="flex items-center space-x-3">
                               <a
@@ -379,7 +379,8 @@ export default function PresalePage() {
                               </a>
                               <button
                                 className="px-4 py-2 text-sm font-medium rounded-md bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                disabled={token.status !== 'active'}
+                                disabled={token.status !== 'active' || Number(token.totalContributed) < Number(token.softCap)}
+                                title={Number(token.totalContributed) < Number(token.softCap) ? 'Soft cap must be reached before finalizing' : ''}
                               >
                                 {token.status === 'pending' ? 'Starting Soon' : token.status === 'ended' ? 'Ended' : 'Contribute'}
                               </button>

@@ -154,6 +154,7 @@ export function Header({ className = '' }: HeaderProps) {
     { href: '/v1', label: 'V1' },
     { href: '/v2', label: 'V2' },
     { href: '/presale', label: 'Presale' },
+    { href: '/guides', label: 'Guides' },
     { href: '/admin', label: 'Admin' }
   ];
 
