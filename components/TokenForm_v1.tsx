@@ -6,7 +6,7 @@ import TokenTemplateArtifact from '../contracts/abi/TokenTemplate_v1.1.0.json';
 import { Toast } from './ui/Toast';
 import { getExplorerUrl } from '../config/networks';
 import { TokenPreview } from './TokenPreview';
-import TokenAdmin from './TokenAdmin';
+import TokenAdmin from './TCAP_v1';
 import { InfoIcon } from './ui/InfoIcon';
 import { TokenConfig } from './types';
 import { useNetwork } from '../contexts/NetworkContext';
@@ -567,11 +567,14 @@ export default function TokenForm_v1({ isConnected }: Props) {
             validationErrors={[]}
           />
           
-          <TokenAdmin
-            isConnected={isConnected}
-            address={factoryAddress || undefined}
-            provider={provider}
-          />
+          <div className="bg-background-secondary rounded-lg p-6 border border-border mb-6">
+            <h2 className="text-xl font-bold text-white mb-4">Token Creator Admin Panel</h2>
+            <TokenAdmin
+              isConnected={isConnected}
+              address={factoryAddress || undefined}
+              provider={provider}
+            />
+          </div>
         </div>
       </div>
     </div>

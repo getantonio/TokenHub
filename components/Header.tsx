@@ -5,7 +5,11 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { ChainId, SUPPORTED_NETWORKS } from '../config/networks';
 
-export function Header() {
+interface HeaderProps {
+  className?: string;
+}
+
+export function Header({ className = '' }: HeaderProps) {
   const { chainId, setChainId } = useNetwork();
   const [mounted, setMounted] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
@@ -203,7 +207,7 @@ export function Header() {
   if (!mounted) return null;
 
   return (
-    <header className="bg-gray-800 border-b border-gray-700">
+    <header className={`bg-background-secondary border-b border-border ${className}`}>
       <div className="container mx-auto px-4">
         <div className="flex justify-between items-center h-16">
           <div className="flex items-center space-x-8">

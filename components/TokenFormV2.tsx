@@ -6,7 +6,7 @@ import { getExplorerUrl } from '../config/networks';
 import { getNetworkContractAddress } from '../config/contracts';
 import { Toast } from './ui/Toast';
 import { TokenPreview } from './TokenPreview';
-import TokenAdminV2 from './TokenAdminV2';
+import TokenAdminV2 from './TCAP_v2';
 import { InfoIcon } from './ui/InfoIcon';
 import { TokenConfig } from './types';
 
@@ -539,7 +539,13 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
             <button
               type="submit"
               disabled={!isConnected || loading}
-              className={`inline-flex justify-center rounded-md border border-transparent bg-[#1B4D3E] py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-[#2C614F] focus:outline-none focus:ring-2 focus:ring-[#2C614F] focus:ring-offset-2 ${(!isConnected || loading) ? 'opacity-50 cursor-not-allowed' : ''}`}
+              className={`px-4 py-2 text-sm font-medium rounded-md ${
+                !isConnected
+                  ? 'bg-gray-600 text-gray-300 cursor-not-allowed'
+                  : loading
+                  ? 'bg-blue-500/50 text-white cursor-wait'
+                  : 'bg-blue-500 hover:bg-blue-600 text-white'
+              }`}
             >
               {loading ? 'Creating...' : (isConnected ? 'Create Token' : 'Connect Wallet to Deploy')}
             </button>
@@ -554,11 +560,14 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
             validationErrors={[]}
           />
           
-          <TokenAdminV2
-            isConnected={isConnected}
-            address={successInfo?.tokenAddress}
-            provider={provider}
-          />
+          <div className="bg-background-secondary rounded-lg p-6 border border-border mb-6">
+            <h2 className="text-xl font-bold text-white mb-4">Token Creator Admin Panel</h2>
+            <TokenAdminV2
+              isConnected={isConnected}
+              address={successInfo?.tokenAddress}
+              provider={provider}
+            />
+          </div>
         </div>
       </div>
     </div>

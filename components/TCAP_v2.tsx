@@ -59,6 +59,13 @@ export default function TokenAdminV2({ isConnected, address, provider: externalP
   const [lockInfo, setLockInfo] = useState<LockInfo>({ address: '', duration: 30 });
   const [currentWallet, setCurrentWallet] = useState<string>('');
   const [isExpanded, setIsExpanded] = useState(false);
+  const [hiddenTokens, setHiddenTokens] = useState<string[]>([]);
+  const [isOwner, setIsOwner] = useState(false);
+  const [ownerControls, setOwnerControls] = useState({
+    newOwner: '',
+    newFee: '',
+    newMinLiquidity: ''
+  });
 
   useEffect(() => {
     if (isConnected && chainId && externalProvider && address) {
@@ -87,6 +94,12 @@ export default function TokenAdminV2({ isConnected, address, provider: externalP
 
     updateWallet();
   }, [isConnected, externalProvider]);
+
+  useEffect(() => {
+    if (isConnected && address && externalProvider) {
+      checkOwnership();
+    }
+  }, [isConnected, address, externalProvider, currentWallet]);
 
   const showToast = (type: 'success' | 'error', message: string) => {
     setToast({ type, message });
@@ -373,6 +386,75 @@ export default function TokenAdminV2({ isConnected, address, provider: externalP
     return new Date(timestamp * 1000).toLocaleString();
   };
 
+  function hideToken(address: string) {
+    setHiddenTokens(prev => [...prev, address]);
+  }
+
+  function resetHiddenTokens() {
+    setHiddenTokens([]);
+  }
+
+  function getVisibleTokens() {
+    return tokens.filter(token => !hiddenTokens.includes(token.address));
+  }
+
+  const checkOwnership = async () => {
+    if (!address || !externalProvider || !currentWallet) return;
+    try {
+      const factory = new Contract(address, TokenFactoryV2.abi, externalProvider);
+      const owner = await factory.owner();
+      setIsOwner(owner.toLowerCase() === currentWallet.toLowerCase());
+    } catch (error) {
+      console.error('Error checking ownership:', error);
+    }
+  };
+
+  const handleOwnerAction = async (action: string) => {
+    if (!isConnected || !window.ethereum || !address) return;
+
+    try {
+      setIsLoading(true);
+      const provider = new BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const factory = new Contract(address, TokenFactoryV2.abi, signer);
+
+      let tx;
+      switch (action) {
+        case 'transferOwnership':
+          if (!ownerControls.newOwner || !ethers.isAddress(ownerControls.newOwner)) {
+            showToast('error', 'Invalid address');
+            return;
+          }
+          tx = await factory.transferOwnership(ownerControls.newOwner);
+          break;
+        case 'setFee':
+          if (!ownerControls.newFee || isNaN(Number(ownerControls.newFee))) {
+            showToast('error', 'Invalid fee amount');
+            return;
+          }
+          tx = await factory.setFee(ethers.parseEther(ownerControls.newFee));
+          break;
+        case 'setMinLiquidity':
+          if (!ownerControls.newMinLiquidity || isNaN(Number(ownerControls.newMinLiquidity))) {
+            showToast('error', 'Invalid minimum liquidity amount');
+            return;
+          }
+          tx = await factory.setMinLiquidity(ethers.parseEther(ownerControls.newMinLiquidity));
+          break;
+      }
+
+      showToast('success', 'Transaction submitted...');
+      await tx.wait();
+      showToast('success', 'Transaction completed successfully');
+      setOwnerControls({ newOwner: '', newFee: '', newMinLiquidity: '' });
+    } catch (error: any) {
+      console.error('Error executing owner action:', error);
+      showToast('error', error.message || 'Transaction failed');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   if (!isConnected) {
     return (
       <div className="p-1 bg-gray-800 rounded-lg shadow-lg">
@@ -388,8 +470,19 @@ export default function TokenAdminV2({ isConnected, address, provider: externalP
         className="flex justify-between items-center cursor-pointer py-0.5"
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <h2 className="text-xs font-medium text-text-primary">Token Management (V2)</h2>
+        <h2 className="text-xs font-medium text-text-primary">TCAP_v2</h2>
         <div className="flex items-center gap-2">
+          {hiddenTokens.length > 0 && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                resetHiddenTokens();
+              }}
+              className="text-xs px-2 py-1 rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30"
+            >
+              Show All ({hiddenTokens.length})
+            </button>
+          )}
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -412,26 +505,87 @@ export default function TokenAdminV2({ isConnected, address, provider: externalP
           <div className="flex justify-center items-center py-1">
             <Spinner className="w-4 h-4 text-text-primary" />
           </div>
-        ) : tokens.length === 0 ? (
+        ) : getVisibleTokens().length === 0 ? (
           <div className="mt-0.5">
             <p className="text-xs text-text-secondary">No V2 tokens found. Deploy a new token to get started.</p>
           </div>
         ) : (
           <div className="space-y-2 mt-1">
-            {tokens.map(token => (
-              <div key={token.address} className="border border-border rounded-lg p-2 space-y-2 bg-background-secondary">
-                <div className="flex justify-between items-start">
+            {isOwner && (
+              <div className="border border-border rounded-lg p-2 space-y-2 bg-background-secondary mb-2">
+                <h3 className="text-sm font-bold text-text-primary">Factory Owner Controls</h3>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={ownerControls.newOwner}
+                      onChange={(e) => setOwnerControls({ ...ownerControls, newOwner: e.target.value })}
+                      placeholder="New owner address"
+                      className="flex-1 p-1 text-xs rounded bg-background-primary border border-border"
+                    />
+                    <button
+                      onClick={() => handleOwnerAction('transferOwnership')}
+                      className="px-2 py-1 text-xs rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30"
+                    >
+                      Transfer Ownership
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={ownerControls.newFee}
+                      onChange={(e) => setOwnerControls({ ...ownerControls, newFee: e.target.value })}
+                      placeholder="New fee amount (ETH)"
+                      className="flex-1 p-1 text-xs rounded bg-background-primary border border-border"
+                    />
+                    <button
+                      onClick={() => handleOwnerAction('setFee')}
+                      className="px-2 py-1 text-xs rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30"
+                    >
+                      Set Fee
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={ownerControls.newMinLiquidity}
+                      onChange={(e) => setOwnerControls({ ...ownerControls, newMinLiquidity: e.target.value })}
+                      placeholder="New min liquidity (ETH)"
+                      className="flex-1 p-1 text-xs rounded bg-background-primary border border-border"
+                    />
+                    <button
+                      onClick={() => handleOwnerAction('setMinLiquidity')}
+                      className="px-2 py-1 text-xs rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30"
+                    >
+                      Set Min Liquidity
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+            {getVisibleTokens().map(token => (
+              <div key={token.address} className="border border-border rounded-lg p-2 space-y-2 bg-background-secondary relative group">
+                <div className="flex justify-between items-start gap-2">
                   <div>
                     <h3 className="text-sm font-bold text-text-primary">{token.name} ({token.symbol})</h3>
                     <p className="text-xs text-text-secondary">Address: {token.address}</p>
                     <p className="text-xs text-text-secondary">Total Supply: {Number(token.totalSupply).toLocaleString()} {token.symbol}</p>
                   </div>
-                  <button
-                    onClick={() => setSelectedToken(selectedToken === token.address ? null : token.address)}
-                    className="text-xs text-text-accent hover:text-blue-400"
-                  >
-                    {selectedToken === token.address ? 'Hide' : 'Manage'}
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setSelectedToken(selectedToken === token.address ? null : token.address)}
+                      className="text-xs px-2 py-1 rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30"
+                    >
+                      {selectedToken === token.address ? 'Hide' : 'Manage'}
+                    </button>
+                    <button
+                      onClick={() => hideToken(token.address)}
+                      className="text-xs px-2 py-1 rounded bg-gray-500/10 text-gray-400 hover:bg-gray-500/20"
+                      title="Hide token"
+                    >
+                      Hide
+                    </button>
+                  </div>
                 </div>
 
                 {selectedToken === token.address && (

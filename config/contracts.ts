@@ -1,15 +1,16 @@
 import { ChainId } from './networks';
 
 export interface ContractAddresses {
-  factoryAddress?: string;
-  factoryAddressV2?: string;
+  factoryAddress: string;
+  factoryAddressV2: string;
   tokenTemplateAddressV1?: string;
   tokenTemplateAddressV2?: string;
 }
 
-export const contractAddresses: Record<number, ContractAddresses> = {
+export const contractAddresses: Record<ChainId, ContractAddresses> = {
   [ChainId.MAINNET]: {
-    factoryAddress: process.env.NEXT_PUBLIC_MAINNET_FACTORY_ADDRESS || ''
+    factoryAddress: process.env.NEXT_PUBLIC_MAINNET_FACTORY_ADDRESS || '',
+    factoryAddressV2: ''
   },
   [ChainId.SEPOLIA]: {
     factoryAddress: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V1 || '',
@@ -37,25 +38,29 @@ export const contractAddresses: Record<number, ContractAddresses> = {
   }
 };
 
-export function getNetworkContractAddress(
-  chainId: number, 
-  contractName: keyof ContractAddresses
-): string {
-  const networkContracts = contractAddresses[chainId];
-  if (!networkContracts) {
-    console.warn(`Network configuration not found for chainId: ${chainId}`);
+export function getNetworkContractAddress(chainId: ChainId | null, contractName: keyof ContractAddresses): string {
+  if (!chainId) {
+    console.warn('No chain ID provided');
     return '';
   }
-  
-  const address = networkContracts[contractName];
+
+  const networkConfig = contractAddresses[chainId];
+  if (!networkConfig) {
+    console.warn(`No network configuration found for chain ID ${chainId}`);
+    return '';
+  }
+
+  const address = networkConfig[contractName];
   if (!address) {
-    console.warn(`Contract ${contractName} not found for chainId: ${chainId}`);
+    console.warn(`Contract ${contractName} not found for chain ID ${chainId}`);
     return '';
   }
-  
+
   return address;
 }
 
 // Ensure the V2 factory address is correctly retrieved for Sepolia
 const sepoliaV2Address = getNetworkContractAddress(ChainId.SEPOLIA, 'factoryAddressV2');
-console.log('Sepolia V2 Factory Address:', sepoliaV2Address); 
+console.log('Sepolia V2 Factory Address:', sepoliaV2Address);
+
+export default contractAddresses; 

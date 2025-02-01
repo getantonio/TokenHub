@@ -1,80 +1,59 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { useNetwork } from '../contexts/NetworkContext';
 import { Header } from '../components/Header';
 import Head from 'next/head';
-import { BrowserProvider } from 'ethers';
-import { useNetwork } from '../contexts/NetworkContext';
-import TokenVersionSwitcher from '../components/TokenVersionSwitcher';
+import { BrowserProvider, Contract } from 'ethers';
+import FactoryOwnerControls from '../components/FactoryOwnerControls';
 
 export default function AdminPage() {
-  const [isConnected, setIsConnected] = useState(false);
-  const [provider, setProvider] = useState<BrowserProvider | null>(null);
   const { chainId } = useNetwork();
-  const [factoryAddresses, setFactoryAddresses] = useState<{v1?: string, v2?: string}>({});
+  const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    const initProvider = async () => {
+    const checkConnection = async () => {
       if (window.ethereum) {
         try {
-          const accounts = await window.ethereum.request({
+          const accounts = await window.ethereum.request<string[]>({
             method: 'eth_accounts'
           });
-          const isConnected = Array.isArray(accounts) && accounts.length > 0;
-          setIsConnected(isConnected);
-
-          if (isConnected) {
-            const provider = new BrowserProvider(window.ethereum);
-            setProvider(provider);
-          }
-
-          window.ethereum.on('accountsChanged', handleAccountsChanged);
-          return () => {
-            window.ethereum?.removeListener('accountsChanged', handleAccountsChanged);
-          };
+          setIsConnected(Array.isArray(accounts) && accounts.length > 0);
         } catch (error) {
-          console.error('Error initializing provider:', error);
+          console.error('Error checking connection:', error);
         }
       }
     };
-
-    initProvider();
+    
+    checkConnection();
   }, []);
 
-  const handleAccountsChanged = (accounts: unknown) => {
-    const isConnected = Array.isArray(accounts) && accounts.length > 0;
-    setIsConnected(isConnected);
-    if (!isConnected) {
-      setProvider(null);
-    }
-  };
-
-  useEffect(() => {
-    if (isConnected && window.ethereum) {
-      const provider = new BrowserProvider(window.ethereum);
-      setProvider(provider);
-    }
-  }, [isConnected]);
-
   return (
-    <div className="min-h-screen bg-gray-900">
+    <div className="min-h-screen bg-background-primary">
       <Head>
-        <title>TokenHub.dev - Admin Panel</title>
-        <meta name="description" content="TokenHub.dev admin panel for factory management" />
+        <title>TokenHub.dev - Admin</title>
+        <meta name="description" content="Factory Owner Administration" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
-      
+
       <Header />
-      
+
       <main className="container mx-auto px-4 py-8">
-        <div className="max-w-4xl mx-auto space-y-8">
-          <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-            <h1 className="text-xl font-bold text-white mb-4">Token Management</h1>
-            <TokenVersionSwitcher 
-              isConnected={isConnected} 
-              provider={provider}
-            />
+        <div className="max-w-6xl mx-auto">
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold text-white mb-2">Factory Administration</h1>
+            <p className="text-gray-400">Manage factory settings and fees</p>
           </div>
 
-          {/* Factory Management section will be added here in the future */}
+          <div className="space-y-6">
+            <div className="bg-background-secondary rounded-lg p-6 border border-border">
+              <h2 className="text-xl font-bold text-white mb-6">V1 Factory Controls</h2>
+              <FactoryOwnerControls version="v1" isConnected={isConnected} />
+            </div>
+
+            <div className="bg-background-secondary rounded-lg p-6 border border-border">
+              <h2 className="text-xl font-bold text-white mb-6">V2 Factory Controls</h2>
+              <FactoryOwnerControls version="v2" isConnected={isConnected} />
+            </div>
+          </div>
         </div>
       </main>
     </div>
