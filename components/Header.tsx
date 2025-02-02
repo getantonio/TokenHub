@@ -14,10 +14,9 @@ export function Header({ className = '' }: HeaderProps) {
   const [mounted, setMounted] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [showNetworkMenu, setShowNetworkMenu] = useState(false);
-  const [showMobileMenu, setShowMobileMenu] = useState(false);
-  const router = useRouter();
   const [address, setAddress] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -77,17 +76,17 @@ export function Header({ className = '' }: HeaderProps) {
           console.error('Error requesting accounts:', error);
           // If user rejected or there was an error, try deep linking on mobile
           if (isMobile) {
+            // Use universal linking format for better compatibility
             const currentUrl = encodeURIComponent(window.location.href);
-            // Use WalletConnect format for better mobile handling
-            const metamaskAppDeepLink = `https://metamask.app.link/wc?url=${currentUrl}`;
-            window.location.href = metamaskAppDeepLink;
+            const metamaskDeepLink = `https://metamask.app.link/dapp/${window.location.host}${window.location.pathname}`;
+            window.location.href = metamaskDeepLink;
+            return;
           }
         }
       } else if (isMobile) {
         // Mobile device without MetaMask
-        const currentUrl = encodeURIComponent(window.location.href);
-        const metamaskAppDeepLink = `https://metamask.app.link/wc?url=${currentUrl}`;
-        window.location.href = metamaskAppDeepLink;
+        const metamaskDeepLink = `https://metamask.app.link/dapp/${window.location.host}${window.location.pathname}`;
+        window.location.href = metamaskDeepLink;
       } else {
         // Desktop without MetaMask
         window.open('https://metamask.io/download/', '_blank');
@@ -149,61 +148,6 @@ export function Header({ className = '' }: HeaderProps) {
     }
   };
 
-  const navLinks = [
-    { href: '/', label: 'Home' },
-    { href: '/v1', label: 'V1' },
-    { href: '/v2', label: 'V2' },
-    { href: '/presale', label: 'Presale' },
-    { href: '/guides', label: 'Guides' },
-    { href: '/admin', label: 'Admin' }
-  ];
-
-  // Check connection status whenever the component mounts or window.ethereum changes
-  useEffect(() => {
-    if (mounted && typeof window !== 'undefined') {
-      const checkConnection = async () => {
-        if (window.ethereum) {
-          try {
-            const accounts = await window.ethereum.request<string[]>({
-              method: 'eth_accounts'
-            });
-            handleAccountsChanged(accounts as string[]);
-
-            // Also check chain ID after connection
-            const chainId = await window.ethereum.request({
-              method: 'eth_chainId'
-            });
-            handleChainChanged(chainId as string);
-          } catch (error) {
-            console.error('Error checking connection:', error);
-          }
-        }
-      };
-      
-      checkConnection();
-      
-      // Set up event listeners
-      if (window.ethereum) {
-        const handleAccountsChangedCallback = (...args: unknown[]) => {
-          const accounts = args[0] as string[];
-          handleAccountsChanged(accounts);
-        };
-        const handleChainChangedCallback = (...args: unknown[]) => {
-          const chainId = args[0] as string;
-          handleChainChanged(chainId);
-        };
-        
-        window.ethereum.on('accountsChanged', handleAccountsChangedCallback);
-        window.ethereum.on('chainChanged', handleChainChangedCallback);
-        
-        return () => {
-          window.ethereum?.removeListener('accountsChanged', handleAccountsChangedCallback);
-          window.ethereum?.removeListener('chainChanged', handleChainChangedCallback);
-        };
-      }
-    }
-  }, [mounted]);
-
   // Don't render anything until mounted
   if (!mounted) return null;
 
@@ -211,50 +155,14 @@ export function Header({ className = '' }: HeaderProps) {
     <header className={`bg-background-secondary border-b border-border ${className}`}>
       <div className="container mx-auto px-4">
         <div className="flex justify-between items-center h-16">
-          <div className="flex items-center space-x-8">
-            <Link href="/" className="flex items-center">
-              <h1 className="text-2xl font-bold text-white">
-                TokenHub<span className="text-blue-500">.dev</span>
-              </h1>
-            </Link>
+          {/* Logo */}
+          <Link href="/" className="flex items-center">
+            <h1 className="text-2xl font-bold text-white">
+              TokenHub<span className="text-blue-500">.dev</span>
+            </h1>
+          </Link>
 
-            {/* Desktop Navigation */}
-            <div className="hidden md:flex items-center">
-              <div className="relative">
-                <button
-                  onClick={() => setShowMobileMenu(!showMobileMenu)}
-                  className="px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700 hover:text-white flex items-center"
-                >
-                  <span>Token Factory</span>
-                  <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-
-                {showMobileMenu && (
-                  <div className="absolute left-0 mt-2 w-48 rounded-md shadow-lg bg-gray-700 ring-1 ring-black ring-opacity-5">
-                    <div className="py-1" role="menu">
-                      {navLinks.map((link) => (
-                        <Link
-                          key={link.href}
-                          href={link.href}
-                          onClick={() => setShowMobileMenu(false)}
-                          className={`block px-4 py-2 text-sm ${
-                            router.pathname === link.href
-                              ? 'bg-gray-600 text-white'
-                              : 'text-gray-300 hover:bg-gray-600'
-                          }`}
-                        >
-                          {link.label}
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
+          {/* Network and Wallet Section */}
           <div className="flex items-center space-x-4">
             {/* Network Switcher */}
             <div className="relative z-50">
@@ -295,7 +203,7 @@ export function Header({ className = '' }: HeaderProps) {
             </div>
             
             {/* Connect Wallet Button */}
-            <div className="flex items-center gap-4">
+            <div className="flex items-center">
               {isConnected ? (
                 <button
                   onClick={disconnect}
@@ -316,22 +224,6 @@ export function Header({ className = '' }: HeaderProps) {
                   </span>
                 </button>
               )}
-            </div>
-
-            {/* Mobile Menu Button */}
-            <div className="md:hidden">
-              <button
-                onClick={() => setShowMobileMenu(!showMobileMenu)}
-                className="text-gray-300 hover:text-white"
-              >
-                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  {showMobileMenu ? (
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  ) : (
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                  )}
-                </svg>
-              </button>
             </div>
           </div>
         </div>

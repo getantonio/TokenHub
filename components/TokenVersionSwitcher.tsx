@@ -2,8 +2,8 @@ import { useState } from 'react';
 import TokenAdmin from './TCAP_v1';
 import TokenAdminV2 from './TCAP_v2';
 import { BrowserProvider } from 'ethers';
-import FactoryOwnerControls from './FactoryOwnerControls';
-import FactoryOwnerControlsV2 from './FactoryOwnerControls_v2';
+import FactoryOwnerControls_v1 from './factoryOwnerControls_v1';
+import FactoryOwnerControlsV2 from './factoryOwnerControls_v2';
 
 interface TokenVersionSwitcherProps {
   isConnected: boolean;
@@ -41,7 +41,7 @@ export default function TokenVersionSwitcher({ isConnected, address, provider }:
 
       {selectedVersion === 'v1' ? (
         <>
-          <FactoryOwnerControls version="v1" isConnected={isConnected} />
+          <FactoryOwnerControls_v1 isConnected={isConnected} />
           <TokenAdmin isConnected={isConnected} address={address} provider={provider} />
         </>
       ) : (

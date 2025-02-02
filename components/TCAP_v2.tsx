@@ -447,6 +447,38 @@ export default function TokenAdminV2({ isConnected, address, provider: externalP
     }
   };
 
+  function getTokenInitials(name: string, symbol: string) {
+    // Try to get a number from the name or symbol
+    const numberMatch = (name + symbol).match(/\d+/);
+    if (numberMatch) {
+      const num = parseInt(numberMatch[0]);
+      return num < 100 ? num.toString() : symbol.charAt(0).toUpperCase();
+    }
+    // Otherwise return first letter
+    return symbol.charAt(0).toUpperCase() || name.charAt(0).toUpperCase();
+  }
+
+  function getTokenColor(name: string, symbol: string) {
+    // Generate a consistent color based on name and symbol
+    const str = (name + symbol).toLowerCase();
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    // Use predefined colors for better visibility
+    const colors = [
+      'hsl(210, 90%, 50%)', // Blue
+      'hsl(150, 90%, 40%)', // Green
+      'hsl(0, 90%, 50%)',   // Red
+      'hsl(270, 90%, 50%)', // Purple
+      'hsl(30, 90%, 50%)',  // Orange
+      'hsl(180, 90%, 40%)', // Teal
+      'hsl(300, 90%, 50%)', // Pink
+      'hsl(60, 90%, 40%)'   // Yellow
+    ];
+    return colors[Math.abs(hash) % colors.length];
+  }
+
   if (!isConnected) {
     return (
       <div className="p-1 bg-gray-800 rounded-lg shadow-lg">
@@ -543,10 +575,18 @@ export default function TokenAdminV2({ isConnected, address, provider: externalP
             {getVisibleTokens().map(token => (
               <div key={token.address} className="border border-border rounded-lg p-2 space-y-2 bg-background-secondary relative group">
                 <div className="flex justify-between items-start gap-2">
-                  <div>
-                    <h3 className="text-sm font-bold text-text-primary">{token.name} ({token.symbol})</h3>
-                    <p className="text-xs text-text-secondary">Address: {token.address}</p>
-                    <p className="text-xs text-text-secondary">Total Supply: {Number(token.totalSupply).toLocaleString()} {token.symbol}</p>
+                  <div className="flex items-start gap-2">
+                    <div 
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
+                      style={{ backgroundColor: getTokenColor(token.name, token.symbol) }}
+                    >
+                      {getTokenInitials(token.name, token.symbol)}
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-text-primary">{token.name} ({token.symbol})</h3>
+                      <p className="text-xs text-text-secondary">Address: {token.address}</p>
+                      <p className="text-xs text-text-secondary">Total Supply: {Number(token.totalSupply).toLocaleString()} {token.symbol}</p>
+                    </div>
                   </div>
                   <div className="flex gap-2">
                     <button

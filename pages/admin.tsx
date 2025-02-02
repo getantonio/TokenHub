@@ -3,7 +3,8 @@ import { useNetwork } from '../contexts/NetworkContext';
 import { Header } from '../components/Header';
 import Head from 'next/head';
 import { BrowserProvider, Contract } from 'ethers';
-import FactoryOwnerControls from '../components/FactoryOwnerControls';
+import FactoryOwnerControlsV1 from '../components/factoryOwnerControls_v1';
+import FactoryOwnerControlsV2 from '../components/factoryOwnerControls_v2';
 
 export default function AdminPage() {
   const { chainId } = useNetwork();
@@ -43,15 +44,15 @@ export default function AdminPage() {
             <p className="text-gray-400">Manage factory settings and fees</p>
           </div>
 
-          <div className="space-y-6">
-            <div className="bg-background-secondary rounded-lg p-6 border border-border">
-              <h2 className="text-xl font-bold text-white mb-6">V1 Factory Controls</h2>
-              <FactoryOwnerControls version="v1" isConnected={isConnected} />
+          <div className="space-y-4">
+            <div className="bg-background-secondary rounded-lg p-4 border border-border">
+              <h2 className="text-sm font-bold text-white mb-4">V1 Factory Controls</h2>
+              <FactoryOwnerControlsV1 isConnected={isConnected} />
             </div>
 
-            <div className="bg-background-secondary rounded-lg p-6 border border-border">
-              <h2 className="text-xl font-bold text-white mb-6">V2 Factory Controls</h2>
-              <FactoryOwnerControls version="v2" isConnected={isConnected} />
+            <div className="bg-background-secondary rounded-lg p-4 border border-border">
+              <h2 className="text-sm font-bold text-white mb-4">V2 Factory Controls</h2>
+              <FactoryOwnerControlsV2 isConnected={isConnected} />
             </div>
           </div>
         </div>

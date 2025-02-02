@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { BrowserProvider, Contract, formatUnits, parseUnits } from 'ethers';
 import { useNetwork } from '../contexts/NetworkContext';
-import TokenFactoryV2 from '../contracts/abi/TokenFactory_v2.1.0.json';
+import TokenFactoryV1 from '../contracts/abi/TokenFactory_v1.json';
 import { getNetworkContractAddress } from '../config/contracts';
 import { Spinner } from './ui/Spinner';
 import { Toast } from './ui/Toast';
@@ -15,7 +15,7 @@ interface ToastMessage {
   message: string;
 }
 
-export default function FactoryOwnerControlsV2({ isConnected }: FactoryOwnerControlsProps) {
+export default function FactoryOwnerControls({ isConnected }: FactoryOwnerControlsProps) {
   const { chainId } = useNetwork();
   const [isOwner, setIsOwner] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -44,10 +44,15 @@ export default function FactoryOwnerControlsV2({ isConnected }: FactoryOwnerCont
       const signer = await provider.getSigner();
       const userAddress = await signer.getAddress();
       
-      const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddressV2');
+      const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddress');
       if (!factoryAddress) return;
 
-      const factory = new Contract(factoryAddress, TokenFactoryV2.abi, provider);
+      const factory = new Contract(
+        factoryAddress,
+        TokenFactoryV1.abi,
+        provider
+      );
+
       const owner = await factory.owner();
       setIsOwner(owner.toLowerCase() === userAddress.toLowerCase());
     } catch (error) {
@@ -60,10 +65,14 @@ export default function FactoryOwnerControlsV2({ isConnected }: FactoryOwnerCont
 
     try {
       const provider = new BrowserProvider(window.ethereum);
-      const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddressV2');
+      const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddress');
       if (!factoryAddress) return;
 
-      const factory = new Contract(factoryAddress, TokenFactoryV2.abi, provider);
+      const factory = new Contract(
+        factoryAddress,
+        TokenFactoryV1.abi,
+        provider
+      );
 
       const fee = await factory.deploymentFee();
       setCurrentFee(formatUnits(fee, 'ether'));
@@ -83,10 +92,15 @@ export default function FactoryOwnerControlsV2({ isConnected }: FactoryOwnerCont
       const provider = new BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       
-      const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddressV2');
+      const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddress');
       if (!factoryAddress) throw new Error('Factory not deployed on this network');
 
-      const factory = new Contract(factoryAddress, TokenFactoryV2.abi, signer);
+      const factory = new Contract(
+        factoryAddress,
+        TokenFactoryV1.abi,
+        signer
+      );
+
       const tx = await factory.setDeploymentFee(parseUnits(newFee, 'ether'));
       showToast('success', 'Updating deployment fee...');
       
@@ -110,10 +124,15 @@ export default function FactoryOwnerControlsV2({ isConnected }: FactoryOwnerCont
       const provider = new BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       
-      const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddressV2');
+      const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddress');
       if (!factoryAddress) throw new Error('Factory not deployed on this network');
 
-      const factory = new Contract(factoryAddress, TokenFactoryV2.abi, signer);
+      const factory = new Contract(
+        factoryAddress,
+        TokenFactoryV1.abi,
+        signer
+      );
+
       const tx = await factory.setWalletDeploymentFee(discountAddress, parseUnits(discountFee, 'ether'));
       showToast('success', 'Setting wallet discount...');
       
@@ -137,10 +156,15 @@ export default function FactoryOwnerControlsV2({ isConnected }: FactoryOwnerCont
       const provider = new BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       
-      const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddressV2');
+      const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddress');
       if (!factoryAddress) throw new Error('Factory not deployed on this network');
 
-      const factory = new Contract(factoryAddress, TokenFactoryV2.abi, signer);
+      const factory = new Contract(
+        factoryAddress,
+        TokenFactoryV1.abi,
+        signer
+      );
+
       const tx = await factory.withdrawFees();
       showToast('success', 'Withdrawing fees...');
       
@@ -160,7 +184,7 @@ export default function FactoryOwnerControlsV2({ isConnected }: FactoryOwnerCont
   return (
     <div className="bg-background-secondary rounded-lg p-4 border border-border">
       <div className="flex justify-between items-center mb-3">
-        <h2 className="text-sm font-bold text-white">Factory Controls (V2)</h2>
+        <h2 className="text-sm font-bold text-white">Factory Controls (V1)</h2>
         {toast && <Toast {...toast} />}
       </div>
 

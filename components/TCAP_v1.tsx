@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { BrowserProvider, Contract, formatUnits } from 'ethers';
+import { BrowserProvider, Contract, formatUnits, EventLog } from 'ethers';
 import TokenFactoryV1 from '../contracts/abi/TokenFactory_v1.1.0.json';
 import TokenTemplateV1 from '../contracts/abi/TokenTemplate_v1.1.0.json';
 import { getNetworkContractAddress } from '../config/contracts';
@@ -25,6 +25,18 @@ interface TokenInfo {
   totalSupply: string;
   blacklistEnabled: boolean;
   timeLockEnabled: boolean;
+  presaleEnabled?: boolean;
+  presaleInfo?: {
+    softCap: string;
+    hardCap: string;
+    minContribution: string;
+    maxContribution: string;
+    startTime: number;
+    endTime: number;
+    presaleRate: string;
+    totalContributed: string;
+    finalized: boolean;
+  } | null;
 }
 
 interface ToastMessage {
@@ -98,10 +110,7 @@ export default function TokenAdmin({ isConnected, address, provider: externalPro
     try {
       setIsLoading(true);
       console.log("Starting token loading process...");
-      setTokens([]);
-      const foundTokens: TokenInfo[] = [];
-      const processedAddresses = new Set<string>();
-
+      
       const signer = await externalProvider.getSigner();
       console.log("Connected with signer:", await signer.getAddress());
 
@@ -119,239 +128,129 @@ export default function TokenAdmin({ isConnected, address, provider: externalPro
 
       const factory = new Contract(address, TokenFactoryV1.abi, signer);
       console.log("Factory contract initialized");
-      
-      try {
-        // First try direct token list if available
-        console.log('Attempting to get tokens directly from factory...');
-        const tokenList = await factory.getDeployedTokens().catch((e: Error) => {
-          console.log('Direct token list not available:', e.message);
-          return null;
-        });
 
-        if (tokenList && tokenList.length > 0) {
-          console.log(`Found ${tokenList.length} tokens directly from factory`);
-          // Process direct token list
-          for (const addr of tokenList) {
-            console.log(`Processing token at address: ${addr}`);
-            try {
-              const normalizedAddr = addr.toLowerCase();
-              if (processedAddresses.has(normalizedAddr)) {
-                console.log(`Skipping already processed token: ${normalizedAddr}`);
-                continue;
-              }
+      // Get events from the last 200,000 blocks
+      const currentBlock = await externalProvider.getBlockNumber();
+      const fromBlock = Math.max(0, currentBlock - 200000);
 
-              // Verify contract exists
-              const code = await externalProvider.getCode(normalizedAddr);
-              if (code === '0x') {
-                console.log(`Skipping address with no code: ${normalizedAddr}`);
-                continue;
-              }
+      console.log(`Searching for events from block ${fromBlock} to ${currentBlock}`);
 
-              const token = new Contract(normalizedAddr, TokenTemplateV1.abi, externalProvider);
-              console.log(`Token contract initialized for: ${normalizedAddr}`);
-              
-              // Get token info with retries
-              let retries = 3;
-              let tokenInfo = null;
-              
-              while (retries > 0 && !tokenInfo) {
-                try {
-                  console.log(`Attempt ${4-retries}/3 to get token info for: ${normalizedAddr}`);
-                  const [name, symbol, totalSupply] = await Promise.all([
-                    token.name().catch(() => 'Unknown'),
-                    token.symbol().catch(() => 'UNK'),
-                    token.totalSupply().catch(() => '0')
-                  ]);
+      // Get all TokenCreated events
+      const filter = factory.filters.TokenCreated();
+      const events = await factory.queryFilter(filter, fromBlock, currentBlock);
+      console.log("Found events:", events.length);
 
-                  let blacklistEnabled = false;
-                  let timeLockEnabled = false;
+      const foundTokens: TokenInfo[] = [];
+      const processedAddresses = new Set<string>();
 
-                  try {
-                    await token.blacklistEnabled();
-                    blacklistEnabled = true;
-                  } catch (e) {
-                    console.log(`Blacklist not enabled for: ${normalizedAddr}`);
-                  }
+      for (const event of events) {
+        try {
+          if (!(event instanceof EventLog)) continue;
+          const tokenAddr = event.args[0] as string;
+          if (!tokenAddr || !ethers.isAddress(tokenAddr)) continue;
 
-                  try {
-                    await token.timeLockEnabled();
-                    timeLockEnabled = true;
-                  } catch (e) {
-                    console.log(`Timelock not enabled for: ${normalizedAddr}`);
-                  }
+          const normalizedAddr = tokenAddr.toLowerCase();
+          if (processedAddresses.has(normalizedAddr)) continue;
 
-                  if (!foundTokens.some(t => t.address.toLowerCase() === normalizedAddr)) {
-                    tokenInfo = {
-                      address: normalizedAddr,
-                      name,
-                      symbol,
-                      totalSupply: formatUnits(totalSupply, TOKEN_DECIMALS),
-                      blacklistEnabled,
-                      timeLockEnabled
-                    };
-                    console.log(`Token info retrieved:`, tokenInfo);
-                    foundTokens.push(tokenInfo);
-                    processedAddresses.add(normalizedAddr);
-                  }
-                } catch (error) {
-                  console.error(`Retry ${3 - retries + 1}/3 failed for token ${normalizedAddr}:`, error);
-                  retries--;
-                  if (retries > 0) {
-                    await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1s before retry
-                  }
-                }
-              }
-            } catch (error) {
-              console.error("Error processing token:", error);
-              continue;
-            }
-          }
-          console.log(`Setting ${foundTokens.length} tokens to state`);
-          setTokens(foundTokens);
-        } else {
-          // Fallback to event logs
-          console.log('Falling back to event log search...');
-          const currentBlock = await externalProvider.getBlockNumber();
-          const startBlock = Math.max(0, currentBlock - 100000); // Last ~2 weeks of blocks
+          const code = await externalProvider.getCode(normalizedAddr);
+          if (code === '0x') continue;
+
+          console.log("Checking token contract at:", normalizedAddr);
+          const token = new Contract(normalizedAddr, TokenTemplateV1.abi, externalProvider);
           
-          console.log(`Searching events from block ${startBlock} to ${currentBlock}`);
-          
-          // Adjust block range based on network
-          let blockRange = 200000; // default for most networks
-          let fromBlock = 0;
-          
-          if (chainId === 421614) { // Arbitrum Sepolia
-            blockRange = 2000;
-            // Get deployment block from env or use a recent block range
-            fromBlock = Math.max(0, currentBlock - blockRange);
-          } else if (chainId === 11155420) { // OP Sepolia
-            blockRange = 2000;
-            // Get deployment block from env or use a recent block range
-            fromBlock = Math.max(0, currentBlock - blockRange);
-          } else {
-            fromBlock = Math.max(0, currentBlock - blockRange);
-          }
+          // Get basic token info first
+          const [name, symbol, totalSupply] = await Promise.all([
+            token.name().catch(() => 'Unknown'),
+            token.symbol().catch(() => 'UNK'),
+            token.totalSupply().catch(() => '0')
+          ]);
 
-          console.log(`\nSearching for events from block ${fromBlock} to ${currentBlock} on chain ${chainId}`);
-          console.log("Using factory address:", address);
+          // Check if functions exist before calling them
+          let blacklistEnabled = false;
+          let timeLockEnabled = false;
+          let presaleEnabled = false;
 
           try {
-            // Split the event search into smaller chunks to avoid timeout
-            const chunkSize = 1000;
-            const foundTokens: TokenInfo[] = [];
-            const processedAddresses = new Set<string>();
-            
-            for (let startBlock = fromBlock; startBlock < currentBlock; startBlock += chunkSize) {
-              const endBlock = Math.min(startBlock + chunkSize, currentBlock);
-              console.log(`Searching blocks ${startBlock} to ${endBlock}...`);
-              
-              const filter = {
-                address,
-                fromBlock: startBlock,
-                toBlock: endBlock,
-                topics: [ethers.id("TokenCreated(address,string,string,address,uint256,uint256,bool,bool)")]
-              };
-
-              try {
-                const logs = await externalProvider.getLogs(filter);
-                console.log(`Found ${logs.length} logs in this chunk`);
-
-                for (const log of logs) {
-                  try {
-                    const parsedLog = factory.interface.parseLog({
-                      topics: log.topics || [],
-                      data: log.data
-                    });
-
-                    if (!parsedLog || parsedLog.name !== 'TokenCreated') continue;
-
-                    const tokenAddr = parsedLog.args[0] as string;
-                    if (!tokenAddr || !ethers.isAddress(tokenAddr)) continue;
-
-                    const normalizedAddr = tokenAddr.toLowerCase();
-                    if (processedAddresses.has(normalizedAddr)) continue;
-
-                    // Verify contract exists
-                    const code = await externalProvider.getCode(normalizedAddr);
-                    if (code === '0x') continue;
-
-                    const token = new Contract(normalizedAddr, TokenTemplateV1.abi, externalProvider);
-                    
-                    // Get token info with retries
-                    let retries = 3;
-                    let tokenInfo = null;
-                    
-                    while (retries > 0 && !tokenInfo) {
-                      try {
-                        const [name, symbol, totalSupply] = await Promise.all([
-                          token.name().catch(() => 'Unknown'),
-                          token.symbol().catch(() => 'UNK'),
-                          token.totalSupply().catch(() => '0')
-                        ]);
-
-                        let blacklistEnabled = false;
-                        let timeLockEnabled = false;
-
-                        try {
-                          await token.blacklistEnabled();
-                          blacklistEnabled = true;
-                        } catch (e) {}
-
-                        try {
-                          await token.timeLockEnabled();
-                          timeLockEnabled = true;
-                        } catch (e) {}
-
-                        if (!foundTokens.some(t => t.address.toLowerCase() === normalizedAddr)) {
-                          tokenInfo = {
-                            address: normalizedAddr,
-                            name,
-                            symbol,
-                            totalSupply: formatUnits(totalSupply, TOKEN_DECIMALS),
-                            blacklistEnabled,
-                            timeLockEnabled
-                          };
-                          foundTokens.push(tokenInfo);
-                          processedAddresses.add(normalizedAddr);
-                        }
-                      } catch (error) {
-                        console.error(`Retry ${3 - retries + 1}/3 failed for token ${normalizedAddr}:`, error);
-                        retries--;
-                        if (retries > 0) {
-                          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1s before retry
-                        }
-                      }
-                    }
-                  } catch (error) {
-                    console.error("Error processing log:", error);
-                    continue;
-                  }
-                }
-              } catch (error) {
-                console.error(`Error fetching logs for blocks ${startBlock}-${endBlock}:`, error);
-                continue;
-              }
+            if (token.hasOwnProperty('blacklistEnabled')) {
+              blacklistEnabled = await token.blacklistEnabled();
             }
+          } catch (e) {
+            console.log('blacklistEnabled not available:', e);
+          }
 
-            console.log(`Found ${foundTokens.length} total tokens`);
-            setTokens(foundTokens);
-          } catch (error) {
-            console.error("Error in loadTokens:", error);
-            if (error instanceof Error) {
-              showToast('error', `Failed to load tokens: ${error.message}`);
-            } else {
-              showToast('error', 'Failed to load tokens: Unknown error');
+          try {
+            if (token.hasOwnProperty('timeLockEnabled')) {
+              timeLockEnabled = await token.timeLockEnabled();
+            }
+          } catch (e) {
+            console.log('timeLockEnabled not available:', e);
+          }
+
+          try {
+            if (token.hasOwnProperty('presaleEnabled')) {
+              presaleEnabled = await token.presaleEnabled();
+            }
+          } catch (e) {
+            console.log('presaleEnabled not available:', e);
+          }
+
+          let presaleInfo = null;
+          if (presaleEnabled) {
+            try {
+              const [softCap, hardCap, minContribution, maxContribution, startTime, endTime, presaleRate, totalContributed, finalized] = await Promise.all([
+                token.softCap().catch(() => '0'),
+                token.hardCap().catch(() => '0'),
+                token.minContribution().catch(() => '0'),
+                token.maxContribution().catch(() => '0'),
+                token.startTime().catch(() => '0'),
+                token.endTime().catch(() => '0'),
+                token.presaleRate().catch(() => '0'),
+                token.totalContributed().catch(() => '0'),
+                token.presaleFinalized().catch(() => false)
+              ]);
+
+              presaleInfo = {
+                softCap: formatUnits(softCap, 'ether'),
+                hardCap: formatUnits(hardCap, 'ether'),
+                minContribution: formatUnits(minContribution, 'ether'),
+                maxContribution: formatUnits(maxContribution, 'ether'),
+                startTime: Number(startTime),
+                endTime: Number(endTime),
+                presaleRate: formatUnits(presaleRate, 'ether'),
+                totalContributed: formatUnits(totalContributed, 'ether'),
+                finalized
+              };
+            } catch (e) {
+              console.error('Error loading presale info:', e);
             }
           }
-        }
-      } catch (error) {
-        console.error('Error in token loading:', error);
-        if (error instanceof Error) {
-          showToast('error', `Failed to load tokens: ${error.message}`);
-        } else {
-          showToast('error', 'Failed to load tokens: Unknown error');
+
+          foundTokens.push({
+            address: normalizedAddr,
+            name,
+            symbol,
+            totalSupply: formatUnits(totalSupply, 'ether'),
+            blacklistEnabled,
+            timeLockEnabled,
+            presaleEnabled,
+            presaleInfo
+          });
+          processedAddresses.add(normalizedAddr);
+        } catch (error) {
+          console.error("Error processing token:", error);
         }
       }
+
+      if (foundTokens.length > 0) {
+        console.log("Setting found tokens:", foundTokens);
+        setTokens(foundTokens);
+      } else {
+        console.log("No tokens found");
+        setTokens([]);
+      }
+    } catch (error) {
+      console.error("Error in loadTokens:", error);
+      showToast('error', 'Failed to load tokens');
     } finally {
       setIsLoading(false);
     }
@@ -448,6 +347,38 @@ export default function TokenAdmin({ isConnected, address, provider: externalPro
     return visible;
   }
 
+  function getTokenColor(name: string, symbol: string) {
+    // Generate a consistent color based on name and symbol
+    const str = (name + symbol).toLowerCase();
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    // Use predefined colors for better visibility
+    const colors = [
+      'hsl(210, 90%, 50%)', // Blue
+      'hsl(150, 90%, 40%)', // Green
+      'hsl(0, 90%, 50%)',   // Red
+      'hsl(270, 90%, 50%)', // Purple
+      'hsl(30, 90%, 50%)',  // Orange
+      'hsl(180, 90%, 40%)', // Teal
+      'hsl(300, 90%, 50%)', // Pink
+      'hsl(60, 90%, 40%)'   // Yellow
+    ];
+    return colors[Math.abs(hash) % colors.length];
+  }
+
+  function getTokenInitials(name: string, symbol: string) {
+    // Try to get a number from the name or symbol
+    const numberMatch = (name + symbol).match(/\d+/);
+    if (numberMatch) {
+      const num = parseInt(numberMatch[0]);
+      return num < 100 ? num.toString() : symbol.charAt(0).toUpperCase();
+    }
+    // Otherwise return first letter
+    return symbol.charAt(0).toUpperCase() || name.charAt(0).toUpperCase();
+  }
+
   if (!isConnected) {
     return (
       <div className="p-2 bg-gray-800 rounded-lg shadow-lg">
@@ -507,10 +438,18 @@ export default function TokenAdmin({ isConnected, address, provider: externalPro
             {getVisibleTokens().map(token => (
               <div key={token.address} className="border border-border rounded-lg p-2 space-y-2 bg-background-secondary relative group">
                 <div className="flex justify-between items-start gap-2">
-                  <div>
-                    <h3 className="text-sm font-bold text-text-primary">{token.name} ({token.symbol})</h3>
-                    <p className="text-xs text-text-secondary">Address: {token.address}</p>
-                    <p className="text-xs text-text-secondary">Total Supply: {Number(token.totalSupply).toLocaleString()} {token.symbol}</p>
+                  <div className="flex items-start gap-2">
+                    <div 
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
+                      style={{ backgroundColor: getTokenColor(token.name, token.symbol) }}
+                    >
+                      {getTokenInitials(token.name, token.symbol)}
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-text-primary">{token.name} ({token.symbol})</h3>
+                      <p className="text-xs text-text-secondary">Address: {token.address}</p>
+                      <p className="text-xs text-text-secondary">Total Supply: {Number(token.totalSupply).toLocaleString()} {token.symbol}</p>
+                    </div>
                   </div>
                   <div className="flex gap-2">
                     <button

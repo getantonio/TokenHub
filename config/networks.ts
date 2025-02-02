@@ -21,7 +21,43 @@ export interface NetworkConfig {
   };
 }
 
-export const SUPPORTED_NETWORKS: Record<ChainId, NetworkConfig> = {
+export const SUPPORTED_NETWORKS: Record<number, NetworkConfig> = {
+  11155111: {
+    name: 'Sepolia',
+    rpcUrl: process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL || 'https://rpc.sepolia.org',
+    chainId: 11155111,
+    explorerUrl: 'https://sepolia.etherscan.io',
+    currency: 'ETH',
+    isTestnet: true,
+    contracts: {
+      TokenFactory_v1: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V1 || '',
+      TokenFactory_v2: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V2 || ''
+    }
+  },
+  421614: {
+    name: 'Arbitrum Sepolia',
+    rpcUrl: process.env.NEXT_PUBLIC_ARBITRUM_SEPOLIA_RPC_URL || 'https://sepolia-rollup.arbitrum.io/rpc',
+    chainId: 421614,
+    explorerUrl: 'https://sepolia.arbiscan.io',
+    currency: 'ETH',
+    isTestnet: true,
+    contracts: {
+      TokenFactory_v1: process.env.NEXT_PUBLIC_ARBITRUM_SEPOLIA_FACTORY_ADDRESS_V1 || '',
+      TokenFactory_v2: process.env.NEXT_PUBLIC_ARBITRUM_SEPOLIA_FACTORY_ADDRESS_V2 || ''
+    }
+  },
+  11155420: {
+    name: 'OP Sepolia',
+    rpcUrl: process.env.NEXT_PUBLIC_OP_SEPOLIA_RPC_URL || 'https://sepolia.optimism.io',
+    chainId: 11155420,
+    explorerUrl: 'https://sepolia-optimism.etherscan.io',
+    currency: 'ETH',
+    isTestnet: true,
+    contracts: {
+      TokenFactory_v1: process.env.NEXT_PUBLIC_OP_SEPOLIA_FACTORY_ADDRESS_V1 || '',
+      TokenFactory_v2: process.env.NEXT_PUBLIC_OP_SEPOLIA_FACTORY_ADDRESS_V2 || ''
+    }
+  },
   [ChainId.MAINNET]: {
     name: 'Ethereum',
     rpcUrl: process.env.NEXT_PUBLIC_MAINNET_RPC_URL || 'https://eth.llamarpc.com',
@@ -31,18 +67,6 @@ export const SUPPORTED_NETWORKS: Record<ChainId, NetworkConfig> = {
     isTestnet: false,
     contracts: {
       TokenFactory_v1: process.env.NEXT_PUBLIC_MAINNET_FACTORY_ADDRESS || ''
-    }
-  },
-  [ChainId.SEPOLIA]: {
-    name: 'Sepolia',
-    rpcUrl: process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL || 'https://rpc.sepolia.org',
-    chainId: ChainId.SEPOLIA,
-    explorerUrl: 'https://sepolia.etherscan.io',
-    currency: 'ETH',
-    isTestnet: true,
-    contracts: {
-      TokenFactory_v1: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V1 || '',
-      TokenFactory_v2: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V2 || ''
     }
   },
   [ChainId.POLYGON_AMOY]: {
@@ -55,30 +79,6 @@ export const SUPPORTED_NETWORKS: Record<ChainId, NetworkConfig> = {
     contracts: {
       TokenFactory_v1: process.env.NEXT_PUBLIC_POLYGON_AMOY_FACTORY_ADDRESS_V1 || '',
       TokenFactory_v2: process.env.NEXT_PUBLIC_POLYGON_AMOY_FACTORY_ADDRESS_V2 || ''
-    }
-  },
-  [ChainId.OP_SEPOLIA]: {
-    name: 'OP Sepolia',
-    rpcUrl: process.env.NEXT_PUBLIC_OP_SEPOLIA_RPC_URL || 'https://sepolia.optimism.io',
-    chainId: ChainId.OP_SEPOLIA,
-    explorerUrl: 'https://sepolia-optimism.etherscan.io',
-    currency: 'ETH',
-    isTestnet: true,
-    contracts: {
-      TokenFactory_v1: process.env.NEXT_PUBLIC_OP_SEPOLIA_FACTORY_ADDRESS_V1 || '',
-      TokenFactory_v2: process.env.NEXT_PUBLIC_OP_SEPOLIA_FACTORY_ADDRESS_V2 || ''
-    }
-  },
-  [ChainId.ARBITRUM_SEPOLIA]: {
-    name: 'Arbitrum Sepolia',
-    rpcUrl: process.env.NEXT_PUBLIC_ARBITRUM_SEPOLIA_RPC_URL || 'https://sepolia-rollup.arbitrum.io/rpc',
-    chainId: ChainId.ARBITRUM_SEPOLIA,
-    explorerUrl: 'https://sepolia.arbiscan.io',
-    currency: 'ETH',
-    isTestnet: true,
-    contracts: {
-      TokenFactory_v1: process.env.NEXT_PUBLIC_ARBITRUM_SEPOLIA_FACTORY_ADDRESS_V1 || '',
-      TokenFactory_v2: process.env.NEXT_PUBLIC_ARBITRUM_SEPOLIA_FACTORY_ADDRESS_V2 || ''
     }
   }
 };
