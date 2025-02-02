@@ -1,9 +1,11 @@
-const { ethers } = require("hardhat");
-require("dotenv").config();
+import 'dotenv/config';
 
 async function main() {
-  const wallet = new ethers.Wallet(process.env.PRIVATE_KEY);
-  console.log("Wallet address:", wallet.address);
+  const hre = require('hardhat');
+  const { ethers } = hre;
+  
+  const [deployer] = await ethers.getSigners();
+  console.log("Deployer address:", await deployer.getAddress());
 }
 
 main()

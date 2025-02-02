@@ -1,6 +1,7 @@
-const { ethers, network, run } = require("hardhat");
-const fs = require('fs');
-const path = require('path');
+import { HardhatRuntimeEnvironment } from 'hardhat/types';
+import { task } from 'hardhat/config';
+import fs from 'fs';
+import path from 'path';
 
 // Skip compilation of obsolete contracts
 const SKIP_COMPILATION = ['contracts/TokenFactory_v1.0.0.sol', 'contracts/TokenTemplate_v1.0.0.sol', 'contracts/TokenFactory_v2.0.0.sol', 'contracts/TokenTemplate_v2.0.0.sol'];
@@ -12,6 +13,8 @@ type VerifyArgs = {
 };
 
 async function deployV1() {
+  const hre = require('hardhat');
+  const { network } = hre;
   const networkName = network.name;
   const version = 'v1';
   
@@ -19,6 +22,7 @@ async function deployV1() {
 
   // First deploy the TokenTemplate_v1
   console.log('Deploying TokenTemplate_v1...');
+  const { ethers } = require('hardhat');
   const TokenTemplate = await ethers.getContractFactory("TokenTemplate_v1");
   const template = await TokenTemplate.deploy();
   await template.waitForDeployment();
@@ -38,6 +42,8 @@ async function deployV1() {
 }
 
 async function deployV2() {
+  const hre = require('hardhat');
+  const { network } = hre;
   const networkName = network.name;
   const version = 'v2.1.0';
   
@@ -45,6 +51,7 @@ async function deployV2() {
 
   // First deploy the TokenTemplate_v2.1.0
   console.log('Deploying TokenTemplate_v2.1.0...');
+  const { ethers } = require('hardhat');
   const TokenTemplate = await ethers.getContractFactory("TokenTemplate_v2_1_0");
   const template = await TokenTemplate.deploy();
   await template.waitForDeployment();
@@ -138,17 +145,20 @@ Deployment completed:
 
 async function verifyContract(address: string, constructorArguments: any[] = []) {
   try {
-    await run("verify:verify", {
+    const hre = require('hardhat');
+    await hre.run("verify:verify", {
       address,
       constructorArguments
     });
-    console.log(`Verified contract at ${address}`);
+    console.log("Contract verified successfully");
   } catch (error) {
-    console.log(`Verification failed for ${address}:`, error);
+    console.error("Verification failed:", error);
   }
 }
 
 async function deployAndVerify(version: string) {
+  const hre = require('hardhat');
+  const { network } = hre;
   const networkName = network.name;
   console.log(`\nDeploying ${version} to ${networkName}...`);
 
@@ -159,6 +169,7 @@ async function deployAndVerify(version: string) {
     case 'v1.0.0': {
       // Deploy v1.0.0 template
       console.log('Deploying TokenTemplate_v1.0.0...');
+      const { ethers } = require('hardhat');
       const TokenTemplate = await ethers.getContractFactory("TokenTemplate_v1_0_0");
       const template = await TokenTemplate.deploy();
       await template.waitForDeployment();

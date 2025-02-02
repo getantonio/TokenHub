@@ -1,0 +1,10 @@
+{
+  "address": "0x341Ec02538629b621efE4BB908C8CD68ae8b741F",
+  "tokenImpl": "0xD9Aa0Ca55115900908bd649793D9b8dE11Fb7368",
+  "presaleImpl": "0xCBa48f15BecdAC1eAF709Ce65c8FEFe436513e07",
+  "network": "sepolia",
+  "version": "v2",
+  "timestamp": "2025-01-26T01:47:12.947Z",
+  "blockNumber": 7571632,
+  "factoryFee": "0.0001"
+}
