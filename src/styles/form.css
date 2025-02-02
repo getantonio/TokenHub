@@ -1,0 +1,122 @@
+/* Form Container */
+.form-container {
+  @apply bg-background-secondary rounded-lg border border-border p-4 shadow-lg;
+}
+
+/* Form Groups */
+.form-group {
+  @apply mb-3;
+}
+
+/* Form Labels */
+.form-label {
+  @apply block text-xs font-medium text-text-primary mb-1;
+}
+
+/* Form Inputs */
+.form-input {
+  @apply w-full px-2 py-1.5 text-sm rounded bg-background-primary border border-border 
+  hover:border-border-hover focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary
+  text-text-primary placeholder-text-secondary transition-colors duration-200;
+}
+
+/* Form Checkboxes */
+.form-checkbox {
+  @apply h-4 w-4 rounded border-border bg-background-primary text-primary 
+  focus:ring-primary focus:ring-1 focus:ring-offset-0;
+}
+
+/* Form Radio Buttons */
+.form-radio {
+  @apply h-4 w-4 border-border bg-background-primary text-primary 
+  focus:ring-primary focus:ring-1 focus:ring-offset-0;
+}
+
+/* Form Select */
+.form-select {
+  @apply w-full px-2 py-1.5 text-sm rounded bg-background-primary border border-border 
+  hover:border-border-hover focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary
+  text-text-primary;
+}
+
+/* Form Buttons */
+.form-button {
+  @apply px-4 py-1.5 text-sm font-medium rounded transition-colors duration-200
+  focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-background-primary;
+}
+
+.form-button-primary {
+  @apply form-button bg-primary hover:bg-primary-hover text-white 
+  focus:ring-primary disabled:bg-button-disabled disabled:cursor-not-allowed;
+}
+
+.form-button-secondary {
+  @apply form-button bg-secondary hover:bg-secondary-hover text-white 
+  focus:ring-secondary disabled:bg-button-disabled disabled:cursor-not-allowed;
+}
+
+.form-button-destructive {
+  @apply form-button bg-destructive hover:bg-destructive-hover text-white 
+  focus:ring-destructive disabled:bg-button-disabled disabled:cursor-not-allowed;
+}
+
+/* Form Helper Text */
+.form-helper {
+  @apply mt-1 text-xs text-text-secondary;
+}
+
+/* Form Error Text */
+.form-error {
+  @apply mt-1 text-xs text-destructive;
+}
+
+/* Form Grid Layouts */
+.form-grid {
+  @apply grid grid-cols-1 md:grid-cols-2 gap-4;
+}
+
+/* Form Section Headers */
+.form-section-header {
+  @apply text-sm font-medium text-text-primary mb-3;
+}
+
+/* Form Dividers */
+.form-divider {
+  @apply my-4 border-t border-border;
+}
+
+/* Form Actions Section */
+.form-actions {
+  @apply flex justify-end space-x-2 mt-4;
+}
+
+/* Compact Form Specific Styles */
+.form-compact {
+  @apply space-y-3;
+}
+
+.form-compact .form-group {
+  @apply mb-2;
+}
+
+.form-compact .form-label {
+  @apply mb-0.5;
+}
+
+.form-compact .form-input,
+.form-compact .form-select {
+  @apply py-1;
+}
+
+/* Card Styles for Form Sections */
+.form-card {
+  @apply bg-background-secondary rounded-lg border border-border p-3;
+}
+
+.form-card-header {
+  @apply text-sm font-medium text-text-primary mb-2;
+}
+
+.form-card-body {
+  @apply space-y-2;
+} 

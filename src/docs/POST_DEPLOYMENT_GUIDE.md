@@ -1,3 +1,15 @@
+---
+title: "Post-Deployment Guide"
+description: "Essential steps and best practices after deploying your token"
+category: "Token Creation"
+---
+
+# Post-Deployment Guide
+
+## Overview
+
+After deploying your token, there are several important steps to take to ensure its success. This guide covers essential post-deployment tasks, monitoring, and management.
+
 # Post-Deployment Token Management Guide
 
 This guide explains all the features available to token creators after deploying their token through our factory.

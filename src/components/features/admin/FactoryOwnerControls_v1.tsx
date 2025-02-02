@@ -169,7 +169,7 @@ export default function FactoryOwnerControls({ version, isConnected }: FactoryOw
       );
 
       const discountBips = Math.floor(Number(discountPercentage) * 100);
-      const tx = await factory.setAddressDiscount(discountAddress, discountBips);
+      const tx = await factory.setCustomDeploymentFee(discountAddress, discountBips);
       showToast('success', 'Setting address discount...');
       
       await tx.wait();
@@ -187,30 +187,25 @@ export default function FactoryOwnerControls({ version, isConnected }: FactoryOw
   if (!isOwner) return null;
 
   return (
-    <Card className="p-6">
-      <h2 className="text-xl font-bold text-white mb-4">Factory Owner Controls ({version.toUpperCase()})</h2>
-      
-      {toast && <Toast {...toast} />}
-
-      <div className="space-y-6">
+    <div className="form-card">
+      <div className="space-y-2">
         <div>
-          <h3 className="text-lg font-medium text-white mb-2">Fee Management</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             <div>
-              <p className="text-sm text-gray-400 mb-1">Current Fee</p>
-              <p className="text-lg font-medium text-white">{currentFee} ETH</p>
+              <p className="text-xs text-text-secondary">Current Fee</p>
+              <p className="text-sm font-medium text-text-primary">{currentFee} ETH</p>
             </div>
             <div>
-              <p className="text-sm text-gray-400 mb-1">Accumulated</p>
-              <p className="text-lg font-medium text-white">{accumulatedFees} ETH</p>
+              <p className="text-xs text-text-secondary">Accumulated</p>
+              <p className="text-sm font-medium text-text-primary">{accumulatedFees} ETH</p>
             </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-4">
-          <div className="flex items-end gap-4">
+        <div className="grid grid-cols-1 gap-2">
+          <div className="flex items-end gap-2">
             <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-400 mb-1">
+              <label className="form-label">
                 New Fee (ETH)
               </label>
               <input
@@ -218,21 +213,21 @@ export default function FactoryOwnerControls({ version, isConnected }: FactoryOw
                 value={newFee}
                 onChange={(e) => setNewFee(e.target.value)}
                 placeholder="Enter new fee"
-                className="w-full px-3 py-2 bg-background-primary border border-border rounded-md text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="form-input"
               />
             </div>
-            <Button
+            <button
               onClick={updateDeploymentFee}
               disabled={loading || !newFee}
-              className="h-10"
+              className="form-button-primary h-7"
             >
-              {loading ? <Spinner className="w-4 h-4" /> : 'Update'}
-            </Button>
+              {loading ? <Spinner className="w-3 h-3" /> : 'Update'}
+            </button>
           </div>
 
-          <div className="flex items-end gap-4">
+          <div className="flex items-end gap-2">
             <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-400 mb-1">
+              <label className="form-label">
                 Address
               </label>
               <input
@@ -240,11 +235,11 @@ export default function FactoryOwnerControls({ version, isConnected }: FactoryOw
                 value={discountAddress}
                 onChange={(e) => setDiscountAddress(e.target.value)}
                 placeholder="0x..."
-                className="w-full px-3 py-2 bg-background-primary border border-border rounded-md text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="form-input"
               />
             </div>
             <div className="w-24">
-              <label className="block text-sm font-medium text-gray-400 mb-1">
+              <label className="form-label">
                 Discount %
               </label>
               <input
@@ -254,30 +249,29 @@ export default function FactoryOwnerControls({ version, isConnected }: FactoryOw
                 placeholder="0-100"
                 min="0"
                 max="100"
-                className="w-full px-3 py-2 bg-background-primary border border-border rounded-md text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="form-input"
               />
             </div>
-            <Button
+            <button
               onClick={setAddressDiscount}
               disabled={loading || !discountAddress || !discountPercentage}
-              className="h-10"
+              className="form-button-primary h-7"
             >
               Set
-            </Button>
+            </button>
           </div>
         </div>
 
-        <div>
-          <Button
-            onClick={withdrawFees}
-            disabled={loading || Number(accumulatedFees) === 0}
-            variant="secondary"
-            className="w-full"
-          >
-            {loading ? <Spinner className="w-4 h-4" /> : 'Withdraw Fees'}
-          </Button>
-        </div>
+        <button
+          onClick={withdrawFees}
+          disabled={loading || Number(accumulatedFees) === 0}
+          className="form-button-secondary w-full h-7"
+        >
+          {loading ? <Spinner className="w-3 h-3" /> : 'Withdraw Fees'}
+        </button>
       </div>
-    </Card>
+      
+      {toast && <Toast {...toast} />}
+    </div>
   );
 } 

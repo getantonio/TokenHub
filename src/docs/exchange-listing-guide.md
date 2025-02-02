@@ -1,3 +1,9 @@
+---
+title: "Exchange Listing Guide"
+description: "How to prepare your token for exchange listings and manage the listing process"
+category: "Launch Strategy"
+---
+
 # TokenTrad.dev Documentation
 
 ## Why TokenTrad.dev?
@@ -9,7 +15,12 @@ TokenTrad.dev provides a secure, professional platform for token creation and ma
 
 ---
 
-## Exchange Listing Guide
+# Exchange Listing Guide
+
+## Overview
+
+Getting your token listed on exchanges is a crucial step in your token's journey. This guide covers preparation, requirements, and best practices for exchange listings.
+
 Quick reference for listing your token on exchanges. [Source](https://www.blockchain-ads.com/post/how-to-list-token-on-exchange)
 
 **Key Requirements:**

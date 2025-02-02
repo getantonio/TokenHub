@@ -1,4 +1,14 @@
-# TokenHub.dev Homepage Content
+---
+title: "Homepage Content"
+description: "Content and structure for the TokenHub.dev homepage"
+category: "Documentation"
+---
+
+# Homepage Content
+
+## Overview
+
+This document outlines the content and structure for the TokenHub.dev homepage, including key features, benefits, and user interface elements.
 
 ## 🛡️ Security Infographics
 

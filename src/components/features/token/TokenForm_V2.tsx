@@ -314,232 +314,239 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="max-w-4xl mx-auto space-y-8">
-        <Card>
-          <CardHeader>
-            <CardTitle>Create Token (V2)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Token Name</Label>
-                  <Input
-                    id="name"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleChange}
-                    placeholder="My Token"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="symbol">Token Symbol</Label>
-                  <Input
-                    id="symbol"
-                    name="symbol"
-                    value={formData.symbol}
-                    onChange={handleChange}
-                    placeholder="TKN"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="initialSupply">Initial Supply</Label>
-                  <Input
-                    id="initialSupply"
-                    name="initialSupply"
-                    value={formData.initialSupply}
-                    onChange={handleChange}
-                    placeholder="1000000"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="maxSupply">Max Supply</Label>
-                  <Input
-                    id="maxSupply"
-                    name="maxSupply"
-                    value={formData.maxSupply}
-                    onChange={handleChange}
-                    placeholder="2000000"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="initialPrice">Initial Price (ETH)</Label>
-                  <Input
-                    id="initialPrice"
-                    name="initialPrice"
-                    value={formData.initialPrice}
-                    onChange={handleChange}
-                    placeholder="0.001"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="presaleRate">Presale Rate (Tokens per ETH)</Label>
-                  <Input
-                    id="presaleRate"
-                    name="presaleRate"
-                    value={formData.presaleRate}
-                    onChange={handleChange}
-                    placeholder="100"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="minContribution">Min Contribution (ETH)</Label>
-                  <Input
-                    id="minContribution"
-                    name="minContribution"
-                    value={formData.minContribution}
-                    onChange={handleChange}
-                    placeholder="0.1"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="maxContribution">Max Contribution (ETH)</Label>
-                  <Input
-                    id="maxContribution"
-                    name="maxContribution"
-                    value={formData.maxContribution}
-                    onChange={handleChange}
-                    placeholder="1"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="presaleCap">Presale Cap (ETH)</Label>
-                  <Input
-                    id="presaleCap"
-                    name="presaleCap"
-                    value={formData.presaleCap}
-                    onChange={handleChange}
-                    placeholder="10"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="startTime">Start Time</Label>
-                  <Input
-                    type="datetime-local"
-                    id="startTime"
-                    name="startTime"
-                    value={formData.startTime}
-                    onChange={handleChange}
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="endTime">End Time</Label>
-                  <Input
-                    type="datetime-local"
-                    id="endTime"
-                    name="endTime"
-                    value={formData.endTime}
-                    onChange={handleChange}
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="customOwner">Custom Owner (Optional)</Label>
-                  <Input
-                    id="customOwner"
-                    name="customOwner"
-                    value={formData.customOwner}
-                    onChange={handleChange}
-                    placeholder="0x..."
-                  />
-                </div>
+    <div className="container mx-auto px-4 py-4">
+      <div className="max-w-4xl mx-auto space-y-4">
+        <div className="form-container form-compact">
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <div className="form-grid">
+              <div className="form-group">
+                <label htmlFor="name" className="form-label">Token Name</label>
+                <input
+                  id="name"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  placeholder="My Token"
+                  className="form-input"
+                  required
+                />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="enableBlacklist"
-                    name="enableBlacklist"
-                    checked={formData.enableBlacklist}
-                    onCheckedChange={(checked) =>
-                      handleChange({
-                        target: { name: 'enableBlacklist', value: checked },
-                      } as any)
-                    }
-                  />
-                  <Label htmlFor="enableBlacklist">Enable Blacklist</Label>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="enableTimeLock"
-                    name="enableTimeLock"
-                    checked={formData.enableTimeLock}
-                    onCheckedChange={(checked) =>
-                      handleChange({
-                        target: { name: 'enableTimeLock', value: checked },
-                      } as any)
-                    }
-                  />
-                  <Label htmlFor="enableTimeLock">Enable Time Lock</Label>
-                </div>
+              <div className="form-group">
+                <label htmlFor="symbol" className="form-label">Token Symbol</label>
+                <input
+                  id="symbol"
+                  name="symbol"
+                  value={formData.symbol}
+                  onChange={handleChange}
+                  placeholder="TKN"
+                  className="form-input"
+                  required
+                />
               </div>
 
-              <div className="flex justify-end items-center space-x-2">
+              <div className="form-group">
+                <label htmlFor="initialSupply" className="form-label">Initial Supply</label>
+                <input
+                  id="initialSupply"
+                  name="initialSupply"
+                  value={formData.initialSupply}
+                  onChange={handleChange}
+                  placeholder="1000000"
+                  className="form-input"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="maxSupply" className="form-label">Max Supply</label>
+                <input
+                  id="maxSupply"
+                  name="maxSupply"
+                  value={formData.maxSupply}
+                  onChange={handleChange}
+                  placeholder="2000000"
+                  className="form-input"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="initialPrice" className="form-label">Initial Price (ETH)</label>
+                <input
+                  id="initialPrice"
+                  name="initialPrice"
+                  value={formData.initialPrice}
+                  onChange={handleChange}
+                  placeholder="0.001"
+                  className="form-input"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="presaleRate" className="form-label">Presale Rate (Tokens per ETH)</label>
+                <input
+                  id="presaleRate"
+                  name="presaleRate"
+                  value={formData.presaleRate}
+                  onChange={handleChange}
+                  placeholder="100"
+                  className="form-input"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="minContribution" className="form-label">Min Contribution (ETH)</label>
+                <input
+                  id="minContribution"
+                  name="minContribution"
+                  value={formData.minContribution}
+                  onChange={handleChange}
+                  placeholder="0.1"
+                  className="form-input"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="maxContribution" className="form-label">Max Contribution (ETH)</label>
+                <input
+                  id="maxContribution"
+                  name="maxContribution"
+                  value={formData.maxContribution}
+                  onChange={handleChange}
+                  placeholder="1"
+                  className="form-input"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="presaleCap" className="form-label">Presale Cap (ETH)</label>
+                <input
+                  id="presaleCap"
+                  name="presaleCap"
+                  value={formData.presaleCap}
+                  onChange={handleChange}
+                  placeholder="10"
+                  className="form-input"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="startTime" className="form-label">Start Time</label>
+                <input
+                  type="datetime-local"
+                  id="startTime"
+                  name="startTime"
+                  value={formData.startTime}
+                  onChange={handleChange}
+                  className="form-input"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="endTime" className="form-label">End Time</label>
+                <input
+                  type="datetime-local"
+                  id="endTime"
+                  name="endTime"
+                  value={formData.endTime}
+                  onChange={handleChange}
+                  className="form-input"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="customOwner" className="form-label">Custom Owner (Optional)</label>
+                <input
+                  id="customOwner"
+                  name="customOwner"
+                  value={formData.customOwner}
+                  onChange={handleChange}
+                  placeholder="0x..."
+                  className="form-input"
+                />
+              </div>
+            </div>
+
+            <div className="form-grid">
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="enableBlacklist"
+                  name="enableBlacklist"
+                  checked={formData.enableBlacklist}
+                  onChange={(e) => handleChange({
+                    target: { name: 'enableBlacklist', value: e.target.checked },
+                  } as any)}
+                  className="form-checkbox"
+                />
+                <label htmlFor="enableBlacklist" className="form-label">Enable Blacklist</label>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="enableTimeLock"
+                  name="enableTimeLock"
+                  checked={formData.enableTimeLock}
+                  onChange={(e) => handleChange({
+                    target: { name: 'enableTimeLock', value: e.target.checked },
+                  } as any)}
+                  className="form-checkbox"
+                />
+                <label htmlFor="enableTimeLock" className="form-label">Enable Time Lock</label>
+              </div>
+            </div>
+
+            <div className="form-actions">
+              <div className="flex items-center mr-2">
                 <InfoIcon content="Deployment fee will be charged in ETH. Make sure you have enough ETH to cover the fee and gas costs." />
-                <Button
-                  type="submit"
-                  disabled={!isConnected || loading}
-                  className={loading ? 'opacity-50 cursor-wait' : ''}
-                >
-                  {loading ? (
-                    <>
-                      <Spinner className="mr-2" />
-                      Creating...
-                    </>
-                  ) : !isConnected ? (
-                    'Connect Wallet to Deploy'
-                  ) : (
-                    'Create Token'
-                  )}
-                </Button>
               </div>
-            </form>
-          </CardContent>
-        </Card>
+              <button
+                type="submit"
+                disabled={!isConnected || loading}
+                className="form-button-primary"
+              >
+                {loading ? (
+                  <>
+                    <Spinner className="mr-2" />
+                    Creating...
+                  </>
+                ) : !isConnected ? (
+                  'Connect Wallet to Deploy'
+                ) : (
+                  'Create Token'
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
 
         {/* Preview Section */}
-        <div className="space-y-6">
+        <div className="space-y-4">
           <TokenPreview
             config={previewConfig}
             isValid={true}
             validationErrors={[]}
           />
           
-          <Card>
-            <CardHeader>
-              <CardTitle>Token Creator Admin Panel</CardTitle>
-            </CardHeader>
-            <CardContent>
+          <div className="form-card">
+            <h2 className="form-card-header">Token Creator Admin Panel</h2>
+            <div className="form-card-body">
               <TokenAdminV2
                 isConnected={isConnected}
                 address={successInfo?.tokenAddress}
                 provider={provider}
               />
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
       </div>
     </div>

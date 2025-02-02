@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNetwork } from '@contexts/NetworkContext';
 import { NetworkIndicator } from '@components/common/NetworkIndicator';
-import { TokenFormV2 } from '@components/features/token/TokenFormV2';
+import { TokenFormV2 } from '@components/features/token/TokenForm_V2';
 import Head from 'next/head';
 import type { MetaMaskInpageProvider } from '@metamask/providers';
 

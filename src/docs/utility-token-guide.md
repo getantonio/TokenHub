@@ -1,3 +1,9 @@
+---
+title: "Creating Utility Tokens"
+description: "A comprehensive guide to creating and managing utility tokens with TokenHub.dev"
+category: "Token Creation"
+---
+
 # Creating Utility Tokens: Best Practices Guide
 
 ## Overview

@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useNetwork } from '@contexts/NetworkContext';
-import { NetworkIndicator } from '@components/common/NetworkIndicator';
 import Link from 'next/link';
 import { cn } from '@utils/cn';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
@@ -22,7 +21,6 @@ export function Header({ className }: HeaderProps) {
           </div>
 
           <div className="flex items-center space-x-4">
-            <NetworkIndicator />
             <ConnectButton.Custom>
               {({
                 account,
@@ -49,40 +47,37 @@ export function Header({ className }: HeaderProps) {
                     {(() => {
                       if (!connected) {
                         return (
-                          <button onClick={openConnectModal} className="btn-blue">
-                            <span className="text-lg">⚡</span>
+                          <button 
+                            onClick={openConnectModal} 
+                            className="px-4 py-2 rounded-md font-medium bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition-colors duration-200"
+                          >
+                            Connect Wallet
                           </button>
                         );
                       }
 
                       return (
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-3">
                           <button
                             onClick={openChainModal}
-                            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-blue-500/20 rounded-md hover:bg-blue-500/30"
+                            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 rounded-md transition-colors duration-200"
                           >
-                            {chain.hasIcon && (
-                              <div className="w-5 h-5">
-                                {chain.iconUrl && (
-                                  <img
-                                    alt={chain.name ?? 'Chain icon'}
-                                    src={chain.iconUrl}
-                                    className="w-5 h-5"
-                                  />
-                                )}
-                              </div>
+                            {chain.hasIcon && chain.iconUrl && (
+                              <img
+                                alt={chain.name ?? 'Chain icon'}
+                                src={chain.iconUrl}
+                                className="w-4 h-4"
+                              />
                             )}
-                            <span>{chain.name}</span>
+                            {chain.name}
                           </button>
 
                           <button
                             onClick={openAccountModal}
-                            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-blue-500/20 rounded-md hover:bg-blue-500/30"
+                            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 rounded-md transition-colors duration-200"
                           >
-                            <span>
-                              {account.displayName}
-                            </span>
-                            <span>⚙️</span>
+                            {account.displayName}
+                            {account.displayBalance ? ` (${account.displayBalance})` : ''}
                           </button>
                         </div>
                       );

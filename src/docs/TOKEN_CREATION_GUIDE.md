@@ -1,4 +1,14 @@
+---
+title: "Token Creation Guide"
+description: "Step-by-step guide for creating tokens using TokenHub.dev's factory"
+category: "Token Creation"
+---
+
 # Token Creation Guide
+
+## Overview
+
+This guide walks you through the process of creating tokens using TokenHub.dev's factory. We'll cover both V1 and V2 token creation, configuration options, and best practices.
 
 This guide explains the token creation process and the features you can enable during token deployment.
 
