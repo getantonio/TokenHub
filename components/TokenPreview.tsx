@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/Card";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { TokenConfig } from './types';
 import { formatNumber } from '../lib/utils';
 import { Tooltip } from './ui/tooltip';

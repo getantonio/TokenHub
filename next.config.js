@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  swcMinify: false,
+  swcMinify: true,
   // Disable automatic static optimization for pages that need to access window/navigator
   unstable_runtimeJS: true,
   // Enable static export
@@ -11,7 +11,16 @@ const nextConfig = {
   },
   compiler: {
     styledComponents: true
-  }
+  },
+  webpack: (config) => {
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      fs: false,
+      net: false,
+      tls: false,
+    };
+    return config;
+  },
 }
 
 module.exports = nextConfig
