@@ -10,7 +10,7 @@ const navigation = [
     items: [
       { name: 'Version 1', href: '/v1' },
       { name: 'Version 2', href: '/v2' },
-      { name: 'Version 3', href: '#', disabled: true },
+      { name: 'Version 3', href: '/v3' },
       { name: 'Version 4', href: '#', disabled: true },
     ]
   },

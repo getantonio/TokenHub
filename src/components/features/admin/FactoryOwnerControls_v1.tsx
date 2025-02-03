@@ -168,8 +168,15 @@ export default function FactoryOwnerControls({ version, isConnected }: FactoryOw
         signer
       );
 
-      const discountBips = Math.floor(Number(discountPercentage) * 100);
-      const tx = await factory.setCustomDeploymentFee(discountAddress, discountBips);
+      // Calculate the discounted fee amount
+      const currentFeeWei = await factory.deploymentFee();
+      const discountedFee = currentFeeWei * BigInt(Number(discountPercentage)) / BigInt(100);
+      
+      // Use setDeploymentFee for v1 and setCustomDeploymentFee for v2
+      const tx = version === 'v1' 
+        ? await factory.setDeploymentFee(discountedFee)
+        : await factory.setCustomDeploymentFee(discountAddress, discountedFee);
+        
       showToast('success', 'Setting address discount...');
       
       await tx.wait();
@@ -178,6 +185,7 @@ export default function FactoryOwnerControls({ version, isConnected }: FactoryOw
       setDiscountAddress('');
       setDiscountPercentage('');
     } catch (error: any) {
+      console.error('Error setting discount:', error);
       showToast('error', error.message || 'Failed to set address discount');
     } finally {
       setLoading(false);

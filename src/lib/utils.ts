@@ -1,3 +1,6 @@
+import { type ClassValue, clsx } from "clsx";
+import { twMerge } from "tailwind-merge";
+
 export function formatNumber(value: string | number, decimals: number = 2): string {
   const num = typeof value === 'string' ? parseFloat(value) : value;
   if (isNaN(num)) return '0';
@@ -115,4 +118,8 @@ export function formatUSD(amount: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   }).format(amount);
+}
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
 }

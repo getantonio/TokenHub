@@ -7,7 +7,7 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20Pausable
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 
 /**
  * @title TokenTemplate_v2.1.0
@@ -89,8 +89,9 @@ contract TokenTemplate_v2_1_0 is
         __ERC20_init(name_, symbol_);
         __ERC20Burnable_init();
         __ERC20Pausable_init();
-        __Ownable_init(owner_);
+        __Ownable_init();
         __ReentrancyGuard_init();
+        _transferOwnership(owner_);
 
         require(maxSupply_ >= initialSupply_, "Max supply must be >= initial supply");
         require(startTime_ > block.timestamp, "Start time must be in future");
@@ -146,13 +147,11 @@ contract TokenTemplate_v2_1_0 is
         emit TimeLockSet(account, unlockTime);
     }
 
-    function _update(
+    function _beforeTokenTransfer(
         address from,
         address to,
-        uint256 value
+        uint256 amount
     ) internal virtual override(ERC20Upgradeable, ERC20PausableUpgradeable) whenNotPaused {
-        super._update(from, to, value);
-
         if (blacklistEnabled) {
             require(!blacklist[from] && !blacklist[to], "Address is blacklisted");
         }
@@ -160,6 +159,8 @@ contract TokenTemplate_v2_1_0 is
         if (timeLockEnabled && from != address(0)) {
             require(block.timestamp >= timeLocks[from], "Tokens are time-locked");
         }
+
+        super._beforeTokenTransfer(from, to, amount);
     }
 
     function contribute() external payable nonReentrant {

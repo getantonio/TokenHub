@@ -6,7 +6,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import "./TokenTemplate_v1.1.0.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 /**
  * @title TokenFactory_v1.1.0
@@ -36,7 +36,7 @@ contract TokenFactory_v1_1_0 is Initializable, OwnableUpgradeable, UUPSUpgradeab
     }
 
     function initialize(uint256 _deploymentFee) public initializer {
-        __Ownable_init(msg.sender);
+        __Ownable_init();
         __UUPSUpgradeable_init();
         deploymentFee = _deploymentFee;
         emit DeploymentFeeUpdated(_deploymentFee);

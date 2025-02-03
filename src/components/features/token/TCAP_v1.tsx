@@ -120,7 +120,7 @@ export default function TokenAdmin({ isConnected, address, provider: externalPro
       // Attempt to get tokens directly from factory
       console.log("Attempting to get tokens directly from factory...");
       try {
-        const deployedTokens = await factory.getTokensByUser(await signer.getAddress());
+        const deployedTokens = await factory.getDeployedTokens();
         console.log("Found tokens:", deployedTokens);
         
         if (deployedTokens && deployedTokens.length > 0) {

@@ -49,7 +49,8 @@ contract TokenTemplate_v1_1_0 is
     ) public initializer {
         __ERC20_init(name, symbol);
         __ERC20Pausable_init();
-        __Ownable_init(owner);
+        __Ownable_init();
+        _transferOwnership(owner);
         
         require(maxSupply_ == 0 || maxSupply_ >= initialSupply, "Max supply must be 0 or >= initial supply");
         _maxSupply = maxSupply_ == 0 ? type(uint256).max : maxSupply_;
@@ -104,18 +105,20 @@ contract TokenTemplate_v1_1_0 is
     }
 
     // Override transfer functions
-    function _update(
+    function _beforeTokenTransfer(
         address from,
         address to,
         uint256 amount
-    ) internal virtual override {
+    ) internal virtual override whenNotPaused {
         if (blacklistEnabled) {
             require(!_blacklist[from] && !_blacklist[to], "Address is blacklisted");
         }
-        if (timeLockEnabled && from != address(0)) { // Exclude minting
-            require(block.timestamp >= _lockTime[from], "Tokens are locked");
+
+        if (timeLockEnabled && from != address(0)) {
+            require(block.timestamp >= _lockTime[from], "Tokens are time-locked");
         }
-        super._update(from, to, amount);
+
+        super._beforeTokenTransfer(from, to, amount);
     }
 
     // Pause/Unpause
