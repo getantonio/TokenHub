@@ -4,7 +4,7 @@ import { useNetwork } from '@contexts/NetworkContext';
 import TokenFactory_v2 from '@contracts/abi/TokenFactory_v2.1.0.json';
 import { getExplorerUrl } from '@config/networks';
 import { getNetworkContractAddress } from '@config/contracts';
-import { Toast } from '@components/ui/Toast';
+import { Toast } from '@components/ui/toast';
 import { TokenPreview } from '@components/features/token/TokenPreview';
 import TokenAdminV2 from '@components/features/token/TCAP_v2';
 import { InfoIcon } from '@components/ui/InfoIcon';

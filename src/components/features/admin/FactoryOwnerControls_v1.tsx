@@ -5,7 +5,7 @@ import TokenFactory_v1 from '@contracts/abi/TokenFactory_v1.json';
 import TokenFactory_v2 from '@contracts/abi/TokenFactory_v2.1.0.json';
 import { contractAddresses } from '@config/contracts';
 import { Spinner } from '@components/ui/Spinner';
-import { Toast } from '@components/ui/Toast';
+import { useToast } from '@/components/ui/toast/use-toast';
 import { Button } from '@components/ui/button';
 import { Card } from '@components/ui/card';
 
@@ -23,7 +23,7 @@ export default function FactoryOwnerControls({ version, isConnected }: FactoryOw
   const { chainId } = useNetwork();
   const [isOwner, setIsOwner] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [toast, setToast] = useState<ToastMessage | null>(null);
+  const { toast } = useToast();
   const [currentFee, setCurrentFee] = useState<string>('0');
   const [newFee, setNewFee] = useState<string>('');
   const [accumulatedFees, setAccumulatedFees] = useState<string>('0');
@@ -36,8 +36,11 @@ export default function FactoryOwnerControls({ version, isConnected }: FactoryOw
   }, [chainId, isConnected, version]);
 
   const showToast = (type: 'success' | 'error', message: string) => {
-    setToast({ type, message });
-    setTimeout(() => setToast(null), 5000);
+    toast({
+      variant: type === 'error' ? 'destructive' : 'default',
+      title: type === 'error' ? 'Error' : 'Success',
+      description: message,
+    });
   };
 
   async function checkOwnership() {
@@ -278,8 +281,6 @@ export default function FactoryOwnerControls({ version, isConnected }: FactoryOw
           {loading ? <Spinner className="w-3 h-3" /> : 'Withdraw Fees'}
         </button>
       </div>
-      
-      {toast && <Toast {...toast} />}
     </div>
   );
 } 

@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserProvider, Contract, parseUnits, formatUnits } from 'ethers';
 import { getNetworkContractAddress } from '@config/contracts';
-import TokenFactory_v1 from '@contracts/abi/TokenFactory_v1.1.0.json';
+import TokenFactory_v1 from '@contracts/abi/TokenFactory_v1.json';
 import TokenTemplate_v1 from '@contracts/abi/TokenTemplate_v1.1.0.json';
-import { Toast } from '@components/ui/Toast';
 import { getExplorerUrl } from '@config/networks';
 import { TokenPreview } from '@components/features/token/TokenPreview';
 import TokenAdmin from '@components/features/token/TCAP_v1';
@@ -11,6 +10,10 @@ import { InfoIcon } from '@components/ui/InfoIcon';
 import type { TokenConfig } from '../../../types/token-config';
 import { useNetwork } from '@contexts/NetworkContext';
 import { ethers } from 'ethers';
+import { useToast } from '@/components/ui/toast/use-toast';
+import { Spinner } from '@components/ui/Spinner';
+import { Button } from '@components/ui/button';
+import { Card } from '@components/ui/card';
 
 const TokenFactoryABI = TokenFactory_v1.abi;
 const TokenTemplateABI = TokenTemplate_v1.abi;
@@ -44,6 +47,12 @@ interface ToastMessage {
   link?: string;
 }
 
+interface SuccessInfo {
+  tokenAddress: string;
+  tokenName: string;
+  tokenSymbol: string;
+}
+
 export default function TokenForm_v1({ isConnected }: Props) {
   const [formData, setFormData] = useState<FormData>({
     name: "TokenFactory Test v1",
@@ -59,14 +68,7 @@ export default function TokenForm_v1({ isConnected }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [deploymentFee, setDeploymentFee] = useState<string | null>(null);
-  const [successInfo, setSuccessInfo] = useState<{
-    message: string;
-    tokenAddress: string;
-    explorerUrl: string;
-    symbol: string;
-    initialSupply: string;
-    owner: string | null;
-  } | null>(null);
+  const [successInfo, setSuccessInfo] = useState<SuccessInfo | null>(null);
 
   const [previewConfig, setPreviewConfig] = useState<TokenConfig>({
     name: formData.name,
@@ -83,6 +85,7 @@ export default function TokenForm_v1({ isConnected }: Props) {
   const [provider, setProvider] = useState<BrowserProvider | null>(null);
   const { chainId } = useNetwork();
   const [factoryAddress, setFactoryAddress] = useState<string | undefined>(undefined);
+  const { toast: useToastToast } = useToast();
 
   useEffect(() => {
     if (typeof window !== 'undefined' && window.ethereum && isConnected) {
@@ -126,7 +129,7 @@ export default function TokenForm_v1({ isConnected }: Props) {
         }
         
         const factory = new Contract(factoryAddress, TokenFactoryABI, signer);
-        const fee = await factory.getDeploymentFee(userAddress);
+        const fee = await factory.deploymentFee();
         setDeploymentFee(formatUnits(fee, 'ether'));
       } catch (error) {
         console.error('Error fetching deployment fee:', error);
@@ -137,8 +140,20 @@ export default function TokenForm_v1({ isConnected }: Props) {
   }, [isConnected]);
 
   const showToast = (type: 'success' | 'error', message: string, link?: string) => {
-    setToast({ type, message, link });
-    setTimeout(() => setToast(null), 5000);
+    useToastToast({
+      variant: type === 'error' ? 'destructive' : 'default',
+      title: type === 'error' ? 'Error' : 'Success',
+      description: (
+        <div>
+          {message}
+          {link && (
+            <a href={link} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-700 ml-2">
+              View Transaction
+            </a>
+          )}
+        </div>
+      ),
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -169,7 +184,7 @@ export default function TokenForm_v1({ isConnected }: Props) {
       }
 
       const factory = new Contract(factoryAddress, TokenFactoryABI, signer);
-      const fee = await factory.getDeploymentFee(userAddress);
+      const fee = await factory.deploymentFee();
       
       const initialSupplyWei = parseUnits(formData.initialSupply, TOKEN_DECIMALS);
       const maxSupplyWei = parseUnits(formData.maxSupply, TOKEN_DECIMALS);
@@ -218,12 +233,9 @@ export default function TokenForm_v1({ isConnected }: Props) {
       const txExplorerUrl = getExplorerUrl(chainId, tx.hash, 'tx');
 
       setSuccessInfo({
-        message: 'Token created successfully!',
         tokenAddress,
-        explorerUrl,
-        symbol: formData.symbol,
-        initialSupply: formData.initialSupply,
-        owner: userAddress
+        tokenName: formData.name,
+        tokenSymbol: formData.symbol,
       });
 
       showToast('success', 'Token created successfully!', txExplorerUrl);
@@ -392,29 +404,24 @@ export default function TokenForm_v1({ isConnected }: Props) {
 
   return (
     <div className="space-y-6">
-      {toast && (
-        <Toast {...toast} />
-      )}
-
       {successInfo && (
         <div className="rounded-md bg-green-900/20 p-6 border border-green-700 mb-6">
           <h3 className="text-lg font-medium text-green-500 mb-2">🎉 Token Created Successfully!</h3>
           <div className="space-y-2 text-sm text-green-400">
-            <p>Token Symbol: {successInfo.symbol}</p>
+            <p>Token Symbol: {successInfo.tokenSymbol}</p>
             <p>Contract Address: <a 
-              href={successInfo.explorerUrl}
+              href={`${getExplorerUrl(chainId, successInfo.tokenAddress, 'token')}`}
               target="_blank"
               rel="noopener noreferrer"
               className="underline hover:text-green-300"
             >
               {successInfo.tokenAddress}
             </a></p>
-            <p>Initial Supply: {Number(successInfo.initialSupply).toLocaleString()} {successInfo.symbol}</p>
-            <p>Owner: {successInfo.owner?.slice(0, 6)}...{successInfo.owner?.slice(-4)}</p>
+            <p>Token Name: {successInfo.tokenName}</p>
           </div>
           <div className="mt-4 flex gap-4">
             <a
-              href={successInfo.explorerUrl}
+              href={`${getExplorerUrl(chainId, successInfo.tokenAddress, 'token')}`}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-black bg-green-400 hover:bg-green-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"

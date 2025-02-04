@@ -1,16 +1,16 @@
 import { useState, useEffect } from 'react';
-import { BrowserProvider, Contract, formatUnits, Log } from 'ethers';
+import { BrowserProvider, Contract, formatUnits, parseUnits } from 'ethers';
 import TokenFactory_v2 from '@contracts/abi/TokenFactory_v2.1.0.json';
 import TokenTemplate_v2 from '@contracts/abi/TokenTemplate_v2.1.0.json';
 import { getNetworkContractAddress } from '@config/contracts';
 import { getExplorerUrl } from '@config/networks';
 import { useNetwork } from '@contexts/NetworkContext';
-import { Toast } from '@components/ui/Toast';
 import { Spinner } from '@components/ui/Spinner';
 import { ethers } from 'ethers';
 import { AbiCoder } from 'ethers';
 import { Button } from '@components/ui/button';
 import { Card } from '@components/ui/card';
+import { useToast } from '@/components/ui/toast/use-toast';
 
 const TOKEN_DECIMALS = 18;
 
@@ -56,7 +56,7 @@ export default function TokenAdminV2({ isConnected, address, provider: externalP
   const { chainId } = useNetwork();
   const [tokens, setTokens] = useState<TokenInfo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [toast, setToast] = useState<ToastMessage | null>(null);
+  const { toast } = useToast();
   const [selectedToken, setSelectedToken] = useState<string | null>(null);
   const [blacklistAddress, setBlacklistAddress] = useState('');
   const [lockInfo, setLockInfo] = useState<LockInfo>({ address: '', duration: 30 });
@@ -104,8 +104,11 @@ export default function TokenAdminV2({ isConnected, address, provider: externalP
   }, [isConnected, address, externalProvider, currentWallet]);
 
   const showToast = (type: 'success' | 'error', message: string) => {
-    setToast({ type, message });
-    setTimeout(() => setToast(null), 5000);
+    toast({
+      variant: type === 'error' ? 'destructive' : 'default',
+      title: type === 'error' ? 'Error' : 'Success',
+      description: message,
+    });
   };
 
   const loadTokens = async () => {
@@ -492,8 +495,6 @@ export default function TokenAdminV2({ isConnected, address, provider: externalP
           </button>
         </div>
       </div>
-      
-      {toast && <Toast type={toast.type} message={toast.message} />}
       
       {isExpanded && (
         isLoading ? (

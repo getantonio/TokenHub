@@ -1,31 +1,25 @@
-import { ButtonHTMLAttributes, forwardRef } from 'react';
+import * as React from 'react';
+import { cn } from '@/lib/utils';
 
-export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'default' | 'primary' | 'secondary' | 'ghost' | 'link';
-  size?: 'sm' | 'md' | 'lg';
+export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: 'default' | 'primary' | 'secondary' | 'destructive' | 'ghost';
 }
 
-const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className = '', variant = 'default', size = 'md', ...props }, ref) => {
-    const baseStyles = 'inline-flex items-center justify-center rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none';
+export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant = 'default', ...props }, ref) => {
+    const baseStyles = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ring-offset-background';
     
     const variants = {
-      default: 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500',
-      primary: 'bg-indigo-600 text-white hover:bg-indigo-700 focus:ring-indigo-500',
-      secondary: 'bg-gray-800 text-white hover:bg-gray-700 focus:ring-gray-500',
-      ghost: 'hover:bg-gray-800 text-gray-300 hover:text-white',
-      link: 'text-blue-500 hover:underline'
-    };
-
-    const sizes = {
-      sm: 'h-8 px-3 text-sm',
-      md: 'h-10 px-4',
-      lg: 'h-12 px-6 text-lg'
+      default: 'bg-primary text-primary-foreground hover:bg-primary/90',
+      primary: 'bg-blue-600 text-white hover:bg-blue-700',
+      secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
+      destructive: 'bg-red-600 text-white hover:bg-red-700',
+      ghost: 'hover:bg-accent hover:text-accent-foreground'
     };
 
     return (
       <button
-        className={`${baseStyles} ${variants[variant]} ${sizes[size]} ${className}`}
+        className={cn(baseStyles, variants[variant], className)}
         ref={ref}
         {...props}
       />
@@ -34,5 +28,3 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 );
 
 Button.displayName = 'Button';
-
-export { Button };

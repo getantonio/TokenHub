@@ -5,7 +5,7 @@ import TokenTemplate_v1 from '@contracts/abi/TokenTemplate_v1.1.0.json';
 import { getNetworkContractAddress } from '@config/contracts';
 import { getExplorerUrl } from '@config/networks';
 import { useNetwork } from '@contexts/NetworkContext';
-import { Toast } from '@components/ui/Toast';
+import { useToast } from '@/components/ui/toast/use-toast';
 import { Spinner } from '@components/ui/Spinner';
 import { ethers } from 'ethers';
 import { AbiCoder } from 'ethers';
@@ -45,7 +45,7 @@ export default function TokenAdmin({ isConnected, address, provider: externalPro
   const { chainId } = useNetwork();
   const [tokens, setTokens] = useState<TokenInfo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [toast, setToast] = useState<ToastMessage | null>(null);
+  const { toast } = useToast();
   const [selectedToken, setSelectedToken] = useState<string | null>(null);
   const [blacklistAddress, setBlacklistAddress] = useState('');
   const [lockInfo, setLockInfo] = useState<LockInfo>({ address: '', duration: 30 });
@@ -82,8 +82,20 @@ export default function TokenAdmin({ isConnected, address, provider: externalPro
   }, [isConnected, externalProvider]);
 
   const showToast = (type: 'success' | 'error', message: string, link?: string) => {
-    setToast({ type, message, link });
-    setTimeout(() => setToast(null), 5000);
+    toast({
+      variant: type === 'error' ? 'destructive' : 'default',
+      title: type === 'error' ? 'Error' : 'Success',
+      description: (
+        <div>
+          {message}
+          {link && (
+            <a href={link} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-700 ml-2">
+              View Transaction
+            </a>
+          )}
+        </div>
+      ),
+    });
   };
 
   const loadTokens = async () => {
@@ -403,8 +415,6 @@ export default function TokenAdmin({ isConnected, address, provider: externalPro
           </button>
         </div>
       </div>
-      
-      {toast && <Toast type={toast.type} message={toast.message} link={toast.link} />}
       
       {isExpanded && (
         isLoading ? (
