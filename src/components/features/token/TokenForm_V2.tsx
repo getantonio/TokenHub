@@ -302,10 +302,10 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
 
   if (!v2Available) {
     return (
-      <div className="p-1 bg-gray-100 rounded-lg shadow-lg">
-        <div className="rounded-md bg-yellow-100/20 p-1 border border-yellow-100">
-          <h3 className="text-sm font-medium text-yellow-100">TokenFactory V2.1.0 is not yet deployed on this network.</h3>
-          <p className="text-xs text-yellow-100">Note: V2.1.0 is currently only available on specific networks.</p>
+      <div className="p-1 bg-gray-800 rounded-lg shadow-lg">
+        <div className="rounded-md bg-yellow-800/20 p-1 border border-yellow-800">
+          <h3 className="text-sm font-medium text-yellow-800">TokenFactory V2.1.0 is not yet deployed on this network.</h3>
+          <p className="text-xs text-yellow-800">Note: V2.1.0 is currently only available on specific networks.</p>
         </div>
       </div>
     );

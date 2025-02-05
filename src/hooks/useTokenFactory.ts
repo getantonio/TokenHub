@@ -17,6 +17,7 @@ interface CreateTokenParams {
   vestingAmounts?: bigint[];
   vestingPeriods?: number[];
   beneficiaries?: string[];
+  walletNames?: string[];
 }
 
 export const useTokenFactory = (version: 'v3') => {

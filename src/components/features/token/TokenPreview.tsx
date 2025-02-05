@@ -7,6 +7,13 @@ interface TokenPreviewProps {
   symbol: string;
   initialSupply: string;
   maxSupply: string;
+  distributionSegments?: Array<{
+    name: string;
+    amount: number;
+    percentage: number;
+    color: string;
+  }>;
+  totalAllocation?: number;
   governanceConfig?: {
     votingDelay: number;
     votingPeriod: number;
@@ -23,6 +30,8 @@ export default function TokenPreview({
   symbol,
   initialSupply,
   maxSupply,
+  distributionSegments = [],
+  totalAllocation = 0,
   governanceConfig,
   showGovernance = false,
   className
@@ -54,6 +63,47 @@ export default function TokenPreview({
               <p className="text-white font-medium">{maxSupply ? Number(maxSupply).toLocaleString() : '-'} {symbol}</p>
             </div>
           </div>
+        </div>
+
+        {/* Distribution Bar */}
+        <div className="py-2">
+          <h3 className="text-sm font-medium text-white mb-1">Token Distribution ({totalAllocation}%)</h3>
+          <div className="w-full h-6 bg-gray-700 rounded-lg overflow-hidden flex">
+            {distributionSegments.map((segment, index) => (
+              <div
+                key={index}
+                style={{
+                  width: `${segment.percentage}%`,
+                  backgroundColor: segment.color
+                }}
+                className="h-full transition-all duration-300"
+                title={`${segment.name}: ${segment.amount}%`}
+              />
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-2 mt-1">
+            {distributionSegments.map((segment, index) => (
+              <div key={index} className="flex items-center text-xs">
+                <div
+                  className="w-3 h-3 rounded mr-1"
+                  style={{ backgroundColor: segment.color }}
+                />
+                <span className="text-white">
+                  {segment.name}: {segment.amount}%
+                </span>
+              </div>
+            ))}
+          </div>
+          {totalAllocation > 100 && (
+            <p className="text-red-500 text-xs mt-1">
+              Total allocation exceeds 100%
+            </p>
+          )}
+          {totalAllocation < 100 && totalAllocation > 0 && (
+            <p className="text-yellow-500 text-xs mt-1">
+              Remaining: {(100 - totalAllocation).toFixed(2)}%
+            </p>
+          )}
         </div>
 
         {showGovernance && governanceConfig && (
