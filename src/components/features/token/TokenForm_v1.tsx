@@ -5,7 +5,6 @@ import TokenFactory_v1 from '@contracts/abi/TokenFactory_v1.json';
 import TokenTemplate_v1 from '@contracts/abi/TokenTemplate_v1.1.0.json';
 import { getExplorerUrl } from '@config/networks';
 import TokenPreview from '@components/features/token/TokenPreview';
-import TokenAdmin from '@components/features/token/TCAP_v1';
 import { InfoIcon } from '@components/ui/InfoIcon';
 import type { TokenConfig } from '../../../types/token-config';
 import { useNetwork } from '@contexts/NetworkContext';
@@ -14,6 +13,13 @@ import { useToast } from '@/components/ui/toast/use-toast';
 import { Spinner } from '@components/ui/Spinner';
 import { Button } from '@components/ui/button';
 import { Card } from '@components/ui/card';
+import { useForm } from 'react-hook-form';
+import { useWallet } from '@contexts/WalletContext';
+import { Input } from '@components/ui/input';
+import { Label } from '@components/ui/label';
+import { Switch } from '@components/ui/switch';
+import { FACTORY_ADDRESSES } from '@config/contracts';
+import TokenFactoryV1 from '@contracts/abi/TokenFactory_v1.1.0.json';
 
 const TokenFactoryABI = TokenFactory_v1.abi;
 const TokenTemplateABI = TokenTemplate_v1.abi;
@@ -385,36 +391,34 @@ export default function TokenForm_v1({ isConnected }: Props) {
   return (
     <div className="space-y-2">
       {successInfo && (
-        <div className="rounded-md bg-green-900/20 p-2 border border-green-700 mb-6">
-          <h3 className="text-lg font-medium text-green-500 mb-2">🎉 Token Created Successfully!</h3>
-          <div className="space-y-2 text-sm text-green-400">
-            <p>Token Symbol: {successInfo.tokenSymbol}</p>
-            <p>Contract Address: <a 
-              href={`${getExplorerUrl(chainId, successInfo.tokenAddress, 'token')}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline hover:text-green-300"
-            >
-              {successInfo.tokenAddress}
-            </a></p>
-            <p>Token Name: {successInfo.tokenName}</p>
-          </div>
-          <div className="mt-4 flex gap-2">
-            <a
-              href={`${getExplorerUrl(chainId, successInfo.tokenAddress, 'token')}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-black bg-green-400 hover:bg-green-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-            >
-              View on Explorer
-            </a>
-            <button
-              onClick={() => setSuccessInfo(null)}
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-green-400 bg-transparent hover:bg-green-900/30 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-            >
-              Clear Message
-            </button>
-          </div>
+        <div className="mt-4">
+          <Card className="bg-gray-800 border-gray-700">
+            <div className="p-4">
+              <h3 className="text-lg font-semibold text-white mb-2">Token Created Successfully!</h3>
+              <div className="space-y-2">
+                <p className="text-sm text-gray-400">
+                  Your token has been created and is now ready to use.
+                </p>
+                <div className="flex flex-col space-y-1">
+                  <span className="text-sm text-gray-400">Name: {successInfo.tokenName}</span>
+                  <span className="text-sm text-gray-400">Symbol: {successInfo.tokenSymbol}</span>
+                  <span className="text-sm text-gray-400">
+                    Address: {successInfo.tokenAddress.slice(0, 6)}...{successInfo.tokenAddress.slice(-4)}
+                  </span>
+                </div>
+                <div className="flex space-x-2 mt-2">
+                  <a
+                    href={`${getExplorerUrl(chainId, successInfo.tokenAddress, 'token')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-400 hover:text-blue-300 text-sm"
+                  >
+                    View on Explorer →
+                  </a>
+                </div>
+              </div>
+            </div>
+          </Card>
         </div>
       )}
 
@@ -557,17 +561,6 @@ export default function TokenForm_v1({ isConnected }: Props) {
             initialSupply={formData.initialSupply}
             maxSupply={formData.maxSupply}
           />
-          
-          <div className="form-card">
-            <h2 className="form-card-header">Token Creator Admin Panel</h2>
-            <div className="form-card-body">
-              <TokenAdmin
-                isConnected={isConnected}
-                address={successInfo?.tokenAddress}
-                provider={provider}
-              />
-            </div>
-          </div>
         </div>
       </div>
     </div>

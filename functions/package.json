@@ -4,12 +4,12 @@
   "description": "Firebase Functions for Next.js SSR",
   "main": "index.js",
   "engines": {
-    "node": "18"
+    "node": "20"
   },
   "dependencies": {
     "express": "^4.18.2",
-    "firebase-admin": "^11.11.1",
-    "firebase-functions": "^4.9.0",
+    "firebase-admin": "^13.0.2",
+    "firebase-functions": "^6.3.1",
     "next": "^14.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"

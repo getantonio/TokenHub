@@ -22,7 +22,10 @@ contract TokenFactory_v3_0_0 is Initializable, OwnableUpgradeable, UUPSUpgradeab
     
     // Array to track all deployed tokens
     address[] public deployedTokens;
-
+    
+    // Mapping to track tokens deployed by specific users
+    mapping(address => address[]) public userTokens;
+    
     // Events
     event TokenCreated(
         address token,
@@ -112,6 +115,9 @@ contract TokenFactory_v3_0_0 is Initializable, OwnableUpgradeable, UUPSUpgradeab
 
         address tokenAddress = address(proxy);
         deployedTokens.push(tokenAddress);
+        
+        // Track the token for this user
+        userTokens[msg.sender].push(tokenAddress);
 
         emit TokenCreated(
             tokenAddress,
@@ -174,6 +180,15 @@ contract TokenFactory_v3_0_0 is Initializable, OwnableUpgradeable, UUPSUpgradeab
      */
     function getDeployedTokens() external view returns (address[] memory) {
         return deployedTokens;
+    }
+
+    /**
+     * @notice Get all tokens deployed by a specific user
+     * @param user Address of the user
+     * @return Array of token addresses deployed by the user
+     */
+    function getUserTokens(address user) external view returns (address[] memory) {
+        return userTokens[user];
     }
 
     /**

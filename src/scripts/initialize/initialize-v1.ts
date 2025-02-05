@@ -1,4 +1,4 @@
-async function main() {
+async function initializeFactoryV1() {
   const hre = require('hardhat');
   const { ethers } = hre;
   
@@ -10,7 +10,7 @@ async function main() {
   console.log("Factory initialized!");
 }
 
-main()
+initializeFactoryV1()
   .then(() => process.exit(0))
   .catch((error) => {
     console.error(error);

@@ -1,10 +1,11 @@
-import { getDefaultWallets, RainbowKitProvider } from '@rainbow-me/rainbowkit';
-import { createConfig, WagmiConfig } from 'wagmi';
+import { RainbowKitProvider } from '@rainbow-me/rainbowkit';
+import { WagmiConfig } from 'wagmi';
 import { mainnet, sepolia, arbitrumSepolia, optimismSepolia, Chain } from 'viem/chains';
 import { http } from 'viem';
 import '@rainbow-me/rainbowkit/styles.css';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ChainId } from '@config/networks';
+import { getDefaultConfig } from '@rainbow-me/rainbowkit';
 
 // Define Polygon Amoy testnet
 const polygonAmoy = {
@@ -30,27 +31,18 @@ if (!projectId) {
   throw new Error('Missing NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID environment variable');
 }
 
-const { wallets } = getDefaultWallets({
-  appName: 'TokenHub.dev',
-  projectId,
-});
-
 const chains = [mainnet, sepolia, arbitrumSepolia, optimismSepolia, polygonAmoy] as const;
 
-console.log('Web3Provider chains:', chains.map(chain => ({
-  id: chain.id,
-  name: chain.name
-})));
-
-const config = createConfig({
+const config = getDefaultConfig({
+  appName: 'TokenHub.dev',
+  projectId,
   chains,
-  transports: {
-    [mainnet.id]: http(),
-    [sepolia.id]: http(),
-    [arbitrumSepolia.id]: http(),
-    [optimismSepolia.id]: http(),
-    [polygonAmoy.id]: http(),
-  },
+  transports: Object.fromEntries(
+    chains.map(chain => [
+      chain.id,
+      http(chain.rpcUrls.default.http[0])
+    ])
+  ),
 });
 
 const queryClient = new QueryClient();
@@ -59,7 +51,10 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   return (
     <WagmiConfig config={config}>
       <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider>
+        <RainbowKitProvider
+          modalSize="compact"
+          showRecentTransactions={true}
+        >
           {children}
         </RainbowKitProvider>
       </QueryClientProvider>
