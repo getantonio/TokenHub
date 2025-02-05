@@ -60,9 +60,15 @@ export default function TokenAdminV2({ isConnected, address, provider: externalP
   const [selectedToken, setSelectedToken] = useState<string | null>(null);
   const [blacklistAddress, setBlacklistAddress] = useState('');
   const [lockInfo, setLockInfo] = useState<LockInfo>({ address: '', duration: 30 });
-  const [currentWallet, setCurrentWallet] = useState<string>('');
+  const [currentWallet, setCurrentWallet] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
-  const [hiddenTokens, setHiddenTokens] = useState<string[]>([]);
+  const [hiddenTokens, setHiddenTokens] = useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('hiddenTokensV2');
+      return saved ? JSON.parse(saved) : [];
+    }
+    return [];
+  });
   const [isOwner, setIsOwner] = useState(false);
   const [ownerControls, setOwnerControls] = useState({
     newOwner: '',
@@ -102,6 +108,10 @@ export default function TokenAdminV2({ isConnected, address, provider: externalP
       checkOwnership();
     }
   }, [isConnected, address, externalProvider, currentWallet]);
+
+  useEffect(() => {
+    localStorage.setItem('hiddenTokensV2', JSON.stringify(hiddenTokens));
+  }, [hiddenTokens]);
 
   const showToast = (type: 'success' | 'error', message: string) => {
     toast({
@@ -310,7 +320,7 @@ export default function TokenAdminV2({ isConnected, address, provider: externalP
   const handleSetLockTime = async (tokenAddress: string, addressToLock: string, durationDays: number) => {
     if (!isConnected || !window.ethereum) return;
 
-    if (addressToLock.toLowerCase() === currentWallet.toLowerCase()) {
+    if (addressToLock.toLowerCase() === currentWallet?.toLowerCase()) {
       if (!window.confirm('Warning: You are about to lock your own address. This will prevent you from transferring tokens. Are you sure?')) {
         return;
       }
@@ -463,20 +473,25 @@ export default function TokenAdminV2({ isConnected, address, provider: externalP
   }
 
   return (
-    <div className="p-2 relative bg-gray-800 rounded-lg shadow-lg">
+    <div className="form-card">
       <div
-        className="flex justify-between items-center cursor-pointer py-0.5"
+        className="flex justify-between items-center cursor-pointer py-1"
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <h2 className="text-xs font-medium text-text-primary">TCAP_v2</h2>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
+          <h2 className="text-sm font-medium text-text-primary">Token Creator Admin Controls (V2)</h2>
+          <span className="text-xs text-text-secondary">
+            {getVisibleTokens().length} tokens
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
           {hiddenTokens.length > 0 && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 resetHiddenTokens();
               }}
-              className="text-xs px-2 py-1 rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30"
+              className="btn-blue btn-small"
             >
               Show All ({hiddenTokens.length})
             </button>
@@ -486,66 +501,29 @@ export default function TokenAdminV2({ isConnected, address, provider: externalP
               e.stopPropagation();
               loadTokens();
             }}
-            className="text-xs px-2 py-1 rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30"
+            className="btn-blue btn-small"
           >
             Refresh
           </button>
-          <button className="text-text-accent hover:text-blue-400">
+          <span className="text-text-accent hover:text-blue-400">
             {isExpanded ? '▼' : '▶'}
-          </button>
+          </span>
         </div>
       </div>
-      
+
       {isExpanded && (
         isLoading ? (
           <div className="flex justify-center items-center py-1">
             <Spinner className="w-4 h-4 text-text-primary" />
           </div>
         ) : getVisibleTokens().length === 0 ? (
-          <div className="mt-0.5">
-            <p className="text-xs text-text-secondary">No V2 tokens found. Deploy a new token to get started.</p>
+          <div className="mt-2">
+            <p className="text-sm text-text-secondary">No V2 tokens found. Deploy a new token to get started.</p>
           </div>
         ) : (
-          <div className="space-y-2 mt-1">
-            {isOwner && (
-              <div className="border border-border rounded-lg p-2 space-y-2 bg-background-secondary mb-2">
-                <h3 className="text-sm font-bold text-text-primary">Factory Owner Controls</h3>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={ownerControls.newOwner}
-                      onChange={(e) => setOwnerControls({ ...ownerControls, newOwner: e.target.value })}
-                      placeholder="New owner address"
-                      className="flex-1 p-1 text-xs rounded bg-background-primary border border-border"
-                    />
-                    <button
-                      onClick={() => handleOwnerAction('transferOwnership')}
-                      className="px-2 py-1 text-xs rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30"
-                    >
-                      Transfer Ownership
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={ownerControls.newFee}
-                      onChange={(e) => setOwnerControls({ ...ownerControls, newFee: e.target.value })}
-                      placeholder="New fee amount (ETH)"
-                      className="flex-1 p-1 text-xs rounded bg-background-primary border border-border"
-                    />
-                    <button
-                      onClick={() => handleOwnerAction('setFee')}
-                      className="px-2 py-1 text-xs rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30"
-                    >
-                      Set Fee
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
+          <div className="space-y-1 mt-2">
             {getVisibleTokens().map(token => (
-              <div key={token.address} className="border border-border rounded-lg p-2 space-y-2 bg-background-secondary relative group">
+              <div key={token.address} className="border border-border rounded-lg p-2 bg-gray-800">
                 <div className="flex justify-between items-start gap-2">
                   <div>
                     <h3 className="text-sm font-bold text-text-primary">{token.name} ({token.symbol})</h3>

@@ -537,7 +537,7 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
           />
           
           <div className="form-card">
-            <h2 className="form-card-header">Token Creator Admin Panel</h2>
+          
             <div className="form-card-body">
               <TokenAdminV2
                 isConnected={isConnected}
