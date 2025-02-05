@@ -41,7 +41,7 @@ console.log('Sepolia V2 Factory Address:', sepoliaV2Address);
 
 export const FACTORY_ADDRESSES: Record<string, Record<number, string>> = {
   v3: {
-    [ChainId.SEPOLIA]: '0x6B705b953e4F77c9C533F3A9fb0C6F40D44845d6', // Replace with actual v3 address
+    [ChainId.SEPOLIA]: '', // To be added when v3 is deployed
     [ChainId.ARBITRUM_SEPOLIA]: '', // Add when deployed
     [ChainId.OPTIMISM_SEPOLIA]: '', // Add when deployed
     [ChainId.POLYGON_AMOY]: '', // Add when deployed

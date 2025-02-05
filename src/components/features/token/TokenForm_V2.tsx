@@ -4,8 +4,8 @@ import { useNetwork } from '@contexts/NetworkContext';
 import TokenFactory_v2 from '@contracts/abi/TokenFactory_v2.1.0.json';
 import { getExplorerUrl } from '@config/networks';
 import { getNetworkContractAddress } from '@config/contracts';
-import { Toast } from '@components/ui/toast';
-import { TokenPreview } from '@components/features/token/TokenPreview';
+import { useToast } from '@/components/ui/toast/use-toast';
+import TokenPreview from '@components/features/token/TokenPreview';
 import TokenAdminV2 from '@components/features/token/TCAP_v2';
 import { InfoIcon } from '@components/ui/InfoIcon';
 import type { TokenConfig } from '../../../types/token-config';
@@ -43,6 +43,14 @@ interface ToastMessage {
   link?: string;
 }
 
+interface SuccessInfo {
+  tokenAddress: string;
+  tokenName: string;
+  tokenSymbol: string;
+}
+
+const TOKEN_DECIMALS = 18;
+
 const getDefaultTimes = () => {
   const now = new Date();
   const startTime = new Date(now.getTime() + 3600000);
@@ -76,14 +84,9 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
   const [v2Available, setV2Available] = useState<boolean>(false);
   const [deploymentFee, setDeploymentFee] = useState<string | null>(null);
   const [formData, setFormData] = useState<FormData>(defaultValues);
-  const [successInfo, setSuccessInfo] = useState<{
-    message: string;
-    tokenAddress: string;
-    explorerUrl: string;
-    symbol: string;
-    initialSupply: string;
-    owner: string | null;
-  } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [successInfo, setSuccessInfo] = useState<SuccessInfo | null>(null);
+  const { toast: useToastToast } = useToast();
   const [provider, setProvider] = useState<BrowserProvider | null>(null);
 
   const [previewConfig, setPreviewConfig] = useState<TokenConfig>({
@@ -190,105 +193,100 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isConnected || !chainId) return;
-
+    if (!isConnected) {
+      setError("Please connect your wallet first");
+      return;
+    }
+    
     setLoading(true);
-    setToast(null);
+    setError(null);
     setSuccessInfo(null);
 
     try {
-      const now = Math.floor(Date.now() / 1000);
-      const startTimeSeconds = Math.floor(new Date(formData.startTime).getTime() / 1000);
-      const endTimeSeconds = Math.floor(new Date(formData.endTime).getTime() / 1000);
-      
-      if (startTimeSeconds <= now) throw new Error('Start time must be in the future');
-      if (endTimeSeconds <= startTimeSeconds) throw new Error('End time must be after start time');
-      if (!window.ethereum) throw new Error("Please install MetaMask");
+      if (!window.ethereum) {
+        throw new Error("Please install MetaMask");
+      }
 
       const provider = new BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
+      const userAddress = await signer.getAddress();
+      const chainId = Number(await window.ethereum.request({ method: 'eth_chainId' }));
       
       const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddressV2');
-      if (!factoryAddress) throw new Error("TokenFactory V2.1.0 is not yet deployed on this network.");
-
-      const factoryV2 = new Contract(factoryAddress, TokenFactory_v2.abi, signer);
-
-      // Get required deployment fee
-      const userAddress = await signer.getAddress();
-      const fee = await factoryV2.getDeploymentFee(userAddress);
-      if (!fee) {
-        throw new Error('Failed to get deployment fee');
+      if (!factoryAddress) {
+        throw new Error("TokenFactory V2 is not yet deployed on this network.");
       }
 
-      // Handle custom owner address
-      let ownerAddress = "0x0000000000000000000000000000000000000000";
-      if (formData.customOwner) {
-        if (!formData.customOwner.match(/^0x[0-9a-fA-F]{40}$/)) throw new Error('Invalid owner address format');
-        ownerAddress = formData.customOwner;
-      }
+      const factory = new Contract(factoryAddress, TokenFactory_v2.abi, signer);
+      const fee = await factory.deploymentFee();
+      
+      const initialSupplyWei = parseUnits(formData.initialSupply, TOKEN_DECIMALS);
+      const maxSupplyWei = parseUnits(formData.maxSupply, TOKEN_DECIMALS);
 
-      // Convert amounts to BigInt with proper decimals and scaling
-      const initialSupplyAmount = parseUnits(formData.initialSupply || '0', 18);
-      const hardCapAmount = parseUnits(formData.maxSupply || '0', 18);
-      const presaleRateAmount = BigInt(formData.presaleRate || '0');
-      const minContribAmount = parseUnits(formData.minContribution || '0', 18);
-      const maxContribAmount = parseUnits(formData.maxContribution || '0', 18);
-      const presaleCapAmount = parseUnits(formData.presaleCap || '0', 18);
-      const startTimeBigInt = BigInt(startTimeSeconds);
-      const endTimeBigInt = BigInt(endTimeSeconds);
+      showToast('success', 'Preparing transaction...');
 
-      // Create token
-      const tx = await factoryV2.createToken(
+      const tx = await factory.createToken(
         formData.name,
         formData.symbol,
-        initialSupplyAmount,
-        hardCapAmount,
+        initialSupplyWei,
+        maxSupplyWei,
         formData.enableBlacklist,
         formData.enableTimeLock,
-        presaleRateAmount,
-        minContribAmount,
-        maxContribAmount,
-        presaleCapAmount,
-        startTimeBigInt,
-        endTimeBigInt,
-        ownerAddress,
+        parseUnits(formData.presaleRate, 18),
+        parseUnits(formData.minContribution, 18),
+        parseUnits(formData.maxContribution, 18),
+        parseUnits(formData.presaleCap, 18),
+        Math.floor(Date.now() / 1000) + 3600,
+        Math.floor(Date.now() / 1000) + 86400,
+        await signer.getAddress(),
         { value: BigInt(fee) }
       );
+
+      showToast('success', 'Transaction submitted. Waiting for confirmation...', getExplorerUrl(chainId, tx.hash, 'tx'));
       
       const receipt = await tx.wait();
-      const tokenDeployedEvent = receipt.logs
-        .map((log: any) => {
-          try {
-            return factoryV2.interface.parseLog({
-              topics: log.topics,
-              data: log.data
-            });
-          } catch (e) {
-            return null;
+      let tokenAddress = null;
+      
+      for (const log of receipt.logs) {
+        try {
+          const parsedLog = factory.interface.parseLog({
+            topics: log.topics ? log.topics.map((t: string) => t || '') : [],
+            data: log.data || '0x'
+          });
+          if (parsedLog?.name === "TokenCreated") {
+            tokenAddress = parsedLog.args[0];
+            break;
           }
-        })
-        .find((event: any) => event?.name === 'TokenCreated');
+        } catch (e) {
+          continue;
+        }
+      }
 
-      if (!tokenDeployedEvent) throw new Error('Token deployment event not found in transaction logs');
+      if (!tokenAddress) {
+        for (const log of receipt.logs) {
+          if (log.address !== factoryAddress) {
+            tokenAddress = log.address;
+            break;
+          }
+        }
+      }
 
-      const tokenAddress = tokenDeployedEvent.args.token;
+      if (!tokenAddress) {
+        throw new Error("Could not find token address in transaction logs");
+      }
+
       const explorerUrl = getExplorerUrl(chainId, tokenAddress, 'token');
-      const txExplorerUrl = getExplorerUrl(chainId, tx.hash, 'tx');
+      showToast('success', 'Token created successfully!', explorerUrl);
 
       setSuccessInfo({
-        message: 'Token created successfully!',
         tokenAddress,
-        explorerUrl,
-        symbol: formData.symbol,
-        initialSupply: formData.initialSupply,
-        owner: tokenDeployedEvent.args.owner
+        tokenName: formData.name,
+        tokenSymbol: formData.symbol,
       });
 
-      showToast('success', 'Token created successfully!', txExplorerUrl);
-      setFormData({ ...defaultValues, ...getDefaultTimes() });
     } catch (error: any) {
-      console.error("Error creating token:", error);
-      showToast('error', `Failed to create token: ${error.message}`);
+      console.error('Error creating token:', error);
+      showToast('error', error.message || 'Failed to create token');
     } finally {
       setLoading(false);
     }
@@ -532,9 +530,10 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
         {/* Preview Section */}
         <div className="space-y-4">
           <TokenPreview
-            config={previewConfig}
-            isValid={true}
-            validationErrors={[]}
+            name={formData.name}
+            symbol={formData.symbol}
+            initialSupply={formData.maxSupply}
+            maxSupply={formData.maxSupply}
           />
           
           <div className="form-card">

@@ -382,7 +382,7 @@ export default function TokenAdmin({ isConnected, address, provider: externalPro
         ) : (
           <div className="space-y-2 mt-1">
             {getVisibleTokens().map(token => (
-              <div key={token.address} className="border border-border rounded-lg p-2 space-y-2 bg-background-secondary">
+              <div key={token.address} className="border border-border rounded-lg p-2 space-y-2 bg-background-secondary relative group">
                 <div className="flex justify-between items-start gap-2">
                   <div>
                     <h3 className="text-sm font-bold text-text-primary">{token.name} ({token.symbol})</h3>
@@ -412,20 +412,24 @@ export default function TokenAdmin({ isConnected, address, provider: externalPro
                 </div>
 
                 {selectedToken === token.address && (
-                  <div className="space-y-4 pt-2 border-t border-border">
-                    <div className="grid grid-cols-2 gap-4">
+                  <div className="mt-2 space-y-2">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                       <div>
-                        <h4 className="text-xs font-medium text-text-primary mb-1">Governance Info</h4>
-                        <p className="text-xs text-text-secondary">DAO: {token.daoAddress}</p>
-                        <p className="text-xs text-text-secondary">Treasury: {token.treasuryAddress}</p>
-                        <p className="text-xs text-text-secondary">Timelock: {token.timelockAddress}</p>
+                        <h4 className="text-xs font-medium text-text-primary mb-1">Associated Contracts</h4>
+                        <div className="space-y-1">
+                          <p className="text-xs text-text-secondary">DAO: {token.daoAddress}</p>
+                          <p className="text-xs text-text-secondary">Timelock: {token.timelockAddress}</p>
+                          <p className="text-xs text-text-secondary">Treasury: {token.treasuryAddress}</p>
+                        </div>
                       </div>
                       <div>
-                        <h4 className="text-xs font-medium text-text-primary mb-1">Voting Parameters</h4>
-                        <p className="text-xs text-text-secondary">Voting Delay: {token.votingDelay} blocks</p>
-                        <p className="text-xs text-text-secondary">Voting Period: {token.votingPeriod} blocks</p>
-                        <p className="text-xs text-text-secondary">Proposal Threshold: {token.proposalThreshold} {token.symbol}</p>
-                        <p className="text-xs text-text-secondary">Quorum: {token.quorumNumerator}%</p>
+                        <h4 className="text-xs font-medium text-text-primary mb-1">Governance Settings</h4>
+                        <div className="space-y-1">
+                          <p className="text-xs text-text-secondary">Voting Delay: {token.votingDelay} blocks</p>
+                          <p className="text-xs text-text-secondary">Voting Period: {token.votingPeriod} blocks</p>
+                          <p className="text-xs text-text-secondary">Proposal Threshold: {token.proposalThreshold} {token.symbol}</p>
+                          <p className="text-xs text-text-secondary">Quorum: {token.quorumNumerator}%</p>
+                        </div>
                       </div>
                     </div>
 
@@ -514,32 +518,30 @@ export default function TokenAdmin({ isConnected, address, provider: externalPro
                       )}
                     </div>
 
-                    <div className="flex gap-1">
+                    <div className="flex gap-2">
                       <a
-                        href={getExplorerUrl(chainId || 0, token.address, 'token')}
+                        href={chainId ? getExplorerUrl(chainId, token.address, 'token') : '#'}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-xs text-text-accent hover:text-blue-400"
+                        className="text-xs px-2 py-1 rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30"
                       >
-                        View Token ↗
+                        View Token
                       </a>
-                      <span className="text-text-secondary">•</span>
                       <a
-                        href={getExplorerUrl(chainId || 0, token.daoAddress, 'address')}
+                        href={chainId ? getExplorerUrl(chainId, token.daoAddress, 'address') : '#'}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-xs text-text-accent hover:text-blue-400"
+                        className="text-xs px-2 py-1 rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30"
                       >
-                        View DAO ↗
+                        View DAO
                       </a>
-                      <span className="text-text-secondary">•</span>
                       <a
-                        href={getExplorerUrl(chainId || 0, token.treasuryAddress, 'address')}
+                        href={chainId ? getExplorerUrl(chainId, token.treasuryAddress, 'address') : '#'}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-xs text-text-accent hover:text-blue-400"
+                        className="text-xs px-2 py-1 rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30"
                       >
-                        View Treasury ↗
+                        View Treasury
                       </a>
                     </div>
                   </div>

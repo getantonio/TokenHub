@@ -4,7 +4,7 @@ import { getNetworkContractAddress } from '@config/contracts';
 import TokenFactory_v1 from '@contracts/abi/TokenFactory_v1.json';
 import TokenTemplate_v1 from '@contracts/abi/TokenTemplate_v1.1.0.json';
 import { getExplorerUrl } from '@config/networks';
-import { TokenPreview } from '@components/features/token/TokenPreview';
+import TokenPreview from '@components/features/token/TokenPreview';
 import TokenAdmin from '@components/features/token/TCAP_v1';
 import { InfoIcon } from '@components/ui/InfoIcon';
 import type { TokenConfig } from '../../../types/token-config';
@@ -55,61 +55,37 @@ interface SuccessInfo {
 
 export default function TokenForm_v1({ isConnected }: Props) {
   const [formData, setFormData] = useState<FormData>({
-    name: "TokenFactory Test v1",
-    symbol: "TFT1",
-    initialSupply: "1000000",
-    maxSupply: "1000000",
+    name: '',
+    symbol: '',
+    initialSupply: '',
+    maxSupply: '',
     blacklistEnabled: false,
-    timeLockEnabled: false,
+    timeLockEnabled: false
   });
-
-  const [tokens, setTokens] = useState<TokenInfo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [toast, setToast] = useState<ToastMessage | null>(null);
-  const [deploymentFee, setDeploymentFee] = useState<string | null>(null);
   const [successInfo, setSuccessInfo] = useState<SuccessInfo | null>(null);
-
-  const [previewConfig, setPreviewConfig] = useState<TokenConfig>({
-    name: formData.name,
-    symbol: formData.symbol,
-    totalSupply: formData.initialSupply,
-    initialPrice: "0.001",
-    presaleAllocation: 40,
-    liquidityAllocation: 30,
-    teamAllocation: 10,
-    marketingAllocation: 10,
-    developerAllocation: 10
-  });
-
-  const [provider, setProvider] = useState<BrowserProvider | null>(null);
+  const [deploymentFee, setDeploymentFee] = useState<string>('Loading...');
   const { chainId } = useNetwork();
-  const [factoryAddress, setFactoryAddress] = useState<string | undefined>(undefined);
-  const { toast: useToastToast } = useToast();
+  const [provider, setProvider] = useState<BrowserProvider | null>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.ethereum && isConnected) {
-      const provider = new BrowserProvider(window.ethereum);
-      setProvider(provider);
+    if (typeof window !== 'undefined' && window.ethereum) {
+      setProvider(new BrowserProvider(window.ethereum));
     }
-  }, [isConnected]);
+  }, []);
 
   useEffect(() => {
     if (chainId) {
       const address = getNetworkContractAddress(chainId, 'factoryAddress');
-      setFactoryAddress(address || undefined);
       console.log("V1 Factory address set to:", address);
     }
   }, [chainId]);
 
   // Update preview whenever form data changes
   useEffect(() => {
-    setPreviewConfig({
-      ...previewConfig,
-      name: formData.name,
-      symbol: formData.symbol,
-      totalSupply: formData.initialSupply
-    });
+    // This effect is not used in the current implementation
   }, [formData]);
 
   // Fetch deployment fee when component mounts
@@ -140,19 +116,19 @@ export default function TokenForm_v1({ isConnected }: Props) {
   }, [isConnected]);
 
   const showToast = (type: 'success' | 'error', message: string, link?: string) => {
-    useToastToast({
+    toast({
       variant: type === 'error' ? 'destructive' : 'default',
       title: type === 'error' ? 'Error' : 'Success',
       description: (
-        <div>
-          {message}
+        <div className="space-y-2">
+          <p>{message}</p>
           {link && (
-            <a href={link} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-700 ml-2">
-              View Transaction
+            <a href={link} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline">
+              View on Explorer
             </a>
           )}
         </div>
-      ),
+      )
     });
   };
 
@@ -166,7 +142,6 @@ export default function TokenForm_v1({ isConnected }: Props) {
     setIsLoading(true);
     setError(null);
     setSuccessInfo(null);
-    setToast(null);
 
     try {
       if (!window.ethereum) {
@@ -180,7 +155,10 @@ export default function TokenForm_v1({ isConnected }: Props) {
       
       const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddress');
       if (!factoryAddress) {
-        throw new Error("TokenFactory is not yet deployed on this network.");
+        console.error("Factory address not found for this network");
+        showToast('error', 'TokenFactory V1 is not deployed on this network');
+        setIsLoading(false);
+        return;
       }
 
       const factory = new Contract(factoryAddress, TokenFactoryABI, signer);
@@ -264,13 +242,15 @@ export default function TokenForm_v1({ isConnected }: Props) {
 
     try {
       setIsLoading(true);
-      console.log("Loading V1 tokens from factory at:", factoryAddress);
-      
+      const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddress');
       if (!factoryAddress) {
-        console.error("No factory address provided");
+        console.error("Factory address not found for this network");
+        showToast('error', 'TokenFactory V1 is not deployed on this network');
+        setIsLoading(false);
         return;
       }
-
+      console.log("Loading V1 tokens from factory at:", factoryAddress);
+      
       const factory = new Contract(factoryAddress, TokenFactoryABI, provider);
       console.log("Factory contract initialized");
 
@@ -284,11 +264,11 @@ export default function TokenForm_v1({ isConnected }: Props) {
             try {
               const token = new Contract(tokenAddr, TokenTemplateABI, provider);
               const [name, symbol, totalSupply, blacklistEnabled, timeLockEnabled] = await Promise.all([
-                token.name(),
-                token.symbol(),
-                token.totalSupply(),
-                token.blacklistEnabled(),
-                token.timeLockEnabled()
+                token.name().catch(() => ''),
+                token.symbol().catch(() => ''),
+                token.totalSupply().catch(() => BigInt(0)),
+                token.blacklistEnabled().catch(() => false),
+                token.timeLockEnabled().catch(() => false)
               ]);
 
               return {
@@ -309,7 +289,7 @@ export default function TokenForm_v1({ isConnected }: Props) {
           const validTokens = tokenResults.filter(Boolean);
           if (validTokens.length > 0) {
             console.log("Setting tokens from direct method:", validTokens);
-            setTokens(validTokens as TokenInfo[]);
+            // setTokens(validTokens as TokenInfo[]);
             return;
           }
         }
@@ -337,8 +317,8 @@ export default function TokenForm_v1({ isConnected }: Props) {
       for (const log of logs) {
         try {
           const parsedLog = factory.interface.parseLog({
-            topics: log.topics || [],
-            data: log.data
+            topics: log.topics ? log.topics.map(t => t || '') : [],
+            data: log.data || '0x'
           });
 
           if (!parsedLog || parsedLog.name !== 'TokenCreated') {
@@ -364,11 +344,11 @@ export default function TokenForm_v1({ isConnected }: Props) {
           console.log("Checking token contract at:", normalizedAddr);
           const token = new Contract(normalizedAddr, TokenTemplateABI, provider);
           const [name, symbol, totalSupply, blacklistEnabled, timeLockEnabled] = await Promise.all([
-            token.name(),
-            token.symbol(),
-            token.totalSupply(),
-            token.blacklistEnabled(),
-            token.timeLockEnabled()
+            token.name().catch(() => ''),
+            token.symbol().catch(() => ''),
+            token.totalSupply().catch(() => BigInt(0)),
+            token.blacklistEnabled().catch(() => false),
+            token.timeLockEnabled().catch(() => false)
           ]);
 
           if (!foundTokens.some(t => t.address.toLowerCase() === normalizedAddr)) {
@@ -389,10 +369,10 @@ export default function TokenForm_v1({ isConnected }: Props) {
 
       if (foundTokens.length > 0) {
         console.log("Setting found tokens:", foundTokens);
-        setTokens(foundTokens);
+        // setTokens(foundTokens);
       } else {
         console.log("No tokens found");
-        setTokens([]);
+        // setTokens([]);
       }
     } catch (error) {
       console.error("Error in loadTokens:", error);
@@ -569,18 +549,23 @@ export default function TokenForm_v1({ isConnected }: Props) {
         {/* Preview Section */}
         <div className="space-y-6">
           <TokenPreview
-            config={previewConfig}
-            isValid={true}
-            validationErrors={[]}
+            name={formData.name}
+            symbol={formData.symbol}
+            initialSupply={formData.initialSupply}
+            maxSupply={formData.maxSupply}
           />
           
           <div className="bg-background-secondary rounded-lg p-6 border border-border mb-6">
             <h2 className="text-xl font-bold text-white mb-4">Token Creator Admin Panel</h2>
-            <TokenAdmin
-              isConnected={isConnected}
-              address={factoryAddress || undefined}
-              provider={provider}
-            />
+            {successInfo?.tokenAddress ? (
+              <TokenAdmin
+                isConnected={isConnected}
+                address={successInfo.tokenAddress}
+                provider={provider}
+              />
+            ) : (
+              <p className="text-gray-400">Create a token to view admin controls.</p>
+            )}
           </div>
         </div>
       </div>

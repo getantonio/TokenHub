@@ -1,403 +1,225 @@
-import { useState, useEffect } from 'react';
-import { BrowserProvider, Contract, parseUnits, formatUnits } from 'ethers';
-import TokenFactory_v3 from '@contracts/abi/TokenFactory_v3.0.0.json';
-import { getNetworkContractAddress } from '@config/contracts';
-import { getExplorerUrl } from '@config/networks';
+import React, { useState, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { BrowserProvider } from 'ethers';
 import { useNetwork } from '@contexts/NetworkContext';
 import { useToast } from '@/components/ui/toast/use-toast';
+import TokenPreview from '@components/features/token/TokenPreview';
+import TokenAdminV3 from '@components/features/token/TCAP_v3';
+import { InfoIcon } from '@components/ui/InfoIcon';
 import { Spinner } from '@components/ui/Spinner';
-import { Input } from '@components/ui/input';
-import { Button } from '@components/ui/button';
 import { Card } from '@components/ui/card';
-import { Switch } from '@components/ui/switch';
-import { Label } from '@components/ui/label';
-import { Slider } from '@components/ui/slider';
+import { useTokenFactory } from '@/hooks/useTokenFactory';
+import { useWatchContractEvent } from 'wagmi';
+import TokenFactoryV3ABI from '@/contracts/abi/TokenFactory_v3.0.0.json';
+import { FACTORY_ADDRESSES } from '@/config/contracts';
+import { getAddress } from 'viem';
 
-interface TokenFormProps {
+const formSchema = z.object({
+  name: z.string().min(1, 'Token name is required'),
+  symbol: z.string().min(1, 'Token symbol is required'),
+  initialSupply: z.string().min(1, 'Initial supply is required'),
+  maxSupply: z.string().min(1, 'Max supply is required')
+});
+
+interface TokenFormV3Props {
   isConnected: boolean;
-  address?: string;
-  provider: BrowserProvider | null;
 }
 
-interface ToastMessage {
-  type: 'success' | 'error';
-  message: string;
-  link?: string;
+interface SuccessInfo {
+  tokenAddress?: string;
 }
 
-interface GovernanceConfig {
-  votingDelay: number;
-  votingPeriod: number;
-  proposalThreshold: string;
-  quorumNumerator: number;
-  timelockDelay: number;
+interface TokenCreatedEvent {
+  token: `0x${string}`;
+  name: string;
+  symbol: string;
 }
 
-export default function TokenForm({ isConnected, address, provider: externalProvider }: TokenFormProps) {
-  const { chainId } = useNetwork();
-  const [isLoading, setIsLoading] = useState(false);
+const defaultValues = {
+  name: 'Test Token',
+  symbol: 'TEST',
+  initialSupply: '1000000',
+  maxSupply: '2000000'
+};
+
+export function TokenForm_V3({ isConnected }: TokenFormV3Props) {
   const { toast } = useToast();
+  const { createToken, isLoading, error } = useTokenFactory('v3');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [successInfo, setSuccessInfo] = useState<SuccessInfo>({});
+  const { chainId } = useNetwork();
+  const [web3Provider, setWeb3Provider] = useState<BrowserProvider | null>(null);
 
-  // Token basic info
-  const [name, setName] = useState('');
-  const [symbol, setSymbol] = useState('');
-  const [initialSupply, setInitialSupply] = useState('');
-  const [maxSupply, setMaxSupply] = useState('');
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.ethereum) {
+      setWeb3Provider(new BrowserProvider(window.ethereum));
+    }
+  }, []);
 
-  // Governance configuration
-  const [useCustomConfig, setUseCustomConfig] = useState(false);
-  const [governanceConfig, setGovernanceConfig] = useState<GovernanceConfig>({
-    votingDelay: 1,
-    votingPeriod: 7,
-    proposalThreshold: '100000',
-    quorumNumerator: 4,
-    timelockDelay: 2
+  // Listen for TokenCreated events
+  const contractAddress = chainId && FACTORY_ADDRESSES.v3[chainId] 
+    ? getAddress(FACTORY_ADDRESSES.v3[chainId]) 
+    : undefined;
+
+  useWatchContractEvent({
+    address: contractAddress,
+    abi: TokenFactoryV3ABI.abi as unknown as any,
+    eventName: 'TokenCreated',
+    enabled: !!contractAddress,
+    onLogs(logs) {
+      const log = logs[0];
+      const event = log as unknown as { args: TokenCreatedEvent };
+      if (event?.args?.token) {
+        setSuccessInfo({ tokenAddress: event.args.token });
+        toast({
+          title: "Success",
+          description: "Token created successfully"
+        });
+      }
+    },
   });
 
-  const showToast = (type: 'success' | 'error', message: string, link?: string) => {
-    toast({
-      variant: type === 'error' ? 'destructive' : 'default',
-      title: type === 'error' ? 'Error' : 'Success',
-      description: (
-        <div>
-          {message}
-          {link && (
-            <a href={link} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-700 ml-2">
-              View Transaction
-            </a>
-          )}
-        </div>
-      ),
-    });
-  };
+  const form = useForm({
+    resolver: zodResolver(formSchema),
+    defaultValues
+  });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!isConnected || !chainId || !externalProvider || !address) {
-      showToast('error', 'Please connect your wallet first');
+  const onSubmit = async (data: z.infer<typeof formSchema>) => {
+    if (!isConnected) {
+      toast({
+        title: "Error",
+        description: "Please connect your wallet first",
+        variant: "destructive"
+      });
       return;
     }
 
+    setIsSubmitting(true);
     try {
-      setIsLoading(true);
-      console.log('Creating token with params:', {
-        name,
-        symbol,
-        initialSupply,
-        maxSupply,
-        governanceConfig
+      await createToken({
+        name: data.name,
+        symbol: data.symbol,
+        initialSupply: BigInt(data.initialSupply),
+        maxSupply: BigInt(data.maxSupply)
       });
-
-      const signer = await externalProvider.getSigner();
-      const factory = new Contract(address, TokenFactory_v3.abi, signer);
-
-      // Convert supply to wei
-      const initialSupplyWei = parseUnits(initialSupply, 18);
-      const maxSupplyWei = parseUnits(maxSupply, 18);
-      const proposalThresholdWei = parseUnits(governanceConfig.proposalThreshold, 18);
-
-      // Convert time periods to blocks (assuming 12 second block time)
-      const blocksPerDay = 7200; // 24 * 60 * 60 / 12
-      const votingDelayBlocks = governanceConfig.votingDelay * blocksPerDay;
-      const votingPeriodBlocks = governanceConfig.votingPeriod * blocksPerDay;
-      const timelockDelaySeconds = governanceConfig.timelockDelay * 24 * 60 * 60;
-
-      // Get deployment fee
-      const fee = await factory.deploymentFee();
-      console.log('Deployment fee:', formatUnits(fee, 18), 'ETH');
-
-      // Prepare governance config
-      const config = useCustomConfig ? {
-        votingDelay: votingDelayBlocks,
-        votingPeriod: votingPeriodBlocks,
-        proposalThreshold: proposalThresholdWei,
-        quorumNumerator: governanceConfig.quorumNumerator,
-        timelockDelay: timelockDelaySeconds
-      } : {
-        votingDelay: 0,
-        votingPeriod: 0,
-        proposalThreshold: 0,
-        quorumNumerator: 0,
-        timelockDelay: 0
-      };
-
-      showToast('success', 'Creating token...');
-
-      // Deploy token
-      const tx = await factory.createToken(
-        name,
-        symbol,
-        initialSupplyWei,
-        maxSupplyWei,
-        config,
-        { value: fee }
-      );
-
-      showToast('success', 'Transaction submitted, waiting for confirmation...');
-      console.log('Transaction submitted:', tx.hash);
-      
-      const receipt = await tx.wait();
-      console.log('Transaction confirmed:', receipt);
-
-      const event = receipt.logs.find(
-        (log: any) => log.fragment?.name === 'TokenCreated'
-      );
-
-      if (event) {
-        const tokenAddress = event.args[0];
-        const explorerUrl = getExplorerUrl(chainId, tokenAddress, 'token');
-        console.log('Token created at:', tokenAddress);
-        console.log('Explorer URL:', explorerUrl);
-
-        showToast(
-          'success',
-          'Token deployed successfully!',
-          explorerUrl
-        );
-      } else {
-        console.error('TokenCreated event not found in logs');
-        showToast('error', 'Token created but event not found in logs');
-      }
-
-      // Reset form
-      setName('');
-      setSymbol('');
-      setInitialSupply('');
-      setMaxSupply('');
-      setUseCustomConfig(false);
-      setGovernanceConfig({
-        votingDelay: 1,
-        votingPeriod: 7,
-        proposalThreshold: '100000',
-        quorumNumerator: 4,
-        timelockDelay: 2
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message || "Failed to create token",
+        variant: "destructive"
       });
-    } catch (error: any) {
-      console.error('Error deploying token:', error);
-      showToast('error', error.message || 'Failed to deploy token');
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
 
-  if (!isConnected) {
-    return (
-      <Card className="p-6">
-        <h2 className="text-xl font-bold mb-4">Create Token (V3)</h2>
-        <p className="text-gray-400">Please connect your wallet to create a token.</p>
-      </Card>
-    );
-  }
-
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <Card className="p-6">
-        <h2 className="text-xl font-bold mb-4">Create Token (V3)</h2>
-        <p className="text-sm text-gray-400 mb-6">
-          Create a governance token with DAO features. This version includes voting, proposals, timelock, and treasury management.
+    <div className="space-y-1">
+      <Card className="p-2 bg-gray-800">
+        <h2 className="text-lg font-semibold mb-1 text-white">Create Token (V3)</h2>
+        <p className="text-xs text-white mb-1">
+          Create a basic token with standard ERC20 features.
         </p>
 
-        <form onSubmit={handleSubmit} className="form-compact">
-          {/* Basic Token Info */}
-          <div className="form-group">
-            <h3 className="text-lg font-semibold mb-4">Token Information</h3>
-            
-            <div className="form-group">
-              <Label htmlFor="name">Token Name</Label>
-              <Input
-                id="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. My Governance Token"
-                required
-              />
-            </div>
-
-            <div className="form-group">
-              <Label htmlFor="symbol">Token Symbol</Label>
-              <Input
-                id="symbol"
-                value={symbol}
-                onChange={(e) => setSymbol(e.target.value)}
-                placeholder="e.g. MGT"
-                required
-              />
-            </div>
-
-            <div className="form-group">
-              <Label htmlFor="initialSupply">Initial Supply</Label>
-              <Input
-                id="initialSupply"
-                type="number"
-                value={initialSupply}
-                onChange={(e) => setInitialSupply(e.target.value)}
-                placeholder="e.g. 1000000"
-                required
-              />
-              <p className="help-text">Each token has 18 decimals</p>
-            </div>
-
-            <div className="form-group">
-              <Label htmlFor="maxSupply">Maximum Supply</Label>
-              <Input
-                id="maxSupply"
-                type="number"
-                value={maxSupply}
-                onChange={(e) => setMaxSupply(e.target.value)}
-                placeholder="e.g. 10000000"
-                required
-              />
-            </div>
-          </div>
-
-          {/* Governance Configuration */}
-          <div className="form-group mt-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Governance Configuration</h3>
-              <div className="flex items-center space-x-2">
-                <Switch
-                  checked={useCustomConfig}
-                  onCheckedChange={setUseCustomConfig}
-                  id="custom-config"
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-2">
+              <div className="form-group">
+                <label htmlFor="name" className="text-xs font-medium text-white">Token Name</label>
+                <input
+                  id="name"
+                  {...form.register('name')}
+                  placeholder="My Token"
+                  className="mt-1 w-full px-2 py-1.5 text-sm bg-background-primary rounded border border-border text-white"
+                  required
                 />
-                <Label htmlFor="custom-config" className="text-sm">Custom Configuration</Label>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="symbol" className="text-xs font-medium text-white">Token Symbol</label>
+                <input
+                  id="symbol"
+                  {...form.register('symbol')}
+                  placeholder="TKN"
+                  className="mt-1 w-full px-2 py-1.5 text-sm bg-background-primary rounded border border-border text-white"
+                  required
+                />
               </div>
             </div>
 
-            {useCustomConfig && (
-              <div className="space-y-4">
-                <div className="form-group">
-                  <Label className="mb-2">
-                    Voting Delay: {governanceConfig.votingDelay} days
-                  </Label>
-                  <Slider
-                    value={[governanceConfig.votingDelay]}
-                    onValueChange={([value]: [number]) => setGovernanceConfig({
-                      ...governanceConfig,
-                      votingDelay: value
-                    })}
-                    min={1}
-                    max={7}
-                    step={1}
-                    className="my-2"
-                  />
-                </div>
-
-                <div className="form-group">
-                  <Label className="mb-2">
-                    Voting Period: {governanceConfig.votingPeriod} days
-                  </Label>
-                  <Slider
-                    value={[governanceConfig.votingPeriod]}
-                    onValueChange={([value]: [number]) => setGovernanceConfig({
-                      ...governanceConfig,
-                      votingPeriod: value
-                    })}
-                    min={1}
-                    max={14}
-                    step={1}
-                    className="my-2"
-                  />
-                </div>
-
-                <div className="form-group">
-                  <Label htmlFor="proposalThreshold">
-                    Proposal Threshold (tokens)
-                  </Label>
-                  <Input
-                    id="proposalThreshold"
-                    type="number"
-                    value={governanceConfig.proposalThreshold}
-                    onChange={(e) => setGovernanceConfig({
-                      ...governanceConfig,
-                      proposalThreshold: e.target.value
-                    })}
-                    placeholder="e.g. 100000"
-                  />
-                </div>
-
-                <div className="form-group">
-                  <Label className="mb-2">
-                    Quorum: {governanceConfig.quorumNumerator}%
-                  </Label>
-                  <Slider
-                    value={[governanceConfig.quorumNumerator]}
-                    onValueChange={([value]: [number]) => setGovernanceConfig({
-                      ...governanceConfig,
-                      quorumNumerator: value
-                    })}
-                    min={1}
-                    max={10}
-                    step={1}
-                    className="my-2"
-                  />
-                </div>
-
-                <div className="form-group">
-                  <Label className="mb-2">
-                    Timelock Delay: {governanceConfig.timelockDelay} days
-                  </Label>
-                  <Slider
-                    value={[governanceConfig.timelockDelay]}
-                    onValueChange={([value]: [number]) => setGovernanceConfig({
-                      ...governanceConfig,
-                      timelockDelay: value
-                    })}
-                    min={1}
-                    max={7}
-                    step={1}
-                    className="my-2"
-                  />
-                </div>
+            <div className="space-y-2">
+              <div className="form-group">
+                <label htmlFor="initialSupply" className="text-xs font-medium text-white">Initial Supply</label>
+                <input
+                  id="initialSupply"
+                  {...form.register('initialSupply')}
+                  placeholder="1000000"
+                  className="mt-1 w-full px-2 py-1.5 text-sm bg-background-primary rounded border border-border text-white"
+                  required
+                />
               </div>
-            )}
+
+              <div className="form-group">
+                <label htmlFor="maxSupply" className="text-xs font-medium text-white">Maximum Supply</label>
+                <input
+                  id="maxSupply"
+                  {...form.register('maxSupply')}
+                  placeholder="2000000"
+                  className="mt-1 w-full px-2 py-1.5 text-sm bg-background-primary rounded border border-border text-white"
+                  required
+                />
+              </div>
+            </div>
           </div>
 
-          <Button
-            type="submit"
-            className="w-full mt-6"
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <>
-                <Spinner className="w-4 h-4 mr-2" />
-                Deploying...
-              </>
-            ) : (
-              'Deploy Token'
-            )}
-          </Button>
+          {error && (
+            <div className="text-red-900 text-sm">{error}</div>
+          )}
+
+          <div className="flex justify-end items-center space-x-2">
+            <div className="flex items-center">
+              <InfoIcon content="Deployment fee will be charged in ETH. Make sure you have enough ETH to cover the fee and gas costs." />
+            </div>
+            <button
+              type="submit"
+              disabled={!isConnected || isSubmitting}
+              className="px-4 py-1.5 text-sm font-medium rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSubmitting ? (
+                <>
+                  <Spinner className="mr-2" />
+                  Creating...
+                </>
+              ) : !isConnected ? (
+                'Connect Wallet to Deploy'
+              ) : (
+                'Create Token'
+              )}
+            </button>
+          </div>
         </form>
       </Card>
 
       {/* Preview Section */}
-      <Card className="p-6">
-        <h3 className="text-lg font-semibold mb-4">Token Preview</h3>
-        <div className="space-y-4">
-          <div className="p-4 bg-gray-800 rounded-lg">
-            <h4 className="text-sm font-medium text-gray-300 mb-2">Token Details</h4>
-            <div className="space-y-2">
-              <p className="text-sm"><span className="text-gray-400">Name:</span> {name || 'Not set'}</p>
-              <p className="text-sm"><span className="text-gray-400">Symbol:</span> {symbol || 'Not set'}</p>
-              <p className="text-sm"><span className="text-gray-400">Initial Supply:</span> {initialSupply || '0'}</p>
-              <p className="text-sm"><span className="text-gray-400">Max Supply:</span> {maxSupply || '0'}</p>
-            </div>
-          </div>
-
-          {useCustomConfig && (
-            <div className="p-4 bg-gray-800 rounded-lg">
-              <h4 className="text-sm font-medium text-gray-300 mb-2">Governance Settings</h4>
-              <div className="space-y-2">
-                <p className="text-sm"><span className="text-gray-400">Voting Delay:</span> {governanceConfig.votingDelay} days</p>
-                <p className="text-sm"><span className="text-gray-400">Voting Period:</span> {governanceConfig.votingPeriod} days</p>
-                <p className="text-sm"><span className="text-gray-400">Proposal Threshold:</span> {governanceConfig.proposalThreshold} tokens</p>
-                <p className="text-sm"><span className="text-gray-400">Quorum:</span> {governanceConfig.quorumNumerator}%</p>
-                <p className="text-sm"><span className="text-gray-400">Timelock Delay:</span> {governanceConfig.timelockDelay} days</p>
-              </div>
-            </div>
-          )}
-        </div>
-      </Card>
+      <div className="space-y-4">
+        <TokenPreview
+          name={form.watch('name')}
+          symbol={form.watch('symbol')}
+          initialSupply={form.watch('initialSupply')}
+          maxSupply={form.watch('maxSupply')}
+        />
+        
+        <Card className="p-2 bg-gray-900">
+          <h2 className="text-lg font-semibold mb-2 text-white">Token Creator Admin Panel</h2>
+          <TokenAdminV3
+            isConnected={isConnected}
+            address={successInfo?.tokenAddress}
+            provider={web3Provider}
+          />
+        </Card>
+      </div>
     </div>
   );
 } 

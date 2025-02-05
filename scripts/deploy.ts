@@ -78,6 +78,42 @@ async function deployV2() {
   await saveDeployment(networkName, version, address, templateAddress);
 }
 
+async function deployV3() {
+  const hre = require('hardhat');
+  const { network } = hre;
+  const networkName = network.name;
+  const version = 'v3.0.0';
+  
+  console.log(`Deploying TokenFactory_v3.0.0 to ${networkName}...`);
+
+  // First deploy the TokenTemplate_v3.0.0
+  console.log('Deploying TokenTemplate_v3.0.0...');
+  const { ethers } = require('hardhat');
+  const TokenTemplate = await ethers.getContractFactory("TokenTemplate_v3_0_0");
+  const template = await TokenTemplate.deploy();
+  await template.waitForDeployment();
+  const templateAddress = await template.getAddress();
+  console.log(`TokenTemplate_v3.0.0 deployed to: ${templateAddress}`);
+
+  // Deploy the factory with template implementation
+  console.log('Deploying TokenFactory_v3.0.0...');
+  const TokenFactory = await ethers.getContractFactory("TokenFactory_v3_0_0");
+  const factory = await TokenFactory.deploy(templateAddress);
+  await factory.waitForDeployment();
+
+  const address = await factory.getAddress();
+  console.log(`TokenFactory_v3.0.0 deployed to: ${address}`);
+
+  // Initialize the factory with deployment fee
+  console.log('Initializing factory...');
+  const defaultFee = ethers.parseEther("0.0001"); // 0.0001 ETH default fee
+  const tx = await factory.initialize(defaultFee);
+  await tx.wait();
+  console.log(`Factory initialized with default fee: ${ethers.formatEther(defaultFee)} ETH`);
+
+  await saveDeployment(networkName, version, address, templateAddress);
+}
+
 async function saveDeployment(networkName: string, version: string, factoryAddress: string, templateAddress: string) {
   // Save deployment info
   const deploymentPath = path.join(__dirname, '..', 'deployments', version, networkName);
@@ -102,7 +138,13 @@ async function saveDeployment(networkName: string, version: string, factoryAddre
   );
 
   // Update .env.local with the new addresses
-  const versionSuffix = version === 'v1' ? '_V1' : '_V2';
+  let versionSuffix = '_V1';
+  if (version.startsWith('v2')) {
+    versionSuffix = '_V2';
+  } else if (version.startsWith('v3')) {
+    versionSuffix = '_V3';
+  }
+  
   const factoryEnvKey = `NEXT_PUBLIC_${networkName.toUpperCase().replace(/-/g, '_')}_FACTORY_ADDRESS${versionSuffix}`;
   const templateEnvKey = `NEXT_PUBLIC_${networkName.toUpperCase().replace(/-/g, '_')}_TOKEN_TEMPLATE_ADDRESS${versionSuffix}`;
   const envPath = path.join(__dirname, '..', '.env.local');
@@ -270,8 +312,8 @@ async function deployAndVerify(version: string) {
 }
 
 async function main() {
-  // Deploy v2.1.0 with proper initialization
-  await deployAndVerify('v2.1.0');
+  // Deploy v3.0.0 with proper initialization
+  await deployV3();
 }
 
 main()

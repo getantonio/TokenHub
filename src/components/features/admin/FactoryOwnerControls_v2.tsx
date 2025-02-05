@@ -8,17 +8,13 @@ import { useToast } from '@/components/ui/toast/use-toast';
 import { Button } from '@components/ui/button';
 import { Card } from '@components/ui/card';
 
-interface FactoryOwnerControlsProps {
-  version: 'v1' | 'v2';
+interface Props {
   isConnected: boolean;
+  address?: string;
+  provider: BrowserProvider | null;
 }
 
-interface ToastMessage {
-  type: 'success' | 'error';
-  message: string;
-}
-
-export default function FactoryOwnerControls({ version, isConnected }: FactoryOwnerControlsProps) {
+export default function FactoryOwnerControls_v2({ isConnected, address, provider: externalProvider }: Props) {
   const { chainId } = useNetwork();
   const [isOwner, setIsOwner] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -32,7 +28,7 @@ export default function FactoryOwnerControls({ version, isConnected }: FactoryOw
   useEffect(() => {
     checkOwnership();
     loadFees();
-  }, [chainId, isConnected, version]);
+  }, [chainId, isConnected, address]);
 
   const showToast = (type: 'success' | 'error', message: string) => {
     toast({
@@ -43,17 +39,12 @@ export default function FactoryOwnerControls({ version, isConnected }: FactoryOw
   };
 
   async function checkOwnership() {
-    if (!window.ethereum || !isConnected || !chainId) return;
+    if (!externalProvider || !isConnected || !chainId || !address) return;
 
     try {
-      const provider = new BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
+      const signer = await externalProvider.getSigner();
       const userAddress = await signer.getAddress();
-      
-      const factoryAddress = contractAddresses[chainId]?.factoryAddressV2;
-      if (!factoryAddress) return;
-
-      const factory = new Contract(factoryAddress, TokenFactory_v2.abi, provider);
+      const factory = new Contract(address, TokenFactory_v2.abi, externalProvider);
       const owner = await factory.owner();
       setIsOwner(owner.toLowerCase() === userAddress.toLowerCase());
     } catch (error) {
@@ -62,19 +53,15 @@ export default function FactoryOwnerControls({ version, isConnected }: FactoryOw
   }
 
   async function loadFees() {
-    if (!window.ethereum || !isConnected || !chainId) return;
+    if (!externalProvider || !isConnected || !chainId || !address) return;
 
     try {
-      const provider = new BrowserProvider(window.ethereum);
-      const factoryAddress = contractAddresses[chainId]?.factoryAddressV2;
-      if (!factoryAddress) return;
-
-      const factory = new Contract(factoryAddress, TokenFactory_v2.abi, provider);
+      const factory = new Contract(address, TokenFactory_v2.abi, externalProvider);
 
       const fee = await factory.deploymentFee();
       setCurrentFee(formatUnits(fee, 'ether'));
 
-      const balance = await provider.getBalance(factoryAddress);
+      const balance = await externalProvider.getBalance(address);
       setAccumulatedFees(formatUnits(balance, 'ether'));
     } catch (error) {
       console.error('Error loading fees:', error);
@@ -82,17 +69,12 @@ export default function FactoryOwnerControls({ version, isConnected }: FactoryOw
   }
 
   async function updateDeploymentFee() {
-    if (!window.ethereum || !isConnected || !chainId) return;
+    if (!externalProvider || !isConnected || !chainId || !address) return;
 
     try {
       setLoading(true);
-      const provider = new BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      
-      const factoryAddress = contractAddresses[chainId]?.factoryAddressV2;
-      if (!factoryAddress) throw new Error('Factory not deployed on this network');
-
-      const factory = new Contract(factoryAddress, TokenFactory_v2.abi, signer);
+      const signer = await externalProvider.getSigner();
+      const factory = new Contract(address, TokenFactory_v2.abi, signer);
 
       const tx = await factory.setDeploymentFee(parseUnits(newFee, 'ether'));
       showToast('success', 'Updating deployment fee...');
@@ -110,17 +92,12 @@ export default function FactoryOwnerControls({ version, isConnected }: FactoryOw
   }
 
   async function withdrawFees() {
-    if (!window.ethereum || !isConnected || !chainId) return;
+    if (!externalProvider || !isConnected || !chainId || !address) return;
 
     try {
       setLoading(true);
-      const provider = new BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      
-      const factoryAddress = contractAddresses[chainId]?.factoryAddressV2;
-      if (!factoryAddress) throw new Error('Factory not deployed on this network');
-
-      const factory = new Contract(factoryAddress, TokenFactory_v2.abi, signer);
+      const signer = await externalProvider.getSigner();
+      const factory = new Contract(address, TokenFactory_v2.abi, signer);
 
       const tx = await factory.withdrawFees();
       showToast('success', 'Withdrawing fees...');
@@ -137,17 +114,12 @@ export default function FactoryOwnerControls({ version, isConnected }: FactoryOw
   }
 
   async function setAddressDiscount() {
-    if (!window.ethereum || !isConnected || !chainId) return;
+    if (!externalProvider || !isConnected || !chainId || !address) return;
 
     try {
       setLoading(true);
-      const provider = new BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      
-      const factoryAddress = contractAddresses[chainId]?.factoryAddressV2;
-      if (!factoryAddress) throw new Error('Factory not deployed on this network');
-
-      const factory = new Contract(factoryAddress, TokenFactory_v2.abi, signer);
+      const signer = await externalProvider.getSigner();
+      const factory = new Contract(address, TokenFactory_v2.abi, signer);
 
       // Calculate the discounted fee amount
       const currentFeeWei = await factory.deploymentFee();
@@ -173,17 +145,16 @@ export default function FactoryOwnerControls({ version, isConnected }: FactoryOw
 
   return (
     <div className="form-card">
-      <div className="space-y-2">
-        <div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            <div>
-              <p className="text-xs text-text-secondary">Current Fee</p>
-              <p className="text-sm font-medium text-text-primary">{currentFee} ETH</p>
-            </div>
-            <div>
-              <p className="text-xs text-text-secondary">Accumulated</p>
-              <p className="text-sm font-medium text-text-primary">{accumulatedFees} ETH</p>
-            </div>
+      <h2 className="text-lg font-semibold text-text-primary mb-4">Factory Controls (V2)</h2>
+      <div className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          <div>
+            <p className="text-xs text-text-secondary">Current Fee</p>
+            <p className="text-sm font-medium text-text-primary">{currentFee} ETH</p>
+          </div>
+          <div>
+            <p className="text-xs text-text-secondary">Accumulated</p>
+            <p className="text-sm font-medium text-text-primary">{accumulatedFees} ETH</p>
           </div>
         </div>
 

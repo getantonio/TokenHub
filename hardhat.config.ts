@@ -2,26 +2,28 @@ require("@nomicfoundation/hardhat-toolbox");
 require("@nomicfoundation/hardhat-verify");
 require("dotenv").config();
 
+const PRIVATE_KEY = process.env.PRIVATE_KEY || "";
+
 const config = {
   networks: {
     polygonAmoy: {
       url: process.env.POLYGON_AMOY_RPC_URL || "https://rpc.amoy.testnet.polygon.com",
-      accounts: [],
+      accounts: [PRIVATE_KEY],
       chainId: 80002,
     },
     sepolia: {
       url: process.env.SEPOLIA_RPC_URL || "https://rpc.sepolia.org",
-      accounts: [],
+      accounts: [PRIVATE_KEY],
       chainId: 11155111,
     },
     arbitrumSepolia: {
       url: process.env.ARBITRUM_SEPOLIA_RPC_URL || "https://sepolia-rollup.arbitrum.io/rpc",
-      accounts: [],
+      accounts: [PRIVATE_KEY],
       chainId: 421614,
     },
     optimismSepolia: {
       url: process.env.OP_SEPOLIA_RPC_URL || "https://sepolia.optimism.io",
-      accounts: [],
+      accounts: [PRIVATE_KEY],
       chainId: 11155420,
     }
   },
@@ -41,7 +43,14 @@ const config = {
           viaIR: true,
           optimizer: {
             enabled: true,
-            runs: 200
+            runs: 1,
+            details: {
+              yul: true,
+              yulDetails: {
+                stackAllocation: true,
+                optimizerSteps: "dhfoDgvulfnTUtnIf"
+              }
+            }
           }
         }
       },
@@ -51,7 +60,14 @@ const config = {
           viaIR: true,
           optimizer: {
             enabled: true,
-            runs: 200
+            runs: 1,
+            details: {
+              yul: true,
+              yulDetails: {
+                stackAllocation: true,
+                optimizerSteps: "dhfoDgvulfnTUtnIf"
+              }
+            }
           }
         }
       },
@@ -61,7 +77,14 @@ const config = {
           viaIR: true,
           optimizer: {
             enabled: true,
-            runs: 200
+            runs: 1,
+            details: {
+              yul: true,
+              yulDetails: {
+                stackAllocation: true,
+                optimizerSteps: "dhfoDgvulfnTUtnIf"
+              }
+            }
           }
         }
       }

@@ -1,13 +1,9 @@
 import { useState, useEffect } from 'react';
 import { BrowserProvider, Contract, formatUnits, parseUnits } from 'ethers';
 import { useNetwork } from '@contexts/NetworkContext';
-import TokenFactory_v1 from '@contracts/abi/TokenFactory_v1.json';
-import TokenFactory_v2 from '@contracts/abi/TokenFactory_v2.1.0.json';
-import { contractAddresses } from '@config/contracts';
+import TokenFactory_v3 from '@contracts/abi/TokenFactory_v3.0.0.json';
 import { Spinner } from '@components/ui/Spinner';
 import { useToast } from '@/components/ui/toast/use-toast';
-import { Button } from '@components/ui/button';
-import { Card } from '@components/ui/card';
 
 interface Props {
   isConnected: boolean;
@@ -15,12 +11,7 @@ interface Props {
   provider: BrowserProvider | null;
 }
 
-interface ToastMessage {
-  type: 'success' | 'error';
-  message: string;
-}
-
-export default function FactoryOwnerControls_v1({ isConnected, address, provider: externalProvider }: Props) {
+export default function FactoryOwnerControls_v3({ isConnected, address, provider: externalProvider }: Props) {
   const { chainId } = useNetwork();
   const [isOwner, setIsOwner] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -34,7 +25,7 @@ export default function FactoryOwnerControls_v1({ isConnected, address, provider
   useEffect(() => {
     checkOwnership();
     loadFees();
-  }, [chainId, isConnected]);
+  }, [chainId, isConnected, address]);
 
   const showToast = (type: 'success' | 'error', message: string) => {
     toast({
@@ -45,21 +36,12 @@ export default function FactoryOwnerControls_v1({ isConnected, address, provider
   };
 
   async function checkOwnership() {
-    if (!externalProvider || !isConnected || !chainId) return;
+    if (!externalProvider || !isConnected || !chainId || !address) return;
 
     try {
       const signer = await externalProvider.getSigner();
       const userAddress = await signer.getAddress();
-      
-      const factoryAddress = contractAddresses[chainId]['factoryAddress'];
-      if (!factoryAddress) return;
-
-      const factory = new Contract(
-        factoryAddress,
-        TokenFactory_v1.abi,
-        externalProvider
-      );
-
+      const factory = new Contract(address, TokenFactory_v3.abi, externalProvider);
       const owner = await factory.owner();
       setIsOwner(owner.toLowerCase() === userAddress.toLowerCase());
     } catch (error) {
@@ -68,22 +50,15 @@ export default function FactoryOwnerControls_v1({ isConnected, address, provider
   }
 
   async function loadFees() {
-    if (!externalProvider || !isConnected || !chainId) return;
+    if (!externalProvider || !isConnected || !chainId || !address) return;
 
     try {
-      const factoryAddress = contractAddresses[chainId]['factoryAddress'];
-      if (!factoryAddress) return;
-
-      const factory = new Contract(
-        factoryAddress,
-        TokenFactory_v1.abi,
-        externalProvider
-      );
+      const factory = new Contract(address, TokenFactory_v3.abi, externalProvider);
 
       const fee = await factory.deploymentFee();
       setCurrentFee(formatUnits(fee, 'ether'));
 
-      const balance = await externalProvider.getBalance(factoryAddress);
+      const balance = await externalProvider.getBalance(address);
       setAccumulatedFees(formatUnits(balance, 'ether'));
     } catch (error) {
       console.error('Error loading fees:', error);
@@ -91,20 +66,12 @@ export default function FactoryOwnerControls_v1({ isConnected, address, provider
   }
 
   async function updateDeploymentFee() {
-    if (!externalProvider || !isConnected || !chainId) return;
+    if (!externalProvider || !isConnected || !chainId || !address) return;
 
     try {
       setLoading(true);
       const signer = await externalProvider.getSigner();
-      
-      const factoryAddress = contractAddresses[chainId]['factoryAddress'];
-      if (!factoryAddress) throw new Error('Factory not deployed on this network');
-
-      const factory = new Contract(
-        factoryAddress,
-        TokenFactory_v1.abi,
-        signer
-      );
+      const factory = new Contract(address, TokenFactory_v3.abi, signer);
 
       const tx = await factory.setDeploymentFee(parseUnits(newFee, 'ether'));
       showToast('success', 'Updating deployment fee...');
@@ -122,20 +89,12 @@ export default function FactoryOwnerControls_v1({ isConnected, address, provider
   }
 
   async function withdrawFees() {
-    if (!externalProvider || !isConnected || !chainId) return;
+    if (!externalProvider || !isConnected || !chainId || !address) return;
 
     try {
       setLoading(true);
       const signer = await externalProvider.getSigner();
-      
-      const factoryAddress = contractAddresses[chainId]['factoryAddress'];
-      if (!factoryAddress) throw new Error('Factory not deployed on this network');
-
-      const factory = new Contract(
-        factoryAddress,
-        TokenFactory_v1.abi,
-        signer
-      );
+      const factory = new Contract(address, TokenFactory_v3.abi, signer);
 
       const tx = await factory.withdrawFees();
       showToast('success', 'Withdrawing fees...');
@@ -152,28 +111,18 @@ export default function FactoryOwnerControls_v1({ isConnected, address, provider
   }
 
   async function setAddressDiscount() {
-    if (!externalProvider || !isConnected || !chainId) return;
+    if (!externalProvider || !isConnected || !chainId || !address) return;
 
     try {
       setLoading(true);
       const signer = await externalProvider.getSigner();
-      
-      const factoryAddress = contractAddresses[chainId]['factoryAddress'];
-      if (!factoryAddress) throw new Error('Factory not deployed on this network');
-
-      const factory = new Contract(
-        factoryAddress,
-        TokenFactory_v1.abi,
-        signer
-      );
+      const factory = new Contract(address, TokenFactory_v3.abi, signer);
 
       // Calculate the discounted fee amount
       const currentFeeWei = await factory.deploymentFee();
       const discountedFee = currentFeeWei * BigInt(Number(discountPercentage)) / BigInt(100);
       
-      // Use setDeploymentFee for v1 and setCustomDeploymentFee for v2
-      const tx = await factory.setDeploymentFee(discountedFee);
-        
+      const tx = await factory.setCustomDeploymentFee(discountAddress, discountedFee);
       showToast('success', 'Setting address discount...');
       
       await tx.wait();
@@ -193,17 +142,16 @@ export default function FactoryOwnerControls_v1({ isConnected, address, provider
 
   return (
     <div className="form-card">
-      <div className="space-y-2">
-        <div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            <div>
-              <p className="text-xs text-text-secondary">Current Fee</p>
-              <p className="text-sm font-medium text-text-primary">{currentFee} ETH</p>
-            </div>
-            <div>
-              <p className="text-xs text-text-secondary">Accumulated</p>
-              <p className="text-sm font-medium text-text-primary">{accumulatedFees} ETH</p>
-            </div>
+      <h2 className="text-lg font-semibold text-text-primary mb-4">Factory Controls (V3)</h2>
+      <div className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          <div>
+            <p className="text-xs text-text-secondary">Current Fee</p>
+            <p className="text-sm font-medium text-text-primary">{currentFee} ETH</p>
+          </div>
+          <div>
+            <p className="text-xs text-text-secondary">Accumulated</p>
+            <p className="text-sm font-medium text-text-primary">{accumulatedFees} ETH</p>
           </div>
         </div>
 

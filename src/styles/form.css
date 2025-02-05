@@ -15,28 +15,27 @@
 
 /* Form Inputs */
 .form-input {
-  @apply w-full px-2 py-1.5 text-sm rounded bg-background-primary border border-border 
+  @apply w-full px-2 py-1.5 text-sm rounded bg-gray-900 border border-border text-white
   hover:border-border-hover focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary
-  text-text-primary placeholder-text-secondary transition-colors duration-200;
+  placeholder-text-secondary transition-colors duration-200;
 }
 
 /* Form Checkboxes */
 .form-checkbox {
-  @apply h-4 w-4 rounded border-border bg-background-primary text-primary 
+  @apply h-4 w-4 rounded border-border bg-gray-900 text-primary 
   focus:ring-primary focus:ring-1 focus:ring-offset-0;
 }
 
 /* Form Radio Buttons */
 .form-radio {
-  @apply h-4 w-4 border-border bg-background-primary text-primary 
+  @apply h-4 w-4 border-border bg-gray-900 text-primary 
   focus:ring-primary focus:ring-1 focus:ring-offset-0;
 }
 
 /* Form Select */
 .form-select {
-  @apply w-full px-2 py-1.5 text-sm rounded bg-background-primary border border-border 
-  hover:border-border-hover focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary
-  text-text-primary;
+  @apply w-full px-2 py-1.5 text-sm rounded bg-gray-900 border border-border text-white
+  hover:border-border-hover focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary;
 }
 
 /* Form Buttons */

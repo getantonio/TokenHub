@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNetwork } from '@contexts/NetworkContext';
 import { NetworkIndicator } from '@components/common/NetworkIndicator';
-import TokenForm_v1 from '@components/features/token/TokenForm_v1';
+import TokenForm_V1 from '@/components/features/token/TokenForm_V1';
 import Head from 'next/head';
 import type { MetaMaskInpageProvider } from '@metamask/providers';
 
@@ -58,7 +58,7 @@ export default function V1Page() {
             <p className="text-gray-400">Create your own token with essential features like blacklisting and time locks.</p>
           </div>
 
-          <TokenForm_v1 isConnected={isConnected} />
+          <TokenForm_V1 isConnected={isConnected} />
         </div>
       </main>
     </div>
