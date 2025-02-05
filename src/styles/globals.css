@@ -60,15 +60,15 @@
 
 @layer components {
   .btn {
-    @apply px-4 py-2 rounded-md font-medium transition-colors duration-200;
+    @apply px-2 py-1 rounded-md font-medium transition-colors duration-200;
   }
   
   .btn-primary {
-    @apply bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500;
+    @apply bg-blue-600 text-white hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500;
   }
   
   .btn-secondary {
-    @apply bg-gray-800 text-white border border-gray-700 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500;
+    @apply bg-gray-800 text-white border border-gray-700 hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500;
   }
   
   .btn-success {
@@ -80,7 +80,7 @@
   }
   
   .form-input {
-    @apply mt-1 block w-full h-7 rounded-md border-gray-700 bg-gray-800 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500;
+    @apply mt-2 block w-full h-6 rounded-md border-gray-800 bg-gray-800 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500;
   }
   
   .form-label {
@@ -88,7 +88,7 @@
   }
   
   .card {
-    @apply bg-gray-800 p-6 rounded-lg shadow-lg hover:shadow-xl transition-shadow;
+    @apply bg-gray-800 p-1 rounded-lg shadow-lg hover:shadow-xl transition-shadow;
   }
 
   /* Animation classes for token cards */
@@ -105,7 +105,7 @@
   }
   
   .token-card-exit-active {
-    @apply -translate-y-2 opacity-0;
+    @apply -translate-y-1 opacity-0;
   }
 
   .btn-blue {
@@ -113,17 +113,17 @@
   }
 
   .btn-blue-outline {
-    @apply border border-blue-500 text-blue-500 hover:bg-blue-500 hover:text-white font-medium py-1.5 px-4 rounded text-sm transition-colors duration-200;
+    @apply border border-blue-500 text-blue-500 hover:bg-blue-100 hover:text-white font-medium py-1.5 px-4 rounded text-sm transition-colors duration-200;
   }
 
   .btn-small {
-    @apply py-1 px-3 text-xs;
+    @apply py-1 px-2 text-xs;
   }
 }
 
 /* Form Styles */
 .form-compact {
-  @apply space-y-4;
+  @apply space-y-1;
 }
 
 .form-compact .form-group {
@@ -137,11 +137,11 @@
 .form-compact input,
 .form-compact select,
 .form-compact textarea {
-  @apply text-sm p-2 rounded-md bg-gray-800 border border-gray-700 text-white;
+  @apply text-sm p-2 rounded-md bg-gray-900 border border-gray-800 text-white;
 }
 
 .form-compact button {
-  @apply text-sm px-4 py-2 rounded-md;
+  @apply text-sm px-4 py-1 rounded-md;
 }
 
 .form-compact .help-text {
@@ -150,11 +150,11 @@
 
 /* Toast Styles */
 .toast-container {
-  @apply fixed top-4 right-4 z-50;
+  @apply fixed top-2 right-4 z-50;
 }
 
 .toast {
-  @apply bg-gray-800 text-white p-4 rounded-lg shadow-lg mb-2;
+  @apply bg-gray-800 text-white p-1 rounded-lg shadow-lg mb-2;
 }
 
 .toast-success {

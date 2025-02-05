@@ -20,7 +20,12 @@ const formSchema = z.object({
   name: z.string().min(1, 'Token name is required'),
   symbol: z.string().min(1, 'Token symbol is required'),
   initialSupply: z.string().min(1, 'Initial supply is required'),
-  maxSupply: z.string().min(1, 'Max supply is required')
+  maxSupply: z.string().min(1, 'Max supply is required'),
+  enableBlacklist: z.boolean().default(false),
+  enableTimeLock: z.boolean().default(false),
+  vestingAmounts: z.array(z.string()).default([]),
+  vestingPeriods: z.array(z.string()).default([]),
+  beneficiaries: z.array(z.string()).default([])
 });
 
 interface TokenFormV3Props {
@@ -41,7 +46,12 @@ const defaultValues = {
   name: 'Test Token',
   symbol: 'TEST',
   initialSupply: '1000000',
-  maxSupply: '2000000'
+  maxSupply: '2000000',
+  enableBlacklist: false,
+  enableTimeLock: false,
+  vestingAmounts: [''],
+  vestingPeriods: [''],
+  beneficiaries: ['']
 };
 
 export function TokenForm_V3({ isConnected }: TokenFormV3Props) {
@@ -102,7 +112,12 @@ export function TokenForm_V3({ isConnected }: TokenFormV3Props) {
         name: data.name,
         symbol: data.symbol,
         initialSupply: BigInt(data.initialSupply),
-        maxSupply: BigInt(data.maxSupply)
+        maxSupply: BigInt(data.maxSupply),
+        vestingAmounts: data.vestingAmounts.map(BigInt),
+        vestingPeriods: data.vestingPeriods.map(parseInt),
+        beneficiaries: data.beneficiaries,
+        enableBlacklist: data.enableBlacklist,
+        enableTimeLock: data.enableTimeLock
       });
     } catch (err: any) {
       toast({
@@ -117,22 +132,22 @@ export function TokenForm_V3({ isConnected }: TokenFormV3Props) {
 
   return (
     <div className="space-y-1">
-      <Card className="p-2 bg-gray-800">
+      <Card className="p-1 bg-gray-800">
         <h2 className="text-lg font-semibold mb-1 text-white">Create Token (V3)</h2>
         <p className="text-xs text-white mb-1">
-          Create a basic token with standard ERC20 features.
+          Create a token with advanced features including vesting schedules and multi-wallet distribution.
         </p>
 
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-2">
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-2">
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-1">
+          <div className="grid grid-cols-2 gap-1">
+            <div className="space-y-1">
               <div className="form-group">
                 <label htmlFor="name" className="text-xs font-medium text-white">Token Name</label>
                 <input
                   id="name"
                   {...form.register('name')}
                   placeholder="My Token"
-                  className="mt-1 w-full px-2 py-1.5 text-sm bg-background-primary rounded border border-border text-white"
+                  className="mt-1 w-full px-2 py-1 text-sm bg-background-primary rounded border border-border text-white"
                   required
                 />
               </div>
@@ -143,20 +158,20 @@ export function TokenForm_V3({ isConnected }: TokenFormV3Props) {
                   id="symbol"
                   {...form.register('symbol')}
                   placeholder="TKN"
-                  className="mt-1 w-full px-2 py-1.5 text-sm bg-background-primary rounded border border-border text-white"
+                  className="mt-1 w-full px-2 py-1 text-sm bg-background-primary rounded border border-border text-white"
                   required
                 />
               </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-1">
               <div className="form-group">
                 <label htmlFor="initialSupply" className="text-xs font-medium text-white">Initial Supply</label>
                 <input
                   id="initialSupply"
                   {...form.register('initialSupply')}
                   placeholder="1000000"
-                  className="mt-1 w-full px-2 py-1.5 text-sm bg-background-primary rounded border border-border text-white"
+                  className="mt-1 w-full px-2 py-1 text-sm bg-background-primary rounded border border-border text-white"
                   required
                 />
               </div>
@@ -167,15 +182,89 @@ export function TokenForm_V3({ isConnected }: TokenFormV3Props) {
                   id="maxSupply"
                   {...form.register('maxSupply')}
                   placeholder="2000000"
-                  className="mt-1 w-full px-2 py-1.5 text-sm bg-background-primary rounded border border-border text-white"
+                  className="mt-1 w-full px-2 py-1 text-sm bg-background-primary rounded border border-border text-white"
                   required
                 />
               </div>
             </div>
           </div>
 
+          {/* Token Features */}
+          <div className="form-card">
+            <h3 className="form-card-header">Token Features</h3>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="enableBlacklist"
+                  {...form.register('enableBlacklist')}
+                  className="form-checkbox"
+                />
+                <label htmlFor="enableBlacklist" className="text-xs text-white">Enable Blacklist</label>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="enableTimeLock"
+                  {...form.register('enableTimeLock')}
+                  className="form-checkbox"
+                />
+                <label htmlFor="enableTimeLock" className="text-xs text-white">Enable Time Lock</label>
+              </div>
+            </div>
+          </div>
+
+          {/* Vesting and Distribution */}
+          <div className="form-card">
+            <h3 className="form-card-header">Vesting & Distribution</h3>
+            <div className="space-y-2">
+              {form.watch('vestingAmounts').map((_, index) => (
+                <div key={index} className="grid grid-cols-3 gap-2">
+                  <div className="form-group">
+                    <label className="text-xs text-white">Vesting Amount</label>
+                    <input
+                      {...form.register(`vestingAmounts.${index}`)}
+                      placeholder="Amount"
+                      className="form-input"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="text-xs text-white">Vesting Period (days)</label>
+                    <input
+                      {...form.register(`vestingPeriods.${index}`)}
+                      placeholder="Days"
+                      className="form-input"
+                      type="number"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="text-xs text-white">Beneficiary Address</label>
+                    <input
+                      {...form.register(`beneficiaries.${index}`)}
+                      placeholder="0x..."
+                      className="form-input"
+                    />
+                  </div>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  const current = form.getValues();
+                  form.setValue('vestingAmounts', [...current.vestingAmounts, '']);
+                  form.setValue('vestingPeriods', [...current.vestingPeriods, '']);
+                  form.setValue('beneficiaries', [...current.beneficiaries, '']);
+                }}
+                className="btn btn-secondary btn-small"
+              >
+                Add Vesting Schedule
+              </button>
+            </div>
+          </div>
+
           {error && (
-            <div className="text-red-900 text-sm">{error}</div>
+            <div className="text-red-800 text-sm">{error}</div>
           )}
 
           <div className="flex justify-end items-center space-x-2">
@@ -185,7 +274,7 @@ export function TokenForm_V3({ isConnected }: TokenFormV3Props) {
             <button
               type="submit"
               disabled={!isConnected || isSubmitting}
-              className="px-4 py-1.5 text-sm font-medium rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-1 text-sm font-medium rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? (
                 <>
@@ -203,7 +292,7 @@ export function TokenForm_V3({ isConnected }: TokenFormV3Props) {
       </Card>
 
       {/* Preview Section */}
-      <div className="space-y-4">
+      <div className="space-y-1">
         <TokenPreview
           name={form.watch('name')}
           symbol={form.watch('symbol')}
@@ -211,7 +300,7 @@ export function TokenForm_V3({ isConnected }: TokenFormV3Props) {
           maxSupply={form.watch('maxSupply')}
         />
         
-        <Card className="p-2 bg-gray-900">
+        <Card className="p-1 bg-gray-800">
           <h2 className="text-lg font-semibold mb-2 text-white">Token Creator Admin Panel</h2>
           <TokenAdminV3
             isConnected={isConnected}

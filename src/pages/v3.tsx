@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { TokenForm_V3 } from '@/components/features/token/TokenForm_V3';
+import { TokenForm_V3 } from '@/components/features/token/TokenForm_v3';
 import { Toaster } from '@/components/ui/toast/toast';
 import { ToastProvider } from '@/components/ui/toast/use-toast';
 import type { MetaMaskInpageProvider } from '@metamask/providers';
@@ -43,7 +43,7 @@ export default function V3Page() {
 
   return (
     <ToastProvider>
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-1">
         <h1 className="text-3xl font-bold mb-6 text-white">Create Token (v3)</h1>
         <p className="text-white mb-8">
           Create a new token with vesting schedules and multi-wallet distribution.

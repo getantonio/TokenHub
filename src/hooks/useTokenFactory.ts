@@ -10,11 +10,13 @@ import { FACTORY_ADDRESSES } from '@/config/contracts';
 interface CreateTokenParams {
   name: string;
   symbol: string;
-  initialSupply: BigNumberish;
-  maxSupply: BigNumberish;
-  vestingAmounts: BigNumberish[];
-  vestingPeriods: number[];
-  beneficiaries: string[];
+  initialSupply: bigint;
+  maxSupply: bigint;
+  enableBlacklist?: boolean;
+  enableTimeLock?: boolean;
+  vestingAmounts?: bigint[];
+  vestingPeriods?: number[];
+  beneficiaries?: string[];
 }
 
 export const useTokenFactory = (version: 'v3') => {

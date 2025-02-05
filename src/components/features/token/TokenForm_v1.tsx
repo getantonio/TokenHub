@@ -383,9 +383,9 @@ export default function TokenForm_v1({ isConnected }: Props) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-2">
       {successInfo && (
-        <div className="rounded-md bg-green-900/20 p-6 border border-green-700 mb-6">
+        <div className="rounded-md bg-green-900/20 p-2 border border-green-700 mb-6">
           <h3 className="text-lg font-medium text-green-500 mb-2">🎉 Token Created Successfully!</h3>
           <div className="space-y-2 text-sm text-green-400">
             <p>Token Symbol: {successInfo.tokenSymbol}</p>
@@ -399,7 +399,7 @@ export default function TokenForm_v1({ isConnected }: Props) {
             </a></p>
             <p>Token Name: {successInfo.tokenName}</p>
           </div>
-          <div className="mt-4 flex gap-4">
+          <div className="mt-4 flex gap-2">
             <a
               href={`${getExplorerUrl(chainId, successInfo.tokenAddress, 'token')}`}
               target="_blank"
@@ -418,136 +418,139 @@ export default function TokenForm_v1({ isConnected }: Props) {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
         {/* Form Section */}
-        <form onSubmit={handleSubmit} className="space-y-4 bg-gray-800 p-6 rounded-lg shadow-lg">
-          {error && (
-            <div className="rounded-md bg-red-900/20 p-4 border border-red-700">
-              <div className="flex">
-                <div className="ml-3">
-                  <h3 className="text-sm font-medium text-red-500">{error}</h3>
+        <div className="form-card">
+          <h2 className="form-card-header">Create Token</h2>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {error && (
+              <div className="rounded-md bg-red-900/20 p-4 border border-red-700">
+                <div className="flex">
+                  <div className="ml-3">
+                    <h3 className="text-sm font-medium text-red-500">{error}</h3>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div>
+              <label htmlFor="name" className="block text-sm font-medium text-white">Token Name</label>
+              <input
+                type="text"
+                id="name"
+                name="name"
+                value={formData.name}
+                onChange={handleChange}
+                className="mt-2 block w-full rounded-md border-gray-800 bg-gray-900 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                placeholder="TokenFactory Test v1"
+                required
+              />
+            </div>
+
+            <div>
+              <label htmlFor="symbol" className="block text-sm font-medium text-white">Token Symbol</label>
+              <input
+                type="text"
+                id="symbol"
+                name="symbol"
+                value={formData.symbol}
+                onChange={handleChange}
+                className="mt-2 block w-full rounded-md border-gray-800 bg-gray-900 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                placeholder="TFT1"
+                required
+              />
+            </div>
+
+            <div>
+              <label htmlFor="initialSupply" className="block text-sm font-medium text-white">
+                Initial Supply
+                <span className="ml-1 text-xs text-gray-400">(tokens will be sent to your wallet)</span>
+              </label>
+              <div className="relative rounded-md shadow-sm">
+                <input
+                  type="text"
+                  id="initialSupply"
+                  name="initialSupply"
+                  value={formData.initialSupply}
+                  onChange={handleChange}
+                  className="mt-2 block w-full rounded-md border-gray-800 bg-gray-900 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  placeholder="1000000"
+                  required
+                />
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                  <span className="text-gray-400 sm:text-sm">{formData.symbol}</span>
+                </div>
+              </div>
+              <p className="mt-2 text-xs text-gray-400">Each token has {TOKEN_DECIMALS} decimals</p>
+            </div>
+
+            <div>
+              <label htmlFor="maxSupply" className="block text-sm font-medium text-white">
+                Max Supply
+                <span className="ml-1 text-xs text-gray-400">(maximum tokens that can ever exist)</span>
+              </label>
+              <div className="relative rounded-md shadow-sm">
+                <input
+                  type="text"
+                  id="maxSupply"
+                  name="maxSupply"
+                  value={formData.maxSupply}
+                  onChange={handleChange}
+                  className="mt-1 block w-full rounded-md border-gray-700 bg-gray-900 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  placeholder="1000000"
+                  required
+                />
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                  <span className="text-gray-400 sm:text-sm">{formData.symbol}</span>
                 </div>
               </div>
             </div>
-          )}
 
-          <div>
-            <label htmlFor="name" className="block text-sm font-medium text-white">Token Name</label>
-            <input
-              type="text"
-              id="name"
-              name="name"
-              value={formData.name}
-              onChange={handleChange}
-              className="mt-1 block w-full rounded-md border-gray-700 bg-gray-900 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-              placeholder="TokenFactory Test v1"
-              required
-            />
-          </div>
-
-          <div>
-            <label htmlFor="symbol" className="block text-sm font-medium text-white">Token Symbol</label>
-            <input
-              type="text"
-              id="symbol"
-              name="symbol"
-              value={formData.symbol}
-              onChange={handleChange}
-              className="mt-1 block w-full rounded-md border-gray-700 bg-gray-900 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-              placeholder="TFT1"
-              required
-            />
-          </div>
-
-          <div>
-            <label htmlFor="initialSupply" className="block text-sm font-medium text-white">
-              Initial Supply
-              <span className="ml-1 text-xs text-gray-400">(tokens will be sent to your wallet)</span>
-            </label>
-            <div className="relative rounded-md shadow-sm">
+            <div className="flex items-center">
               <input
-                type="text"
-                id="initialSupply"
-                name="initialSupply"
-                value={formData.initialSupply}
+                type="checkbox"
+                id="blacklistEnabled"
+                name="blacklistEnabled"
+                checked={formData.blacklistEnabled}
                 onChange={handleChange}
-                className="mt-1 block w-full rounded-md border-gray-700 bg-gray-900 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                placeholder="1000000"
-                required
+                className="h-4 w-4 rounded border-gray-700 bg-gray-900 text-blue-600 focus:ring-blue-500"
               />
-              <div className="absolute inset-y-0 right-0 flex items-center pr-3">
-                <span className="text-gray-400 sm:text-sm">{formData.symbol}</span>
-              </div>
+              <label htmlFor="blacklistEnabled" className="ml-2 block text-sm text-white">
+                Enable Blacklist
+                <span className="ml-1 text-xs text-gray-400">(ability to block specific addresses)</span>
+              </label>
             </div>
-            <p className="mt-1 text-xs text-gray-400">Each token has {TOKEN_DECIMALS} decimals</p>
-          </div>
 
-          <div>
-            <label htmlFor="maxSupply" className="block text-sm font-medium text-white">
-              Max Supply
-              <span className="ml-1 text-xs text-gray-400">(maximum tokens that can ever exist)</span>
-            </label>
-            <div className="relative rounded-md shadow-sm">
+            <div className="flex items-center">
               <input
-                type="text"
-                id="maxSupply"
-                name="maxSupply"
-                value={formData.maxSupply}
+                type="checkbox"
+                id="timeLockEnabled"
+                name="timeLockEnabled"
+                checked={formData.timeLockEnabled}
                 onChange={handleChange}
-                className="mt-1 block w-full rounded-md border-gray-700 bg-gray-900 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                placeholder="1000000"
-                required
+                className="h-4 w-4 rounded border-gray-700 bg-gray-900 text-blue-600 focus:ring-blue-500"
               />
-              <div className="absolute inset-y-0 right-0 flex items-center pr-3">
-                <span className="text-gray-400 sm:text-sm">{formData.symbol}</span>
-              </div>
+              <label htmlFor="timeLockEnabled" className="ml-2 block text-sm text-white">
+                Enable Time Lock
+                <span className="ml-1 text-xs text-gray-400">(ability to lock tokens for a period)</span>
+              </label>
             </div>
-          </div>
 
-          <div className="flex items-center">
-            <input
-              type="checkbox"
-              id="blacklistEnabled"
-              name="blacklistEnabled"
-              checked={formData.blacklistEnabled}
-              onChange={handleChange}
-              className="h-4 w-4 rounded border-gray-700 bg-gray-900 text-blue-600 focus:ring-blue-500"
-            />
-            <label htmlFor="blacklistEnabled" className="ml-2 block text-sm text-white">
-              Enable Blacklist
-              <span className="ml-1 text-xs text-gray-400">(ability to block specific addresses)</span>
-            </label>
-          </div>
-
-          <div className="flex items-center">
-            <input
-              type="checkbox"
-              id="timeLockEnabled"
-              name="timeLockEnabled"
-              checked={formData.timeLockEnabled}
-              onChange={handleChange}
-              className="h-4 w-4 rounded border-gray-700 bg-gray-900 text-blue-600 focus:ring-blue-500"
-            />
-            <label htmlFor="timeLockEnabled" className="ml-2 block text-sm text-white">
-              Enable Time Lock
-              <span className="ml-1 text-xs text-gray-400">(ability to lock tokens for a period)</span>
-            </label>
-          </div>
-
-          <div className="flex justify-end items-center space-x-2">
-            <InfoIcon content="Deployment fee will be charged in ETH. Make sure you have enough ETH to cover the fee and gas costs." />
-            <button
-              type="submit"
-              disabled={!isConnected || isLoading || deploymentFee === 'Not available on this network'}
-              className={`inline-flex justify-center rounded-md border border-transparent bg-blue-500/20 py-2 px-4 text-sm font-medium text-blue-400 shadow-sm hover:bg-blue-500/30 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:ring-offset-2 ${(!isConnected || isLoading || deploymentFee === 'Not available on this network') ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              {isLoading ? 'Creating...' : !isConnected ? 'Connect Wallet to Deploy' : deploymentFee === 'Not available on this network' ? 'Not Available on this Network' : 'Create Token'}
-            </button>
-          </div>
-        </form>
+            <div className="flex justify-end items-center space-x-2">
+              <InfoIcon content="Deployment fee will be charged in ETH. Make sure you have enough ETH to cover the fee and gas costs." />
+              <button
+                type="submit"
+                disabled={!isConnected || isLoading || deploymentFee === 'Not available on this network'}
+                className={`inline-flex justify-center rounded-md border border-transparent bg-blue-500/20 py-2 px-4 text-sm font-medium text-blue-400 shadow-sm hover:bg-blue-500/30 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:ring-offset-2 ${(!isConnected || isLoading || deploymentFee === 'Not available on this network') ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                {isLoading ? 'Creating...' : !isConnected ? 'Connect Wallet to Deploy' : deploymentFee === 'Not available on this network' ? 'Not Available on this Network' : 'Create Token'}
+              </button>
+            </div>
+          </form>
+        </div>
 
         {/* Preview Section */}
-        <div className="space-y-6">
+        <div className="space-y-2">
           <TokenPreview
             name={formData.name}
             symbol={formData.symbol}
@@ -555,17 +558,19 @@ export default function TokenForm_v1({ isConnected }: Props) {
             maxSupply={formData.maxSupply}
           />
           
-          <div className="bg-background-secondary rounded-lg p-6 border border-border mb-6">
-            <h2 className="text-xl font-bold text-white mb-4">Token Creator Admin Panel</h2>
-            {successInfo?.tokenAddress ? (
-              <TokenAdmin
-                isConnected={isConnected}
-                address={successInfo.tokenAddress}
-                provider={provider}
-              />
-            ) : (
-              <p className="text-gray-400">Create a token to view admin controls.</p>
-            )}
+          <div className="form-card">
+            <h2 className="form-card-header">Token Creator Admin Panel</h2>
+            <div className="form-card-body">
+              {successInfo ? (
+                <TokenAdmin
+                  isConnected={isConnected}
+                  address={successInfo.tokenAddress}
+                  provider={provider}
+                />
+              ) : (
+                <p className="text-gray-400 text-sm">Create a token to view admin controls.</p>
+              )}
+            </div>
           </div>
         </div>
       </div>

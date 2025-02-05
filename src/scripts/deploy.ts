@@ -1,19 +1,30 @@
-import { HardhatRuntimeEnvironment } from 'hardhat/types';
-import { task } from 'hardhat/config';
-import fs from 'fs';
-import path from 'path';
+import * as fs from 'fs';
+import * as path from 'path';
+const hre = require('hardhat');
+const { ethers } = require('hardhat');
 
 // Skip compilation of obsolete contracts
 const SKIP_COMPILATION = ['contracts/TokenFactory_v1.0.0.sol', 'contracts/TokenTemplate_v1.0.0.sol', 'contracts/TokenFactory_v2.0.0.sol', 'contracts/TokenTemplate_v2.0.0.sol'];
 
 // Type for deployment verification
-type VerifyArgs = {
+interface VerifyArgs {
   address: string;
   constructorArguments?: any[];
-};
+}
+
+async function verifyContract(address: string, constructorArguments: any[] = []) {
+  try {
+    await hre.run("verify:verify", {
+      address,
+      constructorArguments
+    });
+    console.log("Contract verified successfully");
+  } catch (error) {
+    console.error("Verification failed:", error);
+  }
+}
 
 async function deployV1() {
-  const hre = require('hardhat');
   const { network } = hre;
   const networkName = network.name;
   const version = 'v1';
@@ -22,8 +33,7 @@ async function deployV1() {
 
   // First deploy the TokenTemplate_v1
   console.log('Deploying TokenTemplate_v1...');
-  const { ethers } = require('hardhat');
-  const TokenTemplate = await ethers.getContractFactory("TokenTemplate_v1");
+  const TokenTemplate = require('hardhat').getContractFactory("TokenTemplate_v1");
   const template = await TokenTemplate.deploy();
   await template.waitForDeployment();
   const templateAddress = await template.getAddress();
@@ -31,7 +41,7 @@ async function deployV1() {
 
   // Deploy the factory with initial fee of 0.0001 ETH
   console.log('Deploying TokenFactory_v1...');
-  const TokenFactory = await ethers.getContractFactory("TokenFactory_v1");
+  const TokenFactory = require('hardhat').getContractFactory("TokenFactory_v1");
   const factory = await TokenFactory.deploy(ethers.parseEther("0.0001"));
   await factory.waitForDeployment();
 
@@ -42,7 +52,6 @@ async function deployV1() {
 }
 
 async function deployV2() {
-  const hre = require('hardhat');
   const { network } = hre;
   const networkName = network.name;
   const version = 'v2.1.0';
@@ -51,8 +60,7 @@ async function deployV2() {
 
   // First deploy the TokenTemplate_v2.1.0
   console.log('Deploying TokenTemplate_v2.1.0...');
-  const { ethers } = require('hardhat');
-  const TokenTemplate = await ethers.getContractFactory("TokenTemplate_v2_1_0");
+  const TokenTemplate = require('hardhat').getContractFactory("TokenTemplate_v2_1_0");
   const template = await TokenTemplate.deploy();
   await template.waitForDeployment();
   const templateAddress = await template.getAddress();
@@ -60,7 +68,7 @@ async function deployV2() {
 
   // Deploy the factory with template implementation
   console.log('Deploying TokenFactory_v2.1.0...');
-  const TokenFactory = await ethers.getContractFactory("TokenFactory_v2_1_0");
+  const TokenFactory = require('hardhat').getContractFactory("TokenFactory_v2_1_0");
   const factory = await TokenFactory.deploy(templateAddress);
   await factory.waitForDeployment();
 
@@ -79,7 +87,6 @@ async function deployV2() {
 }
 
 async function deployV3() {
-  const hre = require('hardhat');
   const { network } = hre;
   const networkName = network.name;
   const version = 'v3.0.0';
@@ -88,8 +95,7 @@ async function deployV3() {
 
   // First deploy the TokenTemplate_v3.0.0
   console.log('Deploying TokenTemplate_v3.0.0...');
-  const { ethers } = require('hardhat');
-  const TokenTemplate = await ethers.getContractFactory("TokenTemplate_v3_0_0");
+  const TokenTemplate = require('hardhat').getContractFactory("TokenTemplate_v3_0_0");
   const template = await TokenTemplate.deploy();
   await template.waitForDeployment();
   const templateAddress = await template.getAddress();
@@ -97,7 +103,7 @@ async function deployV3() {
 
   // Deploy the factory with template implementation
   console.log('Deploying TokenFactory_v3.0.0...');
-  const TokenFactory = await ethers.getContractFactory("TokenFactory_v3_0_0");
+  const TokenFactory = require('hardhat').getContractFactory("TokenFactory_v3_0_0");
   const factory = await TokenFactory.deploy(templateAddress);
   await factory.waitForDeployment();
 
@@ -112,6 +118,20 @@ async function deployV3() {
   console.log(`Factory initialized with default fee: ${ethers.formatEther(defaultFee)} ETH`);
 
   await saveDeployment(networkName, version, address, templateAddress);
+
+  // Verify contracts
+  if (networkName !== 'hardhat' && networkName !== 'localhost') {
+    console.log('\nVerifying contracts...');
+    try {
+      await verifyContract(templateAddress, []);
+      console.log('Template contract verified');
+
+      await verifyContract(address, [templateAddress]);
+      console.log('Factory contract verified');
+    } catch (error) {
+      console.error('Error verifying contracts:', error);
+    }
+  }
 }
 
 async function saveDeployment(networkName: string, version: string, factoryAddress: string, templateAddress: string) {
@@ -123,7 +143,7 @@ async function saveDeployment(networkName: string, version: string, factoryAddre
     network: networkName,
     version,
     timestamp: new Date().toISOString(),
-    blockNumber: await ethers.provider.getBlockNumber()
+    blockNumber: await hre.ethers.provider.getBlockNumber()
   };
 
   // Create directory if it doesn't exist
@@ -138,12 +158,7 @@ async function saveDeployment(networkName: string, version: string, factoryAddre
   );
 
   // Update .env.local with the new addresses
-  let versionSuffix = '_V1';
-  if (version.startsWith('v2')) {
-    versionSuffix = '_V2';
-  } else if (version.startsWith('v3')) {
-    versionSuffix = '_V3';
-  }
+  let versionSuffix = '_V3';
   
   const factoryEnvKey = `NEXT_PUBLIC_${networkName.toUpperCase().replace(/-/g, '_')}_FACTORY_ADDRESS${versionSuffix}`;
   const templateEnvKey = `NEXT_PUBLIC_${networkName.toUpperCase().replace(/-/g, '_')}_TOKEN_TEMPLATE_ADDRESS${versionSuffix}`;
@@ -185,21 +200,7 @@ Deployment completed:
   `);
 }
 
-async function verifyContract(address: string, constructorArguments: any[] = []) {
-  try {
-    const hre = require('hardhat');
-    await hre.run("verify:verify", {
-      address,
-      constructorArguments
-    });
-    console.log("Contract verified successfully");
-  } catch (error) {
-    console.error("Verification failed:", error);
-  }
-}
-
 async function deployAndVerify(version: string) {
-  const hre = require('hardhat');
   const { network } = hre;
   const networkName = network.name;
   console.log(`\nDeploying ${version} to ${networkName}...`);
@@ -211,8 +212,7 @@ async function deployAndVerify(version: string) {
     case 'v1.0.0': {
       // Deploy v1.0.0 template
       console.log('Deploying TokenTemplate_v1.0.0...');
-      const { ethers } = require('hardhat');
-      const TokenTemplate = await ethers.getContractFactory("TokenTemplate_v1_0_0");
+      const TokenTemplate = require('hardhat').getContractFactory("TokenTemplate_v1_0_0");
       const template = await TokenTemplate.deploy();
       await template.waitForDeployment();
       templateAddress = await template.getAddress();
@@ -220,7 +220,7 @@ async function deployAndVerify(version: string) {
 
       // Deploy v1.0.0 factory
       console.log('Deploying TokenFactory_v1.0.0...');
-      const TokenFactory = await ethers.getContractFactory("TokenFactory_v1_0_0");
+      const TokenFactory = require('hardhat').getContractFactory("TokenFactory_v1_0_0");
       const factory = await TokenFactory.deploy();
       await factory.waitForDeployment();
       factoryAddress = await factory.getAddress();
@@ -233,7 +233,7 @@ async function deployAndVerify(version: string) {
     case 'v1.1.0': {
       // Deploy v1.1.0 template
       console.log('Deploying TokenTemplate_v1.1.0...');
-      const TokenTemplate = await ethers.getContractFactory("TokenTemplate_v1_1_0");
+      const TokenTemplate = require('hardhat').getContractFactory("TokenTemplate_v1_1_0");
       const template = await TokenTemplate.deploy();
       await template.waitForDeployment();
       templateAddress = await template.getAddress();
@@ -241,17 +241,11 @@ async function deployAndVerify(version: string) {
 
       // Deploy v1.1.0 factory
       console.log('Deploying TokenFactory_v1.1.0...');
-      const TokenFactory = await ethers.getContractFactory("TokenFactory_v1_1_0");
+      const TokenFactory = require('hardhat').getContractFactory("TokenFactory_v1_1_0");
       const factory = await TokenFactory.deploy(templateAddress);
       await factory.waitForDeployment();
       factoryAddress = await factory.getAddress();
       console.log(`TokenFactory_v1.1.0 deployed to: ${factoryAddress}`);
-
-      // Initialize factory
-      console.log('Initializing factory...');
-      const initTx = await factory.initialize(defaultFee);
-      await initTx.wait();
-      console.log(`Factory initialized with default fee: ${ethers.formatEther(defaultFee)} ETH`);
 
       await verifyContract(templateAddress);
       await verifyContract(factoryAddress, [templateAddress]);
@@ -260,7 +254,7 @@ async function deployAndVerify(version: string) {
     case 'v2.0.0': {
       // Deploy v2.0.0 template
       console.log('Deploying TokenTemplate_v2.0.0...');
-      const TokenTemplate = await ethers.getContractFactory("TokenTemplate_v2_0_0");
+      const TokenTemplate = require('hardhat').getContractFactory("TokenTemplate_v2_0_0");
       const template = await TokenTemplate.deploy();
       await template.waitForDeployment();
       templateAddress = await template.getAddress();
@@ -268,7 +262,7 @@ async function deployAndVerify(version: string) {
 
       // Deploy v2.0.0 factory
       console.log('Deploying TokenFactory_v2.0.0...');
-      const TokenFactory = await ethers.getContractFactory("TokenFactory_v2_0_0");
+      const TokenFactory = require('hardhat').getContractFactory("TokenFactory_v2_0_0");
       const factory = await TokenFactory.deploy(templateAddress);
       await factory.waitForDeployment();
       factoryAddress = await factory.getAddress();
@@ -281,7 +275,7 @@ async function deployAndVerify(version: string) {
     case 'v2.1.0': {
       // Deploy v2.1.0 template
       console.log('Deploying TokenTemplate_v2.1.0...');
-      const TokenTemplate = await ethers.getContractFactory("TokenTemplate_v2_1_0");
+      const TokenTemplate = require('hardhat').getContractFactory("TokenTemplate_v2_1_0");
       const template = await TokenTemplate.deploy();
       await template.waitForDeployment();
       templateAddress = await template.getAddress();
@@ -289,16 +283,32 @@ async function deployAndVerify(version: string) {
 
       // Deploy v2.1.0 factory
       console.log('Deploying TokenFactory_v2.1.0...');
-      const TokenFactory = await ethers.getContractFactory("TokenFactory_v2_1_0");
+      const TokenFactory = require('hardhat').getContractFactory("TokenFactory_v2_1_0");
       const factory = await TokenFactory.deploy(templateAddress);
       await factory.waitForDeployment();
       factoryAddress = await factory.getAddress();
       console.log(`TokenFactory_v2.1.0 deployed to: ${factoryAddress}`);
 
-      // Initialize factory
-      console.log('Initializing factory...');
-      await factory.initialize(defaultFee);
-      console.log(`Factory initialized with default fee: ${ethers.formatEther(defaultFee)} ETH`);
+      await verifyContract(templateAddress);
+      await verifyContract(factoryAddress, [templateAddress]);
+      break;
+    }
+    case 'v3.0.0': {
+      // Deploy v3.0.0 template
+      console.log('Deploying TokenTemplate_v3.0.0...');
+      const TokenTemplate = require('hardhat').getContractFactory("TokenTemplate_v3_0_0");
+      const template = await TokenTemplate.deploy();
+      await template.waitForDeployment();
+      templateAddress = await template.getAddress();
+      console.log(`TokenTemplate_v3.0.0 deployed to: ${templateAddress}`);
+
+      // Deploy v3.0.0 factory
+      console.log('Deploying TokenFactory_v3.0.0...');
+      const TokenFactory = require('hardhat').getContractFactory("TokenFactory_v3_0_0");
+      const factory = await TokenFactory.deploy(templateAddress);
+      await factory.waitForDeployment();
+      factoryAddress = await factory.getAddress();
+      console.log(`TokenFactory_v3.0.0 deployed to: ${factoryAddress}`);
 
       await verifyContract(templateAddress);
       await verifyContract(factoryAddress, [templateAddress]);
@@ -312,8 +322,8 @@ async function deployAndVerify(version: string) {
 }
 
 async function main() {
-  // Deploy v3.0.0 with proper initialization
-  await deployV3();
+  const version = process.env.VERSION || 'v3.0.0';
+  await deployAndVerify(version);
 }
 
 main()
@@ -321,4 +331,4 @@ main()
   .catch((error) => {
     console.error(error);
     process.exit(1);
-  });
+  }); 

@@ -302,20 +302,20 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
 
   if (!v2Available) {
     return (
-      <div className="p-2 bg-gray-800 rounded-lg shadow-lg">
-        <div className="rounded-md bg-yellow-900/20 p-2 border border-yellow-700">
-          <h3 className="text-sm font-medium text-yellow-500">TokenFactory V2.1.0 is not yet deployed on this network.</h3>
-          <p className="text-xs text-yellow-400">Note: V2.1.0 is currently only available on specific networks.</p>
+      <div className="p-1 bg-gray-100 rounded-lg shadow-lg">
+        <div className="rounded-md bg-yellow-100/20 p-1 border border-yellow-100">
+          <h3 className="text-sm font-medium text-yellow-100">TokenFactory V2.1.0 is not yet deployed on this network.</h3>
+          <p className="text-xs text-yellow-100">Note: V2.1.0 is currently only available on specific networks.</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto px-4 py-4">
-      <div className="max-w-4xl mx-auto space-y-4">
+    <div className="container mx-auto px-1 py-1">
+      <div className="max-w-4xl mx-auto space-y-2">
         <div className="form-container form-compact">
-          <form onSubmit={handleSubmit} className="space-y-3">
+          <form onSubmit={handleSubmit} className="space-y-1">
             <div className="form-grid">
               <div className="form-group">
                 <label htmlFor="name" className="form-label">Token Name</label>
@@ -528,7 +528,7 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
         </div>
 
         {/* Preview Section */}
-        <div className="space-y-4">
+        <div className="space-y-2">
           <TokenPreview
             name={formData.name}
             symbol={formData.symbol}

@@ -51,9 +51,9 @@ export default function V2Page() {
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-2">
         <div className="max-w-6xl mx-auto">
-          <div className="mb-8">
+          <div className="mb-1">
             <h1 className="text-3xl font-bold text-white mb-2">Token Factory v2</h1>
             <p className="text-gray-400">Create your own token with advanced features like presale and vesting.</p>
           </div>

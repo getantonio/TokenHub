@@ -1,6 +1,6 @@
 /* Base Form Styles */
 .form-container {
-  @apply space-y-4 bg-background-secondary p-6 rounded-lg shadow-lg;
+  @apply space-y-4 bg-background-secondary p-3 rounded-lg shadow-lg;
 }
 
 .form-group {
@@ -12,11 +12,11 @@
 }
 
 .form-input {
-  @apply w-full px-4 py-2 bg-background-primary border border-border rounded-md text-text-primary focus:outline-none focus:ring-2 focus:ring-[#2FFA3A] focus:border-transparent;
+  @apply w-full px-2 py-2 bg-background-primary border border-border rounded-md text-text-primary focus:outline-none focus:ring-2 focus:ring-[#2FFA3A] focus:border-transparent;
 }
 
 .form-select {
-  @apply w-full px-4 py-2 bg-background-primary border border-border rounded-md text-text-primary focus:outline-none focus:ring-2 focus:ring-[#2FFA3A] focus:border-transparent;
+  @apply w-full px-2 py-2 bg-background-primary border border-border rounded-md text-text-primary focus:outline-none focus:ring-2 focus:ring-[#2FFA3A] focus:border-transparent;
 }
 
 .form-checkbox {
