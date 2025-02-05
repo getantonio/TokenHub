@@ -23,9 +23,18 @@ const formSchema = z.object({
   maxSupply: z.string().min(1, 'Max supply is required'),
   enableBlacklist: z.boolean().default(false),
   enableTimeLock: z.boolean().default(false),
+  // Presale settings
+  presaleEnabled: z.boolean().default(false),
+  presalePrice: z.string().optional(),
+  presaleStartTime: z.string().optional(),
+  presaleEndTime: z.string().optional(),
+  presaleMinContribution: z.string().optional(),
+  presaleMaxContribution: z.string().optional(),
+  // Distribution settings
   vestingAmounts: z.array(z.string()).default([]),
   vestingPeriods: z.array(z.string()).default([]),
-  beneficiaries: z.array(z.string()).default([])
+  beneficiaries: z.array(z.string()).default([]),
+  walletNames: z.array(z.string()).default([])
 });
 
 interface TokenFormV3Props {
@@ -49,9 +58,47 @@ const defaultValues = {
   maxSupply: '2000000',
   enableBlacklist: false,
   enableTimeLock: false,
+  presaleEnabled: false,
+  presalePrice: '0.0001',
+  presaleStartTime: '',
+  presaleEndTime: '',
+  presaleMinContribution: '0.1',
+  presaleMaxContribution: '10',
   vestingAmounts: [''],
   vestingPeriods: [''],
-  beneficiaries: ['']
+  beneficiaries: [''],
+  walletNames: ['']
+};
+
+// Distribution presets
+const DISTRIBUTION_PRESETS = {
+  standard: {
+    name: 'Standard Distribution',
+    schedules: [
+      { amount: '20', period: '0', description: 'Initial Release', walletName: 'Owner' },
+      { amount: '20', period: '90', description: '3 Months Cliff', walletName: 'Team' },
+      { amount: '30', period: '180', description: '6 Months Cliff', walletName: 'Marketing' },
+      { amount: '30', period: '360', description: '12 Months Cliff', walletName: 'Liquidity' }
+    ]
+  },
+  team: {
+    name: 'Team Vesting',
+    schedules: [
+      { amount: '10', period: '90', description: 'Initial Release after 3 months', walletName: 'Team Lead' },
+      { amount: '30', period: '180', description: '6 Months', walletName: 'Development' },
+      { amount: '30', period: '270', description: '9 Months', walletName: 'Operations' },
+      { amount: '30', period: '360', description: '12 Months', walletName: 'Advisors' }
+    ]
+  },
+  investors: {
+    name: 'Investor Distribution',
+    schedules: [
+      { amount: '25', period: '0', description: 'Initial Release', walletName: 'Presale' },
+      { amount: '25', period: '90', description: '3 Months', walletName: 'Private Sale' },
+      { amount: '25', period: '180', description: '6 Months', walletName: 'Public Sale' },
+      { amount: '25', period: '270', description: '9 Months', walletName: 'Treasury' }
+    ]
+  }
 };
 
 export function TokenForm_V3({ isConnected }: TokenFormV3Props) {
@@ -116,6 +163,7 @@ export function TokenForm_V3({ isConnected }: TokenFormV3Props) {
         vestingAmounts: data.vestingAmounts.map(BigInt),
         vestingPeriods: data.vestingPeriods.map(parseInt),
         beneficiaries: data.beneficiaries,
+        walletNames: data.walletNames,
         enableBlacklist: data.enableBlacklist,
         enableTimeLock: data.enableTimeLock
       });
@@ -132,7 +180,7 @@ export function TokenForm_V3({ isConnected }: TokenFormV3Props) {
 
   return (
     <div className="space-y-1">
-      <Card className="p-1 bg-gray-800">
+      <Card className="p-3 bg-gray-800">
         <h2 className="text-lg font-semibold mb-1 text-white">Create Token (V3)</h2>
         <p className="text-xs text-white mb-1">
           Create a token with advanced features including vesting schedules and multi-wallet distribution.
@@ -147,7 +195,7 @@ export function TokenForm_V3({ isConnected }: TokenFormV3Props) {
                   id="name"
                   {...form.register('name')}
                   placeholder="My Token"
-                  className="mt-1 w-full px-2 py-1 text-sm bg-background-primary rounded border border-border text-white"
+                  className="mt-2 w-full px-2 py-1 text-sm bg-background-primary rounded border border-border text-white"
                   required
                 />
               </div>
@@ -158,7 +206,7 @@ export function TokenForm_V3({ isConnected }: TokenFormV3Props) {
                   id="symbol"
                   {...form.register('symbol')}
                   placeholder="TKN"
-                  className="mt-1 w-full px-2 py-1 text-sm bg-background-primary rounded border border-border text-white"
+                  className="mt-2 w-full px-2 py-1 text-sm bg-background-primary rounded border border-border text-white"
                   required
                 />
               </div>
@@ -171,7 +219,7 @@ export function TokenForm_V3({ isConnected }: TokenFormV3Props) {
                   id="initialSupply"
                   {...form.register('initialSupply')}
                   placeholder="1000000"
-                  className="mt-1 w-full px-2 py-1 text-sm bg-background-primary rounded border border-border text-white"
+                  className="mt-2 w-full px-2 py-1 text-sm bg-background-primary rounded border border-border text-white"
                   required
                 />
               </div>
@@ -182,7 +230,7 @@ export function TokenForm_V3({ isConnected }: TokenFormV3Props) {
                   id="maxSupply"
                   {...form.register('maxSupply')}
                   placeholder="2000000"
-                  className="mt-1 w-full px-2 py-1 text-sm bg-background-primary rounded border border-border text-white"
+                  className="mt-2 w-full px-2 py-1 text-sm bg-background-primary rounded border border-border text-white"
                   required
                 />
               </div>
@@ -215,18 +263,127 @@ export function TokenForm_V3({ isConnected }: TokenFormV3Props) {
             </div>
           </div>
 
-          {/* Vesting and Distribution */}
+          {/* Add Presale Section after Token Features */}
+          <div className="form-card">
+            <h3 className="form-card-header">Presale Settings</h3>
+            <div className="space-y-1">
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="presaleEnabled"
+                  {...form.register('presaleEnabled')}
+                  className="form-checkbox"
+                />
+                <label htmlFor="presaleEnabled" className="text-xs text-white">Enable Presale</label>
+              </div>
+
+              {form.watch('presaleEnabled') && (
+                <div className="grid grid-cols-3 gap-1">
+                  <div className="form-group">
+                    <label className="text-xs text-white">Price (ETH)</label>
+                    <input
+                      {...form.register('presalePrice')}
+                      placeholder="0.0001"
+                      className="form-input"
+                      type="number"
+                      step="0.0001"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="text-xs text-white">Min Contribution (ETH)</label>
+                    <input
+                      {...form.register('presaleMinContribution')}
+                      placeholder="0.1"
+                      className="form-input"
+                      type="number"
+                      step="0.1"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="text-xs text-white">Max Contribution (ETH)</label>
+                    <input
+                      {...form.register('presaleMaxContribution')}
+                      placeholder="10"
+                      className="form-input"
+                      type="number"
+                      step="0.1"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="text-xs text-white">Start Time</label>
+                    <input
+                      {...form.register('presaleStartTime')}
+                      type="datetime-local"
+                      className="form-input"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="text-xs text-white">End Time</label>
+                    <input
+                      {...form.register('presaleEndTime')}
+                      type="datetime-local"
+                      className="form-input"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Update Vesting and Distribution section */}
           <div className="form-card">
             <h3 className="form-card-header">Vesting & Distribution</h3>
-            <div className="space-y-2">
+            <div className="space-y-1">
+              <div className="flex space-x-2">
+                {Object.entries(DISTRIBUTION_PRESETS).map(([key, preset]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => {
+                      const schedules = preset.schedules;
+                      form.setValue('vestingAmounts', schedules.map(s => s.amount));
+                      form.setValue('vestingPeriods', schedules.map(s => s.period));
+                      form.setValue('beneficiaries', schedules.map(() => ''));
+                      form.setValue('walletNames', schedules.map(s => s.walletName));
+                    }}
+                    className="px-2 py-1 text-xs rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30"
+                  >
+                    {preset.name}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    form.setValue('vestingAmounts', []);
+                    form.setValue('vestingPeriods', []);
+                    form.setValue('beneficiaries', []);
+                    form.setValue('walletNames', []);
+                  }}
+                  className="px-2 py-1 text-xs rounded bg-red-500/20 text-red-400 hover:bg-red-500/30"
+                >
+                  Clear All
+                </button>
+              </div>
+
               {form.watch('vestingAmounts').map((_, index) => (
-                <div key={index} className="grid grid-cols-3 gap-2">
+                <div key={index} className="grid grid-cols-4 gap-2">
                   <div className="form-group">
-                    <label className="text-xs text-white">Vesting Amount</label>
+                    <label className="text-xs text-white">Wallet Name</label>
+                    <input
+                      {...form.register(`walletNames.${index}`)}
+                      placeholder="e.g. Team, Marketing"
+                      className="form-input"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="text-xs text-white">Vesting Amount (%)</label>
                     <input
                       {...form.register(`vestingAmounts.${index}`)}
                       placeholder="Amount"
                       className="form-input"
+                      type="number"
+                      min="0"
+                      max="100"
                     />
                   </div>
                   <div className="form-group">
@@ -236,6 +393,7 @@ export function TokenForm_V3({ isConnected }: TokenFormV3Props) {
                       placeholder="Days"
                       className="form-input"
                       type="number"
+                      min="0"
                     />
                   </div>
                   <div className="form-group">
@@ -255,8 +413,9 @@ export function TokenForm_V3({ isConnected }: TokenFormV3Props) {
                   form.setValue('vestingAmounts', [...current.vestingAmounts, '']);
                   form.setValue('vestingPeriods', [...current.vestingPeriods, '']);
                   form.setValue('beneficiaries', [...current.beneficiaries, '']);
+                  form.setValue('walletNames', [...current.walletNames, '']);
                 }}
-                className="btn btn-secondary btn-small"
+                className="px-4 py-1 text-sm rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30"
               >
                 Add Vesting Schedule
               </button>
@@ -300,7 +459,7 @@ export function TokenForm_V3({ isConnected }: TokenFormV3Props) {
           maxSupply={form.watch('maxSupply')}
         />
         
-        <Card className="p-1 bg-gray-800">
+        <Card className="p-2 bg-gray-800">
           <h2 className="text-lg font-semibold mb-2 text-white">Token Creator Admin Panel</h2>
           <TokenAdminV3
             isConnected={isConnected}

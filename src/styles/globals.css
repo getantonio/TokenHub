@@ -109,7 +109,7 @@
   }
 
   .btn-blue {
-    @apply bg-blue-500 hover:bg-blue-600 text-white font-medium py-1.5 px-4 rounded text-sm transition-colors duration-200;
+    @apply bg-blue-500 hover:bg-blue-600 text-gray-400 font-medium py-1.5 px-4 rounded text-sm transition-colors duration-200;
   }
 
   .btn-blue-outline {
@@ -117,7 +117,7 @@
   }
 
   .btn-small {
-    @apply py-1 px-2 text-xs;
+    @apply py-2 px-2 text-xs;
   }
 }
 
@@ -131,7 +131,7 @@
 }
 
 .form-compact label {
-  @apply text-sm font-medium text-gray-200;
+  @apply text-sm font-medium text-white;
 }
 
 .form-compact input,
@@ -145,7 +145,7 @@
 }
 
 .form-compact .help-text {
-  @apply text-xs text-gray-400 mt-1;
+  @apply text-xs text-white mt-1;
 }
 
 /* Toast Styles */

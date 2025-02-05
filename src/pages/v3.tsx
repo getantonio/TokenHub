@@ -43,9 +43,9 @@ export default function V3Page() {
 
   return (
     <ToastProvider>
-      <div className="container mx-auto px-4 py-1">
-        <h1 className="text-3xl font-bold mb-6 text-white">Create Token (v3)</h1>
-        <p className="text-white mb-8">
+      <div className="container mx-auto px-4 py-2">
+        <h1 className="text-3xl font-bold mb-3 text-white">Token Factory v3</h1>
+        <p className="text-white mb-2">
           Create a new token with vesting schedules and multi-wallet distribution.
         </p>
         <TokenForm_V3 isConnected={isConnected} />

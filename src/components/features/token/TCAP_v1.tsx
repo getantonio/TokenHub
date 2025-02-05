@@ -30,15 +30,11 @@ export default function TokenAdmin({ isConnected, address, provider }: TokenAdmi
   }, [isConnected, address, provider]);
 
   const loadTokenInfo = async () => {
-    if (!address || !provider) {
-      console.error("Missing address or provider");
-      return;
-    }
+    if (!address || !provider) return;
 
     try {
       setIsLoading(true);
       
-      // First check if the contract exists and has code
       const code = await provider.getCode(address);
       if (code === '0x') {
         throw new Error('No contract found at this address');
@@ -46,7 +42,6 @@ export default function TokenAdmin({ isConnected, address, provider }: TokenAdmi
 
       const token = new Contract(address, TokenTemplate_v1.abi, provider);
       
-      // Check if contract has required methods before calling them
       const [name, symbol, totalSupply, blacklistEnabled, timeLockEnabled] = await Promise.all([
         token.name().catch(() => ''),
         token.symbol().catch(() => ''),
@@ -66,7 +61,7 @@ export default function TokenAdmin({ isConnected, address, provider }: TokenAdmi
       console.error('Error loading token info:', error);
       toast({
         title: 'Error',
-        description: error.message || 'Failed to load token information. Please verify this is a valid V1 token contract.',
+        description: error.message || 'Failed to load token information',
         variant: 'destructive'
       });
       setTokenInfo(null);
@@ -78,7 +73,7 @@ export default function TokenAdmin({ isConnected, address, provider }: TokenAdmi
   if (!isConnected) {
     return (
       <Card className="p-6">
-        <p className="text-gray-400">Please connect your wallet to access admin features.</p>
+        <p className="text-gray-400">Please connect your wallet to access token controls.</p>
       </Card>
     );
   }
@@ -86,7 +81,7 @@ export default function TokenAdmin({ isConnected, address, provider }: TokenAdmi
   if (!address) {
     return (
       <Card className="p-6">
-        <p className="text-gray-400">No token address provided.</p>
+        <p className="text-gray-400">Deploy a new token to access token controls.</p>
       </Card>
     );
   }

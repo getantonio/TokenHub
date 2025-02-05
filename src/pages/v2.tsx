@@ -55,7 +55,7 @@ export default function V2Page() {
         <div className="max-w-6xl mx-auto">
           <div className="mb-1">
             <h1 className="text-3xl font-bold text-white mb-2">Token Factory v2</h1>
-            <p className="text-gray-400">Create your own token with advanced features like presale and vesting.</p>
+            <p className="text-white">Create your own token with advanced features like presale and vesting.</p>
           </div>
 
           <TokenFormV2 isConnected={isConnected} />

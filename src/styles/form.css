@@ -10,7 +10,7 @@
 
 /* Form Labels */
 .form-label {
-  @apply block text-xs font-medium text-text-primary mb-1;
+  @apply block text-xs font-medium text-text-primary mb-2;
 }
 
 /* Form Inputs */
@@ -22,7 +22,7 @@
 
 /* Form Checkboxes */
 .form-checkbox {
-  @apply h-2 w-4 rounded border-border bg-gray-900 text-primary 
+  @apply h-4 w-4 rounded border-border bg-gray-900 text-primary 
   focus:ring-primary focus:ring-1 focus:ring-offset-0;
 }
 
@@ -40,7 +40,7 @@
 
 /* Form Buttons */
 .form-button {
-  @apply px-4 py-1 text-sm font-medium rounded transition-colors duration-200
+  @apply px-4 py-2 text-sm font-medium rounded transition-colors duration-200
   focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-background-primary;
 }
 

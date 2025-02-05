@@ -424,7 +424,7 @@ export default function TokenForm_v1({ isConnected }: Props) {
           <h2 className="form-card-header">Create Token</h2>
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="rounded-md bg-red-900/20 p-4 border border-red-700">
+              <div className="rounded-md bg-red-900/20 p-2 border border-red-700">
                 <div className="flex">
                   <div className="ml-3">
                     <h3 className="text-sm font-medium text-red-500">{error}</h3>
@@ -561,15 +561,11 @@ export default function TokenForm_v1({ isConnected }: Props) {
           <div className="form-card">
             <h2 className="form-card-header">Token Creator Admin Panel</h2>
             <div className="form-card-body">
-              {successInfo ? (
-                <TokenAdmin
-                  isConnected={isConnected}
-                  address={successInfo.tokenAddress}
-                  provider={provider}
-                />
-              ) : (
-                <p className="text-gray-400 text-sm">Create a token to view admin controls.</p>
-              )}
+              <TokenAdmin
+                isConnected={isConnected}
+                address={successInfo?.tokenAddress}
+                provider={provider}
+              />
             </div>
           </div>
         </div>
