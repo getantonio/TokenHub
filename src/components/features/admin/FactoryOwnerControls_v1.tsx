@@ -193,6 +193,7 @@ export default function FactoryOwnerControls_v1({ isConnected, address, provider
 
   return (
     <div className="form-card">
+      <h2 className="text-lg font-semibold text-text-primary mb-4">Factory Controls (V1)</h2>
       <div className="space-y-2">
         <div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">

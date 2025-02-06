@@ -16,6 +16,8 @@ const config = {
       url: process.env.POLYGON_AMOY_RPC_URL || "https://rpc.amoy.testnet.polygon.com",
       accounts: [PRIVATE_KEY],
       chainId: 80002,
+      gasPrice: 50000000000, // 50 gwei
+      gas: 5000000, // 5M gas limit
     },
     sepolia: {
       url: process.env.SEPOLIA_RPC_URL || "https://rpc.sepolia.org",
