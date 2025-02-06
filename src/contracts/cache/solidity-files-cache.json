@@ -1,109 +1,6 @@
 {
   "_format": "hh-sol-cache-2",
   "files": {
-    "/Volumes/UE_5_4T/Crypto/TokenFactory/src/contracts/TokenFactory_v2.1.0.sol": {
-      "lastModificationDate": 1738796296435,
-      "contentHash": "52e4a9b32cb9c941a6789e4a21a78663",
-      "sourceName": "src/contracts/TokenFactory_v2.1.0.sol",
-      "solcConfig": {
-        "version": "0.8.22",
-        "settings": {
-          "viaIR": true,
-          "optimizer": {
-            "enabled": true,
-            "runs": 1,
-            "details": {
-              "yul": true,
-              "yulDetails": {
-                "stackAllocation": true,
-                "optimizerSteps": "dhfoDgvulfnTUtnIf"
-              }
-            }
-          },
-          "evmVersion": "paris",
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          }
-        }
-      },
-      "imports": [
-        "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol",
-        "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol",
-        "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol",
-        "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol",
-        "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol",
-        "./TokenTemplate_v2.1.0.sol"
-      ],
-      "versionPragmas": [
-        "0.8.22"
-      ],
-      "artifacts": [
-        "TokenFactory_v2_1_0"
-      ]
-    },
-    "/Volumes/UE_5_4T/Crypto/TokenFactory/src/contracts/TokenTemplate_v2.1.0.sol": {
-      "lastModificationDate": 1738796280617,
-      "contentHash": "f60096c9926975d2bfda763c29c25b27",
-      "sourceName": "src/contracts/TokenTemplate_v2.1.0.sol",
-      "solcConfig": {
-        "version": "0.8.22",
-        "settings": {
-          "viaIR": true,
-          "optimizer": {
-            "enabled": true,
-            "runs": 1,
-            "details": {
-              "yul": true,
-              "yulDetails": {
-                "stackAllocation": true,
-                "optimizerSteps": "dhfoDgvulfnTUtnIf"
-              }
-            }
-          },
-          "evmVersion": "paris",
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          }
-        }
-      },
-      "imports": [
-        "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol",
-        "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20BurnableUpgradeable.sol",
-        "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PausableUpgradeable.sol",
-        "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol",
-        "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol",
-        "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol",
-        "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol"
-      ],
-      "versionPragmas": [
-        "0.8.22"
-      ],
-      "artifacts": [
-        "TokenTemplate_v2_1_0"
-      ]
-    },
     "/Volumes/UE_5_4T/Crypto/TokenFactory/node_modules/@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol": {
       "lastModificationDate": 1738796051121,
       "contentHash": "2c309ab8cb953d5db2a280f534c113cd",
@@ -1482,6 +1379,109 @@
       ],
       "artifacts": [
         "Context"
+      ]
+    },
+    "/Volumes/UE_5_4T/Crypto/TokenFactory/src/contracts/TokenFactory_v2.sol": {
+      "lastModificationDate": 1738803471093,
+      "contentHash": "0af4fb27ec564d5e47cf7f82973ad5c9",
+      "sourceName": "src/contracts/TokenFactory_v2.sol",
+      "solcConfig": {
+        "version": "0.8.22",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 1,
+            "details": {
+              "yul": true,
+              "yulDetails": {
+                "stackAllocation": true,
+                "optimizerSteps": "dhfoDgvulfnTUtnIf"
+              }
+            }
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol",
+        "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol",
+        "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol",
+        "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol",
+        "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol",
+        "./TokenTemplate_v2.sol"
+      ],
+      "versionPragmas": [
+        "0.8.22"
+      ],
+      "artifacts": [
+        "TokenFactory_v2"
+      ]
+    },
+    "/Volumes/UE_5_4T/Crypto/TokenFactory/src/contracts/TokenTemplate_v2.sol": {
+      "lastModificationDate": 1738803739553,
+      "contentHash": "a4e1556cf0863b162533a27d3c892c8c",
+      "sourceName": "src/contracts/TokenTemplate_v2.sol",
+      "solcConfig": {
+        "version": "0.8.22",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 1,
+            "details": {
+              "yul": true,
+              "yulDetails": {
+                "stackAllocation": true,
+                "optimizerSteps": "dhfoDgvulfnTUtnIf"
+              }
+            }
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol",
+        "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20BurnableUpgradeable.sol",
+        "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PausableUpgradeable.sol",
+        "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol",
+        "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol",
+        "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol",
+        "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol"
+      ],
+      "versionPragmas": [
+        "0.8.22"
+      ],
+      "artifacts": [
+        "TokenTemplate_v2"
       ]
     }
   }

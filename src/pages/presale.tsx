@@ -4,13 +4,21 @@ import { NetworkIndicator } from '@components/common/NetworkIndicator';
 import { PresaleCountdown } from '@components/features/presale/PresaleCountdown';
 import Head from 'next/head';
 import type { MetaMaskInpageProvider } from '@metamask/providers';
-import { BrowserProvider, Contract, formatUnits } from 'ethers';
-import TokenFactory_v2_1_0 from '../contracts/abi/TokenFactory_v2.1.0.json';
-import TokenTemplateV2 from '../contracts/abi/TokenTemplate_v2.1.0.json';
+import { BrowserProvider, Contract, formatUnits, EventLog } from 'ethers';
+import TokenFactory_v2 from '../contracts/abi/TokenFactory_v2.json';
+import TokenTemplateV2 from '../contracts/abi/TokenTemplate_v2.json';
 import { getNetworkContractAddress } from '../config/contracts';
 import { getExplorerUrl } from '../config/networks';
 import { Spinner } from '../components/ui/Spinner';
 import { TokenIcon } from '../components/ui/TokenIcon';
+
+// Add ERC1967 proxy interface
+const ERC1967_ABI = [
+  "function implementation() external view returns (address)",
+  "function admin() external view returns (address)",
+  "function upgradeTo(address newImplementation) external",
+  "function upgradeToAndCall(address newImplementation, bytes memory data) external payable"
+];
 
 interface PresaleToken {
   address: string;
@@ -71,52 +79,96 @@ export default function PresalePage() {
         throw new Error('No V2 factory deployed on this network');
       }
 
-      const factory = new Contract(factoryAddress, TokenFactory_v2_1_0.abi, provider);
-      const deployedTokens = await factory.getDeployedTokens();
+      const factory = new Contract(factoryAddress, TokenFactory_v2.abi, provider);
+      const currentBlock = await provider.getBlockNumber();
+      const fromBlock = Math.max(0, currentBlock - 100000);
+
+      console.log(`\nSearching for events from block ${fromBlock} to ${currentBlock}`);
+
+      // Get TokenCreated events
+      const filter = factory.filters.TokenCreated();
+      const events = await factory.queryFilter(filter, fromBlock, currentBlock);
+      
+      console.log("Found events:", events.length);
 
       const tokens: PresaleToken[] = [];
+      const processedAddresses = new Set<string>();
 
-      for (const tokenAddress of deployedTokens) {
+      for (const event of events) {
         try {
-          const token = new Contract(tokenAddress, TokenTemplateV2.abi, provider);
-          const [name, symbol, presaleStatus] = await Promise.all([
-            token.name(),
-            token.symbol(),
-            token.getPresaleStatus()
-          ]);
+          // Cast event to EventLog to access args
+          const eventLog = event as EventLog;
+          const { token: tokenAddr, name, symbol, owner } = eventLog.args;
+          
+          if (!tokenAddr || !ethers.isAddress(tokenAddr)) continue;
+          
+          const normalizedAddr = tokenAddr.toLowerCase();
+          if (processedAddresses.has(normalizedAddr)) continue;
 
-          const currentTime = Math.floor(Date.now() / 1000);
-          let status: 'pending' | 'active' | 'ended';
+          const code = await provider.getCode(normalizedAddr);
+          if (code === '0x') continue;
 
-          if (currentTime < presaleStatus.startTime) {
-            status = 'pending';
-          } else if (currentTime > presaleStatus.endTime || presaleStatus.finalized) {
-            status = 'ended';
-          } else {
-            status = 'active';
+          // Create contract instance with the token ABI
+          const token = new Contract(tokenAddr, TokenTemplateV2.abi, provider);
+          
+          try {
+            // Get presale info
+            const presaleStatus = await token.getPresaleStatus().catch(() => ({
+              softCap: BigInt(0),
+              hardCap: BigInt(0),
+              minContribution: BigInt(0),
+              maxContribution: BigInt(0),
+              startTime: BigInt(0),
+              endTime: BigInt(0),
+              presaleRate: BigInt(0),
+              whitelistEnabled: false,
+              finalized: false,
+              totalContributed: BigInt(0)
+            }));
+
+            const currentTime = Math.floor(Date.now() / 1000);
+            let status: 'pending' | 'active' | 'ended';
+
+            if (currentTime < Number(presaleStatus.startTime)) {
+              status = 'pending';
+            } else if (currentTime > Number(presaleStatus.endTime) || presaleStatus.finalized) {
+              status = 'ended';
+            } else {
+              status = 'active';
+            }
+
+            // Only add tokens that have presale configured (non-zero hardCap)
+            if (presaleStatus.hardCap > BigInt(0)) {
+              tokens.push({
+                address: normalizedAddr,
+                name,
+                symbol,
+                softCap: formatUnits(presaleStatus.softCap, 18),
+                hardCap: formatUnits(presaleStatus.hardCap, 18),
+                minContribution: formatUnits(presaleStatus.minContribution, 18),
+                maxContribution: formatUnits(presaleStatus.maxContribution, 18),
+                presaleRate: formatUnits(presaleStatus.presaleRate, 18),
+                startTime: Number(presaleStatus.startTime),
+                endTime: Number(presaleStatus.endTime),
+                totalContributed: formatUnits(presaleStatus.totalContributed, 18),
+                isWhitelistEnabled: presaleStatus.whitelistEnabled,
+                status
+              });
+              processedAddresses.add(normalizedAddr);
+              console.log(`Successfully processed presale token: ${name} (${symbol}) at ${normalizedAddr}`);
+            }
+          } catch (error) {
+            console.error(`Error reading presale data for ${tokenAddr}:`, error);
           }
-
-          tokens.push({
-            address: tokenAddress,
-            name,
-            symbol,
-            softCap: formatUnits(presaleStatus.softCap, 18),
-            hardCap: formatUnits(presaleStatus.hardCap, 18),
-            minContribution: formatUnits(presaleStatus.minContribution, 18),
-            maxContribution: formatUnits(presaleStatus.maxContribution, 18),
-            presaleRate: formatUnits(presaleStatus.presaleRate, 18),
-            startTime: Number(presaleStatus.startTime),
-            endTime: Number(presaleStatus.endTime),
-            totalContributed: formatUnits(presaleStatus.totalContributed, 18),
-            isWhitelistEnabled: presaleStatus.whitelistEnabled,
-            status
-          });
         } catch (error) {
           console.error('Error loading token:', error);
         }
       }
 
       setPresaleTokens(tokens);
+      if (tokens.length === 0) {
+        setError('No active presales found');
+      }
     } catch (error) {
       console.error('Error loading presale tokens:', error);
       setError(error instanceof Error ? error.message : 'Failed to load presale tokens');

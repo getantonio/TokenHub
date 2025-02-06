@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { BrowserProvider, Contract, formatUnits, parseUnits } from 'ethers';
-import TokenFactory_v2 from '@contracts/abi/TokenFactory_v2.1.0.json';
-import TokenTemplate_v2 from '@contracts/abi/TokenTemplate_v2.1.0.json';
+import { BrowserProvider, Contract, formatUnits, parseUnits, EventLog } from 'ethers';
+import TokenFactory_v2 from '@contracts/abi/TokenFactory_v2.json';
+import TokenTemplate_v2 from '@contracts/abi/TokenTemplate_v2.json';
 import { getNetworkContractAddress } from '@config/contracts';
 import { getExplorerUrl } from '@config/networks';
 import { useNetwork } from '@contexts/NetworkContext';
@@ -13,6 +13,25 @@ import { Card } from '@components/ui/card';
 import { useToast } from '@/components/ui/toast/use-toast';
 
 const TOKEN_DECIMALS = 18;
+
+// Add ERC1967 proxy interface
+const ERC1967_ABI = [
+  "function implementation() external view returns (address)",
+  "function admin() external view returns (address)",
+  "function upgradeTo(address newImplementation) external",
+  "function upgradeToAndCall(address newImplementation, bytes memory data) external payable"
+];
+
+// Add ERC20 interface at the top with other interfaces
+const ERC20_ABI = [
+  "function totalSupply() external view returns (uint256)",
+  "function decimals() external view returns (uint8)",
+  "function balanceOf(address account) external view returns (uint256)",
+  "function transfer(address to, uint256 amount) external returns (bool)",
+  "function allowance(address owner, address spender) external view returns (uint256)",
+  "function approve(address spender, uint256 amount) external returns (bool)",
+  "function transferFrom(address from, address to, uint256 amount) external returns (bool)"
+];
 
 interface TokenAdminV2Props {
   isConnected: boolean;
@@ -39,6 +58,17 @@ interface TokenInfo {
     finalized: boolean;
     totalContributed: string;
   };
+  platformFee: {
+    recipient: string;
+    totalTokens: string;
+    vestingEnabled: boolean;
+    vestingDuration: number;
+    cliffDuration: number;
+    vestingStart: number;
+    tokensClaimed: string;
+  };
+  userContribution?: string;
+  displayTotalSupply?: string;
 }
 
 interface ToastMessage {
@@ -74,6 +104,7 @@ export default function TokenAdminV2({ isConnected, address, provider: externalP
     newOwner: '',
     newFee: ''
   });
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isConnected && chainId && externalProvider && address) {
@@ -115,9 +146,8 @@ export default function TokenAdminV2({ isConnected, address, provider: externalP
 
   const showToast = (type: 'success' | 'error', message: string) => {
     toast({
+      title: message,
       variant: type === 'error' ? 'destructive' : 'default',
-      title: type === 'error' ? 'Error' : 'Success',
-      description: message,
     });
   };
 
@@ -129,6 +159,8 @@ export default function TokenAdminV2({ isConnected, address, provider: externalP
 
     try {
       setIsLoading(true);
+      setError(null);
+
       const signer = await externalProvider.getSigner();
       
       const factoryV2Address = chainId ? getNetworkContractAddress(Number(chainId), 'factoryAddressV2') : null;
@@ -141,156 +173,267 @@ export default function TokenAdminV2({ isConnected, address, provider: externalP
         chainId,
         factoryV2Address
       });
-      const factoryV2 = new Contract(factoryV2Address, TokenFactory_v2.abi, externalProvider);
       
-      // Try to get all deployed tokens first
-      try {
-        const deployedTokens = await factoryV2.getDeployedTokens();
-        console.log("Found deployedTokens:", deployedTokens);
-        
-        if (deployedTokens && deployedTokens.length > 0) {
-          const tokenPromises = deployedTokens.map(async (tokenAddr: string) => {
-            try {
-              const token = new Contract(tokenAddr, TokenTemplate_v2.abi, externalProvider);
-              const [name, symbol, totalSupply, blacklistEnabled, timeLockEnabled, presaleStatus] = await Promise.all([
-                token.name(),
-                token.symbol(),
-                token.totalSupply(),
-                token.blacklistEnabled(),
-                token.timeLockEnabled(),
-                token.getPresaleStatus()
-              ]);
-
-              return {
-                address: tokenAddr,
-                name,
-                symbol,
-                totalSupply: formatUnits(totalSupply, TOKEN_DECIMALS),
-                blacklistEnabled,
-                timeLockEnabled,
-                presaleInfo: {
-                  softCap: formatUnits(presaleStatus.softCap, TOKEN_DECIMALS),
-                  hardCap: formatUnits(presaleStatus.hardCap, TOKEN_DECIMALS),
-                  minContribution: formatUnits(presaleStatus.minContribution, TOKEN_DECIMALS),
-                  maxContribution: formatUnits(presaleStatus.maxContribution, TOKEN_DECIMALS),
-                  startTime: Number(presaleStatus.startTime),
-                  endTime: Number(presaleStatus.endTime),
-                  presaleRate: formatUnits(presaleStatus.presaleRate, TOKEN_DECIMALS),
-                  whitelistEnabled: presaleStatus.whitelistEnabled,
-                  finalized: presaleStatus.finalized,
-                  totalContributed: formatUnits(presaleStatus.totalContributed, TOKEN_DECIMALS)
-                }
-              };
-            } catch (error) {
-              console.error(`Error checking token ${tokenAddr}:`, error);
-              return null;
-            }
-          });
-
-          const tokenResults = await Promise.all(tokenPromises);
-          const validTokens = tokenResults.filter(Boolean);
-          if (validTokens.length > 0) {
-            setTokens(validTokens as TokenInfo[]);
-            return;
-          }
-        }
-      } catch (error) {
-        console.error("deployedTokens failed, trying event logs...", error);
-      }
-
-      // Fallback to event logs
+      const factoryV2 = new Contract(factoryV2Address, TokenFactory_v2.abi, externalProvider);
       const currentBlock = await externalProvider.getBlockNumber();
-      // Search last 100,000 blocks instead of 2.5M to speed up the search
       const fromBlock = Math.max(0, currentBlock - 100000);
 
       console.log(`\nSearching for events from block ${fromBlock} to ${currentBlock}`);
 
-      // Get all logs from the factory contract since no parameters are indexed
-      const logs = await externalProvider.getLogs({
-        address: factoryV2Address,
-        fromBlock,
-        toBlock: currentBlock
-      });
-      console.log("Found logs:", logs.length);
+      // Get TokenCreated events
+      const filter = factoryV2.filters.TokenCreated();
+      const events = await factoryV2.queryFilter(filter, fromBlock, currentBlock);
+      
+      console.log("Found events:", events.length);
 
       const foundTokens: TokenInfo[] = [];
       const processedAddresses = new Set<string>();
+      let errors = 0;
 
-      for (const log of logs) {
+      for (const event of events) {
         try {
-          const parsedLog = factoryV2.interface.parseLog({
-            topics: log.topics || [],
-            data: log.data
-          });
-          if (!parsedLog || parsedLog.name !== 'TokenCreated') {
-            console.log("Skipping non-TokenCreated log:", parsedLog?.name);
+          // Cast event to EventLog to access args
+          const eventLog = event as EventLog;
+          const { token: tokenAddr, name, symbol, owner } = eventLog.args;
+          
+          if (!tokenAddr || !ethers.isAddress(tokenAddr)) {
+            console.log(`Invalid token address: ${tokenAddr}`);
+            continue;
+          }
+          
+          const normalizedAddr = tokenAddr.toLowerCase();
+          if (processedAddresses.has(normalizedAddr)) {
+            console.log(`Token already processed: ${normalizedAddr}`);
             continue;
           }
 
-          console.log("Processing TokenCreated event:", {
-            token: parsedLog.args[0],
-            name: parsedLog.args[1],
-            symbol: parsedLog.args[2],
-            owner: parsedLog.args[3]
+          const code = await externalProvider.getCode(normalizedAddr);
+          if (code === '0x') {
+            console.log(`No code at address: ${normalizedAddr}`);
+            continue;
+          }
+
+          console.log("Processing token:", {
+            address: normalizedAddr,
+            name,
+            symbol,
+            owner
           });
 
-          const tokenAddr = parsedLog.args[0] as string;
-          if (!tokenAddr || !ethers.isAddress(tokenAddr)) continue;
+          // Create contract instance with both ERC20 and Template ABIs
+          const erc20Contract = new Contract(normalizedAddr, ERC20_ABI, externalProvider);
+          const tokenContract = new Contract(normalizedAddr, TokenTemplate_v2.abi, externalProvider);
 
-          const normalizedAddr = tokenAddr.toLowerCase();
-          if (processedAddresses.has(normalizedAddr)) continue;
+          // Check initialization by trying to get basic token info
+          try {
+            const [totalSupply, decimals] = await Promise.all([
+              erc20Contract.totalSupply(),
+              erc20Contract.decimals()
+            ]);
 
-          const code = await externalProvider.getCode(normalizedAddr);
-          if (code === '0x') continue;
+            console.log(`Token info loaded successfully:`, {
+              address: normalizedAddr,
+              totalSupply: formatUnits(totalSupply, decimals),
+              decimals
+            });
 
-          console.log("Checking token contract at:", normalizedAddr);
-          const token = new Contract(normalizedAddr, TokenTemplate_v2.abi, externalProvider);
-          const [name, symbol, totalSupply, blacklistEnabled, timeLockEnabled, presaleStatus] = await Promise.all([
-            token.name(),
-            token.symbol(),
-            token.totalSupply(),
-            token.blacklistEnabled(),
-            token.timeLockEnabled(),
-            token.getPresaleStatus()
-          ]);
-
-          if (!foundTokens.some(t => t.address.toLowerCase() === normalizedAddr)) {
+            // If we get here, the token is initialized
             foundTokens.push({
               address: normalizedAddr,
               name,
               symbol,
-              totalSupply: formatUnits(totalSupply, TOKEN_DECIMALS),
-              blacklistEnabled,
-              timeLockEnabled,
+              totalSupply: formatUnits(totalSupply, decimals),
+              blacklistEnabled: false,
+              timeLockEnabled: false,
               presaleInfo: {
-                softCap: formatUnits(presaleStatus.softCap, TOKEN_DECIMALS),
-                hardCap: formatUnits(presaleStatus.hardCap, TOKEN_DECIMALS),
-                minContribution: formatUnits(presaleStatus.minContribution, TOKEN_DECIMALS),
-                maxContribution: formatUnits(presaleStatus.maxContribution, TOKEN_DECIMALS),
-                startTime: Number(presaleStatus.startTime),
-                endTime: Number(presaleStatus.endTime),
-                presaleRate: formatUnits(presaleStatus.presaleRate, TOKEN_DECIMALS),
-                whitelistEnabled: presaleStatus.whitelistEnabled,
-                finalized: presaleStatus.finalized,
-                totalContributed: formatUnits(presaleStatus.totalContributed, TOKEN_DECIMALS)
+                softCap: "0",
+                hardCap: "0",
+                minContribution: "0",
+                maxContribution: "0",
+                startTime: 0,
+                endTime: 0,
+                presaleRate: "0",
+                whitelistEnabled: false,
+                finalized: false,
+                totalContributed: "0"
+              },
+              platformFee: {
+                recipient: ethers.ZeroAddress,
+                totalTokens: "0",
+                vestingEnabled: false,
+                vestingDuration: 0,
+                cliffDuration: 0,
+                vestingStart: 0,
+                tokensClaimed: "0"
               }
             });
+            
             processedAddresses.add(normalizedAddr);
+            console.log(`Successfully processed token: ${name} (${symbol}) at ${normalizedAddr}`);
+          } catch (error) {
+            console.log(`Token ${normalizedAddr} initialization check failed:`, error);
+            continue;
           }
         } catch (error) {
-          console.error("Error processing log:", error);
+          console.error("Error processing event:", error);
+          errors++;
         }
       }
 
       if (foundTokens.length > 0) {
         console.log("Setting found tokens:", foundTokens);
         setTokens(foundTokens);
+        showToast('success', `Found ${foundTokens.length} tokens`);
+
+        // After setting the basic token info, load additional data in the background
+        loadAdditionalTokenData(foundTokens);
+      } else {
+        console.log("No initialized tokens found");
+        setTokens([]);
       }
     } catch (error: any) {
       console.error('Error loading tokens:', error);
       showToast('error', error.message || 'Failed to load tokens');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadAdditionalTokenData = async (tokens: TokenInfo[]) => {
+    if (!externalProvider) return;
+
+    let presaleErrors = 0;
+    let platformFeeErrors = 0;
+
+    for (const token of tokens) {
+      try {
+        // Create contract instances
+        const erc20Contract = new Contract(token.address, ERC20_ABI, externalProvider);
+        const tokenContract = new Contract(token.address, TokenTemplate_v2.abi, externalProvider);
+
+        // First get basic ERC20 info with proper error handling
+        const [totalSupply, decimals] = await Promise.all([
+          erc20Contract.totalSupply().catch((error) => {
+            console.error(`Failed to get totalSupply for ${token.address}:`, error);
+            return BigInt(0);
+          }),
+          erc20Contract.decimals().catch((error) => {
+            console.error(`Failed to get decimals for ${token.address}:`, error);
+            return 18;
+          })
+        ]);
+
+        // Update basic token info first
+        setTokens(prevTokens => 
+          prevTokens.map(t => 
+            t.address === token.address 
+              ? { 
+                  ...t, 
+                  totalSupply: formatUnits(totalSupply, decimals),
+                  displayTotalSupply: Number(formatUnits(totalSupply, decimals)).toLocaleString(undefined, {
+                    maximumFractionDigits: 0
+                  })
+                }
+              : t
+          )
+        );
+
+        // Then try to get presale info with proper error handling
+        const presaleInfo = await tokenContract.presaleInfo().catch((error) => {
+          console.error(`Failed to get presale info for ${token.address}:`, error);
+          presaleErrors++;
+          return {
+            softCap: BigInt(0),
+            hardCap: BigInt(0),
+            minContribution: BigInt(0),
+            maxContribution: BigInt(0),
+            startTime: BigInt(0),
+            endTime: BigInt(0),
+            presaleRate: BigInt(0),
+            whitelistEnabled: false,
+            finalized: false,
+            totalContributed: BigInt(0)
+          };
+        });
+        
+        // Update presale info if successful
+        setTokens(prevTokens => 
+          prevTokens.map(t => 
+            t.address === token.address 
+              ? { 
+                  ...t,
+                  presaleInfo: {
+                    softCap: formatUnits(presaleInfo.softCap, TOKEN_DECIMALS),
+                    hardCap: formatUnits(presaleInfo.hardCap, TOKEN_DECIMALS),
+                    minContribution: formatUnits(presaleInfo.minContribution, TOKEN_DECIMALS),
+                    maxContribution: formatUnits(presaleInfo.maxContribution, TOKEN_DECIMALS),
+                    startTime: Number(presaleInfo.startTime),
+                    endTime: Number(presaleInfo.endTime),
+                    presaleRate: formatUnits(presaleInfo.presaleRate, TOKEN_DECIMALS),
+                    whitelistEnabled: presaleInfo.whitelistEnabled,
+                    finalized: presaleInfo.finalized,
+                    totalContributed: formatUnits(presaleInfo.totalContributed, TOKEN_DECIMALS)
+                  }
+                }
+              : t
+          )
+        );
+
+        // Try to get platform fee info with proper error handling
+        try {
+          const [
+            recipient,
+            totalTokens,
+            vestingEnabled,
+            vestingDuration,
+            cliffDuration,
+            vestingStart,
+            tokensClaimed
+          ] = await Promise.all([
+            tokenContract.platformFeeRecipient(),
+            tokenContract.platformFeeTokens(),
+            tokenContract.platformFeeVestingEnabled(),
+            tokenContract.platformFeeVestingDuration(),
+            tokenContract.platformFeeCliffDuration(),
+            tokenContract.platformFeeVestingStart(),
+            tokenContract.platformFeeTokensClaimed()
+          ]);
+
+          // Update platform fee info if successful
+          setTokens(prevTokens => 
+            prevTokens.map(t => 
+              t.address === token.address 
+                ? { 
+                    ...t, 
+                    platformFee: {
+                      recipient,
+                      totalTokens: formatUnits(totalTokens, decimals),
+                      vestingEnabled,
+                      vestingDuration: Number(vestingDuration),
+                      cliffDuration: Number(cliffDuration),
+                      vestingStart: Number(vestingStart),
+                      tokensClaimed: formatUnits(tokensClaimed, decimals)
+                    }
+                  }
+                : t
+            )
+          );
+        } catch (error: any) {
+          console.error(`Failed to get platform fee info for ${token.address}:`, error);
+          platformFeeErrors++;
+        }
+
+      } catch (error: any) {
+        console.error(`Error loading additional data for token ${token.address}:`, error);
+      }
+    }
+
+    // Show a single summary toast for all errors
+    if (presaleErrors > 0 || platformFeeErrors > 0) {
+      const errorMessages = [];
+      if (presaleErrors > 0) errorMessages.push(`${presaleErrors} presale info errors`);
+      if (platformFeeErrors > 0) errorMessages.push(`${platformFeeErrors} platform fee errors`);
+      showToast('error', `Failed to load some token data: ${errorMessages.join(', ')}`);
     }
   };
 
@@ -398,6 +541,7 @@ export default function TokenAdminV2({ isConnected, address, provider: externalP
   };
 
   const formatDate = (timestamp: number) => {
+    if (!timestamp) return 'Not set';
     return new Date(timestamp * 1000).toLocaleString();
   };
 
@@ -528,7 +672,7 @@ export default function TokenAdminV2({ isConnected, address, provider: externalP
                   <div>
                     <h3 className="text-sm font-bold text-text-primary">{token.name} ({token.symbol})</h3>
                     <p className="text-xs text-text-secondary">Address: {token.address}</p>
-                    <p className="text-xs text-text-secondary">Total Supply: {Number(token.totalSupply).toLocaleString()} {token.symbol}</p>
+                    <p className="text-xs text-text-secondary">Total Supply: {token.displayTotalSupply || Number(token.totalSupply).toLocaleString(undefined, { maximumFractionDigits: 0 })} {token.symbol}</p>
                   </div>
                   <div className="flex gap-2">
                     <button
@@ -587,6 +731,33 @@ export default function TokenAdminV2({ isConnected, address, provider: externalP
                         </button>
                       )}
                     </div>
+
+                    {/* Platform Fee Information */}
+                    <div className="space-y-1">
+                      <h4 className="text-xs font-medium text-text-primary">Platform Fee Info</h4>
+                      <div className="grid grid-cols-2 gap-1">
+                        <div>
+                          <p className="text-xs text-text-secondary">Total Tokens: {token.platformFee.totalTokens}</p>
+                          <p className="text-xs text-text-secondary">Tokens Claimed: {token.platformFee.tokensClaimed}</p>
+                          <p className="text-xs text-text-secondary">Vesting Enabled: {token.platformFee.vestingEnabled ? 'Yes' : 'No'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-text-secondary">Vesting Duration: {token.platformFee.vestingDuration / 86400} days</p>
+                          <p className="text-xs text-text-secondary">Cliff Duration: {token.platformFee.cliffDuration / 86400} days</p>
+                          {token.platformFee.vestingStart > 0 && (
+                            <p className="text-xs text-text-secondary">Vesting Start: {formatDate(token.platformFee.vestingStart)}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* User Contribution */}
+                    {token.userContribution && (
+                      <div className="space-y-1">
+                        <h4 className="text-xs font-medium text-text-primary">Your Contribution</h4>
+                        <p className="text-xs text-text-secondary">{token.userContribution} ETH</p>
+                      </div>
+                    )}
 
                     {!token.blacklistEnabled && !token.timeLockEnabled ? (
                       <p className="text-xs text-text-secondary italic">This token was created without blacklist or timelock features.</p>

@@ -6,19 +6,28 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import "./TokenTemplate_v2.1.0.sol";
+import "./TokenTemplate_v2.sol";
 
 /**
- * @title TokenFactory_v2.1.0
+ * @title TokenFactory_v2
  * @notice Factory contract for creating new token instances with presale functionality
  * @dev Uses ERC1967 proxy pattern for upgradeable token instances
  */
-contract TokenFactory_v2_1_0 is Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuardUpgradeable {
-    string public constant VERSION = "2.1.0";
+contract TokenFactory_v2 is Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuardUpgradeable {
+    string public constant VERSION = "2.0.0";
 
     // Deployment fee configuration
     uint256 public deploymentFee;
     mapping(address => uint256) public customDeploymentFees;
+    
+    // Platform fee configuration
+    uint256 public platformFeePercentage; // Percentage with 2 decimals (e.g., 500 = 5%)
+    address public platformFeeRecipient;
+    
+    // Platform fee vesting configuration
+    uint256 public platformFeeVestingDuration; // Duration in seconds
+    uint256 public platformFeeCliffDuration;   // Cliff duration in seconds
+    bool public platformFeeVestingEnabled;     // Whether vesting is enabled
     
     // Array to track all deployed tokens
     address[] public deployedTokens;
@@ -26,8 +35,14 @@ contract TokenFactory_v2_1_0 is Initializable, OwnableUpgradeable, UUPSUpgradeab
     // Events
     event DeploymentFeeUpdated(uint256 newFee);
     event CustomDeploymentFeeSet(address indexed user, uint256 fee);
+    event PlatformFeeUpdated(uint256 newPercentage);
+    event PlatformFeeRecipientUpdated(address newRecipient);
+    event PlatformFeeVestingConfigured(
+        uint256 vestingDuration,
+        uint256 cliffDuration,
+        bool enabled
+    );
 
-    // Events
     event TokenCreated(
         address token,
         string name,
@@ -38,10 +53,10 @@ contract TokenFactory_v2_1_0 is Initializable, OwnableUpgradeable, UUPSUpgradeab
     );
 
     // Template implementation
-    TokenTemplate_v2_1_0 public immutable tokenImplementation;
+    TokenTemplate_v2 public immutable tokenImplementation;
 
     constructor(address _implementation) {
-        tokenImplementation = TokenTemplate_v2_1_0(_implementation);
+        tokenImplementation = TokenTemplate_v2(_implementation);
     }
 
     function initialize(uint256 _deploymentFee) public initializer {
@@ -49,7 +64,63 @@ contract TokenFactory_v2_1_0 is Initializable, OwnableUpgradeable, UUPSUpgradeab
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
         deploymentFee = _deploymentFee;
+        platformFeePercentage = 500; // Default 5%
+        platformFeeRecipient = owner(); // Default to contract owner
+        platformFeeVestingDuration = 365 days; // Default 1 year vesting
+        platformFeeCliffDuration = 90 days;    // Default 90 days cliff
+        platformFeeVestingEnabled = true;      // Enable vesting by default
+        
         emit DeploymentFeeUpdated(_deploymentFee);
+        emit PlatformFeeUpdated(platformFeePercentage);
+        emit PlatformFeeRecipientUpdated(platformFeeRecipient);
+        emit PlatformFeeVestingConfigured(
+            platformFeeVestingDuration,
+            platformFeeCliffDuration,
+            platformFeeVestingEnabled
+        );
+    }
+
+    /**
+     * @notice Configure platform fee vesting parameters
+     * @param _vestingDuration Duration of the vesting period in seconds
+     * @param _cliffDuration Duration of the cliff period in seconds
+     * @param _enabled Whether vesting is enabled
+     */
+    function configurePlatformFeeVesting(
+        uint256 _vestingDuration,
+        uint256 _cliffDuration,
+        bool _enabled
+    ) external onlyOwner {
+        require(_cliffDuration <= _vestingDuration, "Cliff longer than vesting");
+        platformFeeVestingDuration = _vestingDuration;
+        platformFeeCliffDuration = _cliffDuration;
+        platformFeeVestingEnabled = _enabled;
+        
+        emit PlatformFeeVestingConfigured(
+            _vestingDuration,
+            _cliffDuration,
+            _enabled
+        );
+    }
+
+    /**
+     * @notice Set the platform fee percentage
+     * @param _percentage New fee percentage with 2 decimals (e.g., 500 = 5%)
+     */
+    function setPlatformFeePercentage(uint256 _percentage) external onlyOwner {
+        require(_percentage <= 10000, "Fee cannot exceed 100%");
+        platformFeePercentage = _percentage;
+        emit PlatformFeeUpdated(_percentage);
+    }
+
+    /**
+     * @notice Set the platform fee recipient
+     * @param _recipient Address to receive platform fees
+     */
+    function setPlatformFeeRecipient(address _recipient) external onlyOwner {
+        require(_recipient != address(0), "Invalid recipient");
+        platformFeeRecipient = _recipient;
+        emit PlatformFeeRecipientUpdated(_recipient);
     }
 
     /**
@@ -119,13 +190,17 @@ contract TokenFactory_v2_1_0 is Initializable, OwnableUpgradeable, UUPSUpgradeab
         uint256 fee = getDeploymentFee(msg.sender);
         require(msg.value >= fee, "Insufficient deployment fee");
 
+        // Calculate platform fee tokens
+        uint256 platformFeeTokens = (initialSupply * platformFeePercentage) / 10000;
+        uint256 adjustedInitialSupply = initialSupply - platformFeeTokens;
+
         // Create proxy
         bytes memory initData = abi.encodeWithSelector(
-            TokenTemplate_v2_1_0.initialize.selector,
-            TokenTemplate_v2_1_0.InitParams({
+            TokenTemplate_v2.initialize.selector,
+            TokenTemplate_v2.InitParams({
                 name: name,
                 symbol: symbol,
-                initialSupply: initialSupply,
+                initialSupply: adjustedInitialSupply,
                 maxSupply: maxSupply,
                 owner: msg.sender,
                 enableBlacklist: enableBlacklist,
@@ -135,7 +210,12 @@ contract TokenFactory_v2_1_0 is Initializable, OwnableUpgradeable, UUPSUpgradeab
                 maxContribution: maxContribution,
                 presaleCap: presaleCap,
                 startTime: startTime,
-                endTime: endTime
+                endTime: endTime,
+                platformFeeRecipient: platformFeeRecipient,
+                platformFeeTokens: platformFeeTokens,
+                platformFeeVestingEnabled: platformFeeVestingEnabled,
+                platformFeeVestingDuration: platformFeeVestingDuration,
+                platformFeeCliffDuration: platformFeeCliffDuration
             })
         );
 

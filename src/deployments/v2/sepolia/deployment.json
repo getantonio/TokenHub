@@ -1,10 +1,8 @@
 {
-  "address": "0x341Ec02538629b621efE4BB908C8CD68ae8b741F",
-  "tokenImpl": "0xD9Aa0Ca55115900908bd649793D9b8dE11Fb7368",
-  "presaleImpl": "0xCBa48f15BecdAC1eAF709Ce65c8FEFe436513e07",
+  "factoryAddress": "0xE5FC8C8Dba204E451cE55Bab3BAD3542EeD8beDa",
+  "templateAddress": "0xd0617D25F13D45E992fa70FF6F2F2032bf8A7dB0",
   "network": "sepolia",
   "version": "v2",
-  "timestamp": "2025-01-26T01:47:12.947Z",
-  "blockNumber": 7571632,
-  "factoryFee": "0.0001"
+  "timestamp": "2025-02-06T02:58:13.446Z",
+  "blockNumber": 7648961
 }

@@ -7,6 +7,7 @@ import { Navigation } from '@components/layouts/Navigation'
 import '../styles/shared.css'
 import { Web3Provider } from '@components/common/Web3Provider'
 import { ToastProvider } from '@/components/ui/toast/use-toast'
+import { Toaster } from '@/components/ui/toast/toast'
 
 export default function App({ Component, pageProps }: AppProps) {
   return (
@@ -18,6 +19,7 @@ export default function App({ Component, pageProps }: AppProps) {
               <Header />
               <Navigation />
               <Component {...pageProps} />
+              <Toaster />
             </div>
           </Web3Provider>
         </WalletProvider>

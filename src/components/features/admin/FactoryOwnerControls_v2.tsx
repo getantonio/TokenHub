@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { BrowserProvider, Contract, formatUnits, parseUnits } from 'ethers';
 import { useNetwork } from '@contexts/NetworkContext';
-import TokenFactory_v2 from '@contracts/abi/TokenFactory_v2.1.0.json';
+import TokenFactory_v2 from '@contracts/abi/TokenFactory_v2.json';
 import { contractAddresses } from '@config/contracts';
 import { Spinner } from '@components/ui/Spinner';
 import { useToast } from '@/components/ui/toast/use-toast';

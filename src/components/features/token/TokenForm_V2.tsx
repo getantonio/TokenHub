@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { BrowserProvider, Contract, parseUnits, formatUnits } from 'ethers';
 import { useNetwork } from '@contexts/NetworkContext';
-import TokenFactory_v2 from '@contracts/abi/TokenFactory_v2.1.0.json';
+import TokenFactory_v2 from '../../../contracts/abi/TokenFactory_v2.json';
 import { getExplorerUrl } from '@config/networks';
 import { getNetworkContractAddress } from '@config/contracts';
 import { useToast } from '@/components/ui/toast/use-toast';
@@ -209,7 +209,6 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
 
       const provider = new BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
-      const userAddress = await signer.getAddress();
       const chainId = Number(await window.ethereum.request({ method: 'eth_chainId' }));
       
       const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddressV2');
@@ -218,10 +217,12 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
       }
 
       const factory = new Contract(factoryAddress, TokenFactory_v2.abi, signer);
-      const fee = await factory.deploymentFee();
+      const fee = await factory.getDeploymentFee(await signer.getAddress());
       
       const initialSupplyWei = parseUnits(formData.initialSupply, TOKEN_DECIMALS);
       const maxSupplyWei = parseUnits(formData.maxSupply, TOKEN_DECIMALS);
+      const startTimeUnix = Math.floor(new Date(formData.startTime).getTime() / 1000);
+      const endTimeUnix = Math.floor(new Date(formData.endTime).getTime() / 1000);
 
       showToast('success', 'Preparing transaction...');
 
@@ -236,10 +237,9 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
         parseUnits(formData.minContribution, 18),
         parseUnits(formData.maxContribution, 18),
         parseUnits(formData.presaleCap, 18),
-        Math.floor(Date.now() / 1000) + 3600,
-        Math.floor(Date.now() / 1000) + 86400,
-        await signer.getAddress(),
-        { value: BigInt(fee) }
+        startTimeUnix,
+        endTimeUnix,
+        { value: fee }
       );
 
       showToast('success', 'Transaction submitted. Waiting for confirmation...', getExplorerUrl(chainId, tx.hash, 'tx'));
@@ -247,45 +247,32 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
       const receipt = await tx.wait();
       let tokenAddress = null;
       
+      // Find TokenCreated event
       for (const log of receipt.logs) {
         try {
-          const parsedLog = factory.interface.parseLog({
-            topics: log.topics ? log.topics.map((t: string) => t || '') : [],
-            data: log.data || '0x'
-          });
-          if (parsedLog?.name === "TokenCreated") {
-            tokenAddress = parsedLog.args[0];
+          const parsedLog = factory.interface.parseLog(log);
+          if (parsedLog && parsedLog.name === 'TokenCreated') {
+            tokenAddress = parsedLog.args.token;
             break;
           }
         } catch (e) {
+          // Skip logs that can't be parsed
           continue;
         }
       }
 
-      if (!tokenAddress) {
-        for (const log of receipt.logs) {
-          if (log.address !== factoryAddress) {
-            tokenAddress = log.address;
-            break;
-          }
-        }
+      if (tokenAddress) {
+        setSuccessInfo({
+          tokenAddress,
+          tokenName: formData.name,
+          tokenSymbol: formData.symbol
+        });
+        showToast('success', 'Token created successfully!', getExplorerUrl(chainId, tokenAddress, 'address'));
       }
-
-      if (!tokenAddress) {
-        throw new Error("Could not find token address in transaction logs");
-      }
-
-      const explorerUrl = getExplorerUrl(chainId, tokenAddress, 'token');
-      showToast('success', 'Token created successfully!', explorerUrl);
-
-      setSuccessInfo({
-        tokenAddress,
-        tokenName: formData.name,
-        tokenSymbol: formData.symbol,
-      });
 
     } catch (error: any) {
       console.error('Error creating token:', error);
+      setError(error.message || 'Failed to create token');
       showToast('error', error.message || 'Failed to create token');
     } finally {
       setLoading(false);

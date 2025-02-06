@@ -1,7 +1,13 @@
 {
   "abi": [
     {
-      "inputs": [],
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_implementation",
+          "type": "address"
+        }
+      ],
       "stateMutability": "nonpayable",
       "type": "constructor"
     },
@@ -11,179 +17,153 @@
         {
           "indexed": true,
           "internalType": "address",
-          "name": "deployer",
+          "name": "user",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "fee",
+          "type": "uint256"
+        }
+      ],
+      "name": "CustomDeploymentFeeSet",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "newFee",
+          "type": "uint256"
+        }
+      ],
+      "name": "DeploymentFeeUpdated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "previousOwner",
           "type": "address"
         },
         {
           "indexed": true,
           "internalType": "address",
-          "name": "tokenAddress",
+          "name": "newOwner",
           "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "string",
-          "name": "name",
-          "type": "string"
-        },
-        {
-          "indexed": false,
-          "internalType": "string",
-          "name": "symbol",
-          "type": "string"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint8",
-          "name": "decimals",
-          "type": "uint8"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "initialSupply",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "softCap",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "hardCap",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "minContribution",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "maxContribution",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "startTime",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "endTime",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "presaleRate",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "bool",
-          "name": "whitelistEnabled",
-          "type": "bool"
         }
       ],
-      "name": "TokenDeployed",
+      "name": "OwnershipTransferred",
       "type": "event"
     },
     {
+      "anonymous": false,
       "inputs": [
         {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "vestingDuration",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "cliffDuration",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "bool",
+          "name": "enabled",
+          "type": "bool"
+        }
+      ],
+      "name": "PlatformFeeVestingConfigured",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": false,
+          "internalType": "address",
+          "name": "newRecipient",
+          "type": "address"
+        }
+      ],
+      "name": "PlatformFeeRecipientUpdated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "newPercentage",
+          "type": "uint256"
+        }
+      ],
+      "name": "PlatformFeeUpdated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": false,
+          "internalType": "address",
+          "name": "token",
+          "type": "address"
+        },
+        {
+          "indexed": false,
           "internalType": "string",
           "name": "name",
           "type": "string"
         },
         {
+          "indexed": false,
           "internalType": "string",
           "name": "symbol",
           "type": "string"
         },
         {
-          "internalType": "uint8",
-          "name": "decimals",
-          "type": "uint8"
+          "indexed": false,
+          "internalType": "address",
+          "name": "owner",
+          "type": "address"
         },
         {
-          "internalType": "uint256",
-          "name": "initialSupply",
-          "type": "uint256"
-        },
-        {
-          "internalType": "uint256",
-          "name": "softCap",
-          "type": "uint256"
-        },
-        {
-          "internalType": "uint256",
-          "name": "hardCap",
-          "type": "uint256"
-        },
-        {
-          "internalType": "uint256",
-          "name": "minContribution",
-          "type": "uint256"
-        },
-        {
-          "internalType": "uint256",
-          "name": "maxContribution",
-          "type": "uint256"
-        },
-        {
+          "indexed": false,
           "internalType": "uint256",
           "name": "startTime",
           "type": "uint256"
         },
         {
+          "indexed": false,
           "internalType": "uint256",
           "name": "endTime",
           "type": "uint256"
-        },
-        {
-          "internalType": "uint256",
-          "name": "presaleRate",
-          "type": "uint256"
-        },
-        {
-          "internalType": "bool",
-          "name": "whitelistEnabled",
-          "type": "bool"
         }
       ],
-      "name": "deployToken",
-      "outputs": [
-        {
-          "internalType": "address",
-          "name": "",
-          "type": "address"
-        }
-      ],
-      "stateMutability": "payable",
-      "type": "function"
+      "name": "TokenCreated",
+      "type": "event"
     },
     {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "deployer",
-          "type": "address"
-        }
-      ],
-      "name": "getDeployedTokens",
+      "inputs": [],
+      "name": "VERSION",
       "outputs": [
         {
-          "internalType": "address[]",
+          "internalType": "string",
           "name": "",
-          "type": "address[]"
+          "type": "string"
         }
       ],
       "stateMutability": "view",
@@ -192,19 +172,98 @@
     {
       "inputs": [
         {
-          "internalType": "address",
-          "name": "implementation_",
-          "type": "address"
+          "internalType": "uint256",
+          "name": "_vestingDuration",
+          "type": "uint256"
         },
         {
           "internalType": "uint256",
-          "name": "deploymentFee_",
+          "name": "_cliffDuration",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bool",
+          "name": "_enabled",
+          "type": "bool"
+        }
+      ],
+      "name": "configurePlatformFeeVesting",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "internalType": "string",
+          "name": "symbol",
+          "type": "string"
+        },
+        {
+          "internalType": "uint256",
+          "name": "initialSupply",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "maxSupply",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bool",
+          "name": "enableBlacklist",
+          "type": "bool"
+        },
+        {
+          "internalType": "bool",
+          "name": "enableTimeLock",
+          "type": "bool"
+        },
+        {
+          "internalType": "uint256",
+          "name": "presaleRate",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "minContribution",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "maxContribution",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "presaleCap",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "startTime",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "endTime",
           "type": "uint256"
         }
       ],
-      "name": "initialize",
-      "outputs": [],
-      "stateMutability": "nonpayable",
+      "name": "createToken",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "payable",
       "type": "function"
     },
     {
@@ -224,11 +283,159 @@
       "inputs": [
         {
           "internalType": "address",
-          "name": "newImplementation",
+          "name": "_user",
           "type": "address"
         }
       ],
-      "name": "updateImplementation",
+      "name": "getDeploymentFee",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "getDeployedTokens",
+      "outputs": [
+        {
+          "internalType": "address[]",
+          "name": "",
+          "type": "address[]"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "getTemplateImplementation",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "_deploymentFee",
+          "type": "uint256"
+        }
+      ],
+      "name": "initialize",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "owner",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "platformFeeCliffDuration",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "platformFeePercentage",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "platformFeeRecipient",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "platformFeeVestingDuration",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "platformFeeVestingEnabled",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "renounceOwnership",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_user",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_fee",
+          "type": "uint256"
+        }
+      ],
+      "name": "setCustomDeploymentFee",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"
@@ -237,11 +444,63 @@
       "inputs": [
         {
           "internalType": "uint256",
-          "name": "newFee",
+          "name": "_fee",
           "type": "uint256"
         }
       ],
-      "name": "updateDeploymentFee",
+      "name": "setDeploymentFee",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "_percentage",
+          "type": "uint256"
+        }
+      ],
+      "name": "setPlatformFeePercentage",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_recipient",
+          "type": "address"
+        }
+      ],
+      "name": "setPlatformFeeRecipient",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "tokenImplementation",
+      "outputs": [
+        {
+          "internalType": "contract TokenTemplate_v2",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "transferOwnership",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"
@@ -254,4 +513,4 @@
       "type": "function"
     }
   ]
-} 
+}

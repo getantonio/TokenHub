@@ -68,38 +68,52 @@ async function deployV1() {
 }
 
 async function deployV2() {
-  const { network } = hre;
+  const { network, ethers } = hre;
   const networkName = network.name;
-  const version = 'v2.1.0';
+  const version = 'v2';
   
-  console.log(`Deploying TokenFactory_v2.1.0 to ${networkName}...`);
+  console.log(`Deploying TokenFactory_v2 to ${networkName}...`);
 
-  // First deploy the TokenTemplate_v2.1.0
-  console.log('Deploying TokenTemplate_v2.1.0...');
-  const TokenTemplate = require('hardhat').getContractFactory("TokenTemplate_v2_1_0");
+  // First deploy the TokenTemplate_v2
+  console.log('Deploying TokenTemplate_v2...');
+  const TokenTemplate = await ethers.getContractFactory("TokenTemplate_v2");
   const template = await TokenTemplate.deploy();
   await template.waitForDeployment();
   const templateAddress = await template.getAddress();
-  console.log(`TokenTemplate_v2.1.0 deployed to: ${templateAddress}`);
+  console.log(`TokenTemplate_v2 deployed to: ${templateAddress}`);
 
   // Deploy the factory with template implementation
-  console.log('Deploying TokenFactory_v2.1.0...');
-  const TokenFactory = require('hardhat').getContractFactory("TokenFactory_v2_1_0");
+  console.log('Deploying TokenFactory_v2...');
+  const TokenFactory = await ethers.getContractFactory("TokenFactory_v2");
   const factory = await TokenFactory.deploy(templateAddress);
   await factory.waitForDeployment();
+  const factoryAddress = await factory.getAddress();
+  console.log(`TokenFactory_v2 deployed to: ${factoryAddress}`);
 
-  const address = await factory.getAddress();
-  console.log(`TokenFactory_v2.1.0 deployed to: ${address}`);
-
-  // Initialize the factory with deployment fee through proxy
+  // Initialize the factory with deployment fee
   console.log('Initializing factory...');
   const defaultFee = ethers.parseEther("0.0001"); // 0.0001 ETH default fee
-  const initData = factory.interface.encodeFunctionData("initialize", [defaultFee]);
   const tx = await factory.initialize(defaultFee);
   await tx.wait();
   console.log(`Factory initialized with default fee: ${ethers.formatEther(defaultFee)} ETH`);
 
-  await saveDeployment(networkName, version, address, templateAddress);
+  await saveDeployment(networkName, version, factoryAddress, templateAddress);
+
+  // Verify contracts
+  if (network.name !== 'localhost' && network.name !== 'hardhat') {
+    try {
+      console.log('\nVerifying contracts...');
+      await verifyContract(templateAddress, []);
+      await verifyContract(factoryAddress, [templateAddress]);
+    } catch (error) {
+      console.error('Error verifying contracts:', error);
+    }
+  }
+
+  return {
+    templateAddress,
+    factoryAddress
+  };
 }
 
 async function deployV3() {
@@ -339,7 +353,7 @@ async function deployAndVerify(version: string) {
 
 async function main() {
   console.log('Deploying contracts with account:', (await hre.ethers.provider.getSigner()).address);
-  await deployV1();
+  await deployV2();
 }
 
 main()
