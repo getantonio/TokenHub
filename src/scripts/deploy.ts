@@ -1,6 +1,5 @@
-import { verifyContractOnEtherscan } from './utils/utils';
+// const { verifyContractOnEtherscan } = require('./utils/utils');
 const hre = require('hardhat');
-const { ethers } = require('hardhat');
 const fs = require('fs');
 const path = require('path');
 
@@ -34,34 +33,29 @@ async function deployV1() {
 
   // First deploy the TokenTemplate_v1
   console.log('Deploying TokenTemplate_v1...');
-  const TokenTemplate = await ethers.getContractFactory("TokenTemplate_v1_1_0");
+  const TokenTemplate = await ethers.getContractFactory("TokenTemplate_v1");
   const template = await TokenTemplate.deploy();
   await template.waitForDeployment();
   const templateAddress = await template.getAddress();
   console.log(`TokenTemplate_v1 deployed to: ${templateAddress}`);
 
-  // Deploy the factory with initial fee of 0.0001 ETH
+  // Deploy the factory with initial fee
   console.log('Deploying TokenFactory_v1...');
-  const TokenFactory = await ethers.getContractFactory("TokenFactory_v1_1_0");
-  const factory = await TokenFactory.deploy(templateAddress);
+  const TokenFactory = await ethers.getContractFactory("TokenFactory_v1");
+  const deploymentFee = ethers.parseEther(process.env.FACTORY_FEE || "0.0001");
+  const factory = await TokenFactory.deploy(deploymentFee);
   await factory.waitForDeployment();
-
   const address = await factory.getAddress();
   console.log(`TokenFactory_v1 deployed to: ${address}`);
-
-  // Initialize the factory with deployment fee
-  console.log('Initializing factory...');
-  const deploymentFee = ethers.parseEther(process.env.FACTORY_FEE || "0.0001");
-  await factory.initialize(deploymentFee);
-  console.log(`TokenFactory_v1 initialized with fee: ${ethers.formatEther(deploymentFee)} ETH`);
 
   await saveDeployment(networkName, version, address, templateAddress);
 
   // Verify contracts
   if (network.name !== 'localhost' && network.name !== 'hardhat') {
     try {
-      await verifyContractOnEtherscan(templateAddress, []);
-      await verifyContractOnEtherscan(address, [templateAddress]);
+      console.log('\nVerifying contracts...');
+      await verifyContract(templateAddress, []);
+      await verifyContract(address, [deploymentFee]);
     } catch (error) {
       console.error('Error verifying contracts:', error);
     }
@@ -344,70 +338,8 @@ async function deployAndVerify(version: string) {
 }
 
 async function main() {
-  const [deployer] = await hre.ethers.getSigners();
-  console.log("Deploying contracts with account:", deployer.address);
-
-  // Deploy TokenTemplate_v1
-  console.log("Deploying TokenTemplate_v1...");
-  const TokenTemplate = await hre.ethers.getContractFactory("TokenTemplate_v1_1_0");
-  const template = await TokenTemplate.deploy();
-  await template.waitForDeployment();
-  const templateAddress = await template.getAddress();
-  console.log("TokenTemplate_v1 deployed to:", templateAddress);
-
-  // Deploy TokenFactory_v1
-  console.log("Deploying TokenFactory_v1...");
-  const TokenFactory = await hre.ethers.getContractFactory("TokenFactory_v1_1_0");
-  const factory = await TokenFactory.deploy(templateAddress);
-  await factory.waitForDeployment();
-  const factoryAddress = await factory.getAddress();
-  console.log("TokenFactory_v1 deployed to:", factoryAddress);
-
-  // Initialize factory with deployment fee
-  const deploymentFee = hre.ethers.parseEther(process.env.FACTORY_FEE || "0.0001");
-  await factory.initialize(deploymentFee);
-  console.log("TokenFactory_v1 initialized with fee:", hre.ethers.formatEther(deploymentFee), "ETH");
-
-  // Save deployment addresses
-  const network = hre.network.name;
-  const envFile = path.join(process.cwd(), '.env.local');
-  let envContent = fs.existsSync(envFile) ? fs.readFileSync(envFile, 'utf8') : '';
-
-  const newEnvVars = `
-NEXT_PUBLIC_${network.toUpperCase()}_FACTORY_ADDRESS_V1=${factoryAddress}
-NEXT_PUBLIC_${network.toUpperCase()}_TOKEN_TEMPLATE_ADDRESS_V1=${templateAddress}
-`;
-
-  fs.writeFileSync(envFile, envContent + newEnvVars);
-  console.log("Deployment addresses saved to .env.local");
-
-  // Verify contracts if not on a local network
-  if (network !== 'localhost' && network !== 'hardhat') {
-    console.log("Waiting for block confirmations...");
-    await template.deploymentTransaction()?.wait(5);
-    await factory.deploymentTransaction()?.wait(5);
-
-    console.log("Verifying contracts...");
-    try {
-      await hre.run("verify:verify", {
-        address: templateAddress,
-        constructorArguments: []
-      });
-      console.log("TokenTemplate_v1 verified");
-    } catch (error) {
-      console.error("Error verifying TokenTemplate_v1:", error);
-    }
-
-    try {
-      await hre.run("verify:verify", {
-        address: factoryAddress,
-        constructorArguments: [templateAddress]
-      });
-      console.log("TokenFactory_v1 verified");
-    } catch (error) {
-      console.error("Error verifying TokenFactory_v1:", error);
-    }
-  }
+  console.log('Deploying contracts with account:', (await hre.ethers.provider.getSigner()).address);
+  await deployV1();
 }
 
 main()

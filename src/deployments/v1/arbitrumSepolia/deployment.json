@@ -1,8 +1,8 @@
 {
-  "factoryAddress": "0x44433fc43D7dC2193801755A0eD3F1e335267e15",
-  "templateAddress": "0x4768734d10DCdfB8131eF6b942627557bDd754Eb",
+  "factoryAddress": "0x9209DfFAddB8a8bfe4ffaa2b79537461E478386d",
+  "templateAddress": "0x49449f725C6a04c842DE4923A68b83BB392923d4",
   "network": "arbitrumSepolia",
   "version": "v1",
-  "timestamp": "2025-01-29T21:03:58.424Z",
-  "blockNumber": 119166006
+  "timestamp": "2025-02-06T00:09:20.153Z",
+  "blockNumber": 121392124
 }

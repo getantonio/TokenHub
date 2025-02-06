@@ -1,8 +1,8 @@
 {
-  "address": "0xf9053Ad2bd4D027Cb03fE7aEddC8BbFA0324860B",
+  "factoryAddress": "0x1a28d5eef66AB135208ee7b33864236eEB804586",
+  "templateAddress": "0x32B76c62016615Db119b46e70Bf753AD72035c49",
   "network": "sepolia",
   "version": "v1",
-  "timestamp": "2025-01-27T06:13:02.064Z",
-  "blockNumber": 7579784,
-  "factoryFee": "0.0001"
+  "timestamp": "2025-02-05T23:59:26.432Z",
+  "blockNumber": 7648113
 }

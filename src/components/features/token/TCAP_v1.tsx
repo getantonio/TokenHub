@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserProvider, Contract, formatUnits } from 'ethers';
-import TokenFactory_v1 from '@contracts/abi/TokenFactory_v1.1.0.json';
-import TokenTemplate_v1 from '@contracts/abi/TokenTemplate_v1.1.0.json';
+import TokenFactory_v1 from '@contracts/abi/TokenFactory_v1.json';
+import TokenTemplate_v1 from '@contracts/abi/TokenTemplate_v1.json';
 import { Button } from '@components/ui/button';
 import { Card } from '@components/ui/card';
 import { Spinner } from '@components/ui/Spinner';
@@ -72,7 +72,11 @@ export default function TCAP_v1({ isConnected, address, provider: externalProvid
       setError(null);
 
       const factory = new Contract(address, TokenFactory_v1.abi, externalProvider);
-      const deployedTokens = await factory.getDeployedTokens();
+      const signer = await externalProvider.getSigner();
+      const userAddress = await signer.getAddress();
+      
+      // Get tokens deployed by the connected user
+      const deployedTokens = await factory.getTokensByUser(userAddress);
 
       const tokenPromises = deployedTokens.map(async (tokenAddress: string) => {
         try {
@@ -306,7 +310,7 @@ export default function TCAP_v1({ isConnected, address, provider: externalProvid
                       <div className="flex flex-col gap-1">
                         <h4 className="text-xs font-medium text-text-primary">Token Explorer</h4>
                         <a
-                          href={getExplorerUrl(chainId, token.address)}
+                          href={getExplorerUrl(chainId, token.address, 'token')}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="btn-blue btn-small w-fit"

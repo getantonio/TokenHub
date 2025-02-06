@@ -1,13 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { BrowserProvider, Contract, parseUnits, formatUnits } from 'ethers';
 import { getNetworkContractAddress } from '@config/contracts';
+import { useNetwork } from '@contexts/NetworkContext';
 import TokenFactory_v1 from '@contracts/abi/TokenFactory_v1.json';
-import TokenTemplate_v1 from '@contracts/abi/TokenTemplate_v1.1.0.json';
+import TokenTemplate_v1 from '@contracts/abi/TokenTemplate_v1.json';
 import { getExplorerUrl } from '@config/networks';
 import TokenPreview from '@components/features/token/TokenPreview';
 import { InfoIcon } from '@components/ui/InfoIcon';
 import type { TokenConfig } from '../../../types/token-config';
-import { useNetwork } from '@contexts/NetworkContext';
 import { ethers } from 'ethers';
 import { useToast } from '@/components/ui/toast/use-toast';
 import { Spinner } from '@components/ui/Spinner';
@@ -19,7 +19,7 @@ import { Input } from '@components/ui/input';
 import { Label } from '@components/ui/label';
 import { Switch } from '@components/ui/switch';
 import { FACTORY_ADDRESSES } from '@config/contracts';
-import TokenFactoryV1 from '@contracts/abi/TokenFactory_v1.1.0.json';
+import TokenFactoryV1 from '@contracts/abi/TokenFactory_v1.json';
 
 const TokenFactoryABI = TokenFactory_v1.abi;
 const TokenTemplateABI = TokenTemplate_v1.abi;

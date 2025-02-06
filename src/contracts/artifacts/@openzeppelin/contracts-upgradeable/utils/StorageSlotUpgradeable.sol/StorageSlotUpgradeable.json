@@ -1,0 +1,10 @@
+{
+  "_format": "hh-sol-artifact-1",
+  "contractName": "StorageSlotUpgradeable",
+  "sourceName": "@openzeppelin/contracts-upgradeable/utils/StorageSlotUpgradeable.sol",
+  "abi": [],
+  "bytecode": "0x608060405234601a57604051603f6020823930815050603f90f35b600080fdfe6080604052600080fdfea264697066735822122075144af7dd49feb5a44fb08d9ee56f9896524d893388e27c9b44220a6f16516464736f6c63430008160033",
+  "deployedBytecode": "0x6080604052600080fdfea264697066735822122075144af7dd49feb5a44fb08d9ee56f9896524d893388e27c9b44220a6f16516464736f6c63430008160033",
+  "linkReferences": {},
+  "deployedLinkReferences": {}
+}

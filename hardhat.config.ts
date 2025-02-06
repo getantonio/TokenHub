@@ -5,6 +5,12 @@ require("dotenv").config();
 const PRIVATE_KEY = process.env.PRIVATE_KEY || "";
 
 const config = {
+  paths: {
+    sources: "./src/contracts",
+    tests: "./src/test",
+    cache: "./src/contracts/cache",
+    artifacts: "./src/contracts/artifacts"
+  },
   networks: {
     polygonAmoy: {
       url: process.env.POLYGON_AMOY_RPC_URL || "https://rpc.amoy.testnet.polygon.com",

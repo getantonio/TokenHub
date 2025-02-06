@@ -7,7 +7,7 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20Pausable
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 
 /**
  * @title TokenTemplate_v2.1.0
@@ -71,44 +71,52 @@ contract TokenTemplate_v2_1_0 is
         _disableInitializers();
     }
 
-    function initialize(
-        string memory name_,
-        string memory symbol_,
-        uint256 initialSupply_,
-        uint256 maxSupply_,
-        address owner_,
-        bool enableBlacklist_,
-        bool enableTimeLock_,
-        uint256 presaleRate_,
-        uint256 minContribution_,
-        uint256 maxContribution_,
-        uint256 presaleCap_,
-        uint256 startTime_,
-        uint256 endTime_
-    ) public initializer {
-        __ERC20_init(name_, symbol_);
+    struct InitParams {
+        string name;
+        string symbol;
+        uint256 initialSupply;
+        uint256 maxSupply;
+        address owner;
+        bool enableBlacklist;
+        bool enableTimeLock;
+        uint256 presaleRate;
+        uint256 minContribution;
+        uint256 maxContribution;
+        uint256 presaleCap;
+        uint256 startTime;
+        uint256 endTime;
+    }
+
+    function initialize(InitParams calldata params) public initializer {
+        __ERC20_init(params.name, params.symbol);
         __ERC20Burnable_init();
         __ERC20Pausable_init();
-        __Ownable_init(owner_);
+        __Ownable_init();
         __ReentrancyGuard_init();
+        __UUPSUpgradeable_init();
 
-        require(maxSupply_ >= initialSupply_, "Max supply must be >= initial supply");
-        require(startTime_ > block.timestamp, "Start time must be in future");
-        require(endTime_ > startTime_, "End time must be after start time");
+        // Transfer ownership after initialization
+        if (params.owner != address(0)) {
+            _transferOwnership(params.owner);
+        }
 
-        maxSupply = maxSupply_;
-        blacklistEnabled = enableBlacklist_;
-        timeLockEnabled = enableTimeLock_;
-        _mint(owner_, initialSupply_);
+        require(params.maxSupply >= params.initialSupply, "Max supply must be >= initial supply");
+        require(params.startTime > block.timestamp, "Start time must be in future");
+        require(params.endTime > params.startTime, "End time must be after start time");
+
+        maxSupply = params.maxSupply;
+        blacklistEnabled = params.enableBlacklist;
+        timeLockEnabled = params.enableTimeLock;
+        _mint(params.owner, params.initialSupply);
 
         presaleInfo = PresaleInfo({
-            softCap: presaleCap_ / 2, // Set soft cap to 50% of presale cap
-            hardCap: presaleCap_,
-            minContribution: minContribution_,
-            maxContribution: maxContribution_,
-            startTime: startTime_,
-            endTime: endTime_,
-            presaleRate: presaleRate_,
+            softCap: params.presaleCap / 2, // Set soft cap to 50% of presale cap
+            hardCap: params.presaleCap,
+            minContribution: params.minContribution,
+            maxContribution: params.maxContribution,
+            startTime: params.startTime,
+            endTime: params.endTime,
+            presaleRate: params.presaleRate,
             whitelistEnabled: false, // Start with whitelist disabled
             finalized: false,
             totalContributed: 0
@@ -117,9 +125,9 @@ contract TokenTemplate_v2_1_0 is
         emit PresaleStarted(
             presaleInfo.softCap,
             presaleInfo.hardCap,
-            startTime_,
-            endTime_,
-            presaleRate_
+            params.startTime,
+            params.endTime,
+            params.presaleRate
         );
     }
 
@@ -146,12 +154,12 @@ contract TokenTemplate_v2_1_0 is
         emit TimeLockSet(account, unlockTime);
     }
 
-    function _update(
+    function _beforeTokenTransfer(
         address from,
         address to,
-        uint256 value
-    ) internal virtual override(ERC20Upgradeable, ERC20PausableUpgradeable) whenNotPaused {
-        super._update(from, to, value);
+        uint256 amount
+    ) internal virtual override(ERC20Upgradeable, ERC20PausableUpgradeable) {
+        super._beforeTokenTransfer(from, to, amount);
 
         if (blacklistEnabled) {
             require(!blacklist[from] && !blacklist[to], "Address is blacklisted");

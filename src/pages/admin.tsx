@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useWallet } from '@contexts/WalletContext';
 import FactoryOwnerControls_v1 from '@components/features/admin/FactoryOwnerControls_v1';
 import FactoryOwnerControls_v2 from '@components/features/admin/FactoryOwnerControls_v2';
-import FactoryOwnerControls_v3 from '@components/features/admin/FactoryOwnerControls_v3';
+// import FactoryOwnerControls_v3 from '@components/features/admin/FactoryOwnerControls_v3'; // Temporarily disabled
 import { getNetworkContractAddress } from '@config/contracts';
 import { useNetwork } from '@contexts/NetworkContext';
 import { BrowserProvider } from 'ethers';
@@ -23,7 +23,7 @@ export default function AdminPage() {
 
   const factoryV1Address = chainId ? getNetworkContractAddress(chainId, 'factoryAddress') : undefined;
   const factoryV2Address = chainId ? getNetworkContractAddress(chainId, 'factoryAddressV2') : undefined;
-  const factoryV3Address = chainId ? getNetworkContractAddress(chainId, 'factoryAddressV3') : undefined;
+  // const factoryV3Address = chainId ? getNetworkContractAddress(chainId, 'factoryAddressV3') : undefined; // Temporarily disabled
 
   return (
     <ToastProvider>
@@ -61,6 +61,7 @@ export default function AdminPage() {
             />
           )}
 
+          {/* V3 controls temporarily disabled
           {factoryV3Address && (
             <FactoryOwnerControls_v3
               isConnected={isConnected}
@@ -68,8 +69,9 @@ export default function AdminPage() {
               provider={provider}
             />
           )}
+          */}
 
-          {!factoryV1Address && !factoryV2Address && !factoryV3Address && (
+          {!factoryV1Address && !factoryV2Address && (
             <div className="form-card">
               <p className="text-text-secondary">
                 No factory contracts are deployed on this network.

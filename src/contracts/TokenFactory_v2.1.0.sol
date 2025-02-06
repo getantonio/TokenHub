@@ -4,16 +4,16 @@ pragma solidity 0.8.22;
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import "./TokenTemplate_v2.1.0.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /**
  * @title TokenFactory_v2.1.0
  * @notice Factory contract for creating new token instances with presale functionality
  * @dev Uses ERC1967 proxy pattern for upgradeable token instances
  */
-contract TokenFactory_v2_1_0 is Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuard {
+contract TokenFactory_v2_1_0 is Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuardUpgradeable {
     string public constant VERSION = "2.1.0";
 
     // Deployment fee configuration
@@ -45,8 +45,9 @@ contract TokenFactory_v2_1_0 is Initializable, OwnableUpgradeable, UUPSUpgradeab
     }
 
     function initialize(uint256 _deploymentFee) public initializer {
-        __Ownable_init(msg.sender);
+        __Ownable_init();
         __UUPSUpgradeable_init();
+        __ReentrancyGuard_init();
         deploymentFee = _deploymentFee;
         emit DeploymentFeeUpdated(_deploymentFee);
     }
@@ -98,7 +99,6 @@ contract TokenFactory_v2_1_0 is Initializable, OwnableUpgradeable, UUPSUpgradeab
      * @param presaleCap Maximum ETH to raise in presale
      * @param startTime Presale start time
      * @param endTime Presale end time
-     * @param owner Token owner address (optional, defaults to msg.sender)
      * @return address The address of the newly created token
      */
     function createToken(
@@ -113,59 +113,50 @@ contract TokenFactory_v2_1_0 is Initializable, OwnableUpgradeable, UUPSUpgradeab
         uint256 maxContribution,
         uint256 presaleCap,
         uint256 startTime,
-        uint256 endTime,
-        address owner
-    ) external payable returns (address) {
+        uint256 endTime
+    ) external payable nonReentrant returns (address) {
         // Check deployment fee
-        uint256 requiredFee = getDeploymentFee(msg.sender);
-        require(msg.value >= requiredFee, "Insufficient deployment fee");
-        require(startTime > block.timestamp, "Start time must be in future");
-        require(endTime > startTime, "End time must be after start time");
+        uint256 fee = getDeploymentFee(msg.sender);
+        require(msg.value >= fee, "Insufficient deployment fee");
 
-        // Set owner to msg.sender if not specified
-        if (owner == address(0)) {
-            owner = msg.sender;
-        }
-
-        // Initialize data
+        // Create proxy
         bytes memory initData = abi.encodeWithSelector(
             TokenTemplate_v2_1_0.initialize.selector,
-            name,
-            symbol,
-            initialSupply,
-            maxSupply,
-            owner,
-            enableBlacklist,
-            enableTimeLock,
-            presaleRate,
-            minContribution,
-            maxContribution,
-            presaleCap,
-            startTime,
-            endTime
+            TokenTemplate_v2_1_0.InitParams({
+                name: name,
+                symbol: symbol,
+                initialSupply: initialSupply,
+                maxSupply: maxSupply,
+                owner: msg.sender,
+                enableBlacklist: enableBlacklist,
+                enableTimeLock: enableTimeLock,
+                presaleRate: presaleRate,
+                minContribution: minContribution,
+                maxContribution: maxContribution,
+                presaleCap: presaleCap,
+                startTime: startTime,
+                endTime: endTime
+            })
         );
 
-        // Deploy proxy
         ERC1967Proxy proxy = new ERC1967Proxy(
             address(tokenImplementation),
             initData
         );
 
-        // Track the new token
-        address tokenAddress = address(proxy);
-        deployedTokens.push(tokenAddress);
+        address token = address(proxy);
+        deployedTokens.push(token);
 
-        // Emit event
         emit TokenCreated(
-            tokenAddress,
+            token,
             name,
             symbol,
-            owner,
+            msg.sender,
             startTime,
             endTime
         );
 
-        return tokenAddress;
+        return token;
     }
 
     /**

@@ -40,6 +40,7 @@ export default function HomePage() {
               </Card>
             </Link>
 
+            {/* V3 card temporarily disabled
             <Link href="/v3" className="block">
               <Card className="h-full bg-gray-800 hover:bg-gray-750 transition-colors border-gray-700">
                 <CardContent className="p-4">
@@ -50,6 +51,7 @@ export default function HomePage() {
                 </CardContent>
               </Card>
             </Link>
+            */}
           </div>
 
           <div className="mt-8 text-center">
