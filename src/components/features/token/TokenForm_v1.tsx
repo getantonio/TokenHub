@@ -426,7 +426,7 @@ export default function TokenForm_v1({ isConnected }: Props) {
         {/* Form Section */}
         <div className="form-card">
           <h2 className="form-card-header">Create Token</h2>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-2">
             {error && (
               <div className="rounded-md bg-red-900/20 p-2 border border-red-700">
                 <div className="flex">

@@ -1,19 +1,39 @@
 import { useState, useEffect } from 'react';
-import { BrowserProvider, Contract, formatUnits, parseUnits } from 'ethers';
-import TokenFactory_v3 from '@contracts/abi/TokenFactory_v3.0.0.json';
-import TokenTemplate_v3 from '@contracts/abi/TokenTemplate_v3.0.0.json';
-import TokenGovernor_v3 from '@contracts/abi/TokenGovernor_v3.0.0.json';
-import Treasury_v3 from '@contracts/abi/Treasury_v3.0.0.json';
+import { BrowserProvider, Contract, formatUnits, parseUnits, EventLog } from 'ethers';
+import TokenFactory_v2 from '@contracts/abi/TokenFactory_v2.json';
+import TokenTemplate_v2 from '@contracts/abi/TokenTemplate_v2.json';
+import { FACTORY_ADDRESSES } from '@config/contracts';
 import { getExplorerUrl } from '@config/networks';
 import { useNetwork } from '@contexts/NetworkContext';
-import { useToast } from '@/components/ui/toast/use-toast';
 import { Spinner } from '@components/ui/Spinner';
+import { ethers } from 'ethers';
+import { AbiCoder } from 'ethers';
 import { Button } from '@components/ui/button';
 import { Card } from '@components/ui/card';
-import { Input } from '@components/ui/input';
-import { Label } from '@components/ui/label';
+import { useToast } from '@/components/ui/toast/use-toast';
 
-interface TokenAdminProps {
+const TOKEN_DECIMALS = 18;
+
+// Add ERC1967 proxy interface
+const ERC1967_ABI = [
+  "function implementation() external view returns (address)",
+  "function admin() external view returns (address)",
+  "function upgradeTo(address newImplementation) external",
+  "function upgradeToAndCall(address newImplementation, bytes memory data) external payable"
+];
+
+// Add ERC20 interface
+const ERC20_ABI = [
+  "function totalSupply() external view returns (uint256)",
+  "function decimals() external view returns (uint8)",
+  "function balanceOf(address account) external view returns (uint256)",
+  "function transfer(address to, uint256 amount) external returns (bool)",
+  "function allowance(address owner, address spender) external view returns (uint256)",
+  "function approve(address spender, uint256 amount) external returns (bool)",
+  "function transferFrom(address from, address to, uint256 amount) external returns (bool)"
+];
+
+interface TokenAdminV3Props {
   isConnected: boolean;
   address?: string;
   provider: BrowserProvider | null;
@@ -24,533 +44,343 @@ interface TokenInfo {
   name: string;
   symbol: string;
   totalSupply: string;
-  daoAddress: string;
-  timelockAddress: string;
-  treasuryAddress: string;
-  votingDelay: number;
-  votingPeriod: number;
-  proposalThreshold: string;
-  quorumNumerator: number;
+  blacklistEnabled: boolean;
+  timeLockEnabled: boolean;
+  presaleInfo: {
+    softCap: string;
+    hardCap: string;
+    minContribution: string;
+    maxContribution: string;
+    startTime: number;
+    endTime: number;
+    presaleRate: string;
+    whitelistEnabled: boolean;
+    finalized: boolean;
+    totalContributed: string;
+  };
+  vestingInfo: {
+    schedules: Array<{
+      walletName: string;
+      amount: string;
+      period: string;
+      beneficiary: string;
+      claimed: string;
+    }>;
+  };
+  platformFee: {
+    recipient: string;
+    totalTokens: string;
+    vestingEnabled: boolean;
+    vestingDuration: number;
+    cliffDuration: number;
+    vestingStart: number;
+    tokensClaimed: string;
+  };
+  userContribution?: string;
+  displayTotalSupply?: string;
 }
 
 interface ToastMessage {
   type: 'success' | 'error';
   message: string;
-  link?: string;
 }
 
-interface ProposalInfo {
-  id: string;
-  description: string;
-  proposer: string;
-  state: string;
-  startBlock: number;
-  endBlock: number;
-  forVotes: string;
-  againstVotes: string;
-  abstainVotes: string;
+interface LockInfo {
+  address: string;
+  duration: number;
+  lockUntil?: number;
 }
 
-export default function TokenAdmin({ isConnected, address, provider: externalProvider }: TokenAdminProps) {
+export default function TokenAdminV3({ isConnected, address, provider: externalProvider }: TokenAdminV3Props) {
   const { chainId } = useNetwork();
-  const [tokens, setTokens] = useState<TokenInfo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const { toast } = useToast();
+  const [isExpanded, setIsExpanded] = useState(true);
+  const [tokens, setTokens] = useState<TokenInfo[]>([]);
   const [selectedToken, setSelectedToken] = useState<string | null>(null);
-  const [proposals, setProposals] = useState<ProposalInfo[]>([]);
-  const [proposalDescription, setProposalDescription] = useState('');
-  const [isExpanded, setIsExpanded] = useState(false);
   const [hiddenTokens, setHiddenTokens] = useState<string[]>([]);
+  const { toast } = useToast();
 
   useEffect(() => {
-    if (isConnected && chainId && externalProvider && address) {
-      console.log("Dependencies changed, reloading tokens:", {
-        isConnected,
-        chainId,
-        hasProvider: !!externalProvider,
-        address
-      });
+    if (isConnected && externalProvider) {
       loadTokens();
     }
-  }, [isConnected, chainId, externalProvider, address]);
-
-  const showToast = (type: 'success' | 'error', message: string, link?: string) => {
-    toast({
-      variant: type === 'error' ? 'destructive' : 'default',
-      title: type === 'error' ? 'Error' : 'Success',
-      description: (
-        <div>
-          {message}
-          {link && (
-            <a href={link} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-700 ml-2">
-              View Transaction
-            </a>
-          )}
-        </div>
-      ),
-    });
-  };
+  }, [isConnected, externalProvider, chainId]);
 
   const loadTokens = async () => {
-    if (!isConnected || !chainId || !externalProvider || !address) {
-      console.log("Cannot load tokens - missing requirements");
-      return;
-    }
-
+    if (!externalProvider || !chainId) return;
+    
+    setIsLoading(true);
     try {
-      setIsLoading(true);
-      console.log("Starting token loading process...");
-      
-      const signer = await externalProvider.getSigner();
-      const factory = new Contract(address, TokenFactory_v3.abi, signer);
-      
-      // Get deployed tokens
-      const deployedTokens = await factory.getTokensByUser(await signer.getAddress());
-      console.log("Found tokens:", deployedTokens);
-      
-      if (deployedTokens && deployedTokens.length > 0) {
-        const tokenPromises = deployedTokens.map(async (tokenAddr: string) => {
-          try {
-            const token = new Contract(tokenAddr, TokenTemplate_v3.abi, externalProvider);
-            const [name, symbol, totalSupply] = await Promise.all([
-              token.name(),
-              token.symbol(),
-              token.totalSupply()
-            ]);
-
-            // Get associated contracts
-            const daoAddress = await factory.tokenToDAO(tokenAddr);
-            const timelockAddress = await factory.tokenToTimelock(tokenAddr);
-            const treasuryAddress = await factory.tokenToTreasury(tokenAddr);
-
-            // Get governance settings
-            const governor = new Contract(daoAddress, TokenGovernor_v3.abi, externalProvider);
-            const [votingDelay, votingPeriod, proposalThreshold, quorumNumerator] = await Promise.all([
-              governor.votingDelay(),
-              governor.votingPeriod(),
-              governor.proposalThreshold(),
-              governor.quorumNumerator()
-            ]);
-
-            return {
-              address: tokenAddr,
-              name,
-              symbol,
-              totalSupply: formatUnits(totalSupply, 18),
-              daoAddress,
-              timelockAddress,
-              treasuryAddress,
-              votingDelay: Number(votingDelay),
-              votingPeriod: Number(votingPeriod),
-              proposalThreshold: formatUnits(proposalThreshold, 18),
-              quorumNumerator: Number(quorumNumerator)
-            };
-          } catch (error) {
-            console.error(`Error checking token ${tokenAddr}:`, error);
-            return null;
-          }
-        });
-
-        const tokenResults = await Promise.all(tokenPromises);
-        const validTokens = tokenResults.filter(Boolean);
-        if (validTokens.length > 0) {
-          setTokens(validTokens as TokenInfo[]);
-        }
+      const factoryAddress = FACTORY_ADDRESSES.v2[chainId];
+      if (!factoryAddress) {
+        throw new Error('Factory contract not available on this network');
       }
-    } catch (error: any) {
-      console.error('Error loading tokens:', error);
-      showToast('error', error.message || 'Failed to load tokens');
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
-  const loadProposals = async (tokenInfo: TokenInfo) => {
-    if (!externalProvider) return;
-
-    try {
-      setIsLoading(true);
-      const governor = new Contract(tokenInfo.daoAddress, TokenGovernor_v3.abi, externalProvider);
+      const factory = new Contract(factoryAddress, TokenFactory_v2.abi, externalProvider);
+      const filter = factory.filters.TokenCreated();
+      const events = await factory.queryFilter(filter);
       
-      // Get proposal count (implementation specific)
-      const filter = governor.filters.ProposalCreated();
-      const events = await governor.queryFilter(filter);
-      
-      const proposalPromises = events.map(async (event: any) => {
-        const proposalId = event.args[0];
-        const [state, proposal] = await Promise.all([
-          governor.state(proposalId),
-          governor.proposals(proposalId)
-        ]);
+      const tokenPromises = events.map(async (event) => {
+        if (!('args' in event)) return null;
+        const tokenAddress = event.args?.[0];
+        if (!tokenAddress) return null;
 
-        return {
-          id: proposalId.toString(),
-          description: event.args[event.args.length - 1],
-          proposer: proposal.proposer,
-          state: getProposalState(state),
-          startBlock: Number(proposal.startBlock),
-          endBlock: Number(proposal.endBlock),
-          forVotes: formatUnits(proposal.forVotes, 18),
-          againstVotes: formatUnits(proposal.againstVotes, 18),
-          abstainVotes: formatUnits(proposal.abstainVotes, 18)
-        };
+        const token = new Contract(tokenAddress, TokenTemplate_v2.abi, externalProvider);
+        
+        try {
+          const [
+            name,
+            symbol,
+            totalSupply,
+            blacklistEnabled,
+            timeLockEnabled,
+            presaleInfo,
+            vestingInfo,
+            platformFee
+          ] = await Promise.all([
+            token.name(),
+            token.symbol(),
+            token.totalSupply(),
+            token.blacklistEnabled(),
+            token.timeLockEnabled(),
+            token.getPresaleInfo(),
+            token.getVestingInfo(),
+            token.getPlatformFee()
+          ]);
+
+          return {
+            address: tokenAddress,
+            name,
+            symbol,
+            totalSupply: formatUnits(totalSupply, TOKEN_DECIMALS),
+            blacklistEnabled,
+            timeLockEnabled,
+            presaleInfo: {
+              softCap: formatUnits(presaleInfo.softCap, 18),
+              hardCap: formatUnits(presaleInfo.hardCap, 18),
+              minContribution: formatUnits(presaleInfo.minContribution, 18),
+              maxContribution: formatUnits(presaleInfo.maxContribution, 18),
+              startTime: Number(presaleInfo.startTime),
+              endTime: Number(presaleInfo.endTime),
+              presaleRate: formatUnits(presaleInfo.presaleRate, TOKEN_DECIMALS),
+              whitelistEnabled: presaleInfo.whitelistEnabled,
+              finalized: presaleInfo.finalized,
+              totalContributed: formatUnits(presaleInfo.totalContributed, 18)
+            },
+            vestingInfo: {
+              schedules: vestingInfo.schedules.map((schedule: any) => ({
+                walletName: schedule.walletName,
+                amount: formatUnits(schedule.amount, TOKEN_DECIMALS),
+                period: schedule.period.toString(),
+                beneficiary: schedule.beneficiary,
+                claimed: formatUnits(schedule.claimed, TOKEN_DECIMALS)
+              }))
+            },
+            platformFee: {
+              recipient: platformFee.recipient,
+              totalTokens: formatUnits(platformFee.totalTokens, TOKEN_DECIMALS),
+              vestingEnabled: platformFee.vestingEnabled,
+              vestingDuration: Number(platformFee.vestingDuration),
+              cliffDuration: Number(platformFee.cliffDuration),
+              vestingStart: Number(platformFee.vestingStart),
+              tokensClaimed: formatUnits(platformFee.tokensClaimed, TOKEN_DECIMALS)
+            }
+          };
+        } catch (error) {
+          console.error(`Error loading token ${tokenAddress}:`, error);
+          return null;
+        }
       });
 
-      const proposalResults = await Promise.all(proposalPromises);
-      setProposals(proposalResults);
-    } catch (error: any) {
-      console.error('Error loading proposals:', error);
-      showToast('error', error.message || 'Failed to load proposals');
+      const loadedTokens = (await Promise.all(tokenPromises)).filter((token): token is TokenInfo => token !== null);
+      setTokens(loadedTokens);
+    } catch (error) {
+      console.error('Error loading tokens:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load tokens",
+        variant: "destructive"
+      });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const createProposal = async (tokenInfo: TokenInfo) => {
-    if (!externalProvider) return;
-
-    try {
-      setIsLoading(true);
-      const signer = await externalProvider.getSigner();
-      const governor = new Contract(tokenInfo.daoAddress, TokenGovernor_v3.abi, signer);
-
-      // Example proposal to transfer tokens from treasury
-      const treasury = new Contract(tokenInfo.treasuryAddress, Treasury_v3.abi, signer);
-      const transferCalldata = treasury.interface.encodeFunctionData('sendTokens', [
-        tokenInfo.address,
-        await signer.getAddress(),
-        parseUnits('1000', 18)
-      ]);
-
-      const tx = await governor.propose(
-        [tokenInfo.treasuryAddress],
-        [0],
-        [transferCalldata],
-        proposalDescription
-      );
-
-      showToast('success', 'Proposal submitted...');
-      
-      await tx.wait();
-      showToast('success', 'Proposal created successfully!');
-      
-      await loadProposals(tokenInfo);
-      setProposalDescription('');
-    } catch (error: any) {
-      console.error('Error creating proposal:', error);
-      showToast('error', error.message || 'Failed to create proposal');
-    } finally {
-      setIsLoading(false);
-    }
+  const formatDate = (timestamp: number) => {
+    return new Date(timestamp * 1000).toLocaleString();
   };
 
-  const castVote = async (tokenInfo: TokenInfo, proposalId: string, support: number) => {
-    if (!externalProvider) return;
-
-    try {
-      setIsLoading(true);
-      const signer = await externalProvider.getSigner();
-      const governor = new Contract(tokenInfo.daoAddress, TokenGovernor_v3.abi, signer);
-
-      const tx = await governor.castVote(proposalId, support);
-      showToast('success', 'Vote submitted...');
-      
-      await tx.wait();
-      showToast('success', 'Vote cast successfully!');
-      
-      await loadProposals(tokenInfo);
-    } catch (error: any) {
-      console.error('Error casting vote:', error);
-      showToast('error', error.message || 'Failed to cast vote');
-    } finally {
-      setIsLoading(false);
-    }
+  const hideToken = (tokenAddress: string) => {
+    setHiddenTokens(prev => [...prev, tokenAddress]);
   };
 
-  const executeProposal = async (tokenInfo: TokenInfo, proposalId: string) => {
-    if (!externalProvider) return;
-
-    try {
-      setIsLoading(true);
-      const signer = await externalProvider.getSigner();
-      const governor = new Contract(tokenInfo.daoAddress, TokenGovernor_v3.abi, signer);
-
-      // Get proposal details
-      const proposalData = await governor.getProposalData(proposalId);
-
-      const tx = await governor.execute(
-        proposalData.targets,
-        proposalData.values,
-        proposalData.calldatas,
-        proposalData.descriptionHash
-      );
-
-      showToast('success', 'Execution submitted...');
-      
-      await tx.wait();
-      showToast('success', 'Proposal executed successfully!');
-      
-      await loadProposals(tokenInfo);
-    } catch (error: any) {
-      console.error('Error executing proposal:', error);
-      showToast('error', error.message || 'Failed to execute proposal');
-    } finally {
-      setIsLoading(false);
-    }
+  const getVisibleTokens = () => {
+    return tokens.filter(token => !hiddenTokens.includes(token.address));
   };
-
-  const getProposalState = (state: number): string => {
-    const states = [
-      'Pending',
-      'Active',
-      'Canceled',
-      'Defeated',
-      'Succeeded',
-      'Queued',
-      'Expired',
-      'Executed'
-    ];
-    return states[state] || 'Unknown';
-  };
-
-  function hideToken(address: string) {
-    setHiddenTokens(prev => [...prev, address]);
-  }
-
-  function resetHiddenTokens() {
-    setHiddenTokens([]);
-  }
-
-  function getVisibleTokens() {
-    const visible = tokens.filter(token => !hiddenTokens.includes(token.address));
-    console.log(`Showing ${visible.length}/${tokens.length} tokens (${hiddenTokens.length} hidden)`);
-    return visible;
-  }
-
-  if (!isConnected) {
-    return (
-      <div className="p-2 bg-gray-800 rounded-lg shadow-lg">
-        <h2 className="text-xs font-medium text-text-primary">Token Management (V3)</h2>
-        <p className="text-xs text-text-secondary">Please connect your wallet to manage tokens.</p>
-      </div>
-    );
-  }
 
   return (
-    <div className="p-2 relative bg-gray-800 rounded-lg shadow-lg">
-      <div
-        className="flex justify-between items-center cursor-pointer py-0.5"
-        onClick={() => setIsExpanded(!isExpanded)}
-      >
-        <h2 className="text-xs font-medium text-text-primary">TCAP_v3</h2>
-        <div className="flex items-center gap-2">
-          {hiddenTokens.length > 0 && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                resetHiddenTokens();
-              }}
-              className="text-xs px-2 py-1 rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30"
-            >
-              Show All ({hiddenTokens.length})
-            </button>
-          )}
+    <Card className="bg-gray-900 border-gray-800">
+      <div className="p-4">
+        <div className="flex justify-between items-center">
+          <h2 className="text-lg font-bold text-white">Token Control Panel (V3)</h2>
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              loadTokens();
-            }}
-            className="text-xs px-2 py-1 rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30"
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="text-sm text-gray-400 hover:text-white"
           >
-            Refresh
-          </button>
-          <button className="text-text-accent hover:text-blue-400">
-            {isExpanded ? '▼' : '▶'}
+            {isExpanded ? 'Collapse' : 'Expand'}
           </button>
         </div>
-      </div>
-      
-      {isExpanded && (
-        isLoading ? (
-          <div className="flex justify-center items-center py-1">
-            <Spinner className="w-4 h-4 text-text-primary" />
-          </div>
-        ) : getVisibleTokens().length === 0 ? (
-          <div className="mt-0.5">
-            <p className="text-xs text-text-secondary">No V3 tokens found. Deploy a new token to get started.</p>
-          </div>
-        ) : (
-          <div className="space-y-2 mt-1">
-            {getVisibleTokens().map(token => (
-              <div key={token.address} className="border border-border rounded-lg p-2 space-y-2 bg-background-secondary relative group">
-                <div className="flex justify-between items-start gap-2">
-                  <div>
-                    <h3 className="text-sm font-bold text-text-primary">{token.name} ({token.symbol})</h3>
-                    <p className="text-xs text-text-secondary">Token: {token.address}</p>
-                    <p className="text-xs text-text-secondary">Total Supply: {Number(token.totalSupply).toLocaleString()} {token.symbol}</p>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => {
-                        setSelectedToken(selectedToken === token.address ? null : token.address);
-                        if (selectedToken !== token.address) {
-                          loadProposals(token);
-                        }
-                      }}
-                      className="text-xs px-2 py-1 rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30"
-                    >
-                      {selectedToken === token.address ? 'Hide' : 'Manage'}
-                    </button>
-                    <button
-                      onClick={() => hideToken(token.address)}
-                      className="text-xs px-2 py-1 rounded bg-gray-500/10 text-gray-400 hover:bg-gray-500/20"
-                      title="Hide token"
-                    >
-                      Hide
-                    </button>
-                  </div>
-                </div>
 
-                {selectedToken === token.address && (
-                  <div className="mt-2 space-y-2">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                      <div>
-                        <h4 className="text-xs font-medium text-text-primary mb-1">Associated Contracts</h4>
-                        <div className="space-y-1">
-                          <p className="text-xs text-text-secondary">DAO: {token.daoAddress}</p>
-                          <p className="text-xs text-text-secondary">Timelock: {token.timelockAddress}</p>
-                          <p className="text-xs text-text-secondary">Treasury: {token.treasuryAddress}</p>
-                        </div>
-                      </div>
-                      <div>
-                        <h4 className="text-xs font-medium text-text-primary mb-1">Governance Settings</h4>
-                        <div className="space-y-1">
-                          <p className="text-xs text-text-secondary">Voting Delay: {token.votingDelay} blocks</p>
-                          <p className="text-xs text-text-secondary">Voting Period: {token.votingPeriod} blocks</p>
-                          <p className="text-xs text-text-secondary">Proposal Threshold: {token.proposalThreshold} {token.symbol}</p>
-                          <p className="text-xs text-text-secondary">Quorum: {token.quorumNumerator}%</p>
-                        </div>
-                      </div>
+        {isExpanded && (
+          isLoading ? (
+            <div className="flex justify-center items-center py-4">
+              <Spinner className="w-6 h-6 text-blue-400" />
+            </div>
+          ) : getVisibleTokens().length === 0 ? (
+            <div className="mt-4">
+              <p className="text-sm text-gray-400">No V3 tokens found. Deploy a new token to get started.</p>
+            </div>
+          ) : (
+            <div className="space-y-4 mt-4">
+              {getVisibleTokens().map(token => (
+                <div key={token.address} className="border border-gray-800 rounded-lg p-4 bg-gray-800">
+                  <div className="flex justify-between items-start gap-4">
+                    <div>
+                      <h3 className="text-lg font-bold text-white">{token.name} ({token.symbol})</h3>
+                      <p className="text-sm text-gray-400">Address: {token.address}</p>
+                      <p className="text-sm text-gray-400">
+                        Total Supply: {Number(token.totalSupply).toLocaleString()} {token.symbol}
+                      </p>
                     </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setSelectedToken(selectedToken === token.address ? null : token.address)}
+                        className="px-3 py-1 rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30"
+                      >
+                        {selectedToken === token.address ? 'Hide' : 'Manage'}
+                      </button>
+                      <button
+                        onClick={() => hideToken(token.address)}
+                        className="px-3 py-1 rounded bg-gray-700 text-gray-400 hover:bg-gray-600"
+                      >
+                        Hide
+                      </button>
+                    </div>
+                  </div>
 
-                    <div className="space-y-2">
-                      <h4 className="text-xs font-medium text-text-primary">Create Proposal</h4>
-                      <div className="flex gap-2">
-                        <Input
-                          value={proposalDescription}
-                          onChange={(e) => setProposalDescription(e.target.value)}
-                          placeholder="Proposal description"
-                          className="text-xs"
-                        />
-                        <Button
-                          onClick={() => createProposal(token)}
-                          className="text-xs px-3"
-                          disabled={!proposalDescription}
+                  {selectedToken === token.address && (
+                    <div className="mt-4 space-y-4 pt-4 border-t border-gray-700">
+                      <div>
+                        <a
+                          href={getExplorerUrl(chainId || 0, token.address, 'token')}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-400 hover:text-blue-300"
                         >
-                          Create
-                        </Button>
+                          View on Explorer ↗
+                        </a>
                       </div>
-                    </div>
 
-                    <div className="space-y-2">
-                      <h4 className="text-xs font-medium text-text-primary">Active Proposals</h4>
-                      {proposals.length === 0 ? (
-                        <p className="text-xs text-text-secondary">No proposals found.</p>
-                      ) : (
+                      {/* Presale Information */}
+                      <div>
+                        <h4 className="text-md font-semibold text-white mb-2">Presale Status</h4>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                            <p className="text-sm text-gray-400">
+                              Soft Cap: {token.presaleInfo.softCap} ETH
+                            </p>
+                            <p className="text-sm text-gray-400">
+                              Hard Cap: {token.presaleInfo.hardCap} ETH
+                            </p>
+                            <p className="text-sm text-gray-400">
+                              Min Contribution: {token.presaleInfo.minContribution} ETH
+                            </p>
+                            <p className="text-sm text-gray-400">
+                              Max Contribution: {token.presaleInfo.maxContribution} ETH
+                            </p>
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-sm text-gray-400">
+                              Start: {formatDate(token.presaleInfo.startTime)}
+                            </p>
+                            <p className="text-sm text-gray-400">
+                              End: {formatDate(token.presaleInfo.endTime)}
+                            </p>
+                            <p className="text-sm text-gray-400">
+                              Rate: {token.presaleInfo.presaleRate} tokens/ETH
+                            </p>
+                            <p className="text-sm text-gray-400">
+                              Total Contributed: {token.presaleInfo.totalContributed} ETH
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Vesting Information */}
+                      <div>
+                        <h4 className="text-md font-semibold text-white mb-2">Vesting Schedules</h4>
                         <div className="space-y-2">
-                          {proposals.map(proposal => (
-                            <div key={proposal.id} className="p-2 bg-gray-700/50 rounded-lg space-y-1">
-                              <div className="flex justify-between items-start">
+                          {token.vestingInfo.schedules.map((schedule, index) => (
+                            <div key={index} className="bg-gray-700 rounded-lg p-3">
+                              <div className="grid grid-cols-2 gap-2">
                                 <div>
-                                  <p className="text-xs text-text-primary font-medium">
-                                    Proposal #{proposal.id}
+                                  <p className="text-sm text-gray-400">
+                                    Wallet: {schedule.walletName}
                                   </p>
-                                  <p className="text-xs text-text-secondary">
-                                    {proposal.description}
+                                  <p className="text-sm text-gray-400">
+                                    Amount: {Number(schedule.amount).toLocaleString()} {token.symbol}
                                   </p>
                                 </div>
-                                <span className="text-xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-400">
-                                  {proposal.state}
-                                </span>
+                                <div>
+                                  <p className="text-sm text-gray-400">
+                                    Period: {schedule.period} days
+                                  </p>
+                                  <p className="text-sm text-gray-400">
+                                    Claimed: {Number(schedule.claimed).toLocaleString()} {token.symbol}
+                                  </p>
+                                </div>
                               </div>
-                              
-                              <div className="grid grid-cols-3 gap-2 text-xs text-text-secondary">
-                                <div>For: {proposal.forVotes}</div>
-                                <div>Against: {proposal.againstVotes}</div>
-                                <div>Abstain: {proposal.abstainVotes}</div>
-                              </div>
-
-                              <div className="flex gap-2">
-                                {proposal.state === 'Active' && (
-                                  <>
-                                    <Button
-                                      onClick={() => castVote(token, proposal.id, 1)}
-                                      className="text-xs px-2 py-1"
-                                    >
-                                      Vote For
-                                    </Button>
-                                    <Button
-                                      onClick={() => castVote(token, proposal.id, 0)}
-                                      className="text-xs px-2 py-1"
-                                    >
-                                      Vote Against
-                                    </Button>
-                                    <Button
-                                      onClick={() => castVote(token, proposal.id, 2)}
-                                      className="text-xs px-2 py-1"
-                                    >
-                                      Abstain
-                                    </Button>
-                                  </>
-                                )}
-                                {proposal.state === 'Succeeded' && (
-                                  <Button
-                                    onClick={() => executeProposal(token, proposal.id)}
-                                    className="text-xs px-2 py-1"
-                                  >
-                                    Execute
-                                  </Button>
-                                )}
-                              </div>
+                              <p className="text-xs text-gray-500 mt-1">
+                                Beneficiary: {schedule.beneficiary}
+                              </p>
                             </div>
                           ))}
                         </div>
-                      )}
-                    </div>
+                      </div>
 
-                    <div className="flex gap-2">
-                      <a
-                        href={chainId ? getExplorerUrl(chainId, token.address, 'token') : '#'}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs px-2 py-1 rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30"
-                      >
-                        View Token
-                      </a>
-                      <a
-                        href={chainId ? getExplorerUrl(chainId, token.daoAddress, 'address') : '#'}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs px-2 py-1 rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30"
-                      >
-                        View DAO
-                      </a>
-                      <a
-                        href={chainId ? getExplorerUrl(chainId, token.treasuryAddress, 'address') : '#'}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs px-2 py-1 rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30"
-                      >
-                        View Treasury
-                      </a>
+                      {/* Platform Fee Information */}
+                      <div>
+                        <h4 className="text-md font-semibold text-white mb-2">Platform Fee</h4>
+                        <div className="space-y-1">
+                          <p className="text-sm text-gray-400">
+                            Total Tokens: {Number(token.platformFee.totalTokens).toLocaleString()} {token.symbol}
+                          </p>
+                          <p className="text-sm text-gray-400">
+                            Claimed: {Number(token.platformFee.tokensClaimed).toLocaleString()} {token.symbol}
+                          </p>
+                          {token.platformFee.vestingEnabled && (
+                            <>
+                              <p className="text-sm text-gray-400">
+                                Vesting Duration: {token.platformFee.vestingDuration} days
+                              </p>
+                              <p className="text-sm text-gray-400">
+                                Cliff Duration: {token.platformFee.cliffDuration} days
+                              </p>
+                              <p className="text-sm text-gray-400">
+                                Vesting Start: {formatDate(token.platformFee.vestingStart)}
+                              </p>
+                            </>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )
-      )}
-    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )
+        )}
+      </div>
+    </Card>
   );
 } 
