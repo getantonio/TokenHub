@@ -96,22 +96,10 @@ contract TokenFactory_v3 is Initializable, OwnableUpgradeable, UUPSUpgradeable, 
         __ReentrancyGuard_init();
         
         deploymentFee = _deploymentFee;
-        platformFeePercentage = 500; // Default 5%
-        platformFeeRecipient = owner(); // Default to contract owner
-        platformFeeVestingDuration = 180 days; // Default 6 months vesting
-        platformFeeCliffDuration = 30 days;    // Default 30 days cliff
-        platformFeeVestingEnabled = true;      // Enable vesting by default
         defaultLiquidityPercentage = 3000;     // Default 30%
         defaultLiquidityLockDuration = 180;    // Default 180 days
         
         emit DeploymentFeeUpdated(_deploymentFee);
-        emit PlatformFeeUpdated(platformFeePercentage);
-        emit PlatformFeeRecipientUpdated(platformFeeRecipient);
-        emit PlatformFeeVestingConfigured(
-            platformFeeVestingDuration,
-            platformFeeCliffDuration,
-            platformFeeVestingEnabled
-        );
         emit LiquidityConfigUpdated(
             defaultLiquidityPercentage,
             defaultLiquidityLockDuration
@@ -150,7 +138,7 @@ contract TokenFactory_v3 is Initializable, OwnableUpgradeable, UUPSUpgradeable, 
         require(params.liquidityPercentage <= 10000, "Invalid liquidity %");
         
         // Calculate total allocation
-        uint256 totalAllocation = platformFeePercentage +
+        uint256 totalAllocation = 
             params.presalePercentage +
             params.liquidityPercentage +
             params.teamPercentage +
@@ -158,7 +146,6 @@ contract TokenFactory_v3 is Initializable, OwnableUpgradeable, UUPSUpgradeable, 
             params.developmentPercentage;
             
         emit DebugAllocation("Calculating total allocation", totalAllocation);
-        emit DebugAllocation("Platform fee", platformFeePercentage);
         emit DebugAllocation("Presale", params.presalePercentage);
         emit DebugAllocation("Liquidity", params.liquidityPercentage);
         emit DebugAllocation("Team", params.teamPercentage);

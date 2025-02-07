@@ -1,282 +1,373 @@
 import { useState } from 'react';
-import { useNetwork } from '@contexts/NetworkContext';
-import { useAccount } from 'wagmi';
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
+import { useSplitTokenFactory } from '@/hooks/useSplitTokenFactory';
 import { useToast } from '@/components/ui/toast/use-toast';
 import { parseEther } from 'viem';
-import { useTokenFactory } from '@/hooks/useTokenFactory';
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Spinner } from '@/components/ui/Spinner';
+import TokenPreview from '@/components/features/token/TokenPreview';
+import { useAccount } from 'wagmi';
+import TCAP_test from '@/components/features/token/TCAP_test';
+
+interface WalletEntry {
+  address: string;
+  percentage: number;
+}
 
 export default function TestToken() {
-  const { chainId } = useNetwork();
   const { address } = useAccount();
   const { toast } = useToast();
-  const [loading, setLoading] = useState(false);
-  const { createToken } = useTokenFactory('v3');
-
-  const [formData, setFormData] = useState({
-    name: 'Simple Test Token',
-    symbol: 'STT',
-    initialSupply: '1000000',
-    maxSupply: '1000000', // Same as initial supply for simplicity
-    tokensPerEth: '1000',
-    minContribution: '0.1',
-    maxContribution: '10',
-    presaleCap: '100',
-    presalePercentage: 45, // 45% for presale
-    liquidityPercentage: 30, // 30% for liquidity
-    teamPercentage: 20, // 20% for team (platform fee is 5%)
-    liquidityLockDuration: 180,
+  const { createToken, isLoading: isCreating, error: createError } = useSplitTokenFactory();
+  const [tokenName, setTokenName] = useState('Split Test Token');
+  const [tokenSymbol, setTokenSymbol] = useState('SPLIT');
+  const [totalSupply, setTotalSupply] = useState('1000000');
+  const [createdTokens, setCreatedTokens] = useState<`0x${string}`[]>(() => {
+    // Initialize from localStorage if available
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('createdTokens');
+      return saved ? JSON.parse(saved) as `0x${string}`[] : [];
+    }
+    return [];
   });
+  const [selectedToken, setSelectedToken] = useState<`0x${string}` | null>(() => {
+    // Initialize from localStorage if available
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('selectedToken');
+      return saved ? (saved as `0x${string}`) : null;
+    }
+    return null;
+  });
+  const [wallets, setWallets] = useState<WalletEntry[]>([
+    { address: '', percentage: 50 },
+    { address: '', percentage: 50 }
+  ]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!address) return;
+
     try {
-      setLoading(true);
+      // Filter out any wallets with 0% allocation
+      const validWallets = wallets.filter(w => Number(w.percentage) > 0);
+      
+      // Create arrays for contract call
+      const walletAddresses = validWallets.map(w => w.address as `0x${string}`);
+      const percentages = validWallets.map(w => Number(w.percentage)); // Already in 0-100 format
 
-      if (!chainId || !address) {
-        throw new Error('Please connect your wallet');
-      }
-
-      // Set times
-      const now = new Date();
-      const startTime = new Date(now.getTime() + 24 * 60 * 60 * 1000); // Tomorrow
-      const endTime = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000); // 14 days from now
-
-      const params = {
-        name: formData.name,
-        symbol: formData.symbol,
-        initialSupply: BigInt(parseEther(formData.initialSupply)),
-        maxSupply: BigInt(parseEther(formData.maxSupply)),
-        owner: address as `0x${string}`,
-        enableBlacklist: false,
-        enableTimeLock: false,
-        tokensPerEth: BigInt(parseEther(formData.tokensPerEth)),
-        minContribution: BigInt(parseEther(formData.minContribution)),
-        maxContribution: BigInt(parseEther(formData.maxContribution)),
-        presaleCap: BigInt(parseEther(formData.presaleCap)),
-        startTime: BigInt(Math.floor(startTime.getTime() / 1000)),
-        endTime: BigInt(Math.floor(endTime.getTime() / 1000)),
-        presalePercentage: BigInt(formData.presalePercentage * 100), // Convert to basis points
-        liquidityPercentage: BigInt(formData.liquidityPercentage * 100), // Convert to basis points
-        liquidityLockDuration: BigInt(formData.liquidityLockDuration),
-        teamPercentage: BigInt(formData.teamPercentage * 100), // Convert to basis points
-        marketingPercentage: BigInt(0), // Not using marketing allocation
-        developmentPercentage: BigInt(0) // Not using development allocation
-      };
-
-      // Log parameters for debugging
-      console.log('Simple Test Token Parameters:', {
-        ...params,
-        initialSupply: params.initialSupply.toString(),
-        maxSupply: params.maxSupply.toString(),
-        tokensPerEth: params.tokensPerEth.toString(),
-        minContribution: params.minContribution.toString(),
-        maxContribution: params.maxContribution.toString(),
-        presaleCap: params.presaleCap.toString(),
-        startTime: params.startTime.toString(),
-        endTime: params.endTime.toString(),
-        presalePercentage: params.presalePercentage.toString(),
-        liquidityPercentage: params.liquidityPercentage.toString(),
-        teamPercentage: params.teamPercentage.toString()
+      const result = await createToken({
+        name: tokenName,
+        symbol: tokenSymbol,
+        totalSupply: parseEther(totalSupply.toString()),
+        wallets: walletAddresses,
+        percentages: percentages
       });
 
-      // Verify total percentage (including 5% platform fee)
-      const totalPercentage = 
-        formData.presalePercentage +
-        formData.liquidityPercentage +
-        formData.teamPercentage +
-        5; // Platform fee
-
-      console.log('Total Percentage:', totalPercentage);
-
-      if (totalPercentage !== 100) {
-        throw new Error(`Total allocation must equal 100%. Current total: ${totalPercentage}%`);
+      if (result) {
+        const newTokens = [...createdTokens, result];
+        setCreatedTokens(newTokens);
+        setSelectedToken(result);
+        localStorage.setItem('createdTokens', JSON.stringify(newTokens));
+        localStorage.setItem('selectedToken', result);
+        toast({
+          title: 'Success',
+          description: 'Token created successfully!',
+        });
       }
-
-      await createToken(params);
-      toast({
-        title: "Success",
-        description: "Token created successfully!",
-      });
-
     } catch (err) {
-      console.error('Error creating test token:', err);
+      console.error('Error creating token:', err);
       toast({
-        title: "Error",
+        title: 'Error',
         description: err instanceof Error ? err.message : 'Failed to create token',
-        variant: "destructive"
+        variant: 'destructive'
       });
-    } finally {
-      setLoading(false);
     }
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
+    switch (name) {
+      case 'name':
+        setTokenName(value);
+        break;
+      case 'symbol':
+        setTokenSymbol(value);
+        break;
+      case 'totalSupply':
+        setTotalSupply(value);
+        break;
+    }
+  };
+
+  const handleWalletChange = (index: number, field: 'address' | 'percentage', value: string) => {
+    setWallets(prev => prev.map((wallet, i) => {
+      if (i === index) {
+        return {
+          ...wallet,
+          [field]: field === 'percentage' ? Number(value) : value
+        };
+      }
+      return wallet;
     }));
+  };
+
+  const addWallet = () => {
+    setWallets(prev => [...prev, { address: '', percentage: 0 }]);
+  };
+
+  const removeWallet = (index: number) => {
+    if (wallets.length > 2) {
+      setWallets(prev => prev.filter((_, i) => i !== index));
+    } else {
+      toast({
+        title: 'Info',
+        description: 'Minimum two wallets required',
+        variant: 'default'
+      });
+    }
+  };
+
+  const totalPercentage = wallets.reduce((sum, w) => sum + w.percentage, 0);
+
+  const clearCreatedToken = () => {
+    setSelectedToken(null);
+    localStorage.removeItem('selectedToken');
+    toast({
+      title: 'Info',
+      description: 'Selected token cleared',
+    });
+  };
+
+  const clearAllTokens = () => {
+    setCreatedTokens([]);
+    setSelectedToken(null);
+    localStorage.removeItem('createdTokens');
+    localStorage.removeItem('selectedToken');
+    toast({
+      title: 'Info',
+      description: 'All tokens cleared',
+    });
   };
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold text-white mb-8">Simple Test Token Creation</h1>
-      
-      <form onSubmit={handleSubmit} className="space-y-4 max-w-2xl">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-400 mb-1">Name</label>
-            <Input
-              name="name"
-              value={formData.name}
-              onChange={handleInputChange}
-              className="w-full"
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-400 mb-1">Symbol</label>
-            <Input
-              name="symbol"
-              value={formData.symbol}
-              onChange={handleInputChange}
-              className="w-full"
-            />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-400 mb-1">Initial Supply</label>
-            <Input
-              name="initialSupply"
-              value={formData.initialSupply}
-              onChange={handleInputChange}
-              className="w-full"
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-400 mb-1">Tokens per ETH</label>
-            <Input
-              name="tokensPerEth"
-              value={formData.tokensPerEth}
-              onChange={handleInputChange}
-              className="w-full"
-            />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-400 mb-1">Min Contribution (ETH)</label>
-            <Input
-              name="minContribution"
-              value={formData.minContribution}
-              onChange={handleInputChange}
-              className="w-full"
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-400 mb-1">Max Contribution (ETH)</label>
-            <Input
-              name="maxContribution"
-              value={formData.maxContribution}
-              onChange={handleInputChange}
-              className="w-full"
-            />
-          </div>
-        </div>
-
+      <h1 className="text-3xl font-bold text-white mb-8">Create Split Token</h1>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Form Section */}
         <div>
-          <label className="block text-sm font-medium text-gray-400 mb-1">Presale Cap (ETH)</label>
-          <Input
-            name="presaleCap"
-            value={formData.presaleCap}
-            onChange={handleInputChange}
-            className="w-full"
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <Card className="p-6 bg-background-dark border-border">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-white mb-1">
+                    Token Name
+                  </label>
+                  <Input
+                    name="name"
+                    value={tokenName}
+                    onChange={handleInputChange}
+                    className="w-full bg-gray-800 border-gray-700 text-white"
+                    placeholder="My Token"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-white mb-1">
+                    Token Symbol
+                  </label>
+                  <Input
+                    name="symbol"
+                    value={tokenSymbol}
+                    onChange={handleInputChange}
+                    className="w-full bg-gray-800 border-gray-700 text-white"
+                    placeholder="MTK"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-white mb-1">
+                    Total Supply
+                  </label>
+                  <Input
+                    name="totalSupply"
+                    type="number"
+                    value={totalSupply}
+                    onChange={handleInputChange}
+                    className="w-full bg-gray-800 border-gray-700 text-white"
+                    placeholder="1000000"
+                    required
+                  />
+                </div>
+              </div>
+            </Card>
+
+            {/* Wallet Distribution */}
+            <Card className="p-6 bg-background-dark border-border">
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-lg font-medium text-white">Wallet Distribution</h3>
+                  <Button
+                    type="button"
+                    onClick={addWallet}
+                    className="text-xs bg-blue-500/20 text-blue-400 hover:bg-blue-500/30"
+                  >
+                    Add Wallet
+                  </Button>
+                </div>
+
+                <div className="space-y-4">
+                  {wallets.map((wallet, index) => (
+                    <div
+                      key={index}
+                      className="p-4 rounded-lg border border-border bg-background-dark transition-colors hover:border-border-hover"
+                    >
+                      <div className="flex justify-between items-center mb-3">
+                        <span className="text-sm font-medium text-white">Wallet {index + 1}</span>
+                        {wallets.length > 2 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={() => removeWallet(index)}
+                            className="h-7 text-xs text-red-400 hover:text-red-300 hover:bg-red-400/10"
+                          >
+                            Remove
+                          </Button>
+                        )}
+                      </div>
+                      <div className="space-y-3">
+                        <Input
+                          value={wallet.address}
+                          onChange={(e) => handleWalletChange(index, 'address', e.target.value)}
+                          className="w-full bg-gray-800 border-gray-700 text-white"
+                          placeholder="0x..."
+                          required
+                        />
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="number"
+                            value={wallet.percentage}
+                            onChange={(e) => handleWalletChange(index, 'percentage', e.target.value)}
+                            className="w-full bg-gray-800 border-gray-700 text-white"
+                            min="0"
+                            max="100"
+                            required
+                          />
+                          <span className="text-gray-200">%</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-white">Total Percentage:</span>
+                  <span className={totalPercentage === 100 ? 'text-green-400' : 'text-red-400'}>
+                    {totalPercentage}%
+                  </span>
+                </div>
+              </div>
+            </Card>
+
+            <div className="flex justify-end">
+              <Button
+                type="submit"
+                disabled={isCreating || totalPercentage !== 100 || !address}
+                className="bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 disabled:opacity-50"
+              >
+                {!address ? (
+                  'Connect Wallet'
+                ) : isCreating ? (
+                  'Creating...'
+                ) : (
+                  'Create Token'
+                )}
+              </Button>
+            </div>
+          </form>
+        </div>
+
+        {/* Preview Section */}
+        <div className="space-y-4">
+          <TokenPreview
+            name={tokenName}
+            symbol={tokenSymbol}
+            initialSupply={totalSupply}
+            maxSupply={totalSupply}
+            distributionSegments={wallets.map((wallet, index) => ({
+              name: `Wallet ${index + 1}`,
+              amount: wallet.percentage,
+              percentage: wallet.percentage,
+              color: getWalletColor(index)
+            }))}
+            totalAllocation={totalPercentage}
           />
-        </div>
-
-        <div className="grid grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-400 mb-1">Presale %</label>
-            <Input
-              name="presalePercentage"
-              value={formData.presalePercentage}
-              onChange={handleInputChange}
-              type="number"
-              className="w-full"
-            />
+          <div className="flex justify-between items-center">
+            <h2 className="text-lg font-bold text-white">Token Management</h2>
+            <div className="flex gap-2">
+              {createdTokens.length > 0 && (
+                <Button
+                  onClick={clearAllTokens}
+                  variant="ghost"
+                  className="text-xs text-red-400 hover:text-red-300 hover:bg-red-400/10"
+                >
+                  Clear All
+                </Button>
+              )}
+              {selectedToken && (
+                <Button
+                  onClick={clearCreatedToken}
+                  variant="ghost"
+                  className="text-xs text-red-400 hover:text-red-300 hover:bg-red-400/10"
+                >
+                  Clear Selected
+                </Button>
+              )}
+            </div>
           </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-400 mb-1">Liquidity %</label>
-            <Input
-              name="liquidityPercentage"
-              value={formData.liquidityPercentage}
-              onChange={handleInputChange}
-              type="number"
-              className="w-full"
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-400 mb-1">Team %</label>
-            <Input
-              name="teamPercentage"
-              value={formData.teamPercentage}
-              onChange={handleInputChange}
-              type="number"
-              className="w-full"
-            />
-          </div>
+          {createdTokens.length > 0 ? (
+            <div className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                {createdTokens.map((token) => (
+                  <Button
+                    key={token}
+                    onClick={() => {
+                      setSelectedToken(token);
+                      localStorage.setItem('selectedToken', token);
+                    }}
+                    variant={selectedToken === token ? "default" : "secondary"}
+                    className="text-xs"
+                  >
+                    {token.slice(0, 6)}...{token.slice(-4)}
+                  </Button>
+                ))}
+              </div>
+              {selectedToken ? (
+                <TCAP_test tokenAddress={selectedToken} />
+              ) : (
+                <Card className="p-4 bg-gray-800 border-gray-700">
+                  <p className="text-sm text-gray-400">Select a token to manage</p>
+                </Card>
+              )}
+            </div>
+          ) : (
+            <Card className="p-4 bg-gray-800 border-gray-700">
+              <p className="text-sm text-gray-400">Create a token to manage it here</p>
+            </Card>
+          )}
         </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-400 mb-1">Liquidity Lock (days)</label>
-          <Input
-            name="liquidityLockDuration"
-            value={formData.liquidityLockDuration}
-            onChange={handleInputChange}
-            type="number"
-            className="w-full"
-          />
-        </div>
-
-        <div className="pt-4">
-          <Button 
-            type="submit"
-            disabled={loading || !address}
-            className="w-full"
-          >
-            {!address ? (
-              'Connect Wallet to Continue'
-            ) : loading ? (
-              <>
-                <Spinner className="w-4 h-4 mr-2" />
-                Creating Token...
-              </>
-            ) : (
-              'Create Simple Test Token'
-            )}
-          </Button>
-        </div>
-
-        <div className="mt-4 p-4 bg-gray-800 rounded-lg">
-          <h3 className="text-sm font-medium text-gray-400 mb-2">Total Allocation</h3>
-          <p className="text-white">
-            {formData.presalePercentage + formData.liquidityPercentage + formData.teamPercentage + 5}%
-          </p>
-          <p className="text-xs text-gray-400 mt-1">
-            (Including 5% platform fee)
-          </p>
-        </div>
-      </form>
+      </div>
     </div>
   );
+}
+
+function getWalletColor(index: number): string {
+  const colors = [
+    '#3B82F6', // blue-500
+    '#10B981', // emerald-500
+    '#F59E0B', // amber-500
+    '#EC4899', // pink-500
+    '#8B5CF6', // violet-500
+  ];
+  return colors[index % colors.length];
 } 

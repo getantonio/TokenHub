@@ -15,27 +15,26 @@ interface CreateTokenParams {
   owner: string;
   enableBlacklist: boolean;
   enableTimeLock: boolean;
-  tokensPerEth: bigint;  // Changed from presaleRate
+  tokensPerEth: bigint;
   minContribution: bigint;
   maxContribution: bigint;
   presaleCap: bigint;
   startTime: bigint;
   endTime: bigint;
-  presalePercentage: bigint;  // in basis points (e.g., 3500n for 35%)
-  liquidityPercentage: bigint; // in basis points (e.g., 3000n for 30%)
+  presalePercentage: bigint;
+  liquidityPercentage: bigint;
   liquidityLockDuration: bigint;
-  teamPercentage: bigint;     // in basis points (e.g., 1500n for 15%)
-  marketingPercentage: bigint; // in basis points (e.g., 1000n for 10%)
-  developmentPercentage: bigint; // in basis points (e.g., 500n for 5%)
+  teamPercentage: bigint;
+  marketingPercentage: bigint;
+  developmentPercentage: bigint;
+  platformFeeRecipient: string;
+  platformFeeTokens: bigint;
+  platformFeeVestingEnabled: boolean;
+  platformFeeVestingDuration: bigint;
+  platformFeeCliffDuration: bigint;
 }
 
-const PLATFORM_FEE_BASIS_POINTS = BigInt(500); // 5%
 const TOTAL_BASIS_POINTS = BigInt(10000); // 100%
-const REQUIRED_ALLOCATION_BASIS_POINTS = BigInt(9500); // 95%
-
-const formatPercentage = (basisPoints: number | bigint): string => {
-  return (Number(basisPoints) / 100).toFixed(2);
-};
 
 export const useTokenFactory = (version: 'v3') => {
   const { address } = useAccount();
@@ -84,8 +83,48 @@ export const useTokenFactory = (version: 'v3') => {
 
       console.log('Deployment Fee:', deploymentFee.toString());
 
-      // Ensure all numeric values are properly converted to BigInt
-      const safeParams = {
+      // Validate total allocation equals 100%
+      const totalAllocation = 
+        params.presalePercentage +
+        params.liquidityPercentage +
+        params.teamPercentage +
+        params.marketingPercentage +
+        params.developmentPercentage;
+
+      if (totalAllocation !== TOTAL_BASIS_POINTS) {
+        throw new Error(`Total allocation must equal 100% (10000 basis points). Current total: ${totalAllocation} basis points`);
+      }
+
+      // Log parameters for debugging
+      console.log('Parameters:', {
+        name: params.name,
+        symbol: params.symbol,
+        initialSupply: params.initialSupply.toString(),
+        maxSupply: params.maxSupply.toString(),
+        owner: params.owner,
+        enableBlacklist: params.enableBlacklist,
+        enableTimeLock: params.enableTimeLock,
+        tokensPerEth: params.tokensPerEth.toString(),
+        minContribution: params.minContribution.toString(),
+        maxContribution: params.maxContribution.toString(),
+        presaleCap: params.presaleCap.toString(),
+        startTime: params.startTime.toString(),
+        endTime: params.endTime.toString(),
+        presalePercentage: params.presalePercentage.toString(),
+        liquidityPercentage: params.liquidityPercentage.toString(),
+        liquidityLockDuration: params.liquidityLockDuration.toString(),
+        teamPercentage: params.teamPercentage.toString(),
+        marketingPercentage: params.marketingPercentage.toString(),
+        developmentPercentage: params.developmentPercentage.toString(),
+        platformFeeRecipient: params.platformFeeRecipient,
+        platformFeeTokens: params.platformFeeTokens.toString(),
+        platformFeeVestingEnabled: params.platformFeeVestingEnabled,
+        platformFeeVestingDuration: params.platformFeeVestingDuration.toString(),
+        platformFeeCliffDuration: params.platformFeeCliffDuration.toString()
+      });
+
+      // Create the token creation parameters object
+      const tokenParams = {
         name: params.name,
         symbol: params.symbol,
         initialSupply: params.initialSupply,
@@ -93,7 +132,7 @@ export const useTokenFactory = (version: 'v3') => {
         owner: params.owner,
         enableBlacklist: params.enableBlacklist,
         enableTimeLock: params.enableTimeLock,
-        tokensPerEth: params.tokensPerEth,  // Changed from presaleRate
+        tokensPerEth: params.tokensPerEth,
         minContribution: params.minContribution,
         maxContribution: params.maxContribution,
         presaleCap: params.presaleCap,
@@ -107,65 +146,15 @@ export const useTokenFactory = (version: 'v3') => {
         developmentPercentage: params.developmentPercentage
       };
 
-      // Validate total allocation equals 100%
-      const totalAllocation = BigInt(500) + // Platform fee (5%)
-        safeParams.presalePercentage +
-        safeParams.liquidityPercentage +
-        safeParams.teamPercentage +
-        safeParams.marketingPercentage +
-        safeParams.developmentPercentage;
-
-      if (totalAllocation !== BigInt(10000)) {
-        throw new Error(`Total allocation must equal 100% (10000 basis points). Current total: ${totalAllocation} basis points`);
-      }
-
-      // Validate presale cap
-      const presaleTokens = (safeParams.initialSupply * safeParams.presalePercentage) / BigInt(10000);
-      const requiredPresaleCap = presaleTokens / safeParams.tokensPerEth;  // Changed from presaleRate
-      
-      if (safeParams.presaleCap < requiredPresaleCap) {
-        throw new Error(`Presale cap too low. Required: ${requiredPresaleCap.toString()} ETH, Provided: ${safeParams.presaleCap.toString()} ETH`);
-      }
-
-      // Log the exact parameters being sent
-      console.log('Safe Parameters:', {
-        name: safeParams.name,
-        symbol: safeParams.symbol,
-        initialSupply: safeParams.initialSupply,
-        maxSupply: safeParams.maxSupply,
-        owner: safeParams.owner,
-        enableBlacklist: safeParams.enableBlacklist,
-        enableTimeLock: safeParams.enableTimeLock,
-        tokensPerEth: safeParams.tokensPerEth,  // Changed from presaleRate
-        minContribution: safeParams.minContribution,
-        maxContribution: safeParams.maxContribution,
-        presaleCap: safeParams.presaleCap,
-        startTime: safeParams.startTime,
-        endTime: safeParams.endTime,
-        presalePercentage: safeParams.presalePercentage,
-        liquidityPercentage: safeParams.liquidityPercentage,
-        liquidityLockDuration: safeParams.liquidityLockDuration,
-        teamPercentage: safeParams.teamPercentage,
-        marketingPercentage: safeParams.marketingPercentage,
-        developmentPercentage: safeParams.developmentPercentage
-      });
-
       // Prepare the transaction
       const { request } = await publicClient.simulateContract({
         address: factoryAddress as `0x${string}`,
         abi: TokenFactoryV3ABI.abi as Abi,
         functionName: 'createToken',
-        args: [safeParams],
+        args: [tokenParams],
         value: deploymentFee
       });
 
-      // Log the exact transaction data being sent
-      console.log('Transaction request:', {
-        to: request.address,
-        value: request.value?.toString(),
-        args: request.args
-      });
-      
       // Send the transaction
       await writeContract(request);
       setIsWaiting(false);

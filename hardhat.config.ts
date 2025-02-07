@@ -12,6 +12,12 @@ const config = {
   defaultNetwork: "hardhat",
   networks: {
     hardhat: {
+    },
+    "optimism-sepolia": {
+      url: process.env.NEXT_PUBLIC_OPSEPOLIA_RPC_URL,
+      accounts: [process.env.PRIVATE_KEY || ""],
+      chainId: 11155420,
+      verifyApiKey: process.env.OPTIMISM_API_KEY
     }
   },
   solidity: {
@@ -65,6 +71,21 @@ const config = {
               }
             }
           }
+        }
+      }
+    ]
+  },
+  etherscan: {
+    apiKey: {
+      "optimism-sepolia": process.env.OPTIMISM_API_KEY || ""
+    },
+    customChains: [
+      {
+        network: "optimism-sepolia",
+        chainId: 11155420,
+        urls: {
+          apiURL: "https://api-sepolia-optimistic.etherscan.io/api",
+          browserURL: "https://sepolia-optimism.etherscan.io"
         }
       }
     ]

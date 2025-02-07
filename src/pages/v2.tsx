@@ -5,12 +5,6 @@ import { TokenFormV2 } from '@components/features/token/TokenForm_V2';
 import Head from 'next/head';
 import type { MetaMaskInpageProvider } from '@metamask/providers';
 
-declare global {
-  interface Window {
-    ethereum?: MetaMaskInpageProvider;
-  }
-}
-
 export default function V2Page() {
   const [isConnected, setIsConnected] = useState(false);
   const { chainId } = useNetwork();
@@ -19,9 +13,9 @@ export default function V2Page() {
     const checkConnection = async () => {
       if (window.ethereum) {
         try {
-          const accounts = await window.ethereum.request<string[]>({ 
+          const accounts = await window.ethereum.request({ 
             method: 'eth_accounts' 
-          });
+          }) as string[];
           setIsConnected(Array.isArray(accounts) && accounts.length > 0);
 
           // Listen for account changes

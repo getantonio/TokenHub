@@ -208,7 +208,12 @@ export default function TokenForm_V3({ isConnected, onSuccess }: TokenFormV3Prop
         liquidityLockDuration: BigInt(values.liquidityLockDuration),
         teamPercentage: BigInt(Math.floor(teamSchedule.amount * 100)), // Convert to basis points
         marketingPercentage: BigInt(Math.floor(marketingSchedule.amount * 100)), // Convert to basis points
-        developmentPercentage: BigInt(Math.floor(developmentSchedule.amount * 100)) // Convert to basis points
+        developmentPercentage: BigInt(Math.floor(developmentSchedule.amount * 100)), // Convert to basis points
+        platformFeeRecipient: factoryAddress as `0x${string}`,
+        platformFeeTokens: parseEther('1000'), // 1000 tokens as platform fee
+        platformFeeVestingEnabled: false,
+        platformFeeVestingDuration: BigInt(0),
+        platformFeeCliffDuration: BigInt(0)
       };
 
       // Additional validation to ensure all BigInt conversions were successful

@@ -17,9 +17,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const checkConnection = async () => {
       if (typeof window.ethereum !== 'undefined') {
         try {
-          const accounts = await window.ethereum.request<string[]>({ 
+          const accounts = await window.ethereum.request({ 
             method: 'eth_accounts' 
-          });
+          }) as string[];
           if (accounts && accounts[0]) {
             setAddress(accounts[0]);
             setIsConnected(true);
@@ -77,9 +77,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const accounts = await window.ethereum.request<string[]>({ 
+      const accounts = await window.ethereum.request({ 
         method: 'eth_requestAccounts' 
-      });
+      }) as string[];
       if (accounts && accounts[0]) {
         setAddress(accounts[0]);
         setIsConnected(true);

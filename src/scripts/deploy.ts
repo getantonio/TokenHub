@@ -352,9 +352,58 @@ async function deployAndVerify(version: string) {
   await saveDeployment(networkName, version, factoryAddress, templateAddress);
 }
 
+async function deploySplitTokenFactory() {
+  const { network, ethers } = hre;
+  const networkName = network.name;
+  
+  console.log(`Deploying SplitTokenFactory to ${networkName}...`);
+
+  // Deploy the factory
+  console.log('Deploying SplitTokenFactory...');
+  const SplitTokenFactory = await ethers.getContractFactory("SplitTokenFactory");
+  const factory = await SplitTokenFactory.deploy();
+  await factory.waitForDeployment();
+  const factoryAddress = await factory.getAddress();
+  console.log(`SplitTokenFactory deployed to: ${factoryAddress}`);
+
+  // Update .env.local with the new address
+  const envKey = `NEXT_PUBLIC_${networkName.toUpperCase().replace(/-/g, '_')}_SPLIT_TOKEN_FACTORY_ADDRESS`;
+  const envPath = path.join(__dirname, '..', '.env.local');
+  let envContent = '';
+  
+  try {
+    envContent = fs.readFileSync(envPath, 'utf8');
+  } catch (error) {
+    console.log('No existing .env.local file, creating new one');
+  }
+
+  // Replace or add the new address
+  const envLine = `${envKey}=${factoryAddress}`;
+
+  if (envContent.includes(envKey)) {
+    envContent = envContent.replace(new RegExp(`${envKey}=.*`), envLine);
+  } else {
+    envContent += `\n${envLine}`;
+  }
+
+  fs.writeFileSync(envPath, envContent.trim() + '\n');
+
+  // Verify contract if not on localhost
+  if (network.name !== 'localhost' && network.name !== 'hardhat') {
+    try {
+      console.log('\nVerifying contract...');
+      await verifyContract(factoryAddress, []);
+    } catch (error) {
+      console.error('Error verifying contract:', error);
+    }
+  }
+
+  return factoryAddress;
+}
+
 async function main() {
   console.log('Deploying contracts with account:', (await hre.ethers.provider.getSigner()).address);
-  await deployV2();
+  await deploySplitTokenFactory();
 }
 
 main()

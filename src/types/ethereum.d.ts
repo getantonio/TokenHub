@@ -6,4 +6,5 @@ declare global {
   }
 }
 
+// This export is needed to make this a module
 export {}; 

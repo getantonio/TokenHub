@@ -1,4 +1,4 @@
-import TokenForm_V3 from '../components/features/token/TokenForm_V3';
+import TokenForm_v3 from '../components/features/token/TokenForm_v3';
 import { useAccount } from 'wagmi';
 import { useRouter } from 'next/router';
 
@@ -14,7 +14,7 @@ export default function V3() {
     <div className="container mx-auto px-4 py-2">
       <h1 className="text-3xl font-bold text-white mb-8">Create Token V3</h1>
       <div className="space-y-8">
-        <TokenForm_V3 
+        <TokenForm_v3 
           isConnected={isConnected} 
           onSuccess={handleSuccess}
         />

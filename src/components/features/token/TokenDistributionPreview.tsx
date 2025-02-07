@@ -1,106 +1,115 @@
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
+import { Card } from "@/components/ui/card";
 
-interface TokenDistributionPreviewProps {
-  vestingSchedules: {
-    walletName: string;
-    amount: string;
-  }[];
-  presalePercent: number;
-  liquidityPercent: number;
-  platformFeePercent?: number;
+export interface WalletEntry {
+  address: string;
+  percentage: number;
 }
 
-const COLORS = [
-  '#0088FE', // Blue
-  '#00C49F', // Green
-  '#FFBB28', // Yellow
-  '#FF8042', // Orange
-  '#8884d8', // Purple
-  '#82ca9d', // Light Green
-  '#ffc658', // Light Yellow
-  '#ff7300', // Dark Orange
-];
+export interface TokenDistributionPreviewProps {
+  wallets: WalletEntry[];
+}
 
-export function TokenDistributionPreview({
-  vestingSchedules,
-  presalePercent,
-  liquidityPercent,
-  platformFeePercent = 5, // Default to 5%
-}: TokenDistributionPreviewProps) {
-  // Convert basis points to percentages for display
-  const presaleDisplay = presalePercent / 100;
-  const liquidityDisplay = liquidityPercent / 100;
-  const vestingSchedulesDisplay = vestingSchedules.map(schedule => ({
-    name: schedule.walletName,
-    value: parseFloat(schedule.amount)
-  }));
-
-  // Prepare data for the pie chart
-  const data = [
-    { name: 'Platform Fee', value: platformFeePercent, color: '#FF0000' }, // Red for platform fee
-    { name: 'Presale', value: presaleDisplay },
-    { name: 'Liquidity', value: liquidityDisplay },
-    ...vestingSchedulesDisplay
-  ];
-
-  const totalAllocation = data.reduce((sum, item) => sum + item.value, 0);
+export function TokenDistributionPreview({ wallets }: TokenDistributionPreviewProps) {
+  const totalPercentage = wallets.reduce((sum, w) => sum + w.percentage, 0);
+  const isValid = totalPercentage === 100;
 
   return (
-    <div className="card p-4">
-      <h3 className="text-lg font-medium text-white mb-4">Token Distribution</h3>
-      <div className="flex flex-col md:flex-row items-center justify-between">
-        <div className="w-full md:w-1/2 h-[300px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={data}
-                cx="50%"
-                cy="50%"
-                labelLine={false}
-                label={({ name, percent }) => `${name} (${(percent * 100).toFixed(1)}%)`}
-                outerRadius={80}
-                fill="#8884d8"
-                dataKey="value"
-              >
-                {data.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip
-                formatter={(value: number) => `${value.toFixed(2)}%`}
-              />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
+    <div className="space-y-6">
+      {/* Distribution Bar */}
+      <div className="space-y-3">
+        <div className="flex justify-between items-center text-sm">
+          <span className="text-sm text-gray-200">Total Distribution</span>
+          <span className={`font-medium ${isValid ? 'text-primary' : 'text-red-400'}`}>
+            {totalPercentage}%
+          </span>
         </div>
-        <div className="w-full md:w-1/2 mt-4 md:mt-0 md:ml-4">
-          <div className="space-y-2">
-            {data.map((item, index) => (
-              <div key={index} className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <div
-                    className="w-4 h-4 rounded-full mr-2"
-                    style={{ backgroundColor: COLORS[index % COLORS.length] }}
-                  />
-                  <span className="text-gray-300">{item.name}</span>
-                </div>
-                <span className="text-white font-medium">{item.value.toFixed(2)}%</span>
+        
+        <div className="h-3 bg-background-dark rounded-full overflow-hidden flex">
+          {wallets.map((wallet, index) => (
+            <div
+              key={index}
+              className="h-full transition-all duration-300 first:rounded-l-full last:rounded-r-full"
+              style={{
+                width: `${wallet.percentage}%`,
+                backgroundColor: getWalletColor(index),
+              }}
+            />
+          ))}
+        </div>
+        
+        {!isValid && (
+          <p className="text-sm text-red-300 flex items-center gap-2">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            Total distribution must equal 100%
+          </p>
+        )}
+      </div>
+
+      {/* Wallet List */}
+      <div className="space-y-3">
+        <div className="text-sm font-medium text-gray-200">Wallet Distribution</div>
+        <div className="divide-y divide-border">
+          {wallets.map((wallet, index) => (
+            <div 
+              key={index} 
+              className="flex items-center gap-3 py-3 group"
+            >
+              <div
+                className="w-2 h-2 rounded-full"
+                style={{ backgroundColor: getWalletColor(index) }}
+              />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-gray-200 truncate group-hover:text-gray-100 transition-colors">
+                  {wallet.address || 'No address set'}
+                </p>
               </div>
-            ))}
-            <div className="pt-2 border-t border-gray-700">
-              <div className="flex items-center justify-between">
-                <span className="text-gray-300">Total Allocation</span>
-                <span className="text-white font-medium">{totalAllocation.toFixed(2)}%</span>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-primary">
+                  {wallet.percentage}%
+                </span>
+                <div 
+                  className="w-16 h-1 rounded-full"
+                  style={{ backgroundColor: getWalletColor(index) }}
+                />
               </div>
-              {totalAllocation !== 100 && (
-                <div className="text-red-400 text-sm mt-1">
-                  Total allocation must equal 100%
-                </div>
-              )}
             </div>
-          </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Legend */}
+      <div className="rounded-lg border border-border bg-background-dark/50 p-4">
+        <div className="text-sm text-gray-200">
+          {isValid ? (
+            <div className="flex items-center gap-2 text-primary">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              Distribution is valid
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-red-400">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              Adjust percentages to total 100%
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
+}
+
+function getWalletColor(index: number): string {
+  const colors = [
+    '#3B82F6', // blue-500
+    '#10B981', // emerald-500
+    '#F59E0B', // amber-500
+    '#EC4899', // pink-500
+    '#8B5CF6', // violet-500
+  ];
+  return colors[index % colors.length];
 } 
