@@ -1,8 +1,8 @@
 {
-  "factoryAddress": "0x7f3565C3Ad43A614D620F2F5c8a1a6D77cDa0ce0",
-  "templateAddress": "0x007ee575c3Cb3D4379c5FCd67bc82Fe175372746",
+  "factoryAddress": "0x0886E614Cf23896a62CD0374aad5C3F6a84f03F8",
+  "templateAddress": "0xe3d472665A8127C0eEfd3Fab86cE15CfEb322E76",
   "network": "optimismSepolia",
   "version": "v2",
-  "timestamp": "2025-02-06T12:21:54.012Z",
-  "blockNumber": 23520986
+  "timestamp": "2025-02-07T00:14:24.508Z",
+  "blockNumber": 23542362
 }

@@ -117,28 +117,27 @@ async function deployV2() {
 }
 
 async function deployV3() {
-  const { network } = hre;
+  const { network, ethers } = hre;
   const networkName = network.name;
-  const version = 'v3.0.0';
+  const version = 'v3';
   
-  console.log(`Deploying TokenFactory_v3.0.0 to ${networkName}...`);
+  console.log(`Deploying TokenFactory_v3 to ${networkName}...`);
 
-  // First deploy the TokenTemplate_v3.0.0
-  console.log('Deploying TokenTemplate_v3.0.0...');
-  const TokenTemplate = require('hardhat').getContractFactory("TokenTemplate_v3_0_0");
+  // First deploy the TokenTemplate_v3
+  console.log('Deploying TokenTemplate_v3...');
+  const TokenTemplate = await ethers.getContractFactory("TokenTemplate_v3");
   const template = await TokenTemplate.deploy();
   await template.waitForDeployment();
   const templateAddress = await template.getAddress();
-  console.log(`TokenTemplate_v3.0.0 deployed to: ${templateAddress}`);
+  console.log(`TokenTemplate_v3 deployed to: ${templateAddress}`);
 
   // Deploy the factory with template implementation
-  console.log('Deploying TokenFactory_v3.0.0...');
-  const TokenFactory = require('hardhat').getContractFactory("TokenFactory_v3_0_0");
+  console.log('Deploying TokenFactory_v3...');
+  const TokenFactory = await ethers.getContractFactory("TokenFactory_v3");
   const factory = await TokenFactory.deploy(templateAddress);
   await factory.waitForDeployment();
-
-  const address = await factory.getAddress();
-  console.log(`TokenFactory_v3.0.0 deployed to: ${address}`);
+  const factoryAddress = await factory.getAddress();
+  console.log(`TokenFactory_v3 deployed to: ${factoryAddress}`);
 
   // Initialize the factory with deployment fee
   console.log('Initializing factory...');
@@ -147,21 +146,23 @@ async function deployV3() {
   await tx.wait();
   console.log(`Factory initialized with default fee: ${ethers.formatEther(defaultFee)} ETH`);
 
-  await saveDeployment(networkName, version, address, templateAddress);
+  await saveDeployment(networkName, version, factoryAddress, templateAddress);
 
   // Verify contracts
-  if (networkName !== 'hardhat' && networkName !== 'localhost') {
-    console.log('\nVerifying contracts...');
+  if (network.name !== 'localhost' && network.name !== 'hardhat') {
     try {
+      console.log('\nVerifying contracts...');
       await verifyContract(templateAddress, []);
-      console.log('Template contract verified');
-
-      await verifyContract(address, [templateAddress]);
-      console.log('Factory contract verified');
+      await verifyContract(factoryAddress, [templateAddress]);
     } catch (error) {
       console.error('Error verifying contracts:', error);
     }
   }
+
+  return {
+    templateAddress,
+    factoryAddress
+  };
 }
 
 async function saveDeployment(networkName: string, version: string, factoryAddress: string, templateAddress: string) {

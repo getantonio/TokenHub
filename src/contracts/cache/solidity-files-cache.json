@@ -1483,6 +1483,151 @@
       "artifacts": [
         "TokenTemplate_v2"
       ]
+    },
+    "/Volumes/UE_5_4T/Crypto/TokenFactory/src/contracts/TokenFactory_v3.sol": {
+      "lastModificationDate": 1738887216328,
+      "contentHash": "610797d5e4abfd9f80411aa86d51f889",
+      "sourceName": "src/contracts/TokenFactory_v3.sol",
+      "solcConfig": {
+        "version": "0.8.22",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 1,
+            "details": {
+              "yul": true,
+              "yulDetails": {
+                "stackAllocation": true,
+                "optimizerSteps": "dhfoDgvulfnTUtnIf"
+              }
+            }
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol",
+        "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol",
+        "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol",
+        "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol",
+        "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol",
+        "./TokenTemplate_v3.sol"
+      ],
+      "versionPragmas": [
+        "0.8.22"
+      ],
+      "artifacts": [
+        "TokenFactory_v3"
+      ]
+    },
+    "/Volumes/UE_5_4T/Crypto/TokenFactory/src/contracts/TokenTemplate_v3.sol": {
+      "lastModificationDate": 1738887202805,
+      "contentHash": "79480c20254b8663052b0853fc23e915",
+      "sourceName": "src/contracts/TokenTemplate_v3.sol",
+      "solcConfig": {
+        "version": "0.8.22",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 1,
+            "details": {
+              "yul": true,
+              "yulDetails": {
+                "stackAllocation": true,
+                "optimizerSteps": "dhfoDgvulfnTUtnIf"
+              }
+            }
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol",
+        "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol",
+        "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol",
+        "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol",
+        "@openzeppelin/contracts/utils/math/Math.sol"
+      ],
+      "versionPragmas": [
+        "0.8.22"
+      ],
+      "artifacts": [
+        "TokenTemplate_v3"
+      ]
+    },
+    "/Volumes/UE_5_4T/Crypto/TokenFactory/node_modules/@openzeppelin/contracts/utils/math/Math.sol": {
+      "lastModificationDate": 1738796051088,
+      "contentHash": "fe63409d8a06818b926cf89e0ea88b1b",
+      "sourceName": "@openzeppelin/contracts/utils/math/Math.sol",
+      "solcConfig": {
+        "version": "0.8.22",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 1,
+            "details": {
+              "yul": true,
+              "yulDetails": {
+                "stackAllocation": true,
+                "optimizerSteps": "dhfoDgvulfnTUtnIf"
+              }
+            }
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.0"
+      ],
+      "artifacts": [
+        "Math"
+      ]
     }
   }
 }

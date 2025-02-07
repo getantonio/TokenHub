@@ -7,6 +7,7 @@ interface TokenDistributionPreviewProps {
   }[];
   presalePercent: number;
   liquidityPercent: number;
+  platformFeePercent?: number;
 }
 
 const COLORS = [
@@ -24,15 +25,22 @@ export function TokenDistributionPreview({
   vestingSchedules,
   presalePercent,
   liquidityPercent,
+  platformFeePercent = 5, // Default to 5%
 }: TokenDistributionPreviewProps) {
+  // Adjust percentages to account for platform fee
+  const adjustedPresalePercent = Math.floor(presalePercent * 0.95); // 95% of original
+  const adjustedLiquidityPercent = Math.floor(liquidityPercent * 0.95); // 95% of original
+  const adjustedVestingSchedules = vestingSchedules.map(schedule => ({
+    name: schedule.walletName,
+    value: Math.floor(parseFloat(schedule.amount) * 0.95) // 95% of original
+  }));
+
   // Prepare data for the pie chart
   const data = [
-    { name: 'Presale', value: presalePercent },
-    { name: 'Liquidity', value: liquidityPercent },
-    ...vestingSchedules.map(schedule => ({
-      name: schedule.walletName,
-      value: parseFloat(schedule.amount)
-    }))
+    { name: 'Platform Fee', value: platformFeePercent, color: '#FF0000' }, // Red for platform fee
+    { name: 'Presale', value: adjustedPresalePercent },
+    { name: 'Liquidity', value: adjustedLiquidityPercent },
+    ...adjustedVestingSchedules
   ];
 
   const totalAllocation = data.reduce((sum, item) => sum + item.value, 0);

@@ -1,16 +1,18 @@
 import { useState } from 'react';
-import { BrowserProvider, Contract, parseUnits } from 'ethers';
+import { parseUnits } from 'ethers';
 import { useNetwork } from '@contexts/NetworkContext';
 import { useToast } from '@/components/ui/toast/use-toast';
 import TokenPreview from '@components/features/token/TokenPreview';
 import { InfoIcon } from '@components/ui/InfoIcon';
 import { Spinner } from '@components/ui/Spinner';
-import TokenFactory_v2 from '@contracts/abi/TokenFactory_v2.json';
+import { useTokenFactory } from '@/hooks/useTokenFactory';
+import { useAccount } from 'wagmi';
+import TokenFactory_v3 from '@contracts/abi/TokenFactory_v3.json';
 import { FACTORY_ADDRESSES } from '@config/contracts';
 
 interface TokenFormV3Props {
   isConnected: boolean;
-  onSuccess?: (address: string) => void;
+  onSuccess?: (hash: `0x${string}`) => void;
 }
 
 interface FormData {
@@ -100,10 +102,12 @@ const defaultValues: FormData = {
 
 export default function TokenForm_V3({ isConnected, onSuccess }: TokenFormV3Props) {
   const { chainId } = useNetwork();
+  const { address } = useAccount();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<FormData>(defaultValues);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
+  const { createToken, isLoading: isFactoryLoading } = useTokenFactory('v3');
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target;
@@ -119,27 +123,48 @@ export default function TokenForm_V3({ isConnected, onSuccess }: TokenFormV3Prop
       setError("Please connect your wallet first");
       return;
     }
+
+    // Log current network and factory address
+    console.log('Current Network:', chainId);
+    console.log('Factory Address:', FACTORY_ADDRESSES.v3[chainId || 0]);
     
+    // Validate total allocation
+    const totalAllocation = Number(formData.presalePercent) + 
+                          Number(formData.liquidityPercent) + 
+                          formData.vestingSchedules.reduce((sum, schedule) => sum + Number(schedule.amount), 0);
+    
+    if (totalAllocation > 95) { // 95% is max since 5% is platform fee
+      setError("Total allocation exceeds 95% (5% is reserved for platform fee)");
+      return;
+    }
+
+    if (totalAllocation < 95) {
+      setError("Total allocation must equal 95% (5% is reserved for platform fee)");
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
     try {
-      if (!window.ethereum) {
-        throw new Error("Please install MetaMask");
+      if (!address) {
+        throw new Error("Please connect your wallet");
       }
 
-      const provider = new BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      const signerAddress = await signer.getAddress();
+      if (!chainId) {
+        throw new Error("No network selected");
+      }
 
-      // Get factory address for the current network
-      const factoryAddress = FACTORY_ADDRESSES.v2[chainId || 0];
+      const factoryAddress = FACTORY_ADDRESSES.v3[chainId];
       if (!factoryAddress) {
-        throw new Error('Factory contract not deployed on this network');
+        throw new Error("Token Factory not deployed on this network");
       }
 
-      // Create contract instance
-      const factory = new Contract(factoryAddress, TokenFactory_v2.abi, signer);
+      toast({
+        title: "Preparing Transaction",
+        description: "Please confirm the transaction in your wallet",
+        variant: "default"
+      });
 
       // Convert form values to contract parameters
       const initialSupplyWei = parseUnits(formData.initialSupply, 18);
@@ -151,16 +176,19 @@ export default function TokenForm_V3({ isConnected, onSuccess }: TokenFormV3Prop
       const startTime = Math.floor(new Date(formData.startTime).getTime() / 1000);
       const endTime = Math.floor(new Date(formData.endTime).getTime() / 1000);
 
-      // Prepare vesting schedules
-      const vestingAmounts = formData.vestingSchedules.map(schedule => 
-        parseUnits(String(Number(formData.initialSupply) * (Number(schedule.amount) / 100)), 18)
-      );
-      const vestingPeriods = formData.vestingSchedules.map(schedule => 
-        Number(schedule.period) * 24 * 60 * 60 // Convert days to seconds
-      );
-      const beneficiaries = formData.vestingSchedules.map(schedule => 
-        schedule.beneficiary || signerAddress
-      );
+      // Log parameters for debugging
+      console.log('Token Creation Parameters:', {
+        name: formData.name,
+        symbol: formData.symbol,
+        initialSupply: initialSupplyWei.toString(),
+        maxSupply: maxSupplyWei.toString(),
+        presaleRate: presaleRate.toString(),
+        presaleCap: presaleCapWei.toString(),
+        startTime,
+        endTime,
+        presalePercentage: Math.floor(Number(formData.presalePercent) * 0.95 * 100),
+        liquidityPercentage: Math.floor(Number(formData.liquidityPercent) * 0.95 * 100)
+      });
 
       // Create token parameters
       const params = {
@@ -168,64 +196,40 @@ export default function TokenForm_V3({ isConnected, onSuccess }: TokenFormV3Prop
         symbol: formData.symbol,
         initialSupply: initialSupplyWei,
         maxSupply: maxSupplyWei,
-        owner: formData.customOwner || signerAddress,
+        owner: formData.customOwner || address,
         enableBlacklist: formData.enableBlacklist,
         enableTimeLock: formData.enableTimeLock,
         presaleRate,
         minContribution: minContributionWei,
         maxContribution: maxContributionWei,
         presaleCap: presaleCapWei,
-        startTime,
-        endTime,
-        platformFeeRecipient: signerAddress, // This should be set to the actual platform fee recipient
-        platformFeeTokens: parseUnits('1000', 18), // Example platform fee
-        platformFeeVestingEnabled: true,
-        platformFeeVestingDuration: 180 * 24 * 60 * 60, // 180 days in seconds
-        platformFeeCliffDuration: 30 * 24 * 60 * 60, // 30 days in seconds
+        startTime: BigInt(startTime),
+        endTime: BigInt(endTime),
+        presalePercentage: Math.floor(Number(formData.presalePercent) * 0.95 * 100), // 95% of original, converted to basis points
+        liquidityPercentage: Math.floor(Number(formData.liquidityPercent) * 0.95 * 100), // 95% of original, converted to basis points
+        liquidityLockDuration: Number(formData.liquidityLockPeriod)
       };
 
-      // Get deployment fee
-      const deploymentFee = await factory.deploymentFee();
-
-      // Create token with deployment fee
-      const tx = await factory.createToken(params, {
-        value: deploymentFee
-      });
-
+      const result = await createToken(params);
+      console.log('Transaction Result:', result);
+      
       toast({
         title: "Transaction Submitted",
-        description: "Please wait for the transaction to be confirmed",
+        description: "Your token is being created. Please wait for confirmation.",
         variant: "default"
       });
 
-      // Wait for transaction confirmation
-      const receipt = await tx.wait();
-
-      // Find TokenCreated event
-      const event = receipt.logs.find(
-        (log: any) => log.fragment?.name === 'TokenCreated'
-      );
-
-      if (event && event.args) {
-        const tokenAddress = event.args[0];
-        toast({
-          title: "Success",
-          description: "Token created successfully!",
-          variant: "default"
-        });
-        
-        // Call onSuccess callback with the new token address
-        if (onSuccess) {
-          onSuccess(tokenAddress);
-        }
+      if (onSuccess && result) {
+        onSuccess(result);
       }
 
     } catch (error) {
       console.error('Error creating token:', error);
-      setError(error instanceof Error ? error.message : "Failed to create token");
+      const errorMessage = error instanceof Error ? error.message : "Failed to create token";
+      setError(errorMessage);
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to create token",
+        title: "Error Creating Token",
+        description: errorMessage,
         variant: "destructive"
       });
     } finally {
@@ -625,16 +629,17 @@ export default function TokenForm_V3({ isConnected, onSuccess }: TokenFormV3Prop
           initialSupply={formData.initialSupply}
           maxSupply={formData.maxSupply}
           distributionSegments={[
+            { name: 'Platform Fee', amount: 5, percentage: 5, color: '#FF0000' }, // Platform fee (5%)
             { name: 'Presale', amount: Number(formData.presalePercent), percentage: Number(formData.presalePercent), color: '#0088FE' },
             { name: 'Liquidity', amount: Number(formData.liquidityPercent), percentage: Number(formData.liquidityPercent), color: '#00C49F' },
             ...formData.vestingSchedules.map((schedule, index) => ({
               name: schedule.walletName,
               amount: Number(schedule.amount),
               percentage: Number(schedule.amount),
-              color: COLORS[index + 2] || '#FF8042'
+              color: COLORS[index + 3] || '#FF8042' // Shifted by 3 to account for platform fee, presale, and liquidity
             }))
           ]}
-          totalAllocation={Number(formData.presalePercent) + Number(formData.liquidityPercent) + formData.vestingSchedules.reduce((sum, schedule) => sum + Number(schedule.amount), 0)}
+          totalAllocation={5 + Number(formData.presalePercent) + Number(formData.liquidityPercent) + formData.vestingSchedules.reduce((sum, schedule) => sum + Number(schedule.amount), 0)}
         />
       </div>
     </div>

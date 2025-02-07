@@ -35,10 +35,6 @@ export function getNetworkContractAddress(chainId: number | string, contractName
   return addresses ? addresses[contractName] : null;
 }
 
-// Ensure the V2 factory address is correctly retrieved for Sepolia
-const sepoliaV2Address = getNetworkContractAddress(ChainId.SEPOLIA, 'factoryAddressV2');
-console.log('Sepolia V2 Factory Address:', sepoliaV2Address);
-
 export const FACTORY_ADDRESSES: Record<string, Record<number, string>> = {
   v1: {
     [ChainId.SEPOLIA]: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V1 || '',
