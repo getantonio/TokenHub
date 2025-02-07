@@ -27,20 +27,20 @@ export function TokenDistributionPreview({
   liquidityPercent,
   platformFeePercent = 5, // Default to 5%
 }: TokenDistributionPreviewProps) {
-  // Adjust percentages to account for platform fee
-  const adjustedPresalePercent = Math.floor(presalePercent * 0.95); // 95% of original
-  const adjustedLiquidityPercent = Math.floor(liquidityPercent * 0.95); // 95% of original
-  const adjustedVestingSchedules = vestingSchedules.map(schedule => ({
+  // Convert basis points to percentages for display
+  const presaleDisplay = presalePercent / 100;
+  const liquidityDisplay = liquidityPercent / 100;
+  const vestingSchedulesDisplay = vestingSchedules.map(schedule => ({
     name: schedule.walletName,
-    value: Math.floor(parseFloat(schedule.amount) * 0.95) // 95% of original
+    value: parseFloat(schedule.amount)
   }));
 
   // Prepare data for the pie chart
   const data = [
     { name: 'Platform Fee', value: platformFeePercent, color: '#FF0000' }, // Red for platform fee
-    { name: 'Presale', value: adjustedPresalePercent },
-    { name: 'Liquidity', value: adjustedLiquidityPercent },
-    ...adjustedVestingSchedules
+    { name: 'Presale', value: presaleDisplay },
+    { name: 'Liquidity', value: liquidityDisplay },
+    ...vestingSchedulesDisplay
   ];
 
   const totalAllocation = data.reduce((sum, item) => sum + item.value, 0);
@@ -57,7 +57,7 @@ export function TokenDistributionPreview({
                 cx="50%"
                 cy="50%"
                 labelLine={false}
-                label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                label={({ name, percent }) => `${name} (${(percent * 100).toFixed(1)}%)`}
                 outerRadius={80}
                 fill="#8884d8"
                 dataKey="value"
@@ -67,7 +67,7 @@ export function TokenDistributionPreview({
                 ))}
               </Pie>
               <Tooltip
-                formatter={(value: number) => `${value}%`}
+                formatter={(value: number) => `${value.toFixed(2)}%`}
               />
               <Legend />
             </PieChart>
@@ -84,14 +84,19 @@ export function TokenDistributionPreview({
                   />
                   <span className="text-gray-300">{item.name}</span>
                 </div>
-                <span className="text-white font-medium">{item.value}%</span>
+                <span className="text-white font-medium">{item.value.toFixed(2)}%</span>
               </div>
             ))}
             <div className="pt-2 border-t border-gray-700">
               <div className="flex items-center justify-between">
                 <span className="text-gray-300">Total Allocation</span>
-                <span className="text-white font-medium">{totalAllocation}%</span>
+                <span className="text-white font-medium">{totalAllocation.toFixed(2)}%</span>
               </div>
+              {totalAllocation !== 100 && (
+                <div className="text-red-400 text-sm mt-1">
+                  Total allocation must equal 100%
+                </div>
+              )}
             </div>
           </div>
         </div>

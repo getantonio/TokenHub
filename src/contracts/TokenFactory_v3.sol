@@ -16,6 +16,24 @@ import "./TokenTemplate_v3.sol";
 contract TokenFactory_v3 is Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuardUpgradeable {
     string public constant VERSION = "3.0.0";
 
+    // Debug events
+    event DebugValidation(string message, uint256 value);
+    event DebugAllocation(string message, uint256 value);
+    event DebugInitStep(string step, string message);
+    event DebugPresale(
+        string message,
+        uint256 presaleTokens,
+        uint256 presaleRate,
+        uint256 requiredCap,
+        uint256 providedCap
+    );
+    event DebugTime(
+        string message,
+        uint256 currentTime,
+        uint256 startTime,
+        uint256 endTime
+    );
+
     // Deployment fee configuration
     uint256 public deploymentFee;
     mapping(address => uint256) public customDeploymentFees;
@@ -108,32 +126,79 @@ contract TokenFactory_v3 is Initializable, OwnableUpgradeable, UUPSUpgradeable, 
     ) external payable nonReentrant returns (address) {
         // Check deployment fee
         uint256 fee = getDeploymentFee(msg.sender);
+        emit DebugValidation("Checking deployment fee", fee);
         require(msg.value >= fee, "Insufficient deployment fee");
 
         // Validate parameters
+        emit DebugValidation("Checking supplies", params.initialSupply);
         require(params.initialSupply <= params.maxSupply, "Initial > max supply");
-        require(params.presaleRate > 0, "Invalid presale rate");
+
+        emit DebugValidation("Checking tokens per ETH", params.tokensPerEth);
+        require(params.tokensPerEth > 0, "Invalid tokens per ETH");
+
+        // Time validation
+        emit DebugTime(
+            "Validating time parameters",
+            block.timestamp,
+            params.startTime,
+            params.endTime
+        );
         require(params.startTime > block.timestamp, "Start time must be future");
         require(params.endTime > params.startTime, "End time must be after start");
+
+        emit DebugValidation("Checking liquidity percentage", params.liquidityPercentage);
         require(params.liquidityPercentage <= 10000, "Invalid liquidity %");
-        require(params.presalePercentage + params.liquidityPercentage <= 10000, "Invalid allocation %");
+        
+        // Calculate total allocation
+        uint256 totalAllocation = platformFeePercentage +
+            params.presalePercentage +
+            params.liquidityPercentage +
+            params.teamPercentage +
+            params.marketingPercentage +
+            params.developmentPercentage;
+            
+        emit DebugAllocation("Calculating total allocation", totalAllocation);
+        emit DebugAllocation("Platform fee", platformFeePercentage);
+        emit DebugAllocation("Presale", params.presalePercentage);
+        emit DebugAllocation("Liquidity", params.liquidityPercentage);
+        emit DebugAllocation("Team", params.teamPercentage);
+        emit DebugAllocation("Marketing", params.marketingPercentage);
+        emit DebugAllocation("Development", params.developmentPercentage);
+
+        require(totalAllocation == 10000, "Allocations must total 100%");
+
+        // Calculate presale tokens
+        uint256 presaleTokens = (params.initialSupply * params.presalePercentage) / 10000;
+        uint256 requiredPresaleCap = presaleTokens / params.tokensPerEth;
+        
+        emit DebugPresale(
+            "Validating presale parameters",
+            presaleTokens,
+            params.tokensPerEth,
+            requiredPresaleCap,
+            params.presaleCap
+        );
+
+        require(params.presaleCap >= requiredPresaleCap, "Presale cap too low");
 
         // Calculate platform fee tokens
         uint256 platformFeeTokens = (params.initialSupply * platformFeePercentage) / 10000;
-        uint256 adjustedInitialSupply = params.initialSupply - platformFeeTokens;
+        emit DebugValidation("Platform fee tokens", platformFeeTokens);
 
         // Create proxy
+        emit DebugInitStep("Creating proxy", "Preparing initialization data");
+
         bytes memory initData = abi.encodeWithSelector(
             TokenTemplate_v3.initialize.selector,
             TokenTemplate_v3.InitParams({
                 name: params.name,
                 symbol: params.symbol,
-                initialSupply: adjustedInitialSupply,
+                initialSupply: params.initialSupply,
                 maxSupply: params.maxSupply,
                 owner: params.owner == address(0) ? msg.sender : params.owner,
                 enableBlacklist: params.enableBlacklist,
                 enableTimeLock: params.enableTimeLock,
-                presaleRate: params.presaleRate,
+                tokensPerEth: params.tokensPerEth,
                 minContribution: params.minContribution,
                 maxContribution: params.maxContribution,
                 presaleCap: params.presaleCap,
@@ -145,7 +210,11 @@ contract TokenFactory_v3 is Initializable, OwnableUpgradeable, UUPSUpgradeable, 
                 platformFeeTokens: platformFeeTokens,
                 platformFeeVestingEnabled: platformFeeVestingEnabled,
                 platformFeeVestingDuration: platformFeeVestingDuration,
-                platformFeeCliffDuration: platformFeeCliffDuration
+                platformFeeCliffDuration: platformFeeCliffDuration,
+                teamPercentage: params.teamPercentage,
+                marketingPercentage: params.marketingPercentage,
+                developmentPercentage: params.developmentPercentage,
+                presalePercentage: params.presalePercentage
             })
         );
 
@@ -256,7 +325,7 @@ struct TokenCreationParams {
     address owner;
     bool enableBlacklist;
     bool enableTimeLock;
-    uint256 presaleRate;
+    uint256 tokensPerEth;
     uint256 minContribution;
     uint256 maxContribution;
     uint256 presaleCap;
@@ -265,4 +334,7 @@ struct TokenCreationParams {
     uint256 presalePercentage;
     uint256 liquidityPercentage;
     uint256 liquidityLockDuration;
+    uint256 teamPercentage;
+    uint256 marketingPercentage;
+    uint256 developmentPercentage;
 } 

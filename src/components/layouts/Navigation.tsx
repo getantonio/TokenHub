@@ -11,6 +11,7 @@ const navigation = [
       { name: 'Version 1', href: '/v1' },
       { name: 'Version 2', href: '/v2' },
       { name: 'Version 3', href: '/v3' },
+      { name: 'Test Token', href: '/test-token' },
       { name: 'Version 4', href: '#', disabled: true },
     ]
   },

@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { parseUnits } from 'ethers';
 import { useNetwork } from '@contexts/NetworkContext';
 import { useToast } from '@/components/ui/toast/use-toast';
 import TokenPreview from '@components/features/token/TokenPreview';
@@ -9,227 +8,264 @@ import { useTokenFactory } from '@/hooks/useTokenFactory';
 import { useAccount } from 'wagmi';
 import TokenFactory_v3 from '@contracts/abi/TokenFactory_v3.json';
 import { FACTORY_ADDRESSES } from '@config/contracts';
+import * as z from 'zod';
+import { addDays } from 'date-fns';
+import { parseEther } from 'viem';
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 interface TokenFormV3Props {
   isConnected: boolean;
   onSuccess?: (hash: `0x${string}`) => void;
 }
 
-interface FormData {
-  name: string;
-  symbol: string;
-  initialSupply: string;
-  maxSupply: string;
-  pricePerToken: string;
-  minContribution: string;
-  maxContribution: string;
-  presaleCap: string;
-  startTime: string;
-  endTime: string;
-  presalePercent: string;
-  liquidityPercent: string;
-  liquidityLockPeriod: string;
-  enableBlacklist: boolean;
-  enableTimeLock: boolean;
-  customOwner: string;
-  vestingSchedules: {
-    walletName: string;
-    amount: string;
-    period: string;
-    beneficiary: string;
-  }[];
-}
+const formSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  symbol: z.string().min(1, "Symbol is required"),
+  initialSupply: z.string().min(1, "Initial supply is required"),
+  maxSupply: z.string().min(1, "Max supply is required"),
+  tokensPerEth: z.string().min(1, "Tokens per ETH is required"),
+  minContribution: z.string().min(1, "Min contribution is required"),
+  maxContribution: z.string().min(1, "Max contribution is required"),
+  presaleCap: z.string().min(1, "Presale cap is required"),
+  startTime: z.date().min(new Date(), "Start time must be in the future"),
+  endTime: z.date().min(new Date(), "End time must be in the future"),
+  enableBlacklist: z.boolean(),
+  enableTimeLock: z.boolean(),
+  presalePercentage: z.coerce.number(),
+  liquidityPercentage: z.coerce.number(),
+  liquidityLockDuration: z.coerce.number(),
+  vestingSchedules: z.array(z.object({
+    walletName: z.string().min(1, "Wallet name is required"),
+    amount: z.coerce.number(),
+    period: z.coerce.number(),
+    beneficiary: z.string().min(1, "Beneficiary address is required")
+  }))
+}).refine((data) => {
+  try {
+    // Convert all percentage values to basis points (multiply by 100)
+    const presale = BigInt(data.presalePercentage * 100);
+    const liquidity = BigInt(data.liquidityPercentage * 100);
+    
+    // Safely handle potentially undefined vesting schedules
+    const teamSchedule = data.vestingSchedules.find(s => s.walletName === "Team");
+    const marketingSchedule = data.vestingSchedules.find(s => s.walletName === "Marketing");
+    const developmentSchedule = data.vestingSchedules.find(s => s.walletName === "Development");
+    
+    const team = BigInt((teamSchedule?.amount || 0) * 100);
+    const marketing = BigInt((marketingSchedule?.amount || 0) * 100);
+    const development = BigInt((developmentSchedule?.amount || 0) * 100);
+    const platformFee = BigInt(500); // 5% platform fee
+    
+    const total = presale + liquidity + team + marketing + development + platformFee;
+    
+    if (total !== BigInt(10000)) {
+      console.log("Invalid allocation:", {
+        presale: presale.toString(),
+        liquidity: liquidity.toString(),
+        team: team.toString(),
+        marketing: marketing.toString(),
+        development: development.toString(),
+        platformFee: platformFee.toString(),
+        total: total.toString()
+      });
+      return false;
+    }
+    
+    // Validate supplies
+    const initialSupply = parseEther(data.initialSupply || "0");
+    const maxSupply = parseEther(data.maxSupply || "0");
+    return maxSupply > initialSupply;
+  } catch (e) {
+    console.error("Validation error:", e);
+    return false;
+  }
+}, "Total allocation must equal 10000 basis points (100%): 35% presale + 30% liquidity + 15% team + 10% marketing + 5% development + 5% platform fee");
+
+type FormData = z.infer<typeof formSchema>;
 
 const getDefaultTimes = () => {
   const now = new Date();
-  const startTime = new Date(now.getTime() + 3600000); // 1 hour from now
-  const endTime = new Date(now.getTime() + 86400000); // 24 hours from now
+  const startTime = new Date(now.getTime() + 24 * 60 * 60 * 1000); // Tomorrow
+  const endTime = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000); // 14 days from now
+  
+  // Format dates to match datetime-local input format (yyyy-MM-ddThh:mm)
+  const formatDate = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+
   return {
-    startTime: startTime.toISOString().slice(0, 16),
-    endTime: endTime.toISOString().slice(0, 16)
+    startTime,
+    endTime,
+    startTimeFormatted: formatDate(startTime),
+    endTimeFormatted: formatDate(endTime)
   };
 };
 
-// Define vesting presets with mandatory presale and liquidity allocations
-const VESTING_PRESETS = {
-  standard: [
-    // Mandatory allocations (handled by contract)
-    // - Presale: 40%
-    // - Liquidity: 30%
-    // Remaining 30% distribution:
-    { walletName: 'Team', amount: '15', period: '365', beneficiary: '' },
-    { walletName: 'Marketing', amount: '10', period: '180', beneficiary: '' },
-    { walletName: 'Development', amount: '5', period: '365', beneficiary: '' }
-  ],
-  fair_launch: [
-    // Mandatory allocations (handled by contract)
-    // - Presale: 50%
-    // - Liquidity: 30%
-    // Remaining 20% distribution:
-    { walletName: 'Team', amount: '10', period: '365', beneficiary: '' },
-    { walletName: 'Marketing', amount: '5', period: '180', beneficiary: '' },
-    { walletName: 'Development', amount: '5', period: '365', beneficiary: '' }
-  ],
-  community: [
-    // Mandatory allocations (handled by contract)
-    // - Presale: 45%
-    // - Liquidity: 35%
-    // Remaining 20% distribution:
-    { walletName: 'Team', amount: '5', period: '365', beneficiary: '' },
-    { walletName: 'Community', amount: '10', period: '180', beneficiary: '' },
-    { walletName: 'Development', amount: '5', period: '365', beneficiary: '' }
-  ]
-};
-
 const defaultValues: FormData = {
-  name: 'Test Token',
-  symbol: 'TEST',
-  initialSupply: '1000000',
-  maxSupply: '2000000',
-  pricePerToken: '0.001',
-  minContribution: '0.1',
-  maxContribution: '1',
-  presaleCap: '10',
+  name: "",
+  symbol: "",
+  initialSupply: "",
+  maxSupply: "",
+  tokensPerEth: "",
+  minContribution: "",
+  maxContribution: "",
+  presaleCap: "",
   ...getDefaultTimes(),
-  presalePercent: '40',
-  liquidityPercent: '30',
-  liquidityLockPeriod: '180',
   enableBlacklist: false,
   enableTimeLock: false,
-  customOwner: '',
-  vestingSchedules: []
+  presalePercentage: 35,
+  liquidityPercentage: 30,
+  liquidityLockDuration: 180,
+  vestingSchedules: [
+    {
+      walletName: "Team",
+      amount: 15,
+      period: 365,
+      beneficiary: ""
+    },
+    {
+      walletName: "Marketing",
+      amount: 10,
+      period: 180,
+      beneficiary: ""
+    },
+    {
+      walletName: "Development",
+      amount: 5,
+      period: 365,
+      beneficiary: ""
+    }
+  ]
 };
 
 export default function TokenForm_V3({ isConnected, onSuccess }: TokenFormV3Props) {
   const { chainId } = useNetwork();
   const { address } = useAccount();
-  const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState<FormData>(defaultValues);
-  const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
-  const { createToken, isLoading: isFactoryLoading } = useTokenFactory('v3');
+  const [loading, setLoading] = useState(false);
+  const { createToken, error } = useTokenFactory('v3');
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value, type, checked } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value
-    }));
-  };
+  const form = useForm<FormData>({
+    resolver: zodResolver(formSchema),
+    defaultValues
+  });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!isConnected) {
-      setError("Please connect your wallet first");
-      return;
-    }
-
-    // Log current network and factory address
-    console.log('Current Network:', chainId);
-    console.log('Factory Address:', FACTORY_ADDRESSES.v3[chainId || 0]);
-    
-    // Validate total allocation
-    const totalAllocation = Number(formData.presalePercent) + 
-                          Number(formData.liquidityPercent) + 
-                          formData.vestingSchedules.reduce((sum, schedule) => sum + Number(schedule.amount), 0);
-    
-    if (totalAllocation > 95) { // 95% is max since 5% is platform fee
-      setError("Total allocation exceeds 95% (5% is reserved for platform fee)");
-      return;
-    }
-
-    if (totalAllocation < 95) {
-      setError("Total allocation must equal 95% (5% is reserved for platform fee)");
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
+  const onSubmit = async (values: FormData) => {
     try {
-      if (!address) {
-        throw new Error("Please connect your wallet");
-      }
+      setLoading(true);
 
-      if (!chainId) {
-        throw new Error("No network selected");
+      if (!chainId || !address) {
+        throw new Error('Please connect your wallet');
       }
 
       const factoryAddress = FACTORY_ADDRESSES.v3[chainId];
       if (!factoryAddress) {
-        throw new Error("Token Factory not deployed on this network");
+        throw new Error('Token Factory not deployed on this network');
       }
 
-      toast({
-        title: "Preparing Transaction",
-        description: "Please confirm the transaction in your wallet",
-        variant: "default"
-      });
+      // Validate all required values are present
+      if (!values.initialSupply || !values.maxSupply || !values.tokensPerEth || 
+          !values.minContribution || !values.maxContribution || !values.presaleCap ||
+          !values.startTime || !values.endTime || !values.presalePercentage || 
+          !values.liquidityPercentage || !values.liquidityLockDuration) {
+        throw new Error('All form fields must be filled');
+      }
 
-      // Convert form values to contract parameters
-      const initialSupplyWei = parseUnits(formData.initialSupply, 18);
-      const maxSupplyWei = parseUnits(formData.maxSupply, 18);
-      const presaleRate = parseUnits(String(Math.floor(1 / Number(formData.pricePerToken))), 18);
-      const minContributionWei = parseUnits(formData.minContribution, 18);
-      const maxContributionWei = parseUnits(formData.maxContribution, 18);
-      const presaleCapWei = parseUnits(formData.presaleCap, 18);
-      const startTime = Math.floor(new Date(formData.startTime).getTime() / 1000);
-      const endTime = Math.floor(new Date(formData.endTime).getTime() / 1000);
+      // Find vesting schedules
+      const teamSchedule = values.vestingSchedules.find(s => s.walletName === "Team");
+      const marketingSchedule = values.vestingSchedules.find(s => s.walletName === "Marketing");
+      const developmentSchedule = values.vestingSchedules.find(s => s.walletName === "Development");
 
-      // Log parameters for debugging
-      console.log('Token Creation Parameters:', {
-        name: formData.name,
-        symbol: formData.symbol,
-        initialSupply: initialSupplyWei.toString(),
-        maxSupply: maxSupplyWei.toString(),
-        presaleRate: presaleRate.toString(),
-        presaleCap: presaleCapWei.toString(),
-        startTime,
-        endTime,
-        presalePercentage: Math.floor(Number(formData.presalePercent) * 0.95 * 100),
-        liquidityPercentage: Math.floor(Number(formData.liquidityPercent) * 0.95 * 100)
-      });
+      if (!teamSchedule || !marketingSchedule || !developmentSchedule) {
+        throw new Error('All vesting schedules (Team, Marketing, Development) must be present');
+      }
 
-      // Create token parameters
+      // Create params with explicit BigInt conversions and null checks
       const params = {
-        name: formData.name,
-        symbol: formData.symbol,
-        initialSupply: initialSupplyWei,
-        maxSupply: maxSupplyWei,
-        owner: formData.customOwner || address,
-        enableBlacklist: formData.enableBlacklist,
-        enableTimeLock: formData.enableTimeLock,
-        presaleRate,
-        minContribution: minContributionWei,
-        maxContribution: maxContributionWei,
-        presaleCap: presaleCapWei,
-        startTime: BigInt(startTime),
-        endTime: BigInt(endTime),
-        presalePercentage: Math.floor(Number(formData.presalePercent) * 0.95 * 100), // 95% of original, converted to basis points
-        liquidityPercentage: Math.floor(Number(formData.liquidityPercent) * 0.95 * 100), // 95% of original, converted to basis points
-        liquidityLockDuration: Number(formData.liquidityLockPeriod)
+        name: values.name,
+        symbol: values.symbol,
+        initialSupply: BigInt(parseEther(values.initialSupply)),
+        maxSupply: BigInt(parseEther(values.maxSupply)),
+        owner: address as `0x${string}`,
+        enableBlacklist: values.enableBlacklist,
+        enableTimeLock: values.enableTimeLock,
+        tokensPerEth: BigInt(parseEther(values.tokensPerEth)),
+        minContribution: BigInt(parseEther(values.minContribution)),
+        maxContribution: BigInt(parseEther(values.maxContribution)),
+        presaleCap: BigInt(parseEther(values.presaleCap)),
+        startTime: BigInt(Math.floor(values.startTime.getTime() / 1000)),
+        endTime: BigInt(Math.floor(values.endTime.getTime() / 1000)),
+        presalePercentage: BigInt(Math.floor(values.presalePercentage * 100)), // Convert to basis points
+        liquidityPercentage: BigInt(Math.floor(values.liquidityPercentage * 100)), // Convert to basis points
+        liquidityLockDuration: BigInt(values.liquidityLockDuration),
+        teamPercentage: BigInt(Math.floor(teamSchedule.amount * 100)), // Convert to basis points
+        marketingPercentage: BigInt(Math.floor(marketingSchedule.amount * 100)), // Convert to basis points
+        developmentPercentage: BigInt(Math.floor(developmentSchedule.amount * 100)) // Convert to basis points
       };
 
-      const result = await createToken(params);
-      console.log('Transaction Result:', result);
-      
-      toast({
-        title: "Transaction Submitted",
-        description: "Your token is being created. Please wait for confirmation.",
-        variant: "default"
+      // Additional validation to ensure all BigInt conversions were successful
+      Object.entries(params).forEach(([key, value]) => {
+        if (key !== 'name' && key !== 'symbol' && key !== 'owner' && 
+            key !== 'enableBlacklist' && key !== 'enableTimeLock' && 
+            value === undefined) {
+          throw new Error(`Invalid value for ${key}`);
+        }
       });
 
-      if (onSuccess && result) {
-        onSuccess(result);
+      // Validate total percentage equals 100%
+      const totalPercentage = Number(values.presalePercentage) + 
+                            Number(values.liquidityPercentage) + 
+                            Number(teamSchedule.amount) + 
+                            Number(marketingSchedule.amount) + 
+                            Number(developmentSchedule.amount) + 
+                            5; // Platform fee
+
+      if (totalPercentage !== 100) {
+        throw new Error(`Total allocation must equal 100%. Current total: ${totalPercentage}%`);
       }
 
-    } catch (error) {
-      console.error('Error creating token:', error);
-      const errorMessage = error instanceof Error ? error.message : "Failed to create token";
-      setError(errorMessage);
+      // Debug log all parameters with their types
+      console.log('Token Creation Parameters with Types:', {
+        name: params.name,
+        symbol: params.symbol,
+        initialSupply: params.initialSupply.toString(),
+        maxSupply: params.maxSupply.toString(),
+        owner: params.owner,
+        enableBlacklist: params.enableBlacklist,
+        enableTimeLock: params.enableTimeLock,
+        tokensPerEth: params.tokensPerEth.toString(),
+        minContribution: params.minContribution.toString(),
+        maxContribution: params.maxContribution.toString(),
+        presaleCap: params.presaleCap.toString(),
+        startTime: params.startTime.toString(),
+        endTime: params.endTime.toString(),
+        presalePercentage: params.presalePercentage.toString(),
+        liquidityPercentage: params.liquidityPercentage.toString(),
+        liquidityLockDuration: params.liquidityLockDuration.toString(),
+        teamPercentage: params.teamPercentage.toString(),
+        marketingPercentage: params.marketingPercentage.toString(),
+        developmentPercentage: params.developmentPercentage.toString()
+      });
+
+      await createToken(params);
+      
+      if (onSuccess) {
+        onSuccess(factoryAddress as `0x${string}`);
+      }
+
+    } catch (err) {
+      console.error('Error creating token:', err);
       toast({
-        title: "Error Creating Token",
-        description: errorMessage,
+        title: "Error",
+        description: err instanceof Error ? err.message : 'Failed to create token',
         variant: "destructive"
       });
     } finally {
@@ -237,156 +273,137 @@ export default function TokenForm_V3({ isConnected, onSuccess }: TokenFormV3Prop
     }
   };
 
-  const applyVestingPreset = (presetName: keyof typeof VESTING_PRESETS) => {
-    setFormData(prev => ({
-      ...prev,
-      vestingSchedules: VESTING_PRESETS[presetName]
-    }));
-  };
-
-  // Calculate total allocation percentage
-  const totalAllocation = formData.vestingSchedules.reduce((sum, schedule) => {
-    return sum + Number(schedule.amount);
-  }, 0);
-
   return (
     <div className="form-container form-compact">
-      <form onSubmit={handleSubmit} className="space-y-2">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-2">
         <div className="form-grid">
           <div className="form-group">
             <label htmlFor="name" className="form-label">Token Name</label>
-            <input
-              id="name"
-              name="name"
-              value={formData.name}
-              onChange={handleChange}
+            <Input
+              {...form.register("name")}
               placeholder="My Token"
               className="form-input"
-              required
             />
+            {form.formState.errors.name && (
+              <p className="form-error">{form.formState.errors.name.message}</p>
+            )}
           </div>
 
           <div className="form-group">
             <label htmlFor="symbol" className="form-label">Token Symbol</label>
-            <input
-              id="symbol"
-              name="symbol"
-              value={formData.symbol}
-              onChange={handleChange}
-              placeholder="TKN"
+            <Input
+              {...form.register("symbol")}
+              placeholder="MTK"
               className="form-input"
-              required
             />
+            {form.formState.errors.symbol && (
+              <p className="form-error">{form.formState.errors.symbol.message}</p>
+            )}
           </div>
 
           <div className="form-group">
             <label htmlFor="initialSupply" className="form-label">Initial Supply</label>
-            <input
-              id="initialSupply"
-              name="initialSupply"
-              value={formData.initialSupply}
-              onChange={handleChange}
+            <Input
+              {...form.register("initialSupply")}
               placeholder="1000000"
               className="form-input"
-              required
             />
+            {form.formState.errors.initialSupply && (
+              <p className="form-error">{form.formState.errors.initialSupply.message}</p>
+            )}
           </div>
 
           <div className="form-group">
             <label htmlFor="maxSupply" className="form-label">Max Supply</label>
-            <input
-              id="maxSupply"
-              name="maxSupply"
-              value={formData.maxSupply}
-              onChange={handleChange}
+            <Input
+              {...form.register("maxSupply")}
               placeholder="2000000"
               className="form-input"
-              required
             />
+            {form.formState.errors.maxSupply && (
+              <p className="form-error">{form.formState.errors.maxSupply.message}</p>
+            )}
           </div>
 
           <div className="form-group">
-            <label htmlFor="pricePerToken" className="form-label">
-              Price per Token (ETH)
-              <InfoIcon content="Initial price per token in ETH" />
+            <label htmlFor="tokensPerEth" className="form-label">
+              Tokens per ETH
+              <InfoIcon content="Number of tokens per ETH during presale" />
             </label>
-            <input
-              id="pricePerToken"
-              name="pricePerToken"
-              value={formData.pricePerToken}
-              onChange={handleChange}
-              placeholder="0.001"
+            <Input
+              {...form.register("tokensPerEth")}
+              placeholder="1000"
               className="form-input"
-              required
             />
             <div className="mt-1 text-sm text-gray-400">
-              Presale Rate: {formData.pricePerToken ? `${Math.round(1 / Number(formData.pricePerToken))} Tokens per ETH` : 'N/A'}
+              Price per Token: {form.watch("tokensPerEth") ? `${1 / Number(form.watch("tokensPerEth"))} ETH` : 'N/A'}
             </div>
           </div>
 
           <div className="form-group">
             <label htmlFor="minContribution" className="form-label">Min Contribution (ETH)</label>
-            <input
-              id="minContribution"
-              name="minContribution"
-              value={formData.minContribution}
-              onChange={handleChange}
+            <Input
+              {...form.register("minContribution")}
               placeholder="0.1"
               className="form-input"
-              required
             />
+            {form.formState.errors.minContribution && (
+              <p className="form-error">{form.formState.errors.minContribution.message}</p>
+            )}
           </div>
 
           <div className="form-group">
             <label htmlFor="maxContribution" className="form-label">Max Contribution (ETH)</label>
-            <input
-              id="maxContribution"
-              name="maxContribution"
-              value={formData.maxContribution}
-              onChange={handleChange}
-              placeholder="1"
+            <Input
+              {...form.register("maxContribution")}
+              placeholder="10"
               className="form-input"
-              required
             />
+            {form.formState.errors.maxContribution && (
+              <p className="form-error">{form.formState.errors.maxContribution.message}</p>
+            )}
           </div>
 
           <div className="form-group">
             <label htmlFor="presaleCap" className="form-label">Presale Cap (ETH)</label>
-            <input
-              id="presaleCap"
-              name="presaleCap"
-              value={formData.presaleCap}
-              onChange={handleChange}
-              placeholder="10"
+            <Input
+              {...form.register("presaleCap")}
+              placeholder="100"
               className="form-input"
-              required
             />
+            {form.formState.errors.presaleCap && (
+              <p className="form-error">{form.formState.errors.presaleCap.message}</p>
+            )}
           </div>
 
           <div className="form-group">
             <label htmlFor="startTime" className="form-label">Start Time</label>
-            <input
+            <Input
+              {...form.register("startTime", {
+                setValueAs: (value: string) => value ? new Date(value) : null
+              })}
               type="datetime-local"
-              id="startTime"
-              name="startTime"
-              value={formData.startTime}
-              onChange={handleChange}
+              defaultValue={getDefaultTimes().startTimeFormatted}
               className="form-input"
-              required
             />
+            {form.formState.errors.startTime && (
+              <p className="form-error">{form.formState.errors.startTime.message}</p>
+            )}
           </div>
 
           <div className="form-group">
             <label htmlFor="endTime" className="form-label">End Time</label>
-            <input
+            <Input
+              {...form.register("endTime", {
+                setValueAs: (value: string) => value ? new Date(value) : null
+              })}
               type="datetime-local"
-              id="endTime"
-              name="endTime"
-              value={formData.endTime}
-              onChange={handleChange}
+              defaultValue={getDefaultTimes().endTimeFormatted}
               className="form-input"
-              required
             />
+            {form.formState.errors.endTime && (
+              <p className="form-error">{form.formState.errors.endTime.message}</p>
+            )}
           </div>
 
           <div className="form-group">
@@ -394,15 +411,14 @@ export default function TokenForm_V3({ isConnected, onSuccess }: TokenFormV3Prop
               Liquidity Lock Period (days)
               <InfoIcon content="Number of days the liquidity will be locked" />
             </label>
-            <input
-              id="liquidityLockPeriod"
-              name="liquidityLockPeriod"
-              value={formData.liquidityLockPeriod}
-              onChange={handleChange}
+            <Input
+              {...form.register("liquidityLockDuration")}
               placeholder="180"
               className="form-input"
-              required
             />
+            {form.formState.errors.liquidityLockDuration && (
+              <p className="form-error">{form.formState.errors.liquidityLockDuration.message}</p>
+            )}
           </div>
         </div>
 
@@ -412,10 +428,7 @@ export default function TokenForm_V3({ isConnected, onSuccess }: TokenFormV3Prop
             <div className="flex items-center space-x-2">
               <input
                 type="checkbox"
-                id="enableBlacklist"
-                name="enableBlacklist"
-                checked={formData.enableBlacklist}
-                onChange={handleChange}
+                {...form.register("enableBlacklist")}
                 className="form-checkbox"
               />
               <label htmlFor="enableBlacklist" className="form-label">Enable Blacklist</label>
@@ -424,10 +437,7 @@ export default function TokenForm_V3({ isConnected, onSuccess }: TokenFormV3Prop
             <div className="flex items-center space-x-2">
               <input
                 type="checkbox"
-                id="enableTimeLock"
-                name="enableTimeLock"
-                checked={formData.enableTimeLock}
-                onChange={handleChange}
+                {...form.register("enableTimeLock")}
                 className="form-checkbox"
               />
               <label htmlFor="enableTimeLock" className="form-label">Enable Time Lock</label>
@@ -443,35 +453,33 @@ export default function TokenForm_V3({ isConnected, onSuccess }: TokenFormV3Prop
           
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div className="form-group">
-              <label htmlFor="presalePercent" className="form-label">
+              <label htmlFor="presalePercentage" className="form-label">
                 Presale Allocation (%)
                 <InfoIcon content="Percentage of tokens allocated for presale" />
               </label>
-              <input
-                id="presalePercent"
-                name="presalePercent"
-                value={formData.presalePercent}
-                onChange={handleChange}
-                placeholder="40"
+              <Input
+                {...form.register("presalePercentage")}
+                placeholder="35"
                 className="form-input"
-                required
               />
+              {form.formState.errors.presalePercentage && (
+                <p className="form-error">{form.formState.errors.presalePercentage.message}</p>
+              )}
             </div>
 
             <div className="form-group">
-              <label htmlFor="liquidityPercent" className="form-label">
+              <label htmlFor="liquidityPercentage" className="form-label">
                 Liquidity Allocation (%)
                 <InfoIcon content="Percentage of tokens allocated for liquidity" />
               </label>
-              <input
-                id="liquidityPercent"
-                name="liquidityPercent"
-                value={formData.liquidityPercent}
-                onChange={handleChange}
+              <Input
+                {...form.register("liquidityPercentage")}
                 placeholder="30"
                 className="form-input"
-                required
               />
+              {form.formState.errors.liquidityPercentage && (
+                <p className="form-error">{form.formState.errors.liquidityPercentage.message}</p>
+              )}
             </div>
           </div>
 
@@ -479,21 +487,39 @@ export default function TokenForm_V3({ isConnected, onSuccess }: TokenFormV3Prop
             <div className="flex space-x-2">
               <button
                 type="button"
-                onClick={() => applyVestingPreset('standard')}
+                onClick={() => {
+                  const currentValues = form.getValues();
+                  form.reset({
+                    ...currentValues,
+                    vestingSchedules: VESTING_PRESETS.standard
+                  });
+                }}
                 className="form-button-secondary"
               >
                 Standard (30% Distribution)
               </button>
               <button
                 type="button"
-                onClick={() => applyVestingPreset('fair_launch')}
+                onClick={() => {
+                  const currentValues = form.getValues();
+                  form.reset({
+                    ...currentValues,
+                    vestingSchedules: VESTING_PRESETS.fair_launch
+                  });
+                }}
                 className="form-button-secondary"
               >
                 Fair Launch (20% Distribution)
               </button>
               <button
                 type="button"
-                onClick={() => applyVestingPreset('community')}
+                onClick={() => {
+                  const currentValues = form.getValues();
+                  form.reset({
+                    ...currentValues,
+                    vestingSchedules: VESTING_PRESETS.community
+                  });
+                }}
                 className="form-button-secondary"
               >
                 Community (20% Distribution)
@@ -510,53 +536,33 @@ export default function TokenForm_V3({ isConnected, onSuccess }: TokenFormV3Prop
               </div>
 
               <div className="space-y-2">
-                {formData.vestingSchedules.map((schedule, index) => (
+                {form.watch("vestingSchedules").map((schedule, index) => (
                   <div key={index} className="grid grid-cols-[2fr,1fr,1fr,2fr,auto] gap-4 items-center">
-                    <input
-                      value={schedule.walletName}
-                      onChange={(e) => {
-                        const newSchedules = [...formData.vestingSchedules];
-                        newSchedules[index].walletName = e.target.value;
-                        setFormData(prev => ({ ...prev, vestingSchedules: newSchedules }));
-                      }}
+                    <Input
+                      {...form.register(`vestingSchedules.${index}.walletName`)}
                       placeholder="Wallet Name"
                       className="form-input"
                     />
-                    <input
-                      value={schedule.amount}
-                      onChange={(e) => {
-                        const newSchedules = [...formData.vestingSchedules];
-                        newSchedules[index].amount = e.target.value;
-                        setFormData(prev => ({ ...prev, vestingSchedules: newSchedules }));
-                      }}
+                    <Input
+                      {...form.register(`vestingSchedules.${index}.amount`)}
                       placeholder="%"
                       className="form-input"
                     />
-                    <input
-                      value={schedule.period}
-                      onChange={(e) => {
-                        const newSchedules = [...formData.vestingSchedules];
-                        newSchedules[index].period = e.target.value;
-                        setFormData(prev => ({ ...prev, vestingSchedules: newSchedules }));
-                      }}
+                    <Input
+                      {...form.register(`vestingSchedules.${index}.period`)}
                       placeholder="Days"
                       className="form-input"
                     />
-                    <input
-                      value={schedule.beneficiary}
-                      onChange={(e) => {
-                        const newSchedules = [...formData.vestingSchedules];
-                        newSchedules[index].beneficiary = e.target.value;
-                        setFormData(prev => ({ ...prev, vestingSchedules: newSchedules }));
-                      }}
+                    <Input
+                      {...form.register(`vestingSchedules.${index}.beneficiary`)}
                       placeholder="0x..."
                       className="form-input"
                     />
                     <button
                       type="button"
                       onClick={() => {
-                        const newSchedules = formData.vestingSchedules.filter((_, i) => i !== index);
-                        setFormData(prev => ({ ...prev, vestingSchedules: newSchedules }));
+                        const newSchedules = form.watch("vestingSchedules").filter((_, i) => i !== index);
+                        form.reset({ ...form.watch(), vestingSchedules: newSchedules });
                       }}
                       className="form-button-danger px-2 py-1"
                     >
@@ -567,29 +573,17 @@ export default function TokenForm_V3({ isConnected, onSuccess }: TokenFormV3Prop
               </div>
 
               <button
-                type="button"
                 onClick={() => {
-                  setFormData(prev => ({
-                    ...prev,
-                    vestingSchedules: [
-                      ...prev.vestingSchedules,
-                      { walletName: '', amount: '', period: '', beneficiary: '' }
-                    ]
-                  }));
+                  form.reset({
+                    ...form.watch(),
+                    vestingSchedules: [...form.watch("vestingSchedules"), { walletName: '', amount: 0, period: 0, beneficiary: '' }]
+                  });
                 }}
                 className="form-button-secondary w-full mt-4"
               >
                 Add Vesting Schedule
               </button>
             </div>
-
-            {totalAllocation + Number(formData.presalePercent) + Number(formData.liquidityPercent) > 100 && (
-              <div className="form-error">
-                <p className="text-red-500">
-                  Total allocation exceeds 100%. Please adjust the distribution percentages.
-                </p>
-              </div>
-            )}
           </div>
         </div>
 
@@ -603,43 +597,59 @@ export default function TokenForm_V3({ isConnected, onSuccess }: TokenFormV3Prop
           <div className="flex items-center mr-2">
             <InfoIcon content="Deployment fee will be charged in ETH. Make sure you have enough ETH to cover the fee and gas costs." />
           </div>
-          <button
+          <Button 
             type="submit"
-            disabled={!isConnected || loading || totalAllocation + Number(formData.presalePercent) + Number(formData.liquidityPercent) > 100}
+            disabled={
+              !isConnected || 
+              loading || 
+              form.formState.isSubmitting
+            }
             className="form-button-primary"
           >
             {loading ? (
               <>
-                <Spinner className="mr-2" />
-                Creating...
+                <Spinner className="w-4 h-4 mr-2" />
+                Creating Token...
               </>
-            ) : !isConnected ? (
-              'Connect Wallet to Deploy'
             ) : (
               'Create Token'
             )}
-          </button>
+          </Button>
+        </div>
+        
+        {/* Debug information */}
+        <div className="mt-4 text-sm text-gray-400">
+          <p>Form State:</p>
+          <ul>
+            <li>Is Valid: {form.formState.isValid ? 'Yes' : 'No'}</li>
+            <li>Is Submitting: {form.formState.isSubmitting ? 'Yes' : 'No'}</li>
+            <li>Is Connected: {isConnected ? 'Yes' : 'No'}</li>
+            <li>Loading: {loading ? 'Yes' : 'No'}</li>
+            {form.formState.errors.root && (
+              <li>Root Error: {form.formState.errors.root.message}</li>
+            )}
+          </ul>
         </div>
       </form>
 
       <div className="mt-8">
         <TokenPreview
-          name={formData.name}
-          symbol={formData.symbol}
-          initialSupply={formData.initialSupply}
-          maxSupply={formData.maxSupply}
+          name={form.watch("name")}
+          symbol={form.watch("symbol")}
+          initialSupply={form.watch("initialSupply")}
+          maxSupply={form.watch("maxSupply")}
           distributionSegments={[
             { name: 'Platform Fee', amount: 5, percentage: 5, color: '#FF0000' }, // Platform fee (5%)
-            { name: 'Presale', amount: Number(formData.presalePercent), percentage: Number(formData.presalePercent), color: '#0088FE' },
-            { name: 'Liquidity', amount: Number(formData.liquidityPercent), percentage: Number(formData.liquidityPercent), color: '#00C49F' },
-            ...formData.vestingSchedules.map((schedule, index) => ({
+            { name: 'Presale', amount: Number(form.watch("presalePercentage")), percentage: Number(form.watch("presalePercentage")), color: '#0088FE' },
+            { name: 'Liquidity', amount: Number(form.watch("liquidityPercentage")), percentage: Number(form.watch("liquidityPercentage")), color: '#00C49F' },
+            ...form.watch("vestingSchedules").map((schedule, index) => ({
               name: schedule.walletName,
               amount: Number(schedule.amount),
               percentage: Number(schedule.amount),
               color: COLORS[index + 3] || '#FF8042' // Shifted by 3 to account for platform fee, presale, and liquidity
             }))
           ]}
-          totalAllocation={5 + Number(formData.presalePercent) + Number(formData.liquidityPercent) + formData.vestingSchedules.reduce((sum, schedule) => sum + Number(schedule.amount), 0)}
+          totalAllocation={5 + Number(form.watch("presalePercentage")) + Number(form.watch("liquidityPercentage")) + form.watch("vestingSchedules").reduce((sum, schedule) => sum + Number(schedule.amount), 0)}
         />
       </div>
     </div>
@@ -655,4 +665,35 @@ const COLORS = [
   '#82ca9d', // Light Green
   '#ffc658', // Light Yellow
   '#ff7300', // Dark Orange
-]; 
+];
+
+// Define vesting presets with mandatory presale and liquidity allocations
+const VESTING_PRESETS = {
+  standard: [
+    // Mandatory allocations (handled by contract)
+    // - Presale: 35%
+    // - Liquidity: 30%
+    // Remaining 30% distribution:
+    { walletName: 'Team', amount: 15, period: 365, beneficiary: '' },
+    { walletName: 'Marketing', amount: 10, period: 180, beneficiary: '' },
+    { walletName: 'Development', amount: 5, period: 365, beneficiary: '' }
+  ],
+  fair_launch: [
+    // Mandatory allocations (handled by contract)
+    // - Presale: 35%
+    // - Liquidity: 30%
+    // Remaining 20% distribution:
+    { walletName: 'Team', amount: 10, period: 365, beneficiary: '' },
+    { walletName: 'Marketing', amount: 5, period: 180, beneficiary: '' },
+    { walletName: 'Development', amount: 5, period: 365, beneficiary: '' }
+  ],
+  community: [
+    // Mandatory allocations (handled by contract)
+    // - Presale: 35%
+    // - Liquidity: 30%
+    // Remaining 20% distribution:
+    { walletName: 'Team', amount: 5, period: 365, beneficiary: '' },
+    { walletName: 'Marketing', amount: 10, period: 180, beneficiary: '' },
+    { walletName: 'Development', amount: 5, period: 365, beneficiary: '' }
+  ]
+}; 
