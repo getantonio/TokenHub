@@ -16,25 +16,33 @@ const config = {
     },
     "sepolia": {
       url: process.env.SEPOLIA_RPC_URL,
-      accounts: [process.env.PRIVATE_KEY || ""],
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : undefined,
       chainId: 11155111,
       verifyApiKey: process.env.ETHERSCAN_API_KEY
     },
     "optimism-sepolia": {
       url: process.env.NEXT_PUBLIC_OPSEPOLIA_RPC_URL,
-      accounts: [process.env.PRIVATE_KEY || ""],
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : undefined,
       chainId: 11155420,
       verifyApiKey: process.env.OPTIMISM_API_KEY
     },
     "arbitrumsepolia": {
       url: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_RPC_URL,
-      accounts: [process.env.PRIVATE_KEY || ""],
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : undefined,
       chainId: 421614,
-      verifyApiKey: process.env.ARBITRUM_API_KEY
+      verifyApiKey: process.env.ARBITRUM_API_KEY,
+      gasPrice: 100000000,  // 0.1 gwei
+      gas: 1000000,  // 1M gas limit
+      maxPriorityFeePerGas: 100000000,  // 0.1 gwei
+      maxFeePerGas: 200000000,  // 0.2 gwei
+      timeout: 180000,  // 3 minutes
+      confirmations: 1,
+      networkCheckTimeout: 100000,
+      timeoutBlocks: 200
     },
     "polygon-amoy": {
       url: process.env.POLYGON_AMOY_RPC_URL,
-      accounts: [process.env.PRIVATE_KEY || ""],
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : undefined,
       chainId: 80002,
       verifyApiKey: process.env.POLYGONSCAN_API_KEY,
       gasPrice: 35000000000,  // 35 gwei (higher than pending tx)
