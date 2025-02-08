@@ -19,12 +19,10 @@ export default function V3() {
           isConnected={isConnected} 
           onSuccess={handleSuccess}
         />
-        {tokenAddress && (
-          <div className="mt-8">
-            <h2 className="text-2xl font-bold text-white mb-4">Token Management</h2>
-            <TCAP_v3 tokenAddress={tokenAddress} />
-          </div>
-        )}
+        <div className="mt-8">
+          <h2 className="text-2xl font-bold text-white mb-4">Token Management</h2>
+          <TCAP_v3 tokenAddress={tokenAddress || '0x0000000000000000000000000000000000000000'} />
+        </div>
       </div>
     </div>
   );

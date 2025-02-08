@@ -10,13 +10,13 @@ interface HeaderProps {
 
 export function Header({ className }: HeaderProps) {
   return (
-    <header className={cn('bg-background-secondary border-b border-border py-2', className)}>
+    <header className={cn('bg-background-secondary border-b border-border py-1', className)}>
       <nav className="container mx-auto px-4">
         <div className="flex items-center justify-between h-12">
           <div className="flex items-center">
             <Link href="/" className="flex items-center">
-              <span className="text-2xl font-bold text-white">TokenHub</span>
-              <span className="text-2xl font-light text-blue-500">.dev</span>
+              <span className="text-3xl font-medium text-white">TokenHub</span>
+              <span className="text-3xl font-bold text-blue-500">.dev</span>
             </Link>
           </div>
 

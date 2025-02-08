@@ -68,36 +68,32 @@ const formSchema = z.object({
     // Calculate total wallet percentage
     const totalWalletPercentage = data.wallets.reduce((sum, wallet) => sum + wallet.percentage, 0);
     
-    // Fixed allocations
-    const platformFee = 5; // 5% platform fee
-    const presale = data.presalePercentage; // Presale percentage
-    const liquidity = data.liquidityPercentage; // Liquidity percentage
+    // Fixed platform fee
+    const platformFee = 5;
+    
+    // Get presale and liquidity percentages
+    const presale = Number(data.presalePercentage);
+    const liquidity = Number(data.liquidityPercentage);
     
     // Calculate total allocation
     const total = platformFee + presale + liquidity + totalWalletPercentage;
     
-    // Validate that total equals 100%
-    if (total !== 100) {
-      console.log("Invalid allocation:", {
-        platformFee,
-        presale,
-        liquidity,
-        totalWalletPercentage,
-        total,
-        expected: 100
-      });
-      return false;
-    }
+    // Log for debugging
+    console.log("Allocation validation:", {
+      platformFee,
+      presale,
+      liquidity,
+      totalWalletPercentage,
+      total
+    });
     
-    // Validate supplies
-    const initialSupply = parseEther(data.initialSupply || "0");
-    const maxSupply = parseEther(data.maxSupply || "0");
-    return maxSupply >= initialSupply;
+    // Validate that total equals 100%
+    return total === 100;
   } catch (e) {
     console.error("Validation error:", e);
     return false;
   }
-}, "Total allocation must equal 100%")
+}, "Total allocation must equal 100%. Current allocations: Platform Fee (5%), Presale, Liquidity, and Additional Wallets")
 
 type FormData = z.infer<typeof formSchema>;
 
@@ -325,16 +321,16 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
     const wallets = form.getValues('wallets');
     const currentTotal = wallets.reduce((sum, wallet) => sum + wallet.percentage, 0);
     const platformFee = 5;
-    const presale = form.getValues('presalePercentage');
-    const liquidity = form.getValues('liquidityPercentage');
-    const remainingAllocation = 100 - (platformFee + presale + liquidity + currentTotal);
+    const presale = Number(form.getValues('presalePercentage'));
+    const liquidity = Number(form.getValues('liquidityPercentage'));
+    const remainingAllocation = Math.max(0, 95 - (presale + liquidity + currentTotal));
 
     form.setValue('wallets', [
       ...wallets,
       {
         name: `Wallet ${wallets.length + 1}`,
         address: address || '0x0000000000000000000000000000000000000000',
-        percentage: remainingAllocation > 0 ? remainingAllocation : 0,
+        percentage: remainingAllocation,
         vestingDuration: 0,
         vestingCliff: 0
       }
@@ -348,7 +344,9 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
 
   const applyPreset = (preset: keyof typeof VESTING_PRESETS) => {
     const presetConfig = VESTING_PRESETS[preset];
-    form.setValue('wallets', presetConfig.map(wallet => ({
+    form.setValue('presalePercentage', presetConfig.presalePercentage);
+    form.setValue('liquidityPercentage', presetConfig.liquidityPercentage);
+    form.setValue('wallets', presetConfig.wallets.map(wallet => ({
       name: wallet.walletName,
       address: address || '0x0000000000000000000000000000000000000000',
       percentage: wallet.amount,
@@ -486,7 +484,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
         </div>
 
         <div className="form-section">
-          <h3 className="text-lg font-medium text-white mb-4">Token Features</h3>
+          <h3 className="text-lg font-medium text-white mb-2">Token Features</h3>
           <div className="form-grid">
             <div className="flex items-center space-x-2">
               <input
@@ -508,111 +506,139 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
           </div>
         </div>
 
-        <div className="form-section col-span-2 bg-gray-900/50 rounded-lg p-6">
-          <div className="flex justify-between items-center mb-6">
-            <div>
-              <h3 className="text-lg font-medium text-white mb-1">
-                Distribution & Vesting
-              </h3>
-              <p className="text-sm text-gray-400">Configure token allocations and vesting schedules</p>
-            </div>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                onClick={() => applyPreset('standard')}
-                variant="secondary"
-                className="text-sm px-4"
-              >
-                Standard
-              </Button>
-              <Button
-                type="button"
-                onClick={() => applyPreset('fair_launch')}
-                variant="secondary"
-                className="text-sm px-4"
-              >
-                Fair Launch
-              </Button>
-              <Button
-                type="button"
-                onClick={() => applyPreset('community')}
-                variant="secondary"
-                className="text-sm px-4"
-              >
-                Community
-              </Button>
-            </div>
+        <div className="form-section col-span-2 bg-gray-900/50 rounded-lg p-2">
+          <div className="mb-2">
+            <h3 className="text-lg font-medium text-white mb-1">
+              Distribution & Vesting
+            </h3>
+            <p className="text-sm text-gray-400">Configure token allocations and vesting schedules</p>
+          </div>
+          <div className="flex flex-row gap-2 mb-4 justify-center">
+            <Button
+              type="button"
+              onClick={() => applyPreset('standard')}
+              variant="secondary"
+              className="h-4 text-xs px-1"
+            >
+              Standard
+            </Button>
+            <Button
+              type="button"
+              onClick={() => applyPreset('fair_launch')}
+              variant="secondary"
+              className="h-4 text-xs px-1"
+            >
+              Fair
+            </Button>
+            <Button
+              type="button"
+              onClick={() => applyPreset('community')}
+              variant="secondary"
+              className="h-4 text-xs px-1"
+            >
+              Community
+            </Button>
+            <Button
+              type="button"
+              onClick={() => applyPreset('growth')}
+              variant="secondary"
+              className="h-4 text-xs px-1"
+            >
+              Growth
+            </Button>
+            <Button
+              type="button"
+              onClick={() => applyPreset('bootstrap')}
+              variant="secondary"
+              className="h-4 text-xs px-1"
+            >
+              Bootstrap
+            </Button>
+            <Button
+              type="button"
+              onClick={() => applyPreset('governance')}
+              variant="secondary"
+              className="h-4 text-xs px-1"
+            >
+              Gov
+            </Button>
           </div>
           
-          <div className="bg-gray-800/50 rounded-lg p-4 mb-6">
-            <div className="grid grid-cols-2 gap-6">
-              <div className="space-y-4">
-                <h4 className="text-sm font-medium text-white">Fixed Allocations</h4>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between px-3 py-2 bg-gray-700/30 rounded">
-                    <span className="text-sm text-gray-300">Platform Fee</span>
-                    <span className="text-sm font-medium text-white">5%</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="form-group mb-0">
-                      <label className="form-label text-xs mb-1">
-                        Presale
-                        <InfoIcon content="Percentage of tokens allocated for presale" />
-                      </label>
-                      <div className="relative">
-                        <Input
-                          {...form.register("presalePercentage")}
-                          type="number"
-                          placeholder="35"
-                          className="form-input h-8 text-sm bg-gray-700 w-40 pr-6"
-                        />
-                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-gray-400">%</span>
-                      </div>
-                    </div>
-                    <div className="form-group mb-0">
-                      <label className="form-label text-xs mb-1">
-                        Liquidity
-                        <InfoIcon content="Percentage of tokens allocated for liquidity" />
-                      </label>
-                      <div className="relative">
-                        <Input
-                          {...form.register("liquidityPercentage")}
-                          type="number"
-                          placeholder="30"
-                          className="form-input h-8 text-sm bg-gray-700 w-40 pr-6"
-                        />
-                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-gray-400">%</span>
-                      </div>
-                    </div>
-                  </div>
+          <div className="bg-gray-800/50 rounded-lg p-1 mb-2">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-sm font-medium text-white">Token Distribution</h4>
+                <div className="text-xs text-gray-400">
+                  {(() => {
+                    const total = 5 + Number(form.watch("presalePercentage")) + Number(form.watch("liquidityPercentage")) + form.watch('wallets').reduce((sum, wallet) => sum + Number(wallet.percentage), 0);
+                    return (
+                      <span className={total > 100 ? 'text-red-400' : 'text-gray-400'}>
+                        Total: {total}%
+                        {total > 100 && ' (exceeds 100%)'}
+                      </span>
+                    );
+                  })()}
                 </div>
               </div>
               
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-medium text-white">Dynamic Wallets</h4>
-                  <Button
-                    type="button"
-                    onClick={addWallet}
-                    variant="secondary"
-                    className="h-7 text-xs px-3"
-                  >
-                    Add Wallet
-                  </Button>
+              <div className="grid grid-cols-3 gap-2">
+                {/* Platform Fee - Fixed */}
+                <div className="flex items-center justify-between px-3 py-1 bg-gray-700/30 rounded">
+                  <span className="text-sm text-gray-300">Platform Fee</span>
+                  <span className="text-sm font-medium text-white">5%</span>
                 </div>
-                <div className="text-xs text-gray-400 mb-2">
-                  Remaining allocation: {100 - (5 + Number(form.watch("presalePercentage")) + Number(form.watch("liquidityPercentage")) + form.watch('wallets').reduce((sum, wallet) => sum + Number(wallet.percentage), 0))}%
+                
+                {/* Presale */}
+                <div className="relative">
+                  <Input
+                    {...form.register("presalePercentage")}
+                    type="number"
+                    placeholder="25"
+                    className="form-input h-7 text-sm bg-gray-700 pr-8 w-full"
+                  />
+                  <div className="absolute inset-y-0 right-0 flex items-center">
+                    <span className="text-sm text-gray-400 mr-3">%</span>
+                  </div>
+                  <div className="absolute -top-5 left-0 text-xs text-gray-400">Presale</div>
                 </div>
+                
+                {/* Liquidity */}
+                <div className="relative">
+                  <Input
+                    {...form.register("liquidityPercentage")}
+                    type="number"
+                    placeholder="25"
+                    className="form-input h-7 text-sm bg-gray-700 pr-8 w-full"
+                  />
+                  <div className="absolute inset-y-0 right-0 flex items-center">
+                    <span className="text-sm text-gray-400 mr-3">%</span>
+                  </div>
+                  <div className="absolute -top-5 left-0 text-xs text-gray-400">Liquidity</div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="mt-4">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-sm font-medium text-white">Additional Wallets</h4>
+                <Button
+                  type="button"
+                  onClick={addWallet}
+                  variant="secondary"
+                  className="h-6 text-xs px-3"
+                >
+                  Add Wallet
+                </Button>
               </div>
             </div>
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-1">
             {form.watch('wallets').map((_, index) => (
-              <div key={index} className="bg-gray-800/50 rounded-lg p-3">
-                <div className="grid gap-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-3">
+              <div key={index} className="bg-gray-800/50 rounded-lg p-2">
+                <div className="grid gap-1">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1">
                       <Input
                         {...form.register(`wallets.${index}.name`)}
                         placeholder="Wallet Name"
@@ -637,13 +663,13 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                       type="button"
                       onClick={() => removeWallet(index)}
                       variant="ghost"
-                      className="h-7 w-7 p-0"
+                      className="h-8 w-8 p-1"
                     >
                       ×
                     </Button>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 gap-3">
                     <div className="form-group mb-0">
                       <label className="form-label text-xs mb-1">Vesting Duration (days)</label>
                       <Input
@@ -693,44 +719,28 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
             )}
           </Button>
         </div>
-        
-        {/* Debug information */}
-        {mounted && (
-          <div className="mt-4 text-sm text-gray-400">
-            <p>Form State:</p>
-            <ul>
-              <li>Is Valid: {form.formState.isValid ? 'Yes' : 'No'}</li>
-              <li>Is Submitting: {form.formState.isSubmitting ? 'Yes' : 'No'}</li>
-              <li>Is Connected: {isConnected ? 'Yes' : 'No'}</li>
-              <li>Loading: {loading ? 'Yes' : 'No'}</li>
-              {form.formState.errors.root && (
-                <li>Root Error: {form.formState.errors.root.message}</li>
-              )}
-            </ul>
-          </div>
-        )}
-      </form>
 
-      <div className="mt-8">
-        <TokenPreview
-          name={form.watch("name")}
-          symbol={form.watch("symbol")}
-          initialSupply={form.watch("initialSupply")}
-          maxSupply={form.watch("maxSupply")}
-          distributionSegments={[
-            { name: 'Platform Fee', amount: 5, percentage: 5, color: '#FF0000' },
-            { name: 'Presale', amount: 35, percentage: 35, color: '#0088FE' },
-            { name: 'Liquidity', amount: 30, percentage: 30, color: '#00C49F' },
-            ...form.watch('wallets').map((wallet, index) => ({
-              name: wallet.name,
-              amount: Number(wallet.percentage),
-              percentage: Number(wallet.percentage),
-              color: COLORS[index % COLORS.length]
-            }))
-          ]}
-          totalAllocation={5 + 35 + 30 + form.watch('wallets').reduce((sum, wallet) => sum + Number(wallet.percentage), 0)}
-        />
-      </div>
+        <div className="mt-8">
+          <TokenPreview
+            name={form.watch("name")}
+            symbol={form.watch("symbol")}
+            initialSupply={form.watch("initialSupply")}
+            maxSupply={form.watch("maxSupply")}
+            distributionSegments={[
+              { name: 'Platform Fee', amount: 5, percentage: 5, color: '#FF0000' },
+              { name: 'Presale', amount: Number(form.watch("presalePercentage")), percentage: Number(form.watch("presalePercentage")), color: '#0088FE' },
+              { name: 'Liquidity', amount: Number(form.watch("liquidityPercentage")), percentage: Number(form.watch("liquidityPercentage")), color: '#00C49F' },
+              ...form.watch('wallets').map((wallet, index) => ({
+                name: wallet.name,
+                amount: Number(wallet.percentage),
+                percentage: Number(wallet.percentage),
+                color: COLORS[index % COLORS.length]
+              }))
+            ]}
+            totalAllocation={5 + Number(form.watch("presalePercentage")) + Number(form.watch("liquidityPercentage")) + form.watch('wallets').reduce((sum, wallet) => sum + Number(wallet.percentage), 0)}
+          />
+        </div>
+      </form>
     </div>
   );
 }
@@ -748,31 +758,58 @@ const COLORS = [
 
 // Define vesting presets with mandatory presale and liquidity allocations
 const VESTING_PRESETS = {
-  standard: [
-    // Mandatory allocations (handled by contract)
-    // - Presale: 35%
-    // - Liquidity: 30%
-    // Remaining 30% distribution:
-    { walletName: 'Team', amount: 15, period: 365, beneficiary: '' },
-    { walletName: 'Marketing', amount: 10, period: 180, beneficiary: '' },
-    { walletName: 'Development', amount: 5, period: 365, beneficiary: '' }
-  ],
-  fair_launch: [
-    // Mandatory allocations (handled by contract)
-    // - Presale: 35%
-    // - Liquidity: 30%
-    // Remaining 20% distribution:
-    { walletName: 'Team', amount: 10, period: 365, beneficiary: '' },
-    { walletName: 'Marketing', amount: 5, period: 180, beneficiary: '' },
-    { walletName: 'Development', amount: 5, period: 365, beneficiary: '' }
-  ],
-  community: [
-    // Mandatory allocations (handled by contract)
-    // - Presale: 35%
-    // - Liquidity: 30%
-    // Remaining 20% distribution:
-    { walletName: 'Team', amount: 5, period: 365, beneficiary: '' },
-    { walletName: 'Marketing', amount: 10, period: 180, beneficiary: '' },
-    { walletName: 'Development', amount: 5, period: 365, beneficiary: '' }
-  ]
+  standard: {
+    presalePercentage: 35,
+    liquidityPercentage: 35,
+    wallets: [
+      { walletName: 'Team', amount: 15, period: 365, beneficiary: '' },
+      { walletName: 'Marketing', amount: 10, period: 180, beneficiary: '' },
+      { walletName: 'Development', amount: 5, period: 365, beneficiary: '' }
+    ]
+  },
+  fair_launch: {
+    presalePercentage: 45,
+    liquidityPercentage: 35,
+    wallets: [
+      { walletName: 'Team', amount: 10, period: 365, beneficiary: '' },
+      { walletName: 'Marketing', amount: 5, period: 180, beneficiary: '' },
+      { walletName: 'Development', amount: 5, period: 365, beneficiary: '' }
+    ]
+  },
+  community: {
+    presalePercentage: 45,
+    liquidityPercentage: 35,
+    wallets: [
+      { walletName: 'Team', amount: 5, period: 365, beneficiary: '' },
+      { walletName: 'Marketing', amount: 10, period: 180, beneficiary: '' },
+      { walletName: 'Development', amount: 5, period: 365, beneficiary: '' }
+    ]
+  },
+  growth: {
+    presalePercentage: 35,
+    liquidityPercentage: 35,
+    wallets: [
+      { walletName: 'Team', amount: 12, period: 365, beneficiary: '' },
+      { walletName: 'Marketing', amount: 15, period: 180, beneficiary: '' },
+      { walletName: 'Development', amount: 3, period: 365, beneficiary: '' }
+    ]
+  },
+  bootstrap: {
+    presalePercentage: 40,
+    liquidityPercentage: 40,
+    wallets: [
+      { walletName: 'Team', amount: 8, period: 365, beneficiary: '' },
+      { walletName: 'Marketing', amount: 8, period: 180, beneficiary: '' },
+      { walletName: 'Development', amount: 4, period: 180, beneficiary: '' }
+    ]
+  },
+  governance: {
+    presalePercentage: 35,
+    liquidityPercentage: 35,
+    wallets: [
+      { walletName: 'Team', amount: 10, period: 365, beneficiary: '' },
+      { walletName: 'Treasury', amount: 12, period: 365, beneficiary: '' },
+      { walletName: 'Development', amount: 8, period: 180, beneficiary: '' }
+    ]
+  }
 }; 
