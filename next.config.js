@@ -4,8 +4,6 @@ const path = require('path');
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
-  // Enable static export
-  output: 'export',
   images: {
     unoptimized: true
   },

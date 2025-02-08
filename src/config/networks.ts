@@ -45,7 +45,7 @@ export const networks: { [key in ChainId]: NetworkConfig } = {
     name: 'Polygon Amoy',
     chainId: ChainId.POLYGON_AMOY,
     explorerUrl: 'https://www.oklink.com/amoy',
-    rpcUrl: process.env.NEXT_PUBLIC_POLYGONAMOY_RPC_URL || 'https://rpc.amoy.polymernodes.com',
+    rpcUrl: process.env.NEXT_PUBLIC_POLYGONAMOY_RPC_URL || 'https://polygon-amoy.infura.io/v3/de082d8afc854286a7bdc56f2895fc67',
     currency: 'MATIC',
     isTestnet: true
   }

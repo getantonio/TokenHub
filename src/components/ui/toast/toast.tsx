@@ -21,10 +21,10 @@ export function Toast({
   return (
     <div
       className={cn(
-        'pointer-events-auto relative flex w-full items-center justify-between space-x-4 overflow-hidden rounded-md border p-6 pr-8 shadow-lg transition-all',
+        'pointer-events-auto relative flex w-full items-center justify-between space-x-2 overflow-hidden rounded-md border p-3 shadow-lg transition-all',
         {
-          'bg-white text-slate-950': variant === 'default',
-          'bg-red-600 text-white': variant === 'destructive',
+          'bg-gray-800/90 border-gray-700 text-white': variant === 'default',
+          'bg-red-900/90 border-red-800 text-white': variant === 'destructive',
         }
       )}
     >
@@ -36,7 +36,7 @@ export function Toast({
       </div>
       <button
         onClick={onDismiss}
-        className="absolute right-2 top-2 rounded-md p-1 text-slate-950/50 opacity-0 transition-opacity hover:text-slate-950 focus:opacity-100 focus:outline-none focus:ring-2 group-hover:opacity-100"
+        className="rounded-md p-1 text-white/70 hover:text-white focus:outline-none focus:ring-1 ring-white/20"
       >
         <span className="sr-only">Close</span>
         <svg
@@ -62,9 +62,9 @@ export function Toaster() {
   const { toasts, dismiss } = useToast();
 
   return (
-    <div className="fixed top-0 z-[100] flex max-h-screen w-full flex-col-reverse p-4 sm:bottom-0 sm:right-0 sm:top-auto sm:flex-col md:max-w-[420px]">
+    <div className="fixed top-0 z-[100] flex max-h-screen w-full flex-col-reverse gap-2 p-4 sm:bottom-0 sm:right-0 sm:top-auto sm:flex-col md:max-w-[420px]">
       {toasts.map((toast) => (
-        <div key={toast.id} className="mb-4">
+        <div key={toast.id} className="relative">
           <Toast {...toast} onDismiss={() => dismiss(toast.id)} />
         </div>
       ))}

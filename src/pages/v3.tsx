@@ -2,14 +2,21 @@ import TokenForm_V3 from '../components/features/token/TokenForm_V3';
 import TCAP_v3 from '../components/features/token/TCAP_v3';
 import { useAccount } from 'wagmi';
 import { useState } from 'react';
+import { useNetwork } from '@contexts/NetworkContext';
+import { FACTORY_ADDRESSES } from '@config/contracts';
 
 export default function V3() {
   const { isConnected } = useAccount();
+  const { chainId } = useNetwork();
   const [tokenAddress, setTokenAddress] = useState<`0x${string}` | null>(null);
 
   const handleSuccess = (address: `0x${string}`) => {
     setTokenAddress(address);
   };
+
+  const factoryAddress = chainId ? 
+    (FACTORY_ADDRESSES as any)[chainId]?.v3 as `0x${string}` : 
+    undefined;
 
   return (
     <div className="container mx-auto px-4 py-2">
@@ -21,7 +28,10 @@ export default function V3() {
         />
         <div className="mt-8">
           <h2 className="text-2xl font-bold text-white mb-4">Token Management</h2>
-          <TCAP_v3 tokenAddress={tokenAddress || '0x0000000000000000000000000000000000000000'} />
+          <TCAP_v3 
+            tokenAddress={tokenAddress || '0x0000000000000000000000000000000000000000'} 
+            factoryAddress={factoryAddress}
+          />
         </div>
       </div>
     </div>

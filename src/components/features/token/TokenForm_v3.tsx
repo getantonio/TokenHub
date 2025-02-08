@@ -217,6 +217,40 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
         return;
       }
 
+      // Calculate total percentage
+      const presalePercentage = Number(data.presalePercentage);
+      const liquidityPercentage = Number(data.liquidityPercentage);
+      const marketingWallet = data.wallets.find(w => w.name.toLowerCase().includes('marketing'));
+      const teamWallet = data.wallets.find(w => w.name.toLowerCase().includes('team'));
+      const otherWallets = data.wallets.filter(w => 
+        !w.name.toLowerCase().includes('marketing') && 
+        !w.name.toLowerCase().includes('team')
+      );
+      
+      const marketingPercentage = marketingWallet?.percentage || 0;
+      const teamPercentage = teamWallet?.percentage || 0;
+      const otherWalletsPercentage = otherWallets.reduce((sum, w) => sum + Number(w.percentage), 0);
+      
+      const totalPercentage = presalePercentage + liquidityPercentage + marketingPercentage + teamPercentage + otherWalletsPercentage;
+      
+      console.log('Percentage validation:', {
+        presale: presalePercentage,
+        liquidity: liquidityPercentage,
+        marketing: marketingPercentage,
+        team: teamPercentage,
+        other: otherWalletsPercentage,
+        total: totalPercentage
+      });
+
+      if (totalPercentage !== 95) {
+        toast({
+          title: "Error",
+          description: `Total allocation must be exactly 95% (5% platform fee). Current total: ${totalPercentage}%`,
+          variant: "destructive"
+        });
+        return;
+      }
+
       if (!publicClient) {
         throw new Error('Failed to get public client');
       }
@@ -238,23 +272,20 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
         presaleCap: parseEther(data.presaleCap),
         startTime: BigInt(Math.floor(new Date(data.startTime).getTime() / 1000)),
         endTime: BigInt(Math.floor(new Date(data.endTime).getTime() / 1000)),
-        presalePercentage: data.presalePercentage,
-        liquidityPercentage: data.liquidityPercentage,
+        presalePercentage: presalePercentage,
+        liquidityPercentage: liquidityPercentage,
         liquidityLockDuration: data.liquidityLockDuration,
-        // Find marketing and team wallets from the wallets array
-        marketingWallet: (data.wallets.find(w => w.name.toLowerCase().includes('marketing'))?.address || address) as `0x${string}`,
-        marketingPercentage: data.wallets.find(w => w.name.toLowerCase().includes('marketing'))?.percentage || 0,
-        teamWallet: (data.wallets.find(w => w.name.toLowerCase().includes('team'))?.address || address) as `0x${string}`,
-        teamPercentage: data.wallets.find(w => w.name.toLowerCase().includes('team'))?.percentage || 0,
-        wallets: data.wallets
-          .filter(w => !w.name.toLowerCase().includes('marketing') && !w.name.toLowerCase().includes('team'))
-          .map(wallet => ({
-            name: wallet.name,
-            address: wallet.address as `0x${string}`,
-            percentage: wallet.percentage,
-            vestingDuration: wallet.vestingDuration,
-            vestingCliff: wallet.vestingCliff
-          }))
+        marketingWallet: (marketingWallet?.address || address) as `0x${string}`,
+        marketingPercentage: marketingPercentage,
+        teamWallet: (teamWallet?.address || address) as `0x${string}`,
+        teamPercentage: teamPercentage,
+        wallets: otherWallets.map(wallet => ({
+          name: wallet.name,
+          address: wallet.address as `0x${string}`,
+          percentage: Number(wallet.percentage),
+          vestingDuration: wallet.vestingDuration,
+          vestingCliff: wallet.vestingCliff
+        }))
       };
 
       console.log('Submitting parameters:', params);
