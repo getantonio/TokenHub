@@ -47,10 +47,13 @@ const formSchema = z.object({
   presalePercentage: z.coerce.number(),
   liquidityPercentage: z.coerce.number(),
   liquidityLockDuration: z.coerce.number(),
-  marketingWallet: z.string().min(1, "Marketing wallet address is required"),
-  marketingPercentage: z.coerce.number(),
-  teamWallet: z.string().min(1, "Team wallet address is required"),
-  teamPercentage: z.coerce.number()
+  wallets: z.array(z.object({
+    name: z.string(),
+    address: z.string().min(1, "Wallet address is required"),
+    percentage: z.coerce.number(),
+    vestingDuration: z.coerce.number(),
+    vestingCliff: z.coerce.number()
+  }))
 }).refine((data) => {
   try {
     const startDate = new Date(data.startTime);
@@ -62,23 +65,26 @@ const formSchema = z.object({
 }, "End time must be after start time")
 .refine((data) => {
   try {
-    // Convert all percentage values to basis points (multiply by 100)
-    const presale = data.presalePercentage;
-    const liquidity = data.liquidityPercentage;
-    const team = data.teamPercentage;
-    const marketing = data.marketingPercentage;
+    // Calculate total wallet percentage
+    const totalWalletPercentage = data.wallets.reduce((sum, wallet) => sum + wallet.percentage, 0);
+    
+    // Fixed allocations
     const platformFee = 5; // 5% platform fee
+    const presale = data.presalePercentage; // Presale percentage
+    const liquidity = data.liquidityPercentage; // Liquidity percentage
     
-    const total = presale + liquidity + team + marketing + platformFee;
+    // Calculate total allocation
+    const total = platformFee + presale + liquidity + totalWalletPercentage;
     
+    // Validate that total equals 100%
     if (total !== 100) {
       console.log("Invalid allocation:", {
+        platformFee,
         presale,
         liquidity,
-        team,
-        marketing,
-        platformFee,
-        total
+        totalWalletPercentage,
+        total,
+        expected: 100
       });
       return false;
     }
@@ -91,7 +97,7 @@ const formSchema = z.object({
     console.error("Validation error:", e);
     return false;
   }
-}, "Total allocation must equal 100%: presale + liquidity + team + marketing + 5% platform fee");
+}, "Total allocation must equal 100%")
 
 type FormData = z.infer<typeof formSchema>;
 
@@ -135,10 +141,22 @@ const defaultValues = {
   presalePercentage: 35,
   liquidityPercentage: 30,
   liquidityLockDuration: 180,
-  marketingWallet: '0x0000000000000000000000000000000000000000',
-  marketingPercentage: 20,
-  teamWallet: '0x0000000000000000000000000000000000000000',
-  teamPercentage: 10
+  wallets: [
+    {
+      name: 'Team',
+      address: '0x0000000000000000000000000000000000000000',
+      percentage: 10,
+      vestingDuration: 365,
+      vestingCliff: 90
+    },
+    {
+      name: 'Marketing',
+      address: '0x0000000000000000000000000000000000000000',
+      percentage: 20,
+      vestingDuration: 180,
+      vestingCliff: 30
+    }
+  ]
 };
 
 export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenFormV3Props) {
@@ -159,16 +177,20 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
     defaultValues: {
       ...defaultValues,
       owner: address || '',
-      marketingWallet: address || '0x0000000000000000000000000000000000000000',
-      teamWallet: address || '0x0000000000000000000000000000000000000000'
+      wallets: defaultValues.wallets.map(wallet => ({
+        ...wallet,
+        address: address || '0x0000000000000000000000000000000000000000'
+      }))
     }
   });
 
   useEffect(() => {
     if (address) {
       form.setValue('owner', address);
-      form.setValue('marketingWallet', address);
-      form.setValue('teamWallet', address);
+      form.setValue('wallets', defaultValues.wallets.map(wallet => ({
+        ...wallet,
+        address: address
+      })));
     }
   }, [address, form]);
 
@@ -223,10 +245,20 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
         presalePercentage: data.presalePercentage,
         liquidityPercentage: data.liquidityPercentage,
         liquidityLockDuration: data.liquidityLockDuration,
-        marketingWallet: data.marketingWallet as `0x${string}`,
-        marketingPercentage: data.marketingPercentage,
-        teamWallet: data.teamWallet as `0x${string}`,
-        teamPercentage: data.teamPercentage
+        // Find marketing and team wallets from the wallets array
+        marketingWallet: (data.wallets.find(w => w.name.toLowerCase().includes('marketing'))?.address || address) as `0x${string}`,
+        marketingPercentage: data.wallets.find(w => w.name.toLowerCase().includes('marketing'))?.percentage || 0,
+        teamWallet: (data.wallets.find(w => w.name.toLowerCase().includes('team'))?.address || address) as `0x${string}`,
+        teamPercentage: data.wallets.find(w => w.name.toLowerCase().includes('team'))?.percentage || 0,
+        wallets: data.wallets
+          .filter(w => !w.name.toLowerCase().includes('marketing') && !w.name.toLowerCase().includes('team'))
+          .map(wallet => ({
+            name: wallet.name,
+            address: wallet.address as `0x${string}`,
+            percentage: wallet.percentage,
+            vestingDuration: wallet.vestingDuration,
+            vestingCliff: wallet.vestingCliff
+          }))
       };
 
       console.log('Submitting parameters:', params);
@@ -287,6 +319,42 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
     } finally {
       setLoading(false);
     }
+  };
+
+  const addWallet = () => {
+    const wallets = form.getValues('wallets');
+    const currentTotal = wallets.reduce((sum, wallet) => sum + wallet.percentage, 0);
+    const platformFee = 5;
+    const presale = form.getValues('presalePercentage');
+    const liquidity = form.getValues('liquidityPercentage');
+    const remainingAllocation = 100 - (platformFee + presale + liquidity + currentTotal);
+
+    form.setValue('wallets', [
+      ...wallets,
+      {
+        name: `Wallet ${wallets.length + 1}`,
+        address: address || '0x0000000000000000000000000000000000000000',
+        percentage: remainingAllocation > 0 ? remainingAllocation : 0,
+        vestingDuration: 0,
+        vestingCliff: 0
+      }
+    ]);
+  };
+
+  const removeWallet = (index: number) => {
+    const wallets = form.getValues('wallets');
+    form.setValue('wallets', wallets.filter((_, i) => i !== index));
+  };
+
+  const applyPreset = (preset: keyof typeof VESTING_PRESETS) => {
+    const presetConfig = VESTING_PRESETS[preset];
+    form.setValue('wallets', presetConfig.map(wallet => ({
+      name: wallet.walletName,
+      address: address || '0x0000000000000000000000000000000000000000',
+      percentage: wallet.amount,
+      vestingDuration: wallet.period,
+      vestingCliff: 0
+    })));
   };
 
   return (
@@ -440,102 +508,165 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
           </div>
         </div>
 
-        <div className="form-section col-span-2">
-          <h3 className="text-lg font-medium text-white mb-4">
-            Distribution
-            <InfoIcon content="Configure token distribution percentages" />
-          </h3>
+        <div className="form-section col-span-2 bg-gray-900/50 rounded-lg p-6">
+          <div className="flex justify-between items-center mb-6">
+            <div>
+              <h3 className="text-lg font-medium text-white mb-1">
+                Distribution & Vesting
+              </h3>
+              <p className="text-sm text-gray-400">Configure token allocations and vesting schedules</p>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                onClick={() => applyPreset('standard')}
+                variant="secondary"
+                className="text-sm px-4"
+              >
+                Standard
+              </Button>
+              <Button
+                type="button"
+                onClick={() => applyPreset('fair_launch')}
+                variant="secondary"
+                className="text-sm px-4"
+              >
+                Fair Launch
+              </Button>
+              <Button
+                type="button"
+                onClick={() => applyPreset('community')}
+                variant="secondary"
+                className="text-sm px-4"
+              >
+                Community
+              </Button>
+            </div>
+          </div>
           
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div className="form-group">
-              <label htmlFor="presalePercentage" className="form-label">
-                Presale Allocation (%)
-                <InfoIcon content="Percentage of tokens allocated for presale" />
-              </label>
-              <Input
-                {...form.register("presalePercentage")}
-                placeholder="35"
-                className="form-input"
-              />
-              {form.formState.errors.presalePercentage && (
-                <p className="form-error">{form.formState.errors.presalePercentage.message}</p>
-              )}
+          <div className="bg-gray-800/50 rounded-lg p-4 mb-6">
+            <div className="grid grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <h4 className="text-sm font-medium text-white">Fixed Allocations</h4>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between px-3 py-2 bg-gray-700/30 rounded">
+                    <span className="text-sm text-gray-300">Platform Fee</span>
+                    <span className="text-sm font-medium text-white">5%</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="form-group mb-0">
+                      <label className="form-label text-xs mb-1">
+                        Presale
+                        <InfoIcon content="Percentage of tokens allocated for presale" />
+                      </label>
+                      <div className="relative">
+                        <Input
+                          {...form.register("presalePercentage")}
+                          type="number"
+                          placeholder="35"
+                          className="form-input h-8 text-sm bg-gray-700 w-40 pr-6"
+                        />
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-gray-400">%</span>
+                      </div>
+                    </div>
+                    <div className="form-group mb-0">
+                      <label className="form-label text-xs mb-1">
+                        Liquidity
+                        <InfoIcon content="Percentage of tokens allocated for liquidity" />
+                      </label>
+                      <div className="relative">
+                        <Input
+                          {...form.register("liquidityPercentage")}
+                          type="number"
+                          placeholder="30"
+                          className="form-input h-8 text-sm bg-gray-700 w-40 pr-6"
+                        />
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-gray-400">%</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-medium text-white">Dynamic Wallets</h4>
+                  <Button
+                    type="button"
+                    onClick={addWallet}
+                    variant="secondary"
+                    className="h-7 text-xs px-3"
+                  >
+                    Add Wallet
+                  </Button>
+                </div>
+                <div className="text-xs text-gray-400 mb-2">
+                  Remaining allocation: {100 - (5 + Number(form.watch("presalePercentage")) + Number(form.watch("liquidityPercentage")) + form.watch('wallets').reduce((sum, wallet) => sum + Number(wallet.percentage), 0))}%
+                </div>
+              </div>
             </div>
+          </div>
 
-            <div className="form-group">
-              <label htmlFor="liquidityPercentage" className="form-label">
-                Liquidity Allocation (%)
-                <InfoIcon content="Percentage of tokens allocated for liquidity" />
-              </label>
-              <Input
-                {...form.register("liquidityPercentage")}
-                placeholder="30"
-                className="form-input"
-              />
-              {form.formState.errors.liquidityPercentage && (
-                <p className="form-error">{form.formState.errors.liquidityPercentage.message}</p>
-              )}
-            </div>
+          <div className="space-y-3">
+            {form.watch('wallets').map((_, index) => (
+              <div key={index} className="bg-gray-800/50 rounded-lg p-3">
+                <div className="grid gap-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-3">
+                      <Input
+                        {...form.register(`wallets.${index}.name`)}
+                        placeholder="Wallet Name"
+                        className="form-input h-7 text-sm w-32 bg-gray-700"
+                      />
+                      <Input
+                        {...form.register(`wallets.${index}.address`)}
+                        placeholder="Wallet Address (0x...)"
+                        className="form-input h-7 text-sm w-64 bg-gray-700"
+                      />
+                      <div className="relative w-40">
+                        <Input
+                          {...form.register(`wallets.${index}.percentage`)}
+                          placeholder="0"
+                          type="number"
+                          className="form-input h-7 text-sm bg-gray-700 pr-6"
+                        />
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-gray-400">%</span>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={() => removeWallet(index)}
+                      variant="ghost"
+                      className="h-7 w-7 p-0"
+                    >
+                      ×
+                    </Button>
+                  </div>
 
-            <div className="form-group">
-              <label htmlFor="teamWallet" className="form-label">
-                Team Wallet
-                <InfoIcon content="Address to receive team tokens" />
-              </label>
-              <Input
-                {...form.register("teamWallet")}
-                placeholder="0x..."
-                className="form-input"
-              />
-              {form.formState.errors.teamWallet && (
-                <p className="form-error">{form.formState.errors.teamWallet.message}</p>
-              )}
-            </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="form-group mb-0">
+                      <label className="form-label text-xs mb-1">Vesting Duration (days)</label>
+                      <Input
+                        {...form.register(`wallets.${index}.vestingDuration`)}
+                        placeholder="365"
+                        type="number"
+                        className="form-input h-7 text-sm bg-gray-700"
+                      />
+                    </div>
 
-            <div className="form-group">
-              <label htmlFor="teamPercentage" className="form-label">
-                Team Allocation (%)
-                <InfoIcon content="Percentage of tokens allocated for team" />
-              </label>
-              <Input
-                {...form.register("teamPercentage")}
-                placeholder="10"
-                className="form-input"
-              />
-              {form.formState.errors.teamPercentage && (
-                <p className="form-error">{form.formState.errors.teamPercentage.message}</p>
-              )}
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="marketingWallet" className="form-label">
-                Marketing Wallet
-                <InfoIcon content="Address to receive marketing tokens" />
-              </label>
-              <Input
-                {...form.register("marketingWallet")}
-                placeholder="0x..."
-                className="form-input"
-              />
-              {form.formState.errors.marketingWallet && (
-                <p className="form-error">{form.formState.errors.marketingWallet.message}</p>
-              )}
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="marketingPercentage" className="form-label">
-                Marketing Allocation (%)
-                <InfoIcon content="Percentage of tokens allocated for marketing" />
-              </label>
-              <Input
-                {...form.register("marketingPercentage")}
-                placeholder="20"
-                className="form-input"
-              />
-              {form.formState.errors.marketingPercentage && (
-                <p className="form-error">{form.formState.errors.marketingPercentage.message}</p>
-              )}
-            </div>
+                    <div className="form-group mb-0">
+                      <label className="form-label text-xs mb-1">Cliff Period (days)</label>
+                      <Input
+                        {...form.register(`wallets.${index}.vestingCliff`)}
+                        placeholder="90"
+                        type="number"
+                        className="form-input h-7 text-sm bg-gray-700"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -587,13 +718,17 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
           initialSupply={form.watch("initialSupply")}
           maxSupply={form.watch("maxSupply")}
           distributionSegments={[
-            { name: 'Platform Fee', amount: 5, percentage: 5, color: '#FF0000' }, // Platform fee (5%)
-            { name: 'Presale', amount: Number(form.watch("presalePercentage")), percentage: Number(form.watch("presalePercentage")), color: '#0088FE' },
-            { name: 'Liquidity', amount: Number(form.watch("liquidityPercentage")), percentage: Number(form.watch("liquidityPercentage")), color: '#00C49F' },
-            { name: 'Team', amount: Number(form.watch("teamPercentage")), percentage: Number(form.watch("teamPercentage")), color: '#FFBB28' },
-            { name: 'Marketing', amount: Number(form.watch("marketingPercentage")), percentage: Number(form.watch("marketingPercentage")), color: '#FF8042' }
+            { name: 'Platform Fee', amount: 5, percentage: 5, color: '#FF0000' },
+            { name: 'Presale', amount: 35, percentage: 35, color: '#0088FE' },
+            { name: 'Liquidity', amount: 30, percentage: 30, color: '#00C49F' },
+            ...form.watch('wallets').map((wallet, index) => ({
+              name: wallet.name,
+              amount: Number(wallet.percentage),
+              percentage: Number(wallet.percentage),
+              color: COLORS[index % COLORS.length]
+            }))
           ]}
-          totalAllocation={5 + Number(form.watch("presalePercentage")) + Number(form.watch("liquidityPercentage")) + Number(form.watch("teamPercentage")) + Number(form.watch("marketingPercentage"))}
+          totalAllocation={5 + 35 + 30 + form.watch('wallets').reduce((sum, wallet) => sum + Number(wallet.percentage), 0)}
         />
       </div>
     </div>
