@@ -67,6 +67,7 @@
     "ethers": "^6.11.1",
     "hardhat": "^2.22.18",
     "hardhat-gas-reporter": "^1.0.10",
+    "ignore-loader": "^0.1.2",
     "postcss": "^8.4.35",
     "solidity-coverage": "^0.8.7",
     "tailwindcss": "^3.4.1",

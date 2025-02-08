@@ -1,21 +1,20 @@
-import { useState } from 'react';
-import { useAccount, useChainId, usePublicClient } from 'wagmi';
-import { useWriteContract } from 'wagmi';
-import type { Abi } from 'viem';
-import TokenFactoryV3ABI from '@/contracts/abi/TokenFactory_v3.json';
+import { useCallback } from 'react';
+import { parseEther } from 'viem';
+import { usePublicClient, useWalletClient, useChainId } from 'wagmi';
+import TokenFactoryV3ABI from '@/contracts/abi/TokenFactory_v3_clone.json';
 import { FACTORY_ADDRESSES } from '@/config/contracts';
 import { ChainId } from '@/types/chain';
-import { formatEther } from 'viem';
+import { Abi } from 'viem';
 
-interface CreateTokenParams {
+export type CreateTokenParams = {
   name: string;
   symbol: string;
   initialSupply: bigint;
   maxSupply: bigint;
-  owner: string;
+  owner: `0x${string}`;
   enableBlacklist: boolean;
   enableTimeLock: boolean;
-  tokensPerEth: bigint;
+  presaleRate: bigint;
   minContribution: bigint;
   maxContribution: bigint;
   presaleCap: bigint;
@@ -24,87 +23,39 @@ interface CreateTokenParams {
   presalePercentage: bigint;
   liquidityPercentage: bigint;
   liquidityLockDuration: bigint;
-  teamPercentage: bigint;
+  marketingWallet: `0x${string}`;
   marketingPercentage: bigint;
-  developmentPercentage: bigint;
-  platformFeeRecipient: string;
-  platformFeeTokens: bigint;
-  platformFeeVestingEnabled: boolean;
-  platformFeeVestingDuration: bigint;
-  platformFeeCliffDuration: bigint;
-}
+  teamWallet: `0x${string}`;
+  teamPercentage: bigint;
+};
 
-const TOTAL_BASIS_POINTS = BigInt(10000); // 100%
-
-export const useTokenFactory = (version: 'v3') => {
-  const { address } = useAccount();
-  const chainId = useChainId();
+export const useTokenFactory = () => {
   const publicClient = usePublicClient();
-  const [error, setError] = useState<string | null>(null);
-  const [isWaiting, setIsWaiting] = useState(false);
+  const { data: walletClient } = useWalletClient();
+  const chainId = useChainId();
 
-  const factoryAddress = FACTORY_ADDRESSES[version][chainId || 0];
-
-  const { writeContract, isPending: isLoading } = useWriteContract();
-
-  const createToken = async (params: CreateTokenParams): Promise<void> => {
+  const createToken = async (params: CreateTokenParams) => {
     try {
-      setError(null);
-      
-      // Log network info
-      const networkName = chainId === ChainId.OPTIMISM_SEPOLIA ? 'Optimism Sepolia' :
-                         chainId === ChainId.SEPOLIA ? 'Sepolia' :
-                         chainId === ChainId.ARBITRUM_SEPOLIA ? 'Arbitrum Sepolia' :
-                         chainId === ChainId.POLYGON_AMOY ? 'Polygon Amoy' : 'Unknown Network';
-      
-      console.log('Network:', networkName, '(Chain ID:', chainId, ')');
-      console.log('Factory Address:', factoryAddress);
-      console.log('Using Version:', version);
+      if (!publicClient) throw new Error('Public client not available');
+      if (!chainId) throw new Error('Chain ID not available');
 
-      if (!address) {
-        throw new Error('Wallet not connected');
+      const factoryAddress = process.env.NEXT_PUBLIC_OPTIMISMSEPOLIA_FACTORY_ADDRESS_V3;
+      if (!factoryAddress) {
+        throw new Error('Token Factory not deployed on this network');
       }
 
-      if (!factoryAddress || factoryAddress === '0x0000000000000000000000000000000000000000') {
-        throw new Error(`Token Factory V3 not deployed on ${networkName}. Please switch to Optimism Sepolia.`);
-      }
-
-      if (!publicClient) {
-        throw new Error('Public client not available');
-      }
-
-      // Get the deployment fee first
       const deploymentFee = await publicClient.readContract({
         address: factoryAddress as `0x${string}`,
         abi: TokenFactoryV3ABI.abi as Abi,
-        functionName: 'getDeploymentFee',
-        args: [address]
+        functionName: 'deploymentFee',
       }) as bigint;
 
       console.log('Deployment Fee:', deploymentFee.toString());
-
-      // Validate total allocation equals 100%
-      const totalAllocation = 
-        params.presalePercentage +
-        params.liquidityPercentage +
-        params.teamPercentage +
-        params.marketingPercentage +
-        params.developmentPercentage;
-
-      if (totalAllocation !== TOTAL_BASIS_POINTS) {
-        throw new Error(`Total allocation must equal 100% (10000 basis points). Current total: ${totalAllocation} basis points`);
-      }
-
-      // Log parameters for debugging
-      console.log('Parameters:', {
-        name: params.name,
-        symbol: params.symbol,
+      console.log('Creating token with params:', {
+        ...params,
         initialSupply: params.initialSupply.toString(),
         maxSupply: params.maxSupply.toString(),
-        owner: params.owner,
-        enableBlacklist: params.enableBlacklist,
-        enableTimeLock: params.enableTimeLock,
-        tokensPerEth: params.tokensPerEth.toString(),
+        presaleRate: params.presaleRate.toString(),
         minContribution: params.minContribution.toString(),
         maxContribution: params.maxContribution.toString(),
         presaleCap: params.presaleCap.toString(),
@@ -112,64 +63,24 @@ export const useTokenFactory = (version: 'v3') => {
         endTime: params.endTime.toString(),
         presalePercentage: params.presalePercentage.toString(),
         liquidityPercentage: params.liquidityPercentage.toString(),
-        liquidityLockDuration: params.liquidityLockDuration.toString(),
-        teamPercentage: params.teamPercentage.toString(),
-        marketingPercentage: params.marketingPercentage.toString(),
-        developmentPercentage: params.developmentPercentage.toString(),
-        platformFeeRecipient: params.platformFeeRecipient,
-        platformFeeTokens: params.platformFeeTokens.toString(),
-        platformFeeVestingEnabled: params.platformFeeVestingEnabled,
-        platformFeeVestingDuration: params.platformFeeVestingDuration.toString(),
-        platformFeeCliffDuration: params.platformFeeCliffDuration.toString()
+        liquidityLockDuration: params.liquidityLockDuration.toString()
       });
 
-      // Create the token creation parameters object
-      const tokenParams = {
-        name: params.name,
-        symbol: params.symbol,
-        initialSupply: params.initialSupply,
-        maxSupply: params.maxSupply,
-        owner: params.owner,
-        enableBlacklist: params.enableBlacklist,
-        enableTimeLock: params.enableTimeLock,
-        tokensPerEth: params.tokensPerEth,
-        minContribution: params.minContribution,
-        maxContribution: params.maxContribution,
-        presaleCap: params.presaleCap,
-        startTime: params.startTime,
-        endTime: params.endTime,
-        presalePercentage: params.presalePercentage,
-        liquidityPercentage: params.liquidityPercentage,
-        liquidityLockDuration: params.liquidityLockDuration,
-        teamPercentage: params.teamPercentage,
-        marketingPercentage: params.marketingPercentage,
-        developmentPercentage: params.developmentPercentage
-      };
-
-      // Prepare the transaction
       const { request } = await publicClient.simulateContract({
         address: factoryAddress as `0x${string}`,
         abi: TokenFactoryV3ABI.abi as Abi,
         functionName: 'createToken',
-        args: [tokenParams],
+        args: [params],
         value: deploymentFee
       });
 
-      // Send the transaction
-      await writeContract(request);
-      setIsWaiting(false);
-      
-    } catch (err) {
-      console.error('Error in useTokenFactory:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Failed to create token';
-      setError(errorMessage);
-      throw err;
+      const hash = await walletClient?.writeContract(request);
+      return hash;
+    } catch (error) {
+      console.error('Error creating token:', error);
+      throw error;
     }
   };
 
-  return {
-    createToken,
-    isLoading: isLoading || isWaiting,
-    error
-  };
+  return { createToken };
 };

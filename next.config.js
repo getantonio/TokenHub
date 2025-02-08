@@ -14,7 +14,7 @@ const nextConfig = {
   },
   // Add source directory configuration
   distDir: '.next',
-  webpack: (config) => {
+  webpack: (config, { isServer }) => {
     config.resolve.fallback = {
       ...config.resolve.fallback,
       fs: false,
@@ -36,6 +36,11 @@ const nextConfig = {
       '@hooks': path.resolve(__dirname, './src/hooks'),
       '@lib': path.resolve(__dirname, './src/lib'),
     };
+    // Exclude hardhat scripts from the build
+    config.module.rules.push({
+      test: /scripts\/.+\.ts$/,
+      loader: 'ignore-loader',
+    });
     return config;
   },
 }

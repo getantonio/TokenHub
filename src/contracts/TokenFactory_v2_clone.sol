@@ -4,11 +4,12 @@ pragma solidity 0.8.22;
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import "./TokenTemplate_v3.sol";
+import "./TokenTemplate_v2_clone.sol";
 
-contract TokenFactory_v3 is UUPSUpgradeable, OwnableUpgradeable {
+contract TokenFactory_v2_clone is UUPSUpgradeable, OwnableUpgradeable {
     address public implementation;
     uint256 public deploymentFee;
+    address[] public deployedTokens;
 
     event TokenCreated(address indexed tokenAddress, string name, string symbol);
     event DeploymentFeeUpdated(uint256 newFee);
@@ -21,12 +22,12 @@ contract TokenFactory_v3 is UUPSUpgradeable, OwnableUpgradeable {
     }
 
     function createToken(
-        TokenTemplate_v3.InitParams calldata params
+        TokenTemplate_v2_clone.InitParams calldata params
     ) external payable returns (address) {
         require(msg.value >= deploymentFee, "Insufficient deployment fee");
 
         bytes memory initData = abi.encodeWithSelector(
-            TokenTemplate_v3.initialize.selector,
+            TokenTemplate_v2_clone.initialize.selector,
             params
         );
 
@@ -35,8 +36,11 @@ contract TokenFactory_v3 is UUPSUpgradeable, OwnableUpgradeable {
             initData
         );
 
-        emit TokenCreated(address(proxy), params.name, params.symbol);
-        return address(proxy);
+        address token = address(proxy);
+        deployedTokens.push(token);
+
+        emit TokenCreated(token, params.name, params.symbol);
+        return token;
     }
 
     function setDeploymentFee(uint256 _fee) external onlyOwner {
@@ -47,6 +51,10 @@ contract TokenFactory_v3 is UUPSUpgradeable, OwnableUpgradeable {
     function withdrawFees() external onlyOwner {
         (bool success, ) = payable(owner()).call{value: address(this).balance}("");
         require(success, "Transfer failed");
+    }
+
+    function getDeployedTokens() external view returns (address[] memory) {
+        return deployedTokens;
     }
 
     function _authorizeUpgrade(address) internal override onlyOwner {}

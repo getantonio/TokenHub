@@ -5,10 +5,12 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20BurnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 
-contract TokenTemplate_v3 is 
+contract TokenTemplate_v2_clone is 
+    Initializable,
     ERC20Upgradeable,
     ERC20BurnableUpgradeable,
     ERC20PausableUpgradeable,
@@ -16,7 +18,7 @@ contract TokenTemplate_v3 is
     UUPSUpgradeable,
     ReentrancyGuardUpgradeable
 {
-    string public constant VERSION = "3.0.0";
+    string public constant VERSION = "2.0.0";
     
     struct PresaleInfo {
         uint256 softCap;
@@ -80,11 +82,14 @@ contract TokenTemplate_v3 is
         uint256 presaleCap;
         uint256 startTime;
         uint256 endTime;
-        address platformFeeRecipient;
-        uint256 platformFeeTokens;
-        bool platformFeeVestingEnabled;
-        uint256 platformFeeVestingDuration;
-        uint256 platformFeeCliffDuration;
+        uint256 presalePercentage;
+        uint256 liquidityPercentage;
+        uint256 liquidityLockDuration;
+    }
+
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
     }
 
     function initialize(InitParams calldata params) public initializer {
@@ -98,15 +103,11 @@ contract TokenTemplate_v3 is
         require(params.maxSupply >= params.initialSupply, "Max supply must be >= initial supply");
         require(params.startTime > block.timestamp, "Start time must be in future");
         require(params.endTime > params.startTime, "End time must be after start time");
+        require(params.presalePercentage + params.liquidityPercentage == 95, "Total percentage must be 95%");
 
         maxSupply = params.maxSupply;
         blacklistEnabled = params.enableBlacklist;
         timeLockEnabled = params.enableTimeLock;
-        platformFeeRecipient = params.platformFeeRecipient;
-        platformFeeTokens = params.platformFeeTokens;
-        platformFeeVestingEnabled = params.platformFeeVestingEnabled;
-        platformFeeVestingDuration = params.platformFeeVestingDuration;
-        platformFeeCliffDuration = params.platformFeeCliffDuration;
 
         // Initialize presale info
         presaleInfo = PresaleInfo({
@@ -124,15 +125,6 @@ contract TokenTemplate_v3 is
 
         // Mint initial supply to owner
         _mint(params.owner, params.initialSupply);
-        
-        // Handle platform fee tokens
-        if (params.platformFeeTokens > 0 && params.platformFeeRecipient != address(0)) {
-            if (!params.platformFeeVestingEnabled) {
-                _mint(params.platformFeeRecipient, params.platformFeeTokens);
-            } else {
-                platformFeeVestingStart = block.timestamp;
-            }
-        }
 
         emit PresaleStarted(
             presaleInfo.softCap,
@@ -186,36 +178,6 @@ contract TokenTemplate_v3 is
         require(success, "Transfer failed");
 
         emit PresaleFinalized(presaleInfo.totalContributed, tokensToDistribute);
-    }
-
-    function claimPlatformFeeTokens() external nonReentrant {
-        require(msg.sender == platformFeeRecipient, "Not fee recipient");
-        require(platformFeeVestingEnabled, "Vesting not enabled");
-        require(block.timestamp >= platformFeeVestingStart + platformFeeCliffDuration, "Cliff period not ended");
-        
-        uint256 vestedAmount = _calculateVestedAmount();
-        uint256 claimableAmount = vestedAmount - platformFeeTokensClaimed;
-        require(claimableAmount > 0, "No tokens to claim");
-
-        platformFeeTokensClaimed += claimableAmount;
-        _mint(platformFeeRecipient, claimableAmount);
-
-        emit PlatformFeeClaimed(claimableAmount);
-    }
-
-    function _calculateVestedAmount() internal view returns (uint256) {
-        if (block.timestamp < platformFeeVestingStart + platformFeeCliffDuration) {
-            return 0;
-        }
-        
-        if (block.timestamp >= platformFeeVestingStart + platformFeeVestingDuration) {
-            return platformFeeTokens;
-        }
-
-        uint256 timeFromCliff = block.timestamp - (platformFeeVestingStart + platformFeeCliffDuration);
-        uint256 vestingTime = platformFeeVestingDuration - platformFeeCliffDuration;
-        
-        return (platformFeeTokens * timeFromCliff) / vestingTime;
     }
 
     function updateWhitelist(address[] calldata addresses, bool status) external onlyOwner {

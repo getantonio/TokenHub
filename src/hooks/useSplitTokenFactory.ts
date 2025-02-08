@@ -66,8 +66,8 @@ export const useSplitTokenFactory = () => {
         throw new Error('Number of wallets must match number of percentages');
       }
       const totalPercentage = params.percentages.reduce((sum, p) => sum + p, 0);
-      if (totalPercentage !== 100) {
-        throw new Error('Total percentage must equal 100');
+      if (totalPercentage !== 95) {
+        throw new Error('Total percentage must equal 95% (5% platform fee is automatic)');
       }
 
       // Log parameters for debugging

@@ -20,14 +20,15 @@ contract SplitToken is ERC20, Ownable {
             require(wallets[i] != address(0), "Wallet cannot be zero address");
             totalPercentage += percentages[i];
         }
-        require(totalPercentage == 100, "Total percentage must equal 100");
+        require(totalPercentage == 95, "Total percentage must equal 95% (5% platform fee)");
 
-        // Track remaining tokens to handle rounding
-        uint256 remainingTokens = totalSupply;
+        // Reserve 5% for platform fee
+        uint256 platformFeeAmount = (totalSupply * 5) / 100;
+        uint256 remainingTokens = totalSupply - platformFeeAmount;
         
         // Mint tokens to each wallet according to their percentage
         for (uint256 i = 0; i < wallets.length - 1; i++) {
-            uint256 amount = (totalSupply * percentages[i]) / 100;
+            uint256 amount = (remainingTokens * percentages[i]) / 95; // Adjust for 95% total
             _mint(wallets[i], amount);
             remainingTokens -= amount;
         }
