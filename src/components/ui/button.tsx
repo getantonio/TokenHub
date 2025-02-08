@@ -6,7 +6,13 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 }
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = 'default', ...props }, ref) => {
+  ({ className, variant = 'default', disabled, ...props }, ref) => {
+    const [isClient, setIsClient] = React.useState(false);
+
+    React.useEffect(() => {
+      setIsClient(true);
+    }, []);
+
     const baseStyles = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ring-offset-background';
     
     const variants = {
@@ -21,6 +27,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         className={cn(baseStyles, variants[variant], className)}
         ref={ref}
+        disabled={!isClient ? false : disabled}
         {...props}
       />
     );

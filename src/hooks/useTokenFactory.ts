@@ -20,13 +20,13 @@ export type CreateTokenParams = {
   presaleCap: bigint;
   startTime: bigint;
   endTime: bigint;
-  presalePercentage: bigint;
-  liquidityPercentage: bigint;
-  liquidityLockDuration: bigint;
+  presalePercentage: number;
+  liquidityPercentage: number;
+  liquidityLockDuration: number;
   marketingWallet: `0x${string}`;
-  marketingPercentage: bigint;
+  marketingPercentage: number;
   teamWallet: `0x${string}`;
-  teamPercentage: bigint;
+  teamPercentage: number;
 };
 
 export const useTokenFactory = () => {
@@ -38,8 +38,9 @@ export const useTokenFactory = () => {
     try {
       if (!publicClient) throw new Error('Public client not available');
       if (!chainId) throw new Error('Chain ID not available');
+      if (!walletClient) throw new Error('Wallet client not available');
 
-      const factoryAddress = process.env.NEXT_PUBLIC_OPTIMISMSEPOLIA_FACTORY_ADDRESS_V3;
+      const factoryAddress = FACTORY_ADDRESSES.v3[chainId];
       if (!factoryAddress) {
         throw new Error('Token Factory not deployed on this network');
       }
@@ -60,10 +61,7 @@ export const useTokenFactory = () => {
         maxContribution: params.maxContribution.toString(),
         presaleCap: params.presaleCap.toString(),
         startTime: params.startTime.toString(),
-        endTime: params.endTime.toString(),
-        presalePercentage: params.presalePercentage.toString(),
-        liquidityPercentage: params.liquidityPercentage.toString(),
-        liquidityLockDuration: params.liquidityLockDuration.toString()
+        endTime: params.endTime.toString()
       });
 
       const { request } = await publicClient.simulateContract({
@@ -74,7 +72,7 @@ export const useTokenFactory = () => {
         value: deploymentFee
       });
 
-      const hash = await walletClient?.writeContract(request);
+      const hash = await walletClient.writeContract(request);
       return hash;
     } catch (error) {
       console.error('Error creating token:', error);
