@@ -6,7 +6,7 @@ import { FACTORY_ADDRESSES } from '@/config/contracts';
 import { ChainId } from '@/types/chain';
 import { Abi } from 'viem';
 
-export type CreateTokenParams = {
+interface TokenParams {
   name: string;
   symbol: string;
   initialSupply: bigint;
@@ -15,27 +15,28 @@ export type CreateTokenParams = {
   enableBlacklist: boolean;
   enableTimeLock: boolean;
   presaleRate: bigint;
+  softCap: bigint;
+  hardCap: bigint;
   minContribution: bigint;
   maxContribution: bigint;
-  presaleCap: bigint;
   startTime: bigint;
   endTime: bigint;
   presalePercentage: number;
   liquidityPercentage: number;
   liquidityLockDuration: number;
-  wallets: Array<{
+  wallets: {
     name: string;
     address: `0x${string}`;
     percentage: number;
-  }>;
-};
+  }[];
+}
 
 export const useTokenFactory = () => {
   const publicClient = usePublicClient();
   const { data: walletClient } = useWalletClient();
   const chainId = useChainId() as ChainId;
 
-  const createToken = async (params: CreateTokenParams) => {
+  const createToken = async (params: TokenParams) => {
     try {
       if (!publicClient) throw new Error('Public client not available');
       if (!chainId) throw new Error('Chain ID not available');
@@ -78,17 +79,28 @@ export const useTokenFactory = () => {
       }) as bigint;
 
       console.log('Deployment Fee:', deploymentFee.toString());
-      console.log('Creating token with params:', {
-        ...params,
-        initialSupply: params.initialSupply.toString(),
-        maxSupply: params.maxSupply.toString(),
-        presaleRate: params.presaleRate.toString(),
-        minContribution: params.minContribution.toString(),
-        maxContribution: params.maxContribution.toString(),
-        presaleCap: params.presaleCap.toString(),
-        startTime: params.startTime.toString(),
-        endTime: params.endTime.toString()
-      });
+
+      // Safe logging of parameters
+      const logParams = {
+        name: params.name,
+        symbol: params.symbol,
+        initialSupply: params.initialSupply?.toString() || '0',
+        maxSupply: params.maxSupply?.toString() || '0',
+        presaleRate: params.presaleRate?.toString() || '0',
+        minContribution: params.minContribution?.toString() || '0',
+        maxContribution: params.maxContribution?.toString() || '0',
+        startTime: params.startTime?.toString() || '0',
+        endTime: params.endTime?.toString() || '0',
+        presalePercentage: params.presalePercentage,
+        liquidityPercentage: params.liquidityPercentage,
+        liquidityLockDuration: params.liquidityLockDuration,
+        wallets: params.wallets.map(w => ({
+          name: w.name,
+          address: w.address,
+          percentage: w.percentage
+        }))
+      };
+      console.log('Creating token with params:', logParams);
 
       // Convert wallets array to WalletAllocation array
       const walletAllocations = params.wallets.map(wallet => ({
@@ -113,15 +125,19 @@ export const useTokenFactory = () => {
           enableBlacklist: params.enableBlacklist,
           enableTimeLock: params.enableTimeLock,
           presaleRate: params.presaleRate,
+          softCap: params.softCap,
+          hardCap: params.hardCap,
           minContribution: params.minContribution,
           maxContribution: params.maxContribution,
-          presaleCap: params.presaleCap,
           startTime: params.startTime,
           endTime: params.endTime,
           presalePercentage: params.presalePercentage,
           liquidityPercentage: params.liquidityPercentage,
           liquidityLockDuration: params.liquidityLockDuration,
-          walletAllocations: walletAllocations
+          walletAllocations: walletAllocations.map(w => ({
+            wallet: w.wallet,
+            percentage: w.percentage
+          }))
         }],
         value: deploymentFee,
       });

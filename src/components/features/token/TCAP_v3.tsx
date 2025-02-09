@@ -127,7 +127,7 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
       console.log('TCAP_v3 loadTokens: Starting token load');
       setIsLoading(true);
       setError(null);
-
+      
       const signer = await externalProvider.getSigner();
       console.log('TCAP_v3: Got signer');
       
@@ -239,7 +239,7 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
             }
 
             return {
-              address: tokenAddress,
+        address: tokenAddress,
               name,
               symbol,
               totalSupply: formatEther(totalSupply),
@@ -296,9 +296,9 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
       >
         <div className="flex items-center gap-1">
           <h2 className="text-xs font-medium text-text-primary">Token Creator Admin Controls (V3)</h2>
-          <span className="text-xs text-text-secondary">
+            <span className="text-xs text-text-secondary">
             {showOnlyRecent ? `${Math.min(tokens.length, 3)}/${tokens.length}` : tokens.length} tokens
-          </span>
+            </span>
         </div>
         <div className="flex items-center gap-1">
           <button
@@ -327,48 +327,48 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
 
       {isExpanded && (
         isLoading ? (
-          <div className="flex justify-center items-center py-1">
+            <div className="flex justify-center items-center py-1">
             <Spinner className="w-3 h-3 text-text-primary" />
-          </div>
-        ) : error ? (
+            </div>
+          ) : error ? (
           <div className="text-center py-1 text-red-400 text-xs">
-            {error}
-          </div>
+              {error}
+            </div>
         ) : tokens.length === 0 ? (
           <div className="mt-1">
             <p className="text-xs text-text-secondary">No V3 tokens found. Deploy a new token to get started.</p>
-          </div>
-        ) : (
+            </div>
+          ) : (
           <div className="space-y-1 mt-1">
             {displayedTokens.map(token => (
               <div key={token.address} className="border border-border rounded p-2 bg-gray-800">
-                <div className="flex justify-between items-start gap-2">
-                  <div>
+                  <div className="flex justify-between items-start gap-2">
+                    <div>
                     <h3 className="text-xs font-medium text-text-primary">{token.name} ({token.symbol})</h3>
                     <p className="text-xs text-text-secondary mt-0.5">Token: {token.address}</p>
                     <p className="text-xs text-text-secondary">Supply: {Number(token.totalSupply).toLocaleString()} {token.symbol}</p>
                     {token.presaleInfo && (
                       <div className="mt-0.5">
-                        <p className="text-xs text-text-secondary">
+                      <p className="text-xs text-text-secondary">
                           Presale: {token.presaleInfo.finalized ? 'Finalized' : 'Active'} |
                           Progress: {Number(token.presaleInfo.totalContributed) / Number(token.presaleInfo.hardCap) * 100}%
-                        </p>
-                      </div>
+                      </p>
+                    </div>
                     )}
                   </div>
-                  <button
+                      <button
                     onClick={() => setSelectedToken(selectedToken === token.address ? null : token.address)}
                     className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
-                  >
+                      >
                     {selectedToken === token.address ? 'Hide' : 'Manage'}
-                  </button>
-                </div>
+                      </button>
+                  </div>
 
                 {selectedToken === token.address && (
-                  <div className="mt-2 pt-2 border-t border-border">
+                    <div className="mt-2 pt-2 border-t border-border">
                     <div className="grid grid-cols-2 gap-3">
                       {/* Token Explorer Section */}
-                      <div className="flex flex-col gap-1">
+                        <div className="flex flex-col gap-1">
                         <h4 className="text-xs font-medium text-text-primary mb-1">Token Explorer</h4>
                         <div className="flex gap-1">
                           <a
@@ -392,10 +392,10 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
                             Copy Address
                           </button>
                         </div>
-                      </div>
+                        </div>
 
                       {/* Token Controls Section */}
-                      <div className="flex flex-col gap-1">
+                          <div className="flex flex-col gap-1">
                         <h4 className="text-xs font-medium text-text-primary mb-1">Token Controls</h4>
                         <div className="grid grid-cols-2 gap-1">
                           <button
@@ -430,13 +430,13 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
                         <div className="col-span-2">
                           <h4 className="text-xs font-medium text-text-primary mb-1">Presale Management</h4>
                           <div className="grid grid-cols-3 gap-3">
-                            <div>
+                              <div>
                               <p className="text-xs text-text-secondary">Soft Cap: {token.presaleInfo.softCap} ETH</p>
                               <p className="text-xs text-text-secondary">Hard Cap: {token.presaleInfo.hardCap} ETH</p>
                               <p className="text-xs text-text-secondary">Min/Max: {token.presaleInfo.minContribution}/{token.presaleInfo.maxContribution} ETH</p>
                               <p className="text-xs text-text-secondary">Rate: {token.presaleInfo.presaleRate} tokens/ETH</p>
-                            </div>
-                            <div>
+                              </div>
+                              <div>
                               <p className="text-xs text-text-secondary">Start: {new Date(token.presaleInfo.startTime * 1000).toLocaleString()}</p>
                               <p className="text-xs text-text-secondary">End: {new Date(token.presaleInfo.endTime * 1000).toLocaleString()}</p>
                               <p className="text-xs text-text-secondary">Contributors: {token.presaleInfo.contributorCount}</p>
@@ -450,14 +450,14 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
                               >
                                 Manage Whitelist
                               </button>
-                              <button
+                                  <button
                                 onClick={() => {/* TODO: Implement finalize */}}
                                 className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
                                 disabled={token.presaleInfo.finalized || 
                                   Number(token.presaleInfo.totalContributed) < Number(token.presaleInfo.softCap)}
-                              >
-                                Finalize Presale
-                              </button>
+                                  >
+                                    Finalize Presale
+                                  </button>
                               <button
                                 onClick={() => {/* TODO: Implement emergency withdraw */}}
                                 className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
@@ -495,8 +495,8 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
                               </div>
                             </div>
                           )}
-                        </div>
-                      )}
+                          </div>
+                        )}
 
                       {/* Liquidity Management Section */}
                       {token.liquidityInfo && (
@@ -515,18 +515,18 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
                               >
                                 Extend Lock
                               </button>
-                              <button
+                                <button
                                 onClick={() => {/* TODO: Implement unlock */}}
                                 className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
                                 disabled={token.liquidityInfo.locked || 
                                   Date.now() < token.liquidityInfo.unlockTime * 1000}
                               >
                                 Unlock
-                              </button>
+                                </button>
                             </div>
+                              </div>
                           </div>
-                        </div>
-                      )}
+                        )}
 
                       {/* Platform Fee Section */}
                       {token.platformFee && token.platformFee.vestingEnabled && (
@@ -563,12 +563,12 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
                           </div>
                         </div>
                       )}
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
             ))}
-          </div>
+        </div>
         )
       )}
     </div>

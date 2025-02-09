@@ -31,9 +31,10 @@ const formSchema = z.object({
   enableBlacklist: z.boolean(),
   enableTimeLock: z.boolean(),
   presaleRate: z.string().min(1, "Presale rate is required"),
+  softCap: z.string().min(1, "Soft cap is required"),
+  hardCap: z.string().min(1, "Hard cap is required"),
   minContribution: z.string().min(1, "Min contribution is required"),
   maxContribution: z.string().min(1, "Max contribution is required"),
-  presaleCap: z.string().min(1, "Presale cap is required"),
   startTime: z.string().min(1, "Start time is required")
     .refine((val) => {
       const date = new Date(val);
@@ -95,7 +96,19 @@ const formSchema = z.object({
     }
   }
   return true;
-}, "Invalid vesting parameters");
+}, "Invalid vesting parameters")
+.refine((data) => {
+  // Add validation for soft cap being less than hard cap
+  const softCap = Number(data.softCap);
+  const hardCap = Number(data.hardCap);
+  if (softCap >= hardCap) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Soft cap must be less than hard cap",
+  path: ["softCap"]
+});
 
 type FormData = z.infer<typeof formSchema>;
 
@@ -130,10 +143,11 @@ const defaultValues = {
   owner: '',
   enableBlacklist: false,
   enableTimeLock: false,
-  presaleRate: '1000',
+  presaleRate: '0.001',
+  softCap: '50',
+  hardCap: '100',
   minContribution: '0.1',
-  maxContribution: '5',
-  presaleCap: '100',
+  maxContribution: '10',
   startTime: getDefaultTimes().startTimeFormatted,
   endTime: getDefaultTimes().endTimeFormatted,
   presalePercentage: 40,
@@ -214,6 +228,18 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
         return;
       }
 
+      // Validate soft cap and hard cap
+      const softCap = Number(data.softCap);
+      const hardCap = Number(data.hardCap);
+      if (softCap >= hardCap) {
+        toast({
+          title: "Error",
+          description: "Soft cap must be less than hard cap",
+          variant: "destructive"
+        });
+        return;
+      }
+
       // Calculate total percentage
       const totalPercentage = data.presalePercentage + 
         data.liquidityPercentage + 
@@ -251,31 +277,44 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
 
       setLoading(true);
 
+      // Convert presale rate from ETH to tokens per ETH
+      const ethPerToken = Number(data.presaleRate);
+      const tokensPerEth = Math.floor(1 / ethPerToken);
+      console.log('Converting presale rate:', { ethPerToken, tokensPerEth });
+
+      // Convert all numeric values to BigInt with proper decimals
+      const initialSupply = BigInt(data.initialSupply) * BigInt(10 ** 18); // 18 decimals
+      const maxSupply = BigInt(data.maxSupply) * BigInt(10 ** 18); // 18 decimals
+      const presaleRate = BigInt(tokensPerEth);
+      const minContribution = BigInt(Math.floor(Number(data.minContribution) * 10 ** 18)); // Convert ETH to wei
+      const maxContribution = BigInt(Math.floor(Number(data.maxContribution) * 10 ** 18)); // Convert ETH to wei
+      const hardCapWei = BigInt(Math.floor(Number(data.hardCap) * 10 ** 18)); // Convert ETH to wei
+      const startTimeUnix = BigInt(Math.floor(new Date(data.startTime).getTime() / 1000));
+      const endTimeUnix = BigInt(Math.floor(new Date(data.endTime).getTime() / 1000));
+
+      // Create token with properly formatted parameters
       const tx = await createToken({
         name: data.name,
         symbol: data.symbol,
-        initialSupply: parseEther(data.initialSupply),
-        maxSupply: parseEther(data.maxSupply),
+        initialSupply,
+        maxSupply,
         owner: data.owner as `0x${string}`,
         enableBlacklist: data.enableBlacklist,
         enableTimeLock: data.enableTimeLock,
-        presaleRate: BigInt(data.presaleRate),
-        minContribution: parseEther(data.minContribution),
-        maxContribution: parseEther(data.maxContribution),
-        presaleCap: parseEther(data.presaleCap),
-        startTime: BigInt(Math.floor(new Date(data.startTime).getTime() / 1000)),
-        endTime: BigInt(Math.floor(new Date(data.endTime).getTime() / 1000)),
+        presaleRate,
+        softCap: BigInt(Math.floor(Number(data.softCap) * 10 ** 18)), // Convert ETH to wei
+        hardCap: hardCapWei,
+        minContribution,
+        maxContribution,
+        startTime: startTimeUnix,
+        endTime: endTimeUnix,
         presalePercentage: data.presalePercentage,
         liquidityPercentage: data.liquidityPercentage,
         liquidityLockDuration: data.liquidityLockDuration,
-        wallets: data.wallets.map(wallet => ({
-          name: wallet.name,
-          address: wallet.address as `0x${string}`,
-          percentage: wallet.percentage,
-          vestingEnabled: wallet.vestingEnabled,
-          vestingDuration: wallet.vestingEnabled ? BigInt(wallet.vestingDuration! * 24 * 60 * 60) : BigInt(0), // Convert days to seconds
-          cliffDuration: wallet.vestingEnabled && wallet.cliffDuration ? BigInt(wallet.cliffDuration * 24 * 60 * 60) : BigInt(0),
-          vestingStartTime: wallet.vestingEnabled ? BigInt(Math.floor(new Date(wallet.vestingStartTime!).getTime() / 1000)) : BigInt(0)
+        wallets: data.wallets.map(w => ({
+          name: w.name,
+          address: w.address as `0x${string}`,
+          percentage: w.percentage
         }))
       });
       
@@ -428,7 +467,64 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
           </div>
 
           <div className="form-group">
-            <label htmlFor="minContribution" className="form-label">Min Contribution (ETH)</label>
+            <label htmlFor="presaleRate" className="form-label">
+              Presale Rate (ETH/token)
+              <InfoIcon content="Amount of ETH needed to buy 1 token. Example: 0.001 means 1 token costs 0.001 ETH" />
+            </label>
+            <div className="relative">
+              <Input
+                type="number"
+                step="0.0000000001"
+                placeholder="0.001"
+                {...form.register("presaleRate")}
+                className="form-input"
+              />
+              <div className="absolute right-0 top-0 h-full flex items-center pr-2">
+                <span className="text-xs text-gray-400">
+                  {form.watch("presaleRate") ? `≈ ${Math.floor(1 / Number(form.watch("presaleRate")))} tokens/ETH` : ''}
+                </span>
+              </div>
+            </div>
+            {form.formState.errors.presaleRate && (
+              <p className="form-error">{form.formState.errors.presaleRate.message}</p>
+            )}
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="softCap" className="form-label">
+              Soft Cap (ETH)
+              <InfoIcon content="Minimum amount of ETH needed for presale to be considered successful" />
+            </label>
+            <Input
+              {...form.register("softCap")}
+              placeholder="50"
+              className="form-input"
+            />
+            {form.formState.errors.softCap && (
+              <p className="form-error">{form.formState.errors.softCap.message}</p>
+            )}
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="hardCap" className="form-label">
+              Hard Cap (ETH)
+              <InfoIcon content="Maximum amount of ETH that can be raised during presale" />
+            </label>
+            <Input
+              {...form.register("hardCap")}
+              placeholder="100"
+              className="form-input"
+            />
+            {form.formState.errors.hardCap && (
+              <p className="form-error">{form.formState.errors.hardCap.message}</p>
+            )}
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="minContribution" className="form-label">
+              Min Contribution (ETH)
+              <InfoIcon content="Minimum amount of ETH a user can contribute" />
+            </label>
             <Input
               {...form.register("minContribution")}
               placeholder="0.1"
@@ -440,7 +536,10 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
           </div>
 
           <div className="form-group">
-            <label htmlFor="maxContribution" className="form-label">Max Contribution (ETH)</label>
+            <label htmlFor="maxContribution" className="form-label">
+              Max Contribution (ETH)
+              <InfoIcon content="Maximum amount of ETH a user can contribute" />
+            </label>
             <Input
               {...form.register("maxContribution")}
               placeholder="10"
@@ -448,18 +547,6 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
             />
             {form.formState.errors.maxContribution && (
               <p className="form-error">{form.formState.errors.maxContribution.message}</p>
-            )}
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="presaleCap" className="form-label">Presale Cap (ETH)</label>
-            <Input
-              {...form.register("presaleCap")}
-              placeholder="100"
-              className="form-input"
-            />
-            {form.formState.errors.presaleCap && (
-              <p className="form-error">{form.formState.errors.presaleCap.message}</p>
             )}
           </div>
 

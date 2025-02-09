@@ -1534,8 +1534,8 @@
       ]
     },
     "/Volumes/UE_5_4T/Crypto/TokenFactory/src/contracts/TokenTemplate_v3.sol": {
-      "lastModificationDate": 1739113747698,
-      "contentHash": "c8c95f4b3c32e3acb44d9dcdac87895e",
+      "lastModificationDate": 1739118864696,
+      "contentHash": "24f55c2599cd83f56848fc04521817d9",
       "sourceName": "src/contracts/TokenTemplate_v3.sol",
       "solcConfig": {
         "version": "0.8.22",

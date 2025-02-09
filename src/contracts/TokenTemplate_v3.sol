@@ -87,15 +87,16 @@ contract TokenTemplate_v3 is
         bool enableBlacklist;
         bool enableTimeLock;
         uint256 presaleRate;
+        uint256 softCap;
+        uint256 hardCap;
         uint256 minContribution;
         uint256 maxContribution;
-        uint256 presaleCap;
         uint256 startTime;
         uint256 endTime;
         uint256 presalePercentage;
         uint256 liquidityPercentage;
         uint256 liquidityLockDuration;
-        WalletAllocation[] walletAllocations;  // New dynamic wallet allocations
+        WalletAllocation[] walletAllocations;
     }
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -155,8 +156,8 @@ contract TokenTemplate_v3 is
 
         // Initialize presale info
         presaleInfo = PresaleInfo({
-            softCap: params.presaleCap / 2, // Set soft cap to half of presale cap
-            hardCap: params.presaleCap,
+            softCap: params.softCap, // Use the provided soft cap value
+            hardCap: params.hardCap,
             minContribution: params.minContribution,
             maxContribution: params.maxContribution,
             startTime: params.startTime,
