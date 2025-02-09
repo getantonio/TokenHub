@@ -1485,8 +1485,8 @@
       ]
     },
     "/Volumes/UE_5_4T/Crypto/TokenFactory/src/contracts/TokenFactory_v3.sol": {
-      "lastModificationDate": 1739029547545,
-      "contentHash": "521bf88bb5e34769ae88193ab12f9aba",
+      "lastModificationDate": 1739113663256,
+      "contentHash": "06ac2af9cf360124a623908980b4dc09",
       "sourceName": "src/contracts/TokenFactory_v3.sol",
       "solcConfig": {
         "version": "0.8.22",
@@ -1534,8 +1534,8 @@
       ]
     },
     "/Volumes/UE_5_4T/Crypto/TokenFactory/src/contracts/TokenTemplate_v3.sol": {
-      "lastModificationDate": 1739029547551,
-      "contentHash": "2cbc429ebd67e83f1e0025bc02ca9e30",
+      "lastModificationDate": 1739113747698,
+      "contentHash": "c8c95f4b3c32e3acb44d9dcdac87895e",
       "sourceName": "src/contracts/TokenTemplate_v3.sol",
       "solcConfig": {
         "version": "0.8.22",

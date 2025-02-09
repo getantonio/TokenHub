@@ -20,6 +20,11 @@ contract TokenTemplate_v3 is
 {
     string public constant VERSION = "3.0.0";
     
+    // User tracking
+    mapping(address => bool) public isUser;
+    address[] public users;
+    uint256 public userCount;
+    
     struct PresaleInfo {
         uint256 softCap;
         uint256 hardCap;
@@ -43,15 +48,12 @@ contract TokenTemplate_v3 is
     mapping(address => bool) public blacklist;
     mapping(address => uint256) public timeLocks;
     
-    // Platform fee info
-    address public platformFeeRecipient;
-    uint256 public platformFeeTokens;
-    bool public platformFeeVestingEnabled;
-    uint256 public platformFeeVestingDuration;
-    uint256 public platformFeeCliffDuration;
-    uint256 public platformFeeVestingStart;
-    uint256 public platformFeeTokensClaimed;
-
+    // Distribution tracking
+    address[] public contributors;
+    mapping(address => bool) public isContributor;
+    mapping(address => uint256) public presaleContributorTokens;
+    uint256 public totalPresaleTokensDistributed;
+    
     // Events
     event PresaleStarted(
         uint256 softCap,
@@ -63,10 +65,18 @@ contract TokenTemplate_v3 is
     event WhitelistUpdated(address[] addresses, bool status);
     event BlacklistUpdated(address[] addresses, bool status);
     event TimeLockSet(address account, uint256 unlockTime);
-    event ContributionReceived(address contributor, uint256 amount);
-    event PresaleFinalized(uint256 totalContributed, uint256 tokensDistributed);
+    event ContributionReceived(address contributor, uint256 amount, uint256 tokenAmount);
+    event PresaleFinalized(uint256 totalContributed, uint256 totalTokensDistributed);
     event ContributionRefunded(address contributor, uint256 amount);
-    event PlatformFeeClaimed(uint256 amount);
+    event TokensDistributed(address indexed recipient, uint256 amount);
+    event LiquidityPoolCreated(address indexed pair, uint256 tokensAdded, uint256 ethAdded);
+    event PresaleParticipation(address indexed contributor, uint256 amount, uint256 tokensReceived);
+    event RefundClaimed(address indexed contributor, uint256 amount);
+
+    struct WalletAllocation {
+        address wallet;
+        uint256 percentage;
+    }
 
     struct InitParams {
         string name;
@@ -85,10 +95,7 @@ contract TokenTemplate_v3 is
         uint256 presalePercentage;
         uint256 liquidityPercentage;
         uint256 liquidityLockDuration;
-        address marketingWallet;
-        uint256 marketingPercentage;
-        address teamWallet;
-        uint256 teamPercentage;
+        WalletAllocation[] walletAllocations;  // New dynamic wallet allocations
     }
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -103,32 +110,52 @@ contract TokenTemplate_v3 is
         __Ownable_init();
         __ReentrancyGuard_init();
         __UUPSUpgradeable_init();
+        _transferOwnership(params.owner);
 
         require(params.maxSupply >= params.initialSupply, "Max supply must be >= initial supply");
-        require(params.startTime > block.timestamp, string(abi.encodePacked("Start time must be in future. Current: ", block.timestamp, ", Start: ", params.startTime)));
-        require(params.endTime > params.startTime, string(abi.encodePacked("End time must be after start time. Start: ", params.startTime, ", End: ", params.endTime)));
         
-        uint256 totalPercentage = params.presalePercentage + params.liquidityPercentage + params.marketingPercentage + params.teamPercentage;
-        require(
-            totalPercentage == 95,
-            string(abi.encodePacked(
-                "Total percentage must be 95%. Got: ", totalPercentage,
-                " (Presale: ", params.presalePercentage,
-                ", Liquidity: ", params.liquidityPercentage,
-                ", Marketing: ", params.marketingPercentage,
-                ", Team: ", params.teamPercentage, ")"
-            ))
-        );
-        require(params.marketingWallet != address(0), "Invalid marketing wallet");
-        require(params.teamWallet != address(0), "Invalid team wallet");
+        // Validate wallet allocations - now allows any number of wallets
+        if (params.walletAllocations.length > 0) {
+            // Calculate total percentage including presale and liquidity
+            uint256 totalPercentage = params.presalePercentage + params.liquidityPercentage;
+            
+            // Add percentages from wallet allocations
+            for (uint256 i = 0; i < params.walletAllocations.length; i++) {
+                require(params.walletAllocations[i].wallet != address(0), "Wallet address cannot be zero");
+                require(params.walletAllocations[i].percentage > 0, "Percentage must be > 0");
+                totalPercentage += params.walletAllocations[i].percentage;
+            }
+            
+            require(totalPercentage == 100, "Total percentage must be 100");
+        } else {
+            // If no additional wallets, presale and liquidity must total 100%
+            require(params.presalePercentage + params.liquidityPercentage == 100, 
+                    "Presale and liquidity must total 100% when no additional wallets");
+        }
 
         maxSupply = params.maxSupply;
         blacklistEnabled = params.enableBlacklist;
         timeLockEnabled = params.enableTimeLock;
 
+        // Calculate token allocations
+        uint256 presaleTokens = (params.initialSupply * params.presalePercentage) / 100;
+        uint256 liquidityTokens = (params.initialSupply * params.liquidityPercentage) / 100;
+
+        // Validate token amounts
+        require(presaleTokens > 0, "Presale tokens must be > 0");
+        require(liquidityTokens > 0, "Liquidity tokens must be > 0");
+
+        // Mint presale tokens to the contract itself
+        _mint(address(this), presaleTokens);
+        emit TokensDistributed(address(this), presaleTokens);
+
+        // Mint liquidity tokens to the contract itself
+        _mint(address(this), liquidityTokens);
+        emit TokensDistributed(address(this), liquidityTokens);
+
         // Initialize presale info
         presaleInfo = PresaleInfo({
-            softCap: params.presaleCap / 2,
+            softCap: params.presaleCap / 2, // Set soft cap to half of presale cap
             hardCap: params.presaleCap,
             minContribution: params.minContribution,
             maxContribution: params.maxContribution,
@@ -140,25 +167,14 @@ contract TokenTemplate_v3 is
             totalContributed: 0
         });
 
-        // Mint initial supply according to percentages
-        uint256 presaleTokens = (params.initialSupply * params.presalePercentage) / 100;
-        uint256 liquidityTokens = (params.initialSupply * params.liquidityPercentage) / 100;
-        uint256 marketingTokens = (params.initialSupply * params.marketingPercentage) / 100;
-        uint256 teamTokens = (params.initialSupply * params.teamPercentage) / 100;
-
-        // Mint tokens to respective wallets
-        _mint(address(this), presaleTokens); // Presale tokens held by contract
-        _mint(address(this), liquidityTokens); // Liquidity tokens held by contract
-        _mint(params.marketingWallet, marketingTokens);
-        _mint(params.teamWallet, teamTokens);
-
-        emit PresaleStarted(
-            presaleInfo.softCap,
-            presaleInfo.hardCap,
-            params.startTime,
-            params.endTime,
-            params.presaleRate
-        );
+        // Mint tokens for each wallet allocation
+        for (uint256 i = 0; i < params.walletAllocations.length; i++) {
+            uint256 walletTokens = (params.initialSupply * params.walletAllocations[i].percentage) / 100;
+            require(walletTokens > 0, "Wallet tokens must be > 0");
+            _mint(params.walletAllocations[i].wallet, walletTokens);
+            emit TokensDistributed(params.walletAllocations[i].wallet, walletTokens);
+            _addUser(params.walletAllocations[i].wallet);
+        }
     }
 
     function contribute() external payable nonReentrant {
@@ -182,10 +198,21 @@ contract TokenTemplate_v3 is
             "Would exceed max contribution"
         );
 
+        // Track contributor
+        if (!isContributor[msg.sender]) {
+            contributors.push(msg.sender);
+            isContributor[msg.sender] = true;
+        }
+
+        // Calculate and track tokens
+        uint256 tokensToReceive = msg.value * presaleInfo.presaleRate;
+        presaleContributorTokens[msg.sender] += tokensToReceive;
+
+        // Update contribution tracking
         contributions[msg.sender] = newContribution;
         presaleInfo.totalContributed += msg.value;
 
-        emit ContributionReceived(msg.sender, msg.value);
+        emit ContributionReceived(msg.sender, msg.value, tokensToReceive);
     }
 
     function finalize() external onlyOwner nonReentrant {
@@ -197,13 +224,30 @@ contract TokenTemplate_v3 is
         );
 
         presaleInfo.finalized = true;
-        uint256 tokensToDistribute = presaleInfo.totalContributed * presaleInfo.presaleRate;
 
-        // Transfer raised funds to owner
-        (bool success, ) = owner().call{value: address(this).balance}("");
-        require(success, "Transfer failed");
+        // Distribute presale tokens to contributors
+        for (uint256 i = 0; i < contributors.length; i++) {
+            address contributor = contributors[i];
+            uint256 tokensToDistribute = presaleContributorTokens[contributor];
+            
+            if (tokensToDistribute > 0) {
+                require(transfer(contributor, tokensToDistribute), "Token transfer failed");
+                totalPresaleTokensDistributed += tokensToDistribute;
+                emit TokensDistributed(contributor, tokensToDistribute);
+                
+                // Clear the allocation after distribution
+                presaleContributorTokens[contributor] = 0;
+            }
+        }
 
-        emit PresaleFinalized(presaleInfo.totalContributed, tokensToDistribute);
+        // Transfer remaining ETH to owner
+        uint256 remainingBalance = address(this).balance;
+        if (remainingBalance > 0) {
+            (bool success, ) = owner().call{value: remainingBalance}("");
+            require(success, "ETH transfer failed");
+        }
+
+        emit PresaleFinalized(presaleInfo.totalContributed, totalPresaleTokensDistributed);
     }
 
     function updateWhitelist(address[] calldata addresses, bool status) external onlyOwner {
@@ -244,4 +288,114 @@ contract TokenTemplate_v3 is
     }
 
     function _authorizeUpgrade(address) internal override onlyOwner {}
+
+    // View function to get all contributors
+    function getContributors() external view returns (address[] memory) {
+        return contributors;
+    }
+
+    // View function to get contributor count
+    function getContributorCount() external view returns (uint256) {
+        return contributors.length;
+    }
+
+    // View function to get contributor info
+    function getContributorInfo(address contributor) external view returns (
+        uint256 contribution,
+        uint256 tokenAllocation,
+        bool isWhitelisted
+    ) {
+        return (
+            contributions[contributor],
+            presaleContributorTokens[contributor],
+            whitelist[contributor]
+        );
+    }
+
+    // User tracking functions
+    function _addUser(address user) internal {
+        if (!isUser[user]) {
+            isUser[user] = true;
+            users.push(user);
+            userCount++;
+        }
+    }
+
+    function getUsers() external view returns (address[] memory) {
+        return users;
+    }
+
+    function getUserCount() external view returns (uint256) {
+        return userCount;
+    }
+
+    // Override transfer functions to track users
+    function _transfer(
+        address from,
+        address to,
+        uint256 amount
+    ) internal virtual override {
+        super._transfer(from, to, amount);
+        _addUser(to);
+    }
+
+    // Function to participate in presale
+    function participateInPresale() external payable nonReentrant {
+        require(block.timestamp >= presaleInfo.startTime, "Presale has not started");
+        require(block.timestamp <= presaleInfo.endTime, "Presale has ended");
+        require(!presaleInfo.finalized, "Presale is finalized");
+        require(msg.value >= presaleInfo.minContribution, "Below min contribution");
+        require(msg.value <= presaleInfo.maxContribution, "Above max contribution");
+        require(presaleInfo.totalContributed + msg.value <= presaleInfo.hardCap, "Hard cap reached");
+
+        uint256 tokensToReceive = msg.value * presaleInfo.presaleRate;
+        require(tokensToReceive > 0, "Must receive tokens");
+
+        // Update state
+        presaleInfo.totalContributed += msg.value;
+        contributions[msg.sender] += msg.value;
+        totalPresaleTokensDistributed += tokensToReceive;
+
+        // Transfer tokens
+        _transfer(address(this), msg.sender, tokensToReceive);
+        
+        // Add user to tracking
+        _addUser(msg.sender);
+
+        emit PresaleParticipation(msg.sender, msg.value, tokensToReceive);
+    }
+
+    // Function to finalize presale and create liquidity pool
+    function finalizePresale() external onlyOwner {
+        require(block.timestamp > presaleInfo.endTime || 
+                presaleInfo.totalContributed >= presaleInfo.hardCap, 
+                "Presale not ended");
+        require(!presaleInfo.finalized, "Already finalized");
+        require(presaleInfo.totalContributed >= presaleInfo.softCap, "Soft cap not reached");
+
+        presaleInfo.finalized = true;
+
+        // TODO: Add liquidity pool creation logic here
+        // This will involve:
+        // 1. Creating a pair on the DEX
+        // 2. Adding liquidity using the collected ETH and locked tokens
+        // 3. Locking the LP tokens
+
+        emit PresaleFinalized(presaleInfo.totalContributed, totalPresaleTokensDistributed);
+    }
+
+    // Function to claim refund if presale fails
+    function claimRefund() external nonReentrant {
+        require(block.timestamp > presaleInfo.endTime, "Presale not ended");
+        require(!presaleInfo.finalized, "Presale finalized");
+        require(presaleInfo.totalContributed < presaleInfo.softCap, "Soft cap reached");
+
+        uint256 contribution = contributions[msg.sender];
+        require(contribution > 0, "No contribution");
+
+        contributions[msg.sender] = 0;
+        payable(msg.sender).transfer(contribution);
+
+        emit RefundClaimed(msg.sender, contribution);
+    }
 } 

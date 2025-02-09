@@ -48,11 +48,9 @@ const formSchema = z.object({
   liquidityPercentage: z.coerce.number(),
   liquidityLockDuration: z.coerce.number(),
   wallets: z.array(z.object({
-    name: z.string(),
+    name: z.string().min(1, "Wallet name is required"),
     address: z.string().min(1, "Wallet address is required"),
-    percentage: z.coerce.number(),
-    vestingDuration: z.coerce.number(),
-    vestingCliff: z.coerce.number()
+    percentage: z.coerce.number().min(0, "Percentage must be greater than or equal to 0")
   }))
 }).refine((data) => {
   try {
@@ -65,35 +63,24 @@ const formSchema = z.object({
 }, "End time must be after start time")
 .refine((data) => {
   try {
-    // Calculate total wallet percentage
-    const totalWalletPercentage = data.wallets.reduce((sum, wallet) => sum + wallet.percentage, 0);
+    // Calculate total percentage
+    const totalPercentage = data.presalePercentage + 
+      data.liquidityPercentage + 
+      data.wallets.reduce((sum, wallet) => sum + wallet.percentage, 0);
     
-    // Fixed platform fee
-    const platformFee = 5;
+    // Validate individual percentages
+    if (data.presalePercentage <= 0) return false;
+    if (data.liquidityPercentage <= 0) return false;
+    for (const wallet of data.wallets) {
+      if (wallet.percentage <= 0) return false;
+    }
     
-    // Get presale and liquidity percentages
-    const presale = Number(data.presalePercentage);
-    const liquidity = Number(data.liquidityPercentage);
-    
-    // Calculate total allocation
-    const total = platformFee + presale + liquidity + totalWalletPercentage;
-    
-    // Log for debugging
-    console.log("Allocation validation:", {
-      platformFee,
-      presale,
-      liquidity,
-      totalWalletPercentage,
-      total
-    });
-    
-    // Validate that total equals 100%
-    return total === 100;
+    return totalPercentage === 100;
   } catch (e) {
     console.error("Validation error:", e);
     return false;
   }
-}, "Total allocation must equal 100%. Current allocations: Platform Fee (5%), Presale, Liquidity, and Additional Wallets")
+}, "Total allocation must equal 100% and all percentages must be greater than 0");
 
 type FormData = z.infer<typeof formSchema>;
 
@@ -134,23 +121,14 @@ const defaultValues = {
   presaleCap: '100',
   startTime: getDefaultTimes().startTimeFormatted,
   endTime: getDefaultTimes().endTimeFormatted,
-  presalePercentage: 35,
-  liquidityPercentage: 30,
+  presalePercentage: 40,
+  liquidityPercentage: 40,
   liquidityLockDuration: 180,
   wallets: [
     {
       name: 'Team',
-      address: '0x0000000000000000000000000000000000000000',
-      percentage: 10,
-      vestingDuration: 365,
-      vestingCliff: 90
-    },
-    {
-      name: 'Marketing',
-      address: '0x0000000000000000000000000000000000000000',
+      address: '',
       percentage: 20,
-      vestingDuration: 180,
-      vestingCliff: 30
     }
   ]
 };
@@ -175,7 +153,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
       owner: address || '',
       wallets: defaultValues.wallets.map(wallet => ({
         ...wallet,
-        address: address || '0x0000000000000000000000000000000000000000'
+        address: address || ''
       }))
     }
   });
@@ -183,7 +161,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
   useEffect(() => {
     if (address) {
       form.setValue('owner', address);
-      form.setValue('wallets', defaultValues.wallets.map(wallet => ({
+      form.setValue('wallets', form.getValues('wallets').map(wallet => ({
         ...wallet,
         address: address
       })));
@@ -218,37 +196,34 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
       }
 
       // Calculate total percentage
-      const presalePercentage = Number(data.presalePercentage);
-      const liquidityPercentage = Number(data.liquidityPercentage);
-      const marketingWallet = data.wallets.find(w => w.name.toLowerCase().includes('marketing'));
-      const teamWallet = data.wallets.find(w => w.name.toLowerCase().includes('team'));
-      const otherWallets = data.wallets.filter(w => 
-        !w.name.toLowerCase().includes('marketing') && 
-        !w.name.toLowerCase().includes('team')
-      );
-      
-      const marketingPercentage = marketingWallet?.percentage || 0;
-      const teamPercentage = teamWallet?.percentage || 0;
-      const otherWalletsPercentage = otherWallets.reduce((sum, w) => sum + Number(w.percentage), 0);
-      
-      const totalPercentage = presalePercentage + liquidityPercentage + marketingPercentage + teamPercentage + otherWalletsPercentage;
-      
-      console.log('Percentage validation:', {
-        presale: presalePercentage,
-        liquidity: liquidityPercentage,
-        marketing: marketingPercentage,
-        team: teamPercentage,
-        other: otherWalletsPercentage,
-        total: totalPercentage
-      });
+      const totalPercentage = data.presalePercentage + 
+        data.liquidityPercentage + 
+        data.wallets.reduce((sum, wallet) => sum + wallet.percentage, 0);
 
-      if (totalPercentage !== 95) {
+      console.log('Wallet allocations:', data.wallets.map(w => ({ name: w.name, percentage: w.percentage })));
+      console.log('Total percentage:', totalPercentage);
+
+      if (totalPercentage !== 100) {
         toast({
           title: "Error",
-          description: `Total allocation must be exactly 95% (5% platform fee). Current total: ${totalPercentage}%`,
+          description: `Total allocation must be exactly 100%. Current total: ${totalPercentage}%`,
           variant: "destructive"
         });
         return;
+      }
+
+      // Validate individual percentages
+      if (data.presalePercentage <= 0) throw new Error('Presale percentage must be greater than 0');
+      if (data.liquidityPercentage <= 0) throw new Error('Liquidity percentage must be greater than 0');
+
+      // Validate wallet percentages and addresses
+      for (const wallet of data.wallets) {
+        if (wallet.percentage <= 0) {
+          throw new Error(`Percentage for ${wallet.name} must be greater than 0`);
+        }
+        if (!wallet.address || wallet.address === '0x0000000000000000000000000000000000000000') {
+          throw new Error(`Please provide a valid address for wallet "${wallet.name}"`);
+        }
       }
 
       if (!publicClient) {
@@ -256,14 +231,13 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
       }
 
       setLoading(true);
-      console.log('Token Creation Parameters:', data);
 
-      const params = {
+      const tx = await createToken({
         name: data.name,
         symbol: data.symbol,
         initialSupply: parseEther(data.initialSupply),
         maxSupply: parseEther(data.maxSupply),
-        owner: address as `0x${string}`,
+        owner: data.owner as `0x${string}`,
         enableBlacklist: data.enableBlacklist,
         enableTimeLock: data.enableTimeLock,
         presaleRate: BigInt(data.presaleRate),
@@ -272,29 +246,18 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
         presaleCap: parseEther(data.presaleCap),
         startTime: BigInt(Math.floor(new Date(data.startTime).getTime() / 1000)),
         endTime: BigInt(Math.floor(new Date(data.endTime).getTime() / 1000)),
-        presalePercentage: presalePercentage,
-        liquidityPercentage: liquidityPercentage,
+        presalePercentage: data.presalePercentage,
+        liquidityPercentage: data.liquidityPercentage,
         liquidityLockDuration: data.liquidityLockDuration,
-        marketingWallet: (marketingWallet?.address || address) as `0x${string}`,
-        marketingPercentage: marketingPercentage,
-        teamWallet: (teamWallet?.address || address) as `0x${string}`,
-        teamPercentage: teamPercentage,
-        wallets: otherWallets.map(wallet => ({
+        wallets: data.wallets.map(wallet => ({
           name: wallet.name,
           address: wallet.address as `0x${string}`,
-          percentage: Number(wallet.percentage),
-          vestingDuration: wallet.vestingDuration,
-          vestingCliff: wallet.vestingCliff
+          percentage: wallet.percentage
         }))
-      };
-
-      console.log('Submitting parameters:', params);
-      console.log('Calling createToken function...');
-      const hash = await createToken(params);
-      console.log('Transaction hash:', hash);
+      });
       
       // Wait for transaction receipt to get the token address
-      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      const receipt = await publicClient.waitForTransactionReceipt({ hash: tx });
       console.log('Transaction receipt:', receipt);
       
       // Get the token address from the event logs
@@ -351,19 +314,16 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
   const addWallet = () => {
     const wallets = form.getValues('wallets');
     const currentTotal = wallets.reduce((sum, wallet) => sum + wallet.percentage, 0);
-    const platformFee = 5;
     const presale = Number(form.getValues('presalePercentage'));
     const liquidity = Number(form.getValues('liquidityPercentage'));
-    const remainingAllocation = Math.max(0, 95 - (presale + liquidity + currentTotal));
+    const remainingAllocation = Math.max(0, 100 - (presale + liquidity + currentTotal));
 
     form.setValue('wallets', [
       ...wallets,
       {
         name: `Wallet ${wallets.length + 1}`,
-        address: address || '0x0000000000000000000000000000000000000000',
+        address: address || '',
         percentage: remainingAllocation,
-        vestingDuration: 0,
-        vestingCliff: 0
       }
     ]);
   };
@@ -381,8 +341,6 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
       name: wallet.walletName,
       address: address || '0x0000000000000000000000000000000000000000',
       percentage: wallet.amount,
-      vestingDuration: wallet.period,
-      vestingCliff: 0
     })));
   };
 
@@ -601,7 +559,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                 <h4 className="text-sm font-medium text-white">Token Distribution</h4>
                 <div className="text-xs text-gray-400">
                   {(() => {
-                    const total = 5 + Number(form.watch("presalePercentage")) + Number(form.watch("liquidityPercentage")) + form.watch('wallets').reduce((sum, wallet) => sum + Number(wallet.percentage), 0);
+                    const total = Number(form.watch("presalePercentage")) + Number(form.watch("liquidityPercentage")) + form.watch('wallets').reduce((sum, wallet) => sum + Number(wallet.percentage), 0);
                     return (
                       <span className={total > 100 ? 'text-red-400' : 'text-gray-400'}>
                         Total: {total}%
@@ -613,12 +571,6 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
               </div>
               
               <div className="grid grid-cols-3 gap-2">
-                {/* Platform Fee - Fixed */}
-                <div className="flex items-center justify-between px-3 py-1 bg-gray-700/30 rounded">
-                  <span className="text-sm text-gray-300">Platform Fee</span>
-                  <span className="text-sm font-medium text-white">5%</span>
-                </div>
-                
                 {/* Presale */}
                 <div className="relative">
                   <Input
@@ -689,36 +641,14 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                         />
                         <span className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-gray-400">%</span>
                       </div>
-                    </div>
-                    <Button
-                      type="button"
-                      onClick={() => removeWallet(index)}
-                      variant="ghost"
-                      className="h-8 w-8 p-1"
-                    >
-                      ×
-                    </Button>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="form-group mb-0">
-                      <label className="form-label text-xs mb-1">Vesting Duration (days)</label>
-                      <Input
-                        {...form.register(`wallets.${index}.vestingDuration`)}
-                        placeholder="365"
-                        type="number"
-                        className="form-input h-7 text-sm bg-gray-700"
-                      />
-                    </div>
-
-                    <div className="form-group mb-0">
-                      <label className="form-label text-xs mb-1">Cliff Period (days)</label>
-                      <Input
-                        {...form.register(`wallets.${index}.vestingCliff`)}
-                        placeholder="90"
-                        type="number"
-                        className="form-input h-7 text-sm bg-gray-700"
-                      />
+                      <Button
+                        type="button"
+                        onClick={() => removeWallet(index)}
+                        variant="ghost"
+                        className="h-7 w-7 p-0 text-gray-400 hover:text-red-400"
+                      >
+                        ×
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -727,17 +657,13 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
           </div>
         </div>
 
-        <div className="form-actions">
+        <div className="form-actions mt-4">
           <div className="flex items-center mr-2">
             <InfoIcon content="Deployment fee will be charged in ETH. Make sure you have enough ETH to cover the fee and gas costs." />
           </div>
           <Button 
             type="submit"
-            disabled={
-              !isConnected || 
-              loading || 
-              form.formState.isSubmitting
-            }
+            disabled={!isConnected || loading || form.formState.isSubmitting}
             className="form-button-primary"
           >
             {loading ? (
@@ -758,7 +684,6 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
             initialSupply={form.watch("initialSupply")}
             maxSupply={form.watch("maxSupply")}
             distributionSegments={[
-              { name: 'Platform Fee', amount: 5, percentage: 5, color: '#FF0000' },
               { name: 'Presale', amount: Number(form.watch("presalePercentage")), percentage: Number(form.watch("presalePercentage")), color: '#0088FE' },
               { name: 'Liquidity', amount: Number(form.watch("liquidityPercentage")), percentage: Number(form.watch("liquidityPercentage")), color: '#00C49F' },
               ...form.watch('wallets').map((wallet, index) => ({
@@ -768,7 +693,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                 color: COLORS[index % COLORS.length]
               }))
             ]}
-            totalAllocation={5 + Number(form.watch("presalePercentage")) + Number(form.watch("liquidityPercentage")) + form.watch('wallets').reduce((sum, wallet) => sum + Number(wallet.percentage), 0)}
+            totalAllocation={Number(form.watch("presalePercentage")) + Number(form.watch("liquidityPercentage")) + form.watch('wallets').reduce((sum, wallet) => sum + Number(wallet.percentage), 0)}
           />
         </div>
       </form>
@@ -843,4 +768,4 @@ const VESTING_PRESETS = {
       { walletName: 'Development', amount: 8, period: 180, beneficiary: '' }
     ]
   }
-}; 
+};

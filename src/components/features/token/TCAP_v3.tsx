@@ -12,6 +12,8 @@ import { useNetwork } from '@/contexts/NetworkContext';
 import { getExplorerUrl } from '@/config/networks';
 import { InfoIcon } from '@/components/ui/InfoIcon';
 import { FACTORY_ADDRESSES } from '@/config/contracts';
+import { Contract } from 'ethers';
+import { shortenAddress } from '@/utils/address';
 
 interface TokenAdminTestProps {
   tokenAddress: `0x${string}`;
@@ -94,8 +96,11 @@ interface VestingSchedule {
 }
 
 interface TokenDetails {
+  address: string;
   name: string;
   symbol: string;
+  totalSupply: bigint;
+  owner: string;
 }
 
 export default function TCAP_v3({ tokenAddress, factoryAddress }: TokenAdminTestProps) {
@@ -173,30 +178,44 @@ export default function TCAP_v3({ tokenAddress, factoryAddress }: TokenAdminTest
   }, [tokenAddress, mounted]);
 
   const fetchUserTokens = async () => {
-    if (!address || !factoryAddress || !publicClient) return;
+    if (!publicClient || !factoryAddress || !address) return;
     
     try {
       setLoading(true);
-      const tokens = await publicClient.readContract({
-        address: factoryAddress as `0x${string}`,
+      
+      // Get all deployed tokens first
+      const allTokens = await publicClient.readContract({
+        address: factoryAddress,
+        abi: TokenFactoryV3ABI.abi as unknown as Abi,
+        functionName: 'getDeployedTokens'
+      }) as `0x${string}`[];
+
+      console.log('All deployed tokens:', allTokens);
+      
+      // Get user's tokens
+      const userCreatedTokens = await publicClient.readContract({
+        address: factoryAddress,
         abi: TokenFactoryV3ABI.abi as unknown as Abi,
         functionName: 'getTokensByUser',
-        args: [address],
+        args: [address]
       }) as `0x${string}`[];
-      
-      setUserTokens(tokens);
-      
+
+      console.log('User created tokens:', userCreatedTokens);
+
+      // Use all tokens, but mark user's tokens
+      setUserTokens(allTokens);
+
       // Fetch details for each token
-      for (const token of tokens) {
-        if (!tokenDetails[token]) {
-          await fetchTokenDetails(token as `0x${string}`, publicClient);
-        }
+      for (const token of allTokens) {
+        await fetchTokenDetails(token, publicClient);
       }
-    } catch (error) {
-      console.error('Error fetching user tokens:', error);
+      
+    } catch (err) {
+      console.error('Error fetching tokens:', err);
       toast({
-        description: 'Failed to fetch user tokens',
-        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to fetch tokens',
+        variant: 'destructive'
       });
     } finally {
       setLoading(false);
@@ -430,7 +449,7 @@ export default function TCAP_v3({ tokenAddress, factoryAddress }: TokenAdminTest
   // Fetch token details for a specific token
   const fetchTokenDetails = async (token: `0x${string}`, client: any) => {
     try {
-      const [name, symbol] = await Promise.all([
+      const [name, symbol, totalSupply, owner] = await Promise.all([
         client.readContract({
           address: token,
           abi: TokenV3ABI.abi as unknown as Abi,
@@ -441,14 +460,30 @@ export default function TCAP_v3({ tokenAddress, factoryAddress }: TokenAdminTest
           abi: TokenV3ABI.abi as unknown as Abi,
           functionName: 'symbol',
         }),
+        client.readContract({
+          address: token,
+          abi: TokenV3ABI.abi as unknown as Abi,
+          functionName: 'totalSupply',
+        }),
+        client.readContract({
+          address: token,
+          abi: TokenV3ABI.abi as unknown as Abi,
+          functionName: 'owner',
+        })
       ]);
 
       setTokenDetails(prev => ({
         ...prev,
-        [token]: { name: name as string, symbol: symbol as string }
+        [token]: { 
+          name: name as string, 
+          symbol: symbol as string,
+          totalSupply: totalSupply as bigint,
+          owner: owner as string,
+          address: token,
+        }
       }));
     } catch (err) {
-      console.error('Error fetching token details:', err);
+      console.error('Error fetching token details for', token, ':', err);
     }
   };
 
@@ -498,7 +533,7 @@ export default function TCAP_v3({ tokenAddress, factoryAddress }: TokenAdminTest
           {/* User's Tokens List */}
           {userTokens.length > 0 && (
             <div className="mb-4 border border-border rounded-lg p-2 bg-gray-800/50">
-              <h3 className="text-sm font-medium text-text-primary mb-2">Your Created Tokens</h3>
+              <h3 className="text-sm font-medium text-text-primary mb-2">All Tokens ({userTokens.length})</h3>
               <div className="grid gap-2">
                 {userTokens.map((token) => (
                   <button
@@ -514,6 +549,8 @@ export default function TCAP_v3({ tokenAddress, factoryAddress }: TokenAdminTest
                     {tokenDetails[token] && (
                       <div className="text-xs text-gray-400">
                         {tokenDetails[token].name} ({tokenDetails[token].symbol})
+                        <div>Supply: {formatEther(tokenDetails[token].totalSupply)}</div>
+                        <div>Owner: {tokenDetails[token].owner === address ? 'You' : shortenAddress(tokenDetails[token].owner)}</div>
                       </div>
                     )}
                   </button>

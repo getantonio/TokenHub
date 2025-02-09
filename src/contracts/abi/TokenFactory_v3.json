@@ -4,13 +4,7 @@
   "sourceName": "src/contracts/TokenFactory_v3.sol",
   "abi": [
     {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "_implementation",
-          "type": "address"
-        }
-      ],
+      "inputs": [],
       "stateMutability": "nonpayable",
       "type": "constructor"
     },
@@ -385,9 +379,26 @@
               "internalType": "uint256",
               "name": "liquidityLockDuration",
               "type": "uint256"
+            },
+            {
+              "components": [
+                {
+                  "internalType": "address",
+                  "name": "wallet",
+                  "type": "address"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "percentage",
+                  "type": "uint256"
+                }
+              ],
+              "internalType": "struct TokenTemplate_v3.WalletAllocation[]",
+              "name": "walletAllocations",
+              "type": "tuple[]"
             }
           ],
-          "internalType": "struct TokenCreationParams",
+          "internalType": "struct TokenTemplate_v3.InitParams",
           "name": "params",
           "type": "tuple"
         }

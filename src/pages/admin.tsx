@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useWallet } from '@contexts/WalletContext';
 import FactoryOwnerControls_v1 from '@components/features/admin/FactoryOwnerControls_v1';
 import FactoryOwnerControls_v2 from '@components/features/admin/FactoryOwnerControls_v2';
-import FactoryOwnerControls_v3 from '@components/features/admin/FactoryOwnerControls_v3';
+import FactoryOwnerControls_v3 from '@components/features/token/FactoryOwnerControls_v3';
 import { getNetworkContractAddress } from '@config/contracts';
 import { useNetwork } from '@contexts/NetworkContext';
 import { BrowserProvider } from 'ethers';
@@ -25,6 +25,12 @@ export default function AdminPage() {
   const factoryV2Address = chainId ? getNetworkContractAddress(chainId, 'factoryAddressV2') : undefined;
   const factoryV3Address = chainId ? getNetworkContractAddress(chainId, 'factoryAddressV3') : undefined;
 
+  console.log('Debug Factory V3:', {
+    chainId,
+    factoryV3Address,
+    isConnected
+  });
+
   return (
     <ToastProvider>
       <div className="container mx-auto px-4 py-8">
@@ -45,10 +51,10 @@ export default function AdminPage() {
         </div>
 
         <div className="space-y-6">
-          {factoryV1Address && (
-            <FactoryOwnerControls_v1
+          {factoryV3Address && (
+            <FactoryOwnerControls_v3
               isConnected={isConnected}
-              address={factoryV1Address}
+              address={factoryV3Address}
               provider={provider}
             />
           )}
@@ -61,10 +67,10 @@ export default function AdminPage() {
             />
           )}
 
-          {factoryV3Address && (
-            <FactoryOwnerControls_v3
+          {factoryV1Address && (
+            <FactoryOwnerControls_v1
               isConnected={isConnected}
-              address={factoryV3Address}
+              address={factoryV1Address}
               provider={provider}
             />
           )}

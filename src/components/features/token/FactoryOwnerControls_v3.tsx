@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useAccount, useContractRead, useWriteContract } from 'wagmi';
+import { useAccount, useContractRead, useWriteContract, usePublicClient } from 'wagmi';
 import { formatEther, parseEther, Abi } from 'viem';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,6 +10,7 @@ import { useNetwork } from '@/contexts/NetworkContext';
 import { getExplorerUrl } from '@/config/networks';
 import { InfoIcon } from '@/components/ui/InfoIcon';
 import { FACTORY_ADDRESSES } from '@/config/contracts';
+import { BrowserProvider } from 'ethers';
 
 interface FactoryAddresses {
   [chainId: number]: {
@@ -19,25 +20,61 @@ interface FactoryAddresses {
   };
 }
 
-export default function FactoryOwnerControls_v3() {
+interface FactoryOwnerControlsV3Props {
+  isConnected: boolean;
+  address: string;
+  provider: BrowserProvider | null;
+}
+
+export default function FactoryOwnerControls_v3({ isConnected, address: factoryAddr, provider }: FactoryOwnerControlsV3Props) {
   const { address } = useAccount();
   const { chainId } = useNetwork();
   const { toast } = useToast();
+  const publicClient = usePublicClient();
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
   const [isExpanded, setIsExpanded] = useState(true);
   const [newFee, setNewFee] = useState('');
-  const [newRecipient, setNewRecipient] = useState('');
   const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [balance, setBalance] = useState<bigint>(BigInt(0));
 
-  const factoryAddress = chainId ? 
-    ((FACTORY_ADDRESSES as FactoryAddresses)[chainId]?.v3 || '0x0000000000000000000000000000000000000000' as `0x${string}`) :
-    '0x0000000000000000000000000000000000000000' as `0x${string}`;
+  const factoryAddress = factoryAddr as `0x${string}`;
 
-  // Initialize mounting
+  // Initialize mounting and fetch balance
   useEffect(() => {
     setMounted(true);
-  }, []);
+    if (mounted && factoryAddress && publicClient) {
+      const fetchBalance = async () => {
+        try {
+          const balance = await publicClient.getBalance({ address: factoryAddress });
+          setBalance(balance);
+        } catch (err) {
+          console.error('Error fetching balance:', err);
+        }
+      };
+      fetchBalance();
+    }
+  }, [mounted, factoryAddress, publicClient]);
+
+  // Refresh balance periodically
+  useEffect(() => {
+    if (!mounted || !factoryAddress || !publicClient) return;
+    
+    const interval = setInterval(async () => {
+      try {
+        const balance = await publicClient.getBalance({ address: factoryAddress });
+        setBalance(balance);
+      } catch (err) {
+        console.error('Error fetching balance:', err);
+      }
+    }, 10000); // Refresh every 10 seconds
+
+    return () => clearInterval(interval);
+  }, [mounted, factoryAddress, publicClient]);
+
+  if (!isConnected || !factoryAddr) {
+    return null;
+  }
 
   // Factory Owner Info
   const { data: owner } = useContractRead({
@@ -45,7 +82,7 @@ export default function FactoryOwnerControls_v3() {
     abi: TokenFactoryV3ABI.abi as unknown as Abi,
     functionName: 'owner',
     query: {
-      enabled: mounted,
+      enabled: mounted && factoryAddress !== '0x0000000000000000000000000000000000000000',
     }
   }) as { data: string | undefined };
 
@@ -54,25 +91,7 @@ export default function FactoryOwnerControls_v3() {
     abi: TokenFactoryV3ABI.abi as unknown as Abi,
     functionName: 'deploymentFee',
     query: {
-      enabled: mounted,
-    }
-  }) as { data: bigint | undefined };
-
-  const { data: feeRecipient } = useContractRead({
-    address: factoryAddress,
-    abi: TokenFactoryV3ABI.abi as unknown as Abi,
-    functionName: 'feeRecipient',
-    query: {
-      enabled: mounted,
-    }
-  }) as { data: string | undefined };
-
-  const { data: balance } = useContractRead({
-    address: factoryAddress,
-    abi: TokenFactoryV3ABI.abi as unknown as Abi,
-    functionName: 'getBalance',
-    query: {
-      enabled: mounted,
+      enabled: mounted && factoryAddress !== '0x0000000000000000000000000000000000000000',
     }
   }) as { data: bigint | undefined };
 
@@ -110,63 +129,80 @@ export default function FactoryOwnerControls_v3() {
     }
   };
 
-  const handleUpdateRecipient = async () => {
-    if (!newRecipient) {
-      toast({
-        title: 'Error',
-        description: 'Please enter a new recipient address',
-        variant: 'destructive'
-      });
-      return;
-    }
-
-    try {
-      await writeContract({
-        address: factoryAddress,
-        abi: TokenFactoryV3ABI.abi as unknown as Abi,
-        functionName: 'setFeeRecipient',
-        args: [newRecipient as `0x${string}`]
-      });
-      toast({
-        title: 'Success',
-        description: 'Fee recipient updated successfully',
-      });
-      setNewRecipient('');
-    } catch (err) {
-      toast({
-        title: 'Error',
-        description: err instanceof Error ? err.message : 'Failed to update recipient',
-        variant: 'destructive'
-      });
-    }
-  };
-
   const handleWithdraw = async () => {
-    if (!withdrawAmount) {
+    if (!balance || balance <= BigInt(0)) {
       toast({
         title: 'Error',
-        description: 'Please enter an amount to withdraw',
+        description: 'No fees available to withdraw',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    if (!publicClient) {
+      toast({
+        title: 'Error',
+        description: 'Client not available',
         variant: 'destructive'
       });
       return;
     }
 
     try {
-      await writeContract({
+      console.log('Attempting to withdraw fees from:', factoryAddress);
+      
+      // Use a minimal ABI for just the withdrawFees function
+      const withdrawFeesABI = [{
+        inputs: [],
+        name: 'withdrawFees',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function'
+      }] as const;
+
+      const { request } = await publicClient.simulateContract({
         address: factoryAddress,
-        abi: TokenFactoryV3ABI.abi as unknown as Abi,
-        functionName: 'withdraw',
-        args: [parseEther(withdrawAmount)]
+        abi: withdrawFeesABI,
+        functionName: 'withdrawFees',
+        account: address,
       });
+
+      console.log('Simulation successful, proceeding with transaction');
+
+      const result = await writeContract(request);
+      const hash = result as unknown as `0x${string}`;
+      console.log('Transaction hash:', hash);
+
       toast({
-        title: 'Success',
-        description: 'Funds withdrawn successfully',
+        title: 'Transaction Submitted',
+        description: 'Withdrawal transaction has been submitted. Please wait for confirmation.',
       });
-      setWithdrawAmount('');
+
+      // Wait for transaction confirmation
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      console.log('Transaction receipt:', receipt);
+
+      if (receipt.status === 'success') {
+        toast({
+          title: 'Success',
+          description: 'Fees have been withdrawn successfully',
+        });
+
+        // Refresh the balance
+        const newBalance = await publicClient.getBalance({ address: factoryAddress });
+        setBalance(newBalance);
+      } else {
+        throw new Error('Transaction failed');
+      }
     } catch (err) {
+      console.error('Withdraw error:', err);
+      console.error('Error details:', {
+        message: err instanceof Error ? err.message : 'Unknown error',
+        error: err
+      });
       toast({
         title: 'Error',
-        description: err instanceof Error ? err.message : 'Failed to withdraw funds',
+        description: err instanceof Error ? err.message : 'Failed to withdraw fees',
         variant: 'destructive'
       });
     }
@@ -189,7 +225,7 @@ export default function FactoryOwnerControls_v3() {
   }
 
   return (
-    <div className="form-card mt-4">
+    <div className="form-card">
       <div
         className="flex justify-between items-center cursor-pointer py-1"
         onClick={() => setIsExpanded(!isExpanded)}
@@ -216,8 +252,15 @@ export default function FactoryOwnerControls_v3() {
               <div className="space-y-1 text-xs text-text-secondary">
                 <p>Factory Address: {factoryAddress}</p>
                 <p>Current Fee: {currentFee ? formatEther(currentFee) : '0'} ETH</p>
-                <p>Fee Recipient: {String(feeRecipient || 'Not set')}</p>
                 <p>Contract Balance: {balance ? formatEther(balance) : '0'} ETH</p>
+                <a
+                  href={getExplorerUrl(chainId, factoryAddress, 'address')}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-400 hover:text-blue-300"
+                >
+                  View on Explorer
+                </a>
               </div>
             </div>
 
@@ -240,22 +283,6 @@ export default function FactoryOwnerControls_v3() {
                     Update Fee
                   </Button>
                 </div>
-
-                <div className="flex gap-2">
-                  <Input
-                    type="text"
-                    placeholder="New Recipient (0x...)"
-                    value={newRecipient}
-                    onChange={(e) => setNewRecipient(e.target.value)}
-                    className="flex-1 h-7 text-xs bg-gray-900 border-gray-700 text-white"
-                  />
-                  <Button
-                    onClick={handleUpdateRecipient}
-                    className="h-7 text-xs px-3"
-                  >
-                    Update Recipient
-                  </Button>
-                </div>
               </div>
             </div>
 
@@ -263,18 +290,12 @@ export default function FactoryOwnerControls_v3() {
             <div className="border border-border rounded-lg p-2 bg-gray-800">
               <h3 className="text-sm font-medium text-text-primary mb-2">Withdraw Funds</h3>
               <div className="flex gap-2">
-                <Input
-                  type="number"
-                  placeholder="Amount (ETH)"
-                  value={withdrawAmount}
-                  onChange={(e) => setWithdrawAmount(e.target.value)}
-                  className="flex-1 h-7 text-xs bg-gray-900 border-gray-700 text-white"
-                />
                 <Button
                   onClick={handleWithdraw}
                   className="h-7 text-xs px-3"
+                  disabled={!balance || balance <= BigInt(0)}
                 >
-                  Withdraw
+                  Withdraw All Fees ({balance ? formatEther(balance) : '0'} ETH)
                 </Button>
               </div>
             </div>
