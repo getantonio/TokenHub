@@ -25,34 +25,25 @@ interface TokenFormV3Props {
 const formSchema = z.object({
   name: z.string().min(1, "Name is required"),
   symbol: z.string().min(1, "Symbol is required"),
-  initialSupply: z.string().min(1, "Initial supply is required"),
-  maxSupply: z.string().min(1, "Max supply is required"),
-  owner: z.string().min(1, "Owner address is required"),
+  initialSupply: z.coerce.number().min(0, "Initial supply must be >= 0"),
+  maxSupply: z.coerce.number().min(0, "Max supply must be >= 0"),
   enableBlacklist: z.boolean(),
   enableTimeLock: z.boolean(),
   presaleRate: z.string().min(1, "Presale rate is required"),
-  softCap: z.string().min(1, "Soft cap is required"),
-  hardCap: z.string().min(1, "Hard cap is required"),
-  minContribution: z.string().min(1, "Min contribution is required"),
-  maxContribution: z.string().min(1, "Max contribution is required"),
-  startTime: z.string().min(1, "Start time is required")
-    .refine((val) => {
-      const date = new Date(val);
-      return date > new Date();
-    }, "Start time must be in the future"),
-  endTime: z.string().min(1, "End time is required")
-    .refine((val) => {
-      const date = new Date(val);
-      return date > new Date();
-    }, "End time must be in the future"),
-  presalePercentage: z.coerce.number(),
-  liquidityPercentage: z.coerce.number(),
-  liquidityLockDuration: z.coerce.number(),
+  softCap: z.coerce.number().min(0, "Soft cap must be >= 0"),
+  hardCap: z.coerce.number().min(0, "Hard cap must be >= 0"),
+  minContribution: z.coerce.number().min(0, "Min contribution must be >= 0"),
+  maxContribution: z.coerce.number().min(0, "Max contribution must be >= 0"),
+  startTime: z.string().min(1, "Start time is required"),
+  endTime: z.string().min(1, "End time is required"),
+  presalePercentage: z.coerce.number().min(0, "Presale percentage must be >= 0").max(100, "Presale percentage must be <= 100"),
+  liquidityPercentage: z.coerce.number().min(0, "Liquidity percentage must be >= 0").max(100, "Liquidity percentage must be <= 100"),
+  liquidityLockDuration: z.coerce.number().min(1, "Lock duration must be >= 1"),
   wallets: z.array(z.object({
-    name: z.string().min(1, "Wallet name is required"),
-    address: z.string().min(1, "Wallet address is required"),
-    percentage: z.coerce.number().min(0, "Percentage must be greater than or equal to 0"),
-    vestingEnabled: z.boolean().default(false),
+    name: z.string().min(1, "Name is required"),
+    address: z.string().min(1, "Address is required"),
+    percentage: z.coerce.number().min(0, "Percentage must be >= 0").max(100, "Percentage must be <= 100"),
+    vestingEnabled: z.boolean(),
     vestingDuration: z.coerce.number().optional(),
     cliffDuration: z.coerce.number().optional(),
     vestingStartTime: z.string().optional()
@@ -67,48 +58,10 @@ const formSchema = z.object({
   }
 }, "End time must be after start time")
 .refine((data) => {
-  try {
-    // Calculate total percentage
-    const totalPercentage = data.presalePercentage + 
-      data.liquidityPercentage + 
-      data.wallets.reduce((sum, wallet) => sum + wallet.percentage, 0);
-    
-    // Validate individual percentages
-    if (data.presalePercentage <= 0) return false;
-    if (data.liquidityPercentage <= 0) return false;
-    for (const wallet of data.wallets) {
-      if (wallet.percentage <= 0) return false;
-    }
-    
-    return totalPercentage === 100;
-  } catch (e) {
-    console.error("Validation error:", e);
-    return false;
-  }
-}, "Total allocation must equal 100% and all percentages must be greater than 0")
-.refine((data) => {
-  // Validate vesting parameters if enabled
-  for (const wallet of data.wallets) {
-    if (wallet.vestingEnabled) {
-      if (!wallet.vestingDuration || wallet.vestingDuration <= 0) return false;
-      if (!wallet.vestingStartTime) return false;
-      if (wallet.cliffDuration && wallet.cliffDuration < 0) return false;
-    }
-  }
-  return true;
-}, "Invalid vesting parameters")
-.refine((data) => {
-  // Add validation for soft cap being less than hard cap
-  const softCap = Number(data.softCap);
-  const hardCap = Number(data.hardCap);
-  if (softCap >= hardCap) {
-    return false;
-  }
-  return true;
-}, {
-  message: "Soft cap must be less than hard cap",
-  path: ["softCap"]
-});
+  const totalPercentage = data.presalePercentage + data.liquidityPercentage + 
+    data.wallets.reduce((sum, wallet) => sum + wallet.percentage, 0);
+  return totalPercentage === 100;
+}, "Total allocation must equal 100%");
 
 type FormData = z.infer<typeof formSchema>;
 
@@ -158,7 +111,7 @@ const defaultValues = {
       name: 'Team',
       address: '',
       percentage: 20,
-      vestingEnabled: false,
+      vestingEnabled: true,
       vestingDuration: 365,
       cliffDuration: 90,
       vestingStartTime: getDefaultTimes().startTimeFormatted
@@ -282,41 +235,49 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
       const tokensPerEth = Math.floor(1 / ethPerToken);
       console.log('Converting presale rate:', { ethPerToken, tokensPerEth });
 
-      // Convert all numeric values to BigInt with proper decimals
-      const initialSupply = BigInt(data.initialSupply) * BigInt(10 ** 18); // 18 decimals
-      const maxSupply = BigInt(data.maxSupply) * BigInt(10 ** 18); // 18 decimals
-      const presaleRate = BigInt(tokensPerEth);
-      const minContribution = BigInt(Math.floor(Number(data.minContribution) * 10 ** 18)); // Convert ETH to wei
-      const maxContribution = BigInt(Math.floor(Number(data.maxContribution) * 10 ** 18)); // Convert ETH to wei
-      const hardCapWei = BigInt(Math.floor(Number(data.hardCap) * 10 ** 18)); // Convert ETH to wei
-      const startTimeUnix = BigInt(Math.floor(new Date(data.startTime).getTime() / 1000));
-      const endTimeUnix = BigInt(Math.floor(new Date(data.endTime).getTime() / 1000));
+      // Convert dates to Unix timestamps
+      const startTime = BigInt(Math.floor(new Date(data.startTime).getTime() / 1000));
+      const endTime = BigInt(Math.floor(new Date(data.endTime).getTime() / 1000));
 
-      // Create token with properly formatted parameters
-      const tx = await createToken({
+      // Process wallet allocations with vesting
+      const processedWallets = data.wallets.map(wallet => ({
+        name: wallet.name,
+        address: wallet.address as `0x${string}`,
+        percentage: wallet.percentage,
+        vestingEnabled: wallet.vestingEnabled || false,
+        vestingDuration: wallet.vestingEnabled ? (wallet.vestingDuration || 365) : 0,
+        cliffDuration: wallet.vestingEnabled ? (wallet.cliffDuration || 90) : 0,
+        vestingStartTime: wallet.vestingEnabled ? 
+          BigInt(Math.floor(new Date(wallet.vestingStartTime || Date.now()).getTime() / 1000)) :
+          BigInt(0)
+      }));
+
+      // Log the wallet allocations for debugging
+      console.log('Processed wallets:', processedWallets);
+
+      const params = {
         name: data.name,
         symbol: data.symbol,
-        initialSupply,
-        maxSupply,
-        owner: data.owner as `0x${string}`,
+        initialSupply: parseEther(data.initialSupply.toString()),
+        maxSupply: parseEther(data.maxSupply.toString()),
+        owner: address as `0x${string}`,
         enableBlacklist: data.enableBlacklist,
         enableTimeLock: data.enableTimeLock,
-        presaleRate,
-        softCap: BigInt(Math.floor(Number(data.softCap) * 10 ** 18)), // Convert ETH to wei
-        hardCap: hardCapWei,
-        minContribution,
-        maxContribution,
-        startTime: startTimeUnix,
-        endTime: endTimeUnix,
+        presaleRate: BigInt(tokensPerEth),
+        softCap: parseEther(data.softCap.toString()),
+        hardCap: parseEther(data.hardCap.toString()),
+        minContribution: parseEther(data.minContribution.toString()),
+        maxContribution: parseEther(data.maxContribution.toString()),
+        startTime,
+        endTime,
         presalePercentage: data.presalePercentage,
         liquidityPercentage: data.liquidityPercentage,
         liquidityLockDuration: data.liquidityLockDuration,
-        wallets: data.wallets.map(w => ({
-          name: w.name,
-          address: w.address as `0x${string}`,
-          percentage: w.percentage
-        }))
-      });
+        wallets: processedWallets
+      };
+
+      console.log('Token creation params:', params);
+      const tx = await createToken(params);
       
       // Wait for transaction receipt to get the token address
       const receipt = await publicClient.waitForTransactionReceipt({ hash: tx });
@@ -374,24 +335,17 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
   };
 
   const addWallet = () => {
-    const wallets = form.getValues('wallets');
-    const currentTotal = wallets.reduce((sum, wallet) => sum + wallet.percentage, 0);
-    const presale = Number(form.getValues('presalePercentage'));
-    const liquidity = Number(form.getValues('liquidityPercentage'));
-    const remainingAllocation = Math.max(0, 100 - (presale + liquidity + currentTotal));
-
-    form.setValue('wallets', [
-      ...wallets,
-      {
-        name: `Wallet ${wallets.length + 1}`,
-        address: address || '',
-        percentage: remainingAllocation,
-        vestingEnabled: false,
-        vestingDuration: 365,
-        cliffDuration: 90,
-        vestingStartTime: getDefaultTimes().startTimeFormatted
-      }
-    ]);
+    const newWallet = {
+      name: '',
+      address: '',
+      percentage: 0,
+      vestingEnabled: false,
+      vestingDuration: 365, // Default to 1 year
+      cliffDuration: 90,   // Default to 3 months
+      vestingStartTime: BigInt(Math.floor(Date.now() / 1000)) // Current timestamp
+    };
+    
+    form.setValue('wallets', [...form.getValues('wallets'), newWallet]);
   };
 
   const removeWallet = (index: number) => {
@@ -620,12 +574,12 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
             </h3>
             <p className="text-sm text-gray-400">Configure token allocations and vesting schedules</p>
           </div>
-          <div className="flex flex-row gap-2 mb-4 justify-center">
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-4">
             <Button
               type="button"
               onClick={() => applyPreset('standard')}
               variant="secondary"
-              className="h-4 text-xs px-1"
+              className="h-6 text-xs"
             >
               Standard
             </Button>
@@ -633,7 +587,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
               type="button"
               onClick={() => applyPreset('fair_launch')}
               variant="secondary"
-              className="h-4 text-xs px-1"
+              className="h-6 text-xs"
             >
               Fair
             </Button>
@@ -641,7 +595,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
               type="button"
               onClick={() => applyPreset('community')}
               variant="secondary"
-              className="h-4 text-xs px-1"
+              className="h-6 text-xs"
             >
               Community
             </Button>
@@ -649,7 +603,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
               type="button"
               onClick={() => applyPreset('growth')}
               variant="secondary"
-              className="h-4 text-xs px-1"
+              className="h-6 text-xs"
             >
               Growth
             </Button>
@@ -657,7 +611,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
               type="button"
               onClick={() => applyPreset('bootstrap')}
               variant="secondary"
-              className="h-4 text-xs px-1"
+              className="h-6 text-xs"
             >
               Bootstrap
             </Button>
@@ -665,7 +619,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
               type="button"
               onClick={() => applyPreset('governance')}
               variant="secondary"
-              className="h-4 text-xs px-1"
+              className="h-6 text-xs"
             >
               Gov
             </Button>
@@ -736,80 +690,71 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
 
           <div className="space-y-1">
             {form.watch('wallets').map((_, index) => (
-              <div key={index} className="bg-gray-800/50 rounded-lg p-2">
-                <div className="grid gap-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Input
-                        {...form.register(`wallets.${index}.name`)}
-                        placeholder="Wallet Name"
-                        className="form-input h-7 text-sm w-32 bg-gray-700"
-                      />
-                      <Input
-                        {...form.register(`wallets.${index}.address`)}
-                        placeholder="Wallet Address (0x...)"
-                        className="form-input h-7 text-sm w-64 bg-gray-700"
-                      />
-                      <div className="relative w-40">
-                        <Input
-                          {...form.register(`wallets.${index}.percentage`)}
-                          placeholder="0"
-                          type="number"
-                          className="form-input h-7 text-sm bg-gray-700 pr-6"
-                        />
-                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-gray-400">%</span>
-                      </div>
-                      <Button
-                        type="button"
-                        onClick={() => removeWallet(index)}
-                        variant="ghost"
-                        className="h-7 w-7 p-0 text-gray-400 hover:text-red-400"
-                      >
-                        ×
-                      </Button>
-                    </div>
+              <div key={index} className="p-2 bg-gray-800 rounded-lg">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex-1">
+                    <input
+                      {...form.register(`wallets.${index}.name`)}
+                      placeholder="Wallet Name"
+                      className="w-full bg-gray-700 text-text-primary rounded px-2 py-1 text-xs h-7"
+                    />
                   </div>
-
-                  <div className="flex items-center gap-2 ml-4">
+                  <div className="w-20 relative">
+                    <input
+                      type="number"
+                      {...form.register(`wallets.${index}.percentage`)}
+                      placeholder="%"
+                      className="w-full bg-gray-700 text-text-primary rounded px-2 py-1 text-xs h-7 pr-5"
+                    />
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">%</span>
+                  </div>
+                  <div className="flex items-center gap-1">
                     <input
                       type="checkbox"
                       {...form.register(`wallets.${index}.vestingEnabled`)}
-                      className="form-checkbox"
+                      className="w-2.5 h-2.5 bg-gray-700 rounded"
                     />
-                    <label className="text-xs text-gray-400">Enable Vesting</label>
+                    <span className="text-xs text-gray-400">Vest</span>
                   </div>
-
-                  {form.watch(`wallets.${index}.vestingEnabled`) && (
-                    <div className="grid grid-cols-3 gap-2 ml-4">
-                      <div>
-                        <label className="text-xs text-gray-400">Vesting Duration (days)</label>
-                        <Input
-                          {...form.register(`wallets.${index}.vestingDuration`)}
-                          type="number"
-                          placeholder="365"
-                          className="form-input h-7 text-sm bg-gray-700"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs text-gray-400">Cliff Duration (days)</label>
-                        <Input
-                          {...form.register(`wallets.${index}.cliffDuration`)}
-                          type="number"
-                          placeholder="90"
-                          className="form-input h-7 text-sm bg-gray-700"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs text-gray-400">Start Time</label>
-                        <Input
-                          {...form.register(`wallets.${index}.vestingStartTime`)}
-                          type="datetime-local"
-                          className="form-input h-7 text-sm bg-gray-700"
-                        />
-                      </div>
-                    </div>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => removeWallet(index)}
+                    className="text-xs px-1 py-0.5 bg-red-900/50 hover:bg-red-800 text-red-100 rounded"
+                  >
+                    ×
+                  </button>
                 </div>
+
+                <div className="flex gap-2 mt-0.5">
+                  <input
+                    {...form.register(`wallets.${index}.address`)}
+                    placeholder="Address (0x...)"
+                    className="flex-1 bg-gray-700 text-text-primary rounded px-2 py-1 text-xs h-7"
+                  />
+                </div>
+
+                {form.watch(`wallets.${index}.vestingEnabled`) && (
+                  <div className="flex gap-2 mt-0.5">
+                    <div className="flex-1 relative">
+                      <input
+                        type="number"
+                        {...form.register(`wallets.${index}.vestingDuration`)}
+                        placeholder="Vesting"
+                        className="w-full bg-gray-700 text-text-primary rounded px-2 py-1 text-xs h-7 pr-12"
+                      />
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">days</span>
+                    </div>
+                    <div className="flex-1 relative">
+                      <input
+                        type="number"
+                        {...form.register(`wallets.${index}.cliffDuration`)}
+                        placeholder="Cliff"
+                        className="w-full bg-gray-700 text-text-primary rounded px-2 py-1 text-xs h-7 pr-12"
+                      />
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">days</span>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>

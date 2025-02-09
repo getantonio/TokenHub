@@ -12,6 +12,7 @@ import { useNetwork } from '@/contexts/NetworkContext';
 import { getExplorerUrl } from '@/config/networks';
 import { InfoIcon } from '@/components/ui/InfoIcon';
 import { shortenAddress } from '@/utils/address';
+import { Dialog } from "@/components/ui/dialog";
 
 interface Props {
   isConnected: boolean;
@@ -60,6 +61,18 @@ interface TokenInfo {
     vestingStart: number;
     tokensClaimed: string;
   };
+  paused: boolean;
+  vestingInfo?: {
+    hasVesting: boolean;
+    totalAmount: string;
+    startTime: number;
+    cliffDuration: number;
+    vestingDuration: number;
+    releasedAmount: string;
+    revocable: boolean;
+    revoked: boolean;
+    releasableAmount: string;
+  };
 }
 
 export interface TCAP_v3Ref {
@@ -75,6 +88,11 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
   const [showOnlyRecent, setShowOnlyRecent] = useState(true);
   const { chainId } = useNetwork();
   const { toast } = useToast();
+
+  // Add state for vesting schedules popup
+  const [showVestingSchedules, setShowVestingSchedules] = useState(false);
+  const [selectedTokenForSchedules, setSelectedTokenForSchedules] = useState<string | null>(null);
+  const [vestingSchedules, setVestingSchedules] = useState<any[]>([]);
 
   const displayedTokens = useMemo(() => {
     if (showOnlyRecent) {
@@ -102,15 +120,29 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
       'function symbol() view returns (string)',
       'function totalSupply() view returns (uint256)',
       'function owner() view returns (address)',
+      // Control functions
+      'function pause() external',
+      'function unpause() external',
+      'function paused() view returns (bool)',
+      'function updateBlacklist(address[] calldata addresses, bool status) external',
+      'function setTimeLock(address account, uint256 unlockTime) external',
+      'function burn(uint256 amount) external',
       // Presale functions
       'function presaleInfo() view returns (tuple(uint256 softCap, uint256 hardCap, uint256 minContribution, uint256 maxContribution, uint256 startTime, uint256 endTime, uint256 presaleRate, bool whitelistEnabled, bool finalized, uint256 totalContributed))',
+      'function updateWhitelist(address[] calldata addresses, bool status) external',
+      'function finalize() external',
       'function getContributors() view returns (address[])',
       'function getContributorCount() view returns (uint256)',
       'function getContributorInfo(address) view returns (uint256 contribution, uint256 tokenAllocation, bool isWhitelisted)',
       // Liquidity functions
       'function liquidityInfo() view returns (tuple(uint256 percentage, uint256 lockDuration, uint256 unlockTime, bool locked))',
       // Platform fee functions
-      'function platformFee() view returns (tuple(address recipient, uint256 totalTokens, bool vestingEnabled, uint256 vestingDuration, uint256 cliffDuration, uint256 vestingStart, uint256 tokensClaimed))'
+      'function platformFee() view returns (tuple(address recipient, uint256 totalTokens, bool vestingEnabled, uint256 vestingDuration, uint256 cliffDuration, uint256 vestingStart, uint256 tokensClaimed))',
+      'function createVestingSchedule(address beneficiary, uint256 totalAmount, uint256 startTime, uint256 cliffDuration, uint256 vestingDuration, bool revocable) external',
+      'function releaseVestedTokens() external',
+      'function revokeVesting(address beneficiary) external',
+      'function getVestingSchedule(address) view returns (uint256 totalAmount, uint256 startTime, uint256 cliffDuration, uint256 vestingDuration, uint256 releasedAmount, bool revocable, bool revoked, uint256 releasableAmount)',
+      'function hasVestingSchedule(address) view returns (bool)'
     ], signer);
   };
 
@@ -238,6 +270,28 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
               console.log('No platform fee info for token:', tokenAddress);
             }
 
+            // Try to get vesting info
+            let vestingInfo;
+            try {
+              const hasVesting = await tokenContract.hasVestingSchedule(userAddress);
+              if (hasVesting) {
+                const scheduleInfo = await tokenContract.getVestingSchedule(userAddress);
+                vestingInfo = {
+                  hasVesting: true,
+                  totalAmount: formatEther(scheduleInfo.totalAmount),
+                  startTime: Number(scheduleInfo.startTime),
+                  cliffDuration: Number(scheduleInfo.cliffDuration),
+                  vestingDuration: Number(scheduleInfo.vestingDuration),
+                  releasedAmount: formatEther(scheduleInfo.releasedAmount),
+                  revocable: scheduleInfo.revocable,
+                  revoked: scheduleInfo.revoked,
+                  releasableAmount: formatEther(scheduleInfo.releasableAmount)
+                };
+              }
+            } catch (e) {
+              console.log('No vesting info for token:', tokenAddress);
+            }
+
             return {
         address: tokenAddress,
               name,
@@ -246,7 +300,9 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
               owner,
               presaleInfo,
               liquidityInfo,
-              platformFee
+              platformFee,
+              paused: await tokenContract.paused(),
+              vestingInfo
             } as TokenInfo;
           } catch (error) {
             console.error(`Error loading token ${tokenAddress}:`, error);
@@ -269,6 +325,332 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
       setError('Failed to load tokens. Please try again.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Add token control functions
+  const handlePause = async (tokenAddress: string) => {
+    try {
+      const signer = await externalProvider.getSigner();
+      const tokenContract = getTokenContract(tokenAddress, signer);
+      const isPaused = await tokenContract.paused();
+      
+      const tx = await tokenContract[isPaused ? 'unpause' : 'pause']();
+      await tx.wait();
+      
+      toast({
+        title: isPaused ? 'Token Unpaused' : 'Token Paused',
+        description: `Successfully ${isPaused ? 'unpaused' : 'paused'} token transfers.`
+      });
+      
+      loadTokens();
+    } catch (error) {
+      console.error('Error toggling pause:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to toggle pause state.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleEmergencyWithdraw = async (tokenAddress: string) => {
+    try {
+      const signer = await externalProvider.getSigner();
+      const tokenContract = getTokenContract(tokenAddress, signer);
+      
+      const tx = await tokenContract.claimRefund();
+      await tx.wait();
+      
+      toast({
+        title: 'Emergency Withdraw',
+        description: 'Successfully claimed refund.'
+      });
+      
+      loadTokens();
+    } catch (error) {
+      console.error('Error claiming refund:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to claim refund. Make sure presale has ended and soft cap was not reached.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleBlacklist = async (tokenAddress: string) => {
+    try {
+      const addresses = prompt('Enter addresses to blacklist (comma-separated):');
+      if (!addresses) return;
+      
+      const addressList = addresses.split(',').map(addr => addr.trim());
+      const signer = await externalProvider.getSigner();
+      const tokenContract = getTokenContract(tokenAddress, signer);
+      
+      const tx = await tokenContract.updateBlacklist(addressList, true);
+      await tx.wait();
+      
+      toast({
+        title: 'Addresses Blacklisted',
+        description: `Successfully blacklisted ${addressList.length} addresses.`
+      });
+    } catch (error) {
+      console.error('Error updating blacklist:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update blacklist.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleTimeLock = async (tokenAddress: string) => {
+    try {
+      const address = prompt('Enter address to timelock:');
+      if (!address) return;
+      
+      const duration = prompt('Enter lock duration in days:');
+      if (!duration) return;
+      
+      const unlockTime = Math.floor(Date.now() / 1000) + (parseInt(duration) * 24 * 60 * 60);
+      
+      const signer = await externalProvider.getSigner();
+      const tokenContract = getTokenContract(tokenAddress, signer);
+      
+      const tx = await tokenContract.setTimeLock(address, unlockTime);
+      await tx.wait();
+      
+      toast({
+        title: 'Time Lock Set',
+        description: `Successfully set time lock for ${address}.`
+      });
+    } catch (error) {
+      console.error('Error setting time lock:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to set time lock.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleBurn = async (tokenAddress: string) => {
+    try {
+      const amount = prompt('Enter amount to burn:');
+      if (!amount) return;
+      
+      const signer = await externalProvider.getSigner();
+      const tokenContract = getTokenContract(tokenAddress, signer);
+      
+      const tx = await tokenContract.burn(parseEther(amount));
+      await tx.wait();
+      
+      toast({
+        title: 'Tokens Burned',
+        description: `Successfully burned ${amount} tokens.`
+      });
+      
+      loadTokens();
+    } catch (error) {
+      console.error('Error burning tokens:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to burn tokens.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleWhitelist = async (tokenAddress: string) => {
+    try {
+      const addresses = prompt('Enter addresses to whitelist (comma-separated):');
+      if (!addresses) return;
+      
+      const addressList = addresses.split(',').map(addr => addr.trim());
+      const signer = await externalProvider.getSigner();
+      const tokenContract = getTokenContract(tokenAddress, signer);
+      
+      const tx = await tokenContract.updateWhitelist(addressList, true);
+      await tx.wait();
+      
+      toast({
+        title: 'Addresses Whitelisted',
+        description: `Successfully whitelisted ${addressList.length} addresses.`
+      });
+    } catch (error) {
+      console.error('Error updating whitelist:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update whitelist.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleFinalize = async (tokenAddress: string) => {
+    try {
+      const signer = await externalProvider.getSigner();
+      const tokenContract = getTokenContract(tokenAddress, signer);
+      
+      const tx = await tokenContract.finalize();
+      await tx.wait();
+      
+      toast({
+        title: 'Presale Finalized',
+        description: 'Successfully finalized the presale.'
+      });
+      
+      loadTokens();
+    } catch (error) {
+      console.error('Error finalizing presale:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to finalize presale.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleCreateVesting = async (tokenAddress: string) => {
+    try {
+      const beneficiary = prompt('Enter beneficiary address:');
+      if (!beneficiary) return;
+      
+      const amount = prompt('Enter amount of tokens to vest:');
+      if (!amount) return;
+      
+      const cliffMonths = prompt('Enter cliff period in months:');
+      if (!cliffMonths) return;
+      
+      const vestingMonths = prompt('Enter vesting period in months:');
+      if (!vestingMonths) return;
+      
+      const startTime = Math.floor(Date.now() / 1000);
+      const cliffDuration = parseInt(cliffMonths) * 30 * 24 * 60 * 60;
+      const vestingDuration = parseInt(vestingMonths) * 30 * 24 * 60 * 60;
+      
+      const signer = await externalProvider.getSigner();
+      const tokenContract = getTokenContract(tokenAddress, signer);
+      
+      const tx = await tokenContract.createVestingSchedule(
+        beneficiary,
+        parseEther(amount),
+        startTime,
+        cliffDuration,
+        vestingDuration,
+        true // revocable
+      );
+      await tx.wait();
+      
+      toast({
+        title: 'Vesting Schedule Created',
+        description: `Successfully created vesting schedule for ${beneficiary}`
+      });
+      
+      loadTokens();
+    } catch (error) {
+      console.error('Error creating vesting schedule:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to create vesting schedule.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleReleaseVested = async (tokenAddress: string) => {
+    try {
+      const signer = await externalProvider.getSigner();
+      const tokenContract = getTokenContract(tokenAddress, signer);
+      
+      const tx = await tokenContract.releaseVestedTokens();
+      await tx.wait();
+      
+      toast({
+        title: 'Tokens Released',
+        description: 'Successfully released vested tokens.'
+      });
+      
+      loadTokens();
+    } catch (error) {
+      console.error('Error releasing vested tokens:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to release vested tokens.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleRevokeVesting = async (tokenAddress: string) => {
+    try {
+      const beneficiary = prompt('Enter beneficiary address to revoke vesting:');
+      if (!beneficiary) return;
+      
+      const signer = await externalProvider.getSigner();
+      const tokenContract = getTokenContract(tokenAddress, signer);
+      
+      const tx = await tokenContract.revokeVesting(beneficiary);
+      await tx.wait();
+      
+      toast({
+        title: 'Vesting Revoked',
+        description: `Successfully revoked vesting for ${beneficiary}`
+      });
+      
+      loadTokens();
+    } catch (error) {
+      console.error('Error revoking vesting:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to revoke vesting.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  // Add function to handle viewing vesting schedules
+  const handleViewVestingSchedules = async (tokenAddress: string) => {
+    try {
+      const signer = await externalProvider.getSigner();
+      const tokenContract = getTokenContract(tokenAddress, signer);
+      setSelectedTokenForSchedules(tokenAddress);
+      setShowVestingSchedules(true);
+      
+      // Get the current user's vesting schedule
+      const userAddress = await signer.getAddress();
+      try {
+        const hasVesting = await tokenContract.hasVestingSchedule(userAddress);
+        if (hasVesting) {
+          const schedule = await tokenContract.getVestingSchedule(userAddress);
+          const cliffDays = Math.floor(Number(schedule.cliffDuration) / (24 * 60 * 60));
+          const vestingDays = Math.floor(Number(schedule.vestingDuration) / (24 * 60 * 60));
+          const formattedSchedule = {
+            beneficiary: userAddress,
+            totalAmount: formatEther(schedule.totalAmount),
+            startTime: new Date(Number(schedule.startTime) * 1000).toLocaleString(),
+            cliffDuration: cliffDays,
+            vestingDuration: vestingDays,
+            releasedAmount: formatEther(schedule.releasedAmount),
+            revocable: schedule.revocable,
+            revoked: schedule.revoked,
+            releasableAmount: formatEther(schedule.releasableAmount)
+          };
+          setVestingSchedules([formattedSchedule]);
+        } else {
+          setVestingSchedules([]);
+        }
+      } catch (error) {
+        console.error('Error fetching vesting schedule:', error);
+        setVestingSchedules([]);
+      }
+    } catch (error) {
+      console.error('Error fetching vesting schedules:', error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch vesting schedules",
+        variant: "destructive"
+      });
     }
   };
 
@@ -399,30 +781,81 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
                         <h4 className="text-xs font-medium text-text-primary mb-1">Token Controls</h4>
                         <div className="grid grid-cols-2 gap-1">
                           <button
-                            onClick={() => {/* TODO: Implement pause */}}
+                            onClick={() => handlePause(token.address)}
                             className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
                           >
-                            Pause
+                            {token.paused ? 'Unpause' : 'Pause'}
                           </button>
                           <button
-                            onClick={() => {/* TODO: Implement blacklist */}}
+                            onClick={() => handleBlacklist(token.address)}
                             className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
                           >
                             Blacklist
                           </button>
                           <button
-                            onClick={() => {/* TODO: Implement timelock */}}
+                            onClick={() => handleTimeLock(token.address)}
                             className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
                           >
                             Time Lock
                           </button>
                           <button
-                            onClick={() => {/* TODO: Implement burn */}}
+                            onClick={() => handleBurn(token.address)}
                             className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
                           >
                             Burn
                           </button>
                         </div>
+                      </div>
+
+                      {/* Vesting Management Section */}
+                      <div className="flex flex-col gap-1">
+                        <h4 className="text-xs font-medium text-text-primary mb-1">Vesting Management</h4>
+                        <div className="space-x-2">
+                          <button
+                            onClick={() => handleCreateVesting(token.address)}
+                            className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+                          >
+                            Create Vesting
+                          </button>
+                          <button
+                            onClick={() => handleRevokeVesting(token.address)}
+                            className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+                          >
+                            Revoke Vesting
+                          </button>
+                          <button
+                            onClick={() => handleReleaseVested(token.address)}
+                            className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+                          >
+                            Release Vested
+                          </button>
+                          <button
+                            onClick={() => handleViewVestingSchedules(token.address)}
+                            className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+                          >
+                            Vesting Schedules
+                          </button>
+                        </div>
+                        
+                        {token.vestingInfo?.hasVesting && (
+                          <div className="mt-2">
+                            <p className="text-xs text-text-secondary">Total Amount: {token.vestingInfo.totalAmount}</p>
+                            <p className="text-xs text-text-secondary">Released: {token.vestingInfo.releasedAmount}</p>
+                            <p className="text-xs text-text-secondary">Releasable: {token.vestingInfo.releasableAmount}</p>
+                            <p className="text-xs text-text-secondary">
+                              Start: {new Date(token.vestingInfo.startTime * 1000).toLocaleString()}
+                            </p>
+                            <p className="text-xs text-text-secondary">
+                              Cliff: {Math.floor(token.vestingInfo.cliffDuration / (30 * 24 * 60 * 60))} months
+                            </p>
+                            <p className="text-xs text-text-secondary">
+                              Duration: {Math.floor(token.vestingInfo.vestingDuration / (30 * 24 * 60 * 60))} months
+                            </p>
+                            {token.vestingInfo.revoked && (
+                              <p className="text-xs text-red-500">Vesting Revoked</p>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       {/* Presale Management Section */}
@@ -444,14 +877,14 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
                             </div>
                             <div className="flex flex-col gap-1">
                               <button
-                                onClick={() => {/* TODO: Implement whitelist management */}}
+                                onClick={() => handleWhitelist(token.address)}
                                 className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
                                 disabled={token.presaleInfo.finalized}
                               >
                                 Manage Whitelist
                               </button>
                                   <button
-                                onClick={() => {/* TODO: Implement finalize */}}
+                                onClick={() => handleFinalize(token.address)}
                                 className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
                                 disabled={token.presaleInfo.finalized || 
                                   Number(token.presaleInfo.totalContributed) < Number(token.presaleInfo.softCap)}
@@ -459,9 +892,11 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
                                     Finalize Presale
                                   </button>
                               <button
-                                onClick={() => {/* TODO: Implement emergency withdraw */}}
+                                onClick={() => handleEmergencyWithdraw(token.address)}
                                 className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
-                                disabled={token.presaleInfo.finalized}
+                                disabled={token.presaleInfo.finalized || 
+                                  Number(token.presaleInfo.totalContributed) >= Number(token.presaleInfo.softCap) ||
+                                  Date.now() < token.presaleInfo.endTime * 1000}
                               >
                                 Emergency Withdraw
                               </button>
@@ -571,6 +1006,72 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
         </div>
         )
       )}
+
+      {/* Add the vesting schedules popup */}
+      <Dialog 
+        open={showVestingSchedules} 
+        onClose={() => setShowVestingSchedules(false)}
+      >
+        <div className="bg-gray-800 rounded-lg p-4 max-w-2xl w-full">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-medium text-white">Vesting Schedules</h3>
+            <button
+              onClick={() => setShowVestingSchedules(false)}
+              className="text-gray-400 hover:text-gray-300"
+            >
+              ×
+            </button>
+          </div>
+          
+          <div className="space-y-4">
+            {vestingSchedules.length > 0 ? (
+              vestingSchedules.map((schedule, index) => (
+                <div key={index} className="bg-gray-700/50 rounded-lg p-3">
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <p className="text-gray-400">Beneficiary</p>
+                      <p className="text-white">{shortenAddress(schedule.beneficiary)}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-400">Total Amount</p>
+                      <p className="text-white">{schedule.totalAmount}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-400">Released Amount</p>
+                      <p className="text-white">{schedule.releasedAmount}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-400">Releasable Amount</p>
+                      <p className="text-white">{schedule.releasableAmount}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-400">Start Time</p>
+                      <p className="text-white">{schedule.startTime}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-400">Cliff Duration</p>
+                      <p className="text-white">{schedule.cliffDuration} days</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-400">Vesting Duration</p>
+                      <p className="text-white">{schedule.vestingDuration} days</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-400">Status</p>
+                      <p className="text-white">
+                        {schedule.revoked ? 'Revoked' : 'Active'}
+                        {schedule.revocable && !schedule.revoked && ' (Revocable)'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-gray-400 text-center">No vesting schedules found</p>
+            )}
+          </div>
+        </div>
+      </Dialog>
     </div>
   );
 });

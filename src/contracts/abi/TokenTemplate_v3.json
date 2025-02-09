@@ -210,15 +210,35 @@
             },
             {
               "components": [
-            {
-              "internalType": "address",
+                {
+                  "internalType": "address",
                   "name": "wallet",
-              "type": "address"
-            },
-            {
-              "internalType": "uint256",
+                  "type": "address"
+                },
+                {
+                  "internalType": "uint256",
                   "name": "percentage",
-              "type": "uint256"
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "bool",
+                  "name": "vestingEnabled",
+                  "type": "bool"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "vestingDuration",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "cliffDuration",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "vestingStartTime",
+                  "type": "uint256"
                 }
               ],
               "internalType": "struct TokenTemplate_v3.WalletAllocation[]",
@@ -275,8 +295,8 @@
             {
               "internalType": "uint256",
               "name": "presaleRate",
-              "type": "uint256"
-            },
+          "type": "uint256"
+        },
         {
           "internalType": "bool",
           "name": "whitelistEnabled",

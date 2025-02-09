@@ -30,6 +30,15 @@ contract TokenFactory_v3 is UUPSUpgradeable, OwnableUpgradeable {
     event DeploymentFeeUpdated(uint256 newFee);
     event CustomDeploymentFeeSet(address indexed user, uint256 fee);
 
+    struct WalletAllocation {
+        address wallet;
+        uint256 percentage;
+        bool vestingEnabled;
+        uint256 vestingDuration;
+        uint256 cliffDuration;
+        uint256 vestingStartTime;
+    }
+
     function initialize(address _implementation) public initializer {
         __Ownable_init();
         __UUPSUpgradeable_init();
@@ -56,6 +65,12 @@ contract TokenFactory_v3 is UUPSUpgradeable, OwnableUpgradeable {
             for (uint256 i = 0; i < params.walletAllocations.length; i++) {
                 require(params.walletAllocations[i].wallet != address(0), "Wallet address cannot be zero");
                 require(params.walletAllocations[i].percentage > 0, "Wallet percentage must be > 0");
+                if (params.walletAllocations[i].vestingEnabled) {
+                    require(params.walletAllocations[i].vestingDuration > 0, "Vesting duration must be > 0");
+                    require(params.walletAllocations[i].vestingStartTime > 0, "Vesting start time must be > 0");
+                    require(params.walletAllocations[i].cliffDuration <= params.walletAllocations[i].vestingDuration, 
+                        "Cliff cannot be longer than vesting");
+                }
                 totalPercentage += params.walletAllocations[i].percentage;
             }
         } else {

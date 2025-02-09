@@ -54,6 +54,22 @@ contract TokenTemplate_v3 is
     mapping(address => uint256) public presaleContributorTokens;
     uint256 public totalPresaleTokensDistributed;
     
+    // Add after the existing struct declarations
+    struct VestingSchedule {
+        uint256 totalAmount;      // Total amount of tokens to be vested
+        uint256 startTime;        // Start time of the vesting period
+        uint256 cliffDuration;    // Duration of the cliff period in seconds
+        uint256 vestingDuration;  // Total duration of the vesting period in seconds
+        uint256 releasedAmount;   // Amount of tokens already released
+        bool revocable;           // Whether the vesting is revocable by the owner
+        bool revoked;             // Whether the vesting has been revoked
+    }
+
+    // Vesting state variables
+    mapping(address => VestingSchedule) public vestingSchedules;
+    mapping(address => bool) public hasVestingSchedule;
+    uint256 private _totalVesting;
+
     // Events
     event PresaleStarted(
         uint256 softCap,
@@ -73,9 +89,24 @@ contract TokenTemplate_v3 is
     event PresaleParticipation(address indexed contributor, uint256 amount, uint256 tokensReceived);
     event RefundClaimed(address indexed contributor, uint256 amount);
 
+    // Events for vesting
+    event VestingScheduleCreated(
+        address indexed beneficiary,
+        uint256 totalAmount,
+        uint256 startTime,
+        uint256 cliffDuration,
+        uint256 vestingDuration
+    );
+    event VestingTokensReleased(address indexed beneficiary, uint256 amount);
+    event VestingScheduleRevoked(address indexed beneficiary, uint256 returnedAmount);
+
     struct WalletAllocation {
         address wallet;
         uint256 percentage;
+        bool vestingEnabled;
+        uint256 vestingDuration;
+        uint256 cliffDuration;
+        uint256 vestingStartTime;
     }
 
     struct InitParams {
@@ -172,7 +203,47 @@ contract TokenTemplate_v3 is
         for (uint256 i = 0; i < params.walletAllocations.length; i++) {
             uint256 walletTokens = (params.initialSupply * params.walletAllocations[i].percentage) / 100;
             require(walletTokens > 0, "Wallet tokens must be > 0");
-            _mint(params.walletAllocations[i].wallet, walletTokens);
+            
+            if (params.walletAllocations[i].vestingEnabled) {
+                // Mint tokens to contract for vesting
+                _mint(address(this), walletTokens);
+                
+                // Validate vesting parameters
+                require(params.walletAllocations[i].vestingStartTime > block.timestamp, 
+                    "Vesting start time must be in the future");
+                require(params.walletAllocations[i].vestingDuration >= 1 days, 
+                    "Vesting duration must be at least 1 day");
+                
+                // Create vesting schedule with proper time conversion
+                uint256 startTime = params.walletAllocations[i].vestingStartTime;
+                uint256 cliffDuration = params.walletAllocations[i].cliffDuration * 1 days;
+                uint256 vestingDuration = params.walletAllocations[i].vestingDuration * 1 days;
+                
+                vestingSchedules[params.walletAllocations[i].wallet] = VestingSchedule({
+                    totalAmount: walletTokens,
+                    startTime: startTime,
+                    cliffDuration: cliffDuration,
+                    vestingDuration: vestingDuration,
+                    releasedAmount: 0,
+                    revocable: true,
+                    revoked: false
+                });
+                
+                hasVestingSchedule[params.walletAllocations[i].wallet] = true;
+                _totalVesting += walletTokens;
+                
+                emit VestingScheduleCreated(
+                    params.walletAllocations[i].wallet,
+                    walletTokens,
+                    startTime,
+                    cliffDuration,
+                    vestingDuration
+                );
+            } else {
+                // Mint directly to wallet if no vesting
+                _mint(params.walletAllocations[i].wallet, walletTokens);
+            }
+            
             emit TokensDistributed(params.walletAllocations[i].wallet, walletTokens);
             _addUser(params.walletAllocations[i].wallet);
         }
@@ -398,5 +469,167 @@ contract TokenTemplate_v3 is
         payable(msg.sender).transfer(contribution);
 
         emit RefundClaimed(msg.sender, contribution);
+    }
+
+    // Add after the initialize function
+    function createVestingSchedule(
+        address beneficiary,
+        uint256 totalAmount,
+        uint256 startTime,
+        uint256 cliffDuration,
+        uint256 vestingDuration,
+        bool revocable
+    ) external onlyOwner {
+        require(beneficiary != address(0), "Invalid beneficiary");
+        require(totalAmount > 0, "Amount must be > 0");
+        require(vestingDuration > 0, "Duration must be > 0");
+        require(!hasVestingSchedule[beneficiary], "Already has vesting");
+        require(balanceOf(address(this)) >= totalAmount, "Insufficient balance");
+
+        uint256 currentTime = block.timestamp;
+        require(startTime >= currentTime, "Start time must be future");
+        require(cliffDuration <= vestingDuration, "Cliff longer than vesting");
+
+        vestingSchedules[beneficiary] = VestingSchedule({
+            totalAmount: totalAmount,
+            startTime: startTime,
+            cliffDuration: cliffDuration,
+            vestingDuration: vestingDuration,
+            releasedAmount: 0,
+            revocable: revocable,
+            revoked: false
+        });
+
+        hasVestingSchedule[beneficiary] = true;
+        _totalVesting += totalAmount;
+
+        emit VestingScheduleCreated(
+            beneficiary,
+            totalAmount,
+            startTime,
+            cliffDuration,
+            vestingDuration
+        );
+    }
+
+    function releaseVestedTokens() external {
+        require(hasVestingSchedule[msg.sender], "No vesting schedule");
+        
+        VestingSchedule storage schedule = vestingSchedules[msg.sender];
+        require(!schedule.revoked, "Vesting revoked");
+        
+        uint256 releasable = _computeReleasableAmount(schedule);
+        require(releasable > 0, "No tokens to release");
+
+        schedule.releasedAmount += releasable;
+        _totalVesting -= releasable;
+
+        _transfer(address(this), msg.sender, releasable);
+        emit VestingTokensReleased(msg.sender, releasable);
+    }
+
+    function revokeVesting(address beneficiary) external onlyOwner {
+        require(hasVestingSchedule[beneficiary], "No vesting schedule");
+        
+        VestingSchedule storage schedule = vestingSchedules[beneficiary];
+        require(schedule.revocable, "Not revocable");
+        require(!schedule.revoked, "Already revoked");
+
+        uint256 releasable = _computeReleasableAmount(schedule);
+        uint256 unreleased = schedule.totalAmount - schedule.releasedAmount;
+
+        schedule.revoked = true;
+
+        if (releasable > 0) {
+            schedule.releasedAmount += releasable;
+            _transfer(address(this), beneficiary, releasable);
+            emit VestingTokensReleased(beneficiary, releasable);
+        }
+
+        uint256 returnAmount = unreleased - releasable;
+        if (returnAmount > 0) {
+            _totalVesting -= returnAmount;
+            emit VestingScheduleRevoked(beneficiary, returnAmount);
+        }
+    }
+
+    function getVestingSchedule(address beneficiary) external view returns (
+        uint256 totalAmount,
+        uint256 startTime,
+        uint256 cliffDuration,
+        uint256 vestingDuration,
+        uint256 releasedAmount,
+        bool revocable,
+        bool revoked,
+        uint256 releasableAmount
+    ) {
+        require(hasVestingSchedule[beneficiary], "No vesting schedule");
+        VestingSchedule memory schedule = vestingSchedules[beneficiary];
+        
+        return (
+            schedule.totalAmount,
+            schedule.startTime,
+            schedule.cliffDuration,
+            schedule.vestingDuration,
+            schedule.releasedAmount,
+            schedule.revocable,
+            schedule.revoked,
+            _computeReleasableAmount(schedule)
+        );
+    }
+
+    function _computeReleasableAmount(VestingSchedule memory schedule) internal view returns (uint256) {
+        if (schedule.revoked) return 0;
+        if (block.timestamp < schedule.startTime + schedule.cliffDuration) return 0;
+        if (block.timestamp >= schedule.startTime + schedule.vestingDuration) {
+            return schedule.totalAmount - schedule.releasedAmount;
+        }
+
+        uint256 timeFromStart = block.timestamp - schedule.startTime;
+        uint256 vestedAmount = (schedule.totalAmount * timeFromStart) / schedule.vestingDuration;
+        return vestedAmount - schedule.releasedAmount;
+    }
+
+    function getVestingStatus(address beneficiary) external view returns (
+        bool hasSchedule,
+        uint256 totalAmount,
+        uint256 releasedAmount,
+        uint256 releasableAmount,
+        uint256 remainingAmount,
+        uint256 vestingEndTime,
+        bool isCliffPeriod,
+        bool isFullyVested
+    ) {
+        hasSchedule = hasVestingSchedule[beneficiary];
+        if (!hasSchedule) {
+            return (false, 0, 0, 0, 0, 0, false, false);
+        }
+
+        VestingSchedule memory schedule = vestingSchedules[beneficiary];
+        if (schedule.revoked) {
+            return (true, schedule.totalAmount, schedule.releasedAmount, 0, 0, 0, false, true);
+        }
+
+        uint256 currentTime = block.timestamp;
+        uint256 endTime = schedule.startTime + schedule.vestingDuration;
+        isCliffPeriod = currentTime < (schedule.startTime + schedule.cliffDuration);
+        isFullyVested = currentTime >= endTime;
+        
+        totalAmount = schedule.totalAmount;
+        releasedAmount = schedule.releasedAmount;
+        releasableAmount = _computeReleasableAmount(schedule);
+        remainingAmount = totalAmount - releasedAmount - releasableAmount;
+        vestingEndTime = endTime;
+
+        return (
+            hasSchedule,
+            totalAmount,
+            releasedAmount,
+            releasableAmount,
+            remainingAmount,
+            vestingEndTime,
+            isCliffPeriod,
+            isFullyVested
+        );
     }
 } 

@@ -28,6 +28,10 @@ interface TokenParams {
     name: string;
     address: `0x${string}`;
     percentage: number;
+    vestingEnabled: boolean;
+    vestingDuration: number;
+    cliffDuration: number;
+    vestingStartTime: bigint;
   }[];
 }
 
@@ -102,15 +106,6 @@ export const useTokenFactory = () => {
       };
       console.log('Creating token with params:', logParams);
 
-      // Convert wallets array to WalletAllocation array
-      const walletAllocations = params.wallets.map(wallet => ({
-        wallet: wallet.address,
-        percentage: wallet.percentage
-      }));
-
-      // Log wallet information for debugging
-      console.log('Using wallet allocations:', walletAllocations);
-
       // Structure the parameters according to the InitParams struct
       const { request } = await publicClient.simulateContract({
         address: factoryAddress,
@@ -134,13 +129,37 @@ export const useTokenFactory = () => {
           presalePercentage: params.presalePercentage,
           liquidityPercentage: params.liquidityPercentage,
           liquidityLockDuration: params.liquidityLockDuration,
-          walletAllocations: walletAllocations.map(w => ({
-            wallet: w.wallet,
-            percentage: w.percentage
-          }))
+          walletAllocations: params.wallets.map(w => {
+            console.log('Processing wallet allocation:', {
+              wallet: w.address,
+              percentage: w.percentage,
+              vestingEnabled: w.vestingEnabled,
+              vestingDuration: w.vestingDuration,
+              cliffDuration: w.cliffDuration,
+              vestingStartTime: w.vestingStartTime
+            });
+            
+            // Ensure all vesting parameters are properly set when vestingEnabled is true
+            if (w.vestingEnabled) {
+              if (!w.vestingDuration || !w.vestingStartTime) {
+                throw new Error(`Vesting parameters missing for wallet ${w.address}`);
+              }
+            }
+            
+            return {
+              wallet: w.address,
+              percentage: w.percentage,
+              vestingEnabled: w.vestingEnabled,
+              vestingDuration: w.vestingEnabled ? w.vestingDuration * 24 * 60 * 60 : 0,
+              cliffDuration: w.vestingEnabled ? (w.cliffDuration || 0) * 24 * 60 * 60 : 0,
+              vestingStartTime: w.vestingEnabled ? w.vestingStartTime : BigInt(0)
+            };
+          })
         }],
         value: deploymentFee,
       });
+
+      console.log('Token creation request:', request);
 
       const hash = await walletClient.writeContract(request);
       return hash;
