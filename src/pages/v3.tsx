@@ -1,36 +1,89 @@
 import TokenForm_V3 from '../components/features/token/TokenForm_V3';
 import TCAP_v3 from '../components/features/token/TCAP_v3';
 import { useAccount } from 'wagmi';
-import { useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNetwork } from '@contexts/NetworkContext';
 import { FACTORY_ADDRESSES } from '@config/contracts';
+import { BrowserProvider } from 'ethers';
+import Head from 'next/head';
+import { getNetworkContractAddress } from '@/config/contracts';
 
 export default function V3() {
   const { isConnected } = useAccount();
   const { chainId } = useNetwork();
-  const [tokenAddress, setTokenAddress] = useState<`0x${string}` | null>(null);
+  const [provider, setProvider] = useState<BrowserProvider | null>(null);
+  const tcapRef = useRef<{ loadTokens: () => void } | null>(null);
 
-  const handleSuccess = (address: `0x${string}`) => {
-    setTokenAddress(address);
-  };
+  useEffect(() => {
+    const checkConnection = async () => {
+      if (window.ethereum) {
+        try {
+          const accounts = await window.ethereum.request({ 
+            method: 'eth_accounts' 
+          }) as string[];
+          setProvider(new BrowserProvider(window.ethereum));
+
+          // Listen for account changes
+          const handleAccountsChanged = (accounts: unknown) => {
+            if (Array.isArray(accounts) && accounts.length > 0) {
+              setProvider(new BrowserProvider(window.ethereum));
+            } else {
+              setProvider(null);
+            }
+          };
+
+          window.ethereum.on('accountsChanged', handleAccountsChanged);
+
+          return () => {
+            window.ethereum?.removeListener('accountsChanged', handleAccountsChanged);
+          };
+        } catch (error) {
+          console.error('Error checking wallet connection:', error);
+        }
+      }
+    };
+
+    checkConnection();
+  }, []);
 
   const factoryAddress = chainId ? 
-    (FACTORY_ADDRESSES as any)[chainId]?.v3 as `0x${string}` : 
+    getNetworkContractAddress(chainId, 'factoryAddressV3') as `0x${string}` : 
     undefined;
+
+  const handleSuccess = () => {
+    // Wait for the blockchain to index the new token
+    setTimeout(() => {
+      if (tcapRef.current) {
+        tcapRef.current.loadTokens();
+      }
+    }, 2000);
+  };
 
   return (
     <div className="container mx-auto px-4 py-2">
-      <h1 className="text-3xl font-bold text-white mb-8">Create Token V3</h1>
-      <div className="space-y-8">
-        <TokenForm_V3 
-          isConnected={isConnected} 
-          onSuccess={handleSuccess}
-        />
-        <div className="mt-8">
-          <h2 className="text-2xl font-bold text-white mb-4">Token Management</h2>
+      <Head>
+        <title>TokenHub.dev - Token Factory v3</title>
+        <meta name="description" content="Create your own token with TokenHub.dev v3" />
+        <link rel="icon" href="/favicon.ico" />
+      </Head>
+
+      <div className="max-w-6xl mx-auto">
+        <div className="mb-4">
+          <h1 className="text-3xl font-bold text-white mb-2">Token Factory v3</h1>
+          <p className="text-white">Create your own token with advanced features like presale, liquidity locking, and vesting.</p>
+        </div>
+
+        <div className="space-y-4">
+          <TokenForm_V3 
+            isConnected={isConnected}
+            onSuccess={handleSuccess}
+          />
+          
           <TCAP_v3 
-            tokenAddress={tokenAddress || '0x0000000000000000000000000000000000000000'} 
-            factoryAddress={factoryAddress}
+            ref={tcapRef}
+            isConnected={isConnected}
+            address={factoryAddress}
+            provider={provider}
           />
         </div>
       </div>

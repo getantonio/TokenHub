@@ -1,228 +1,307 @@
-import { useState, useEffect } from 'react';
-import { BrowserProvider, Contract, formatUnits, parseUnits } from 'ethers';
-import { useNetwork } from '@contexts/NetworkContext';
-import TokenFactory_v3 from '@contracts/abi/TokenFactory_v3.json';
-import { Spinner } from '@components/ui/Spinner';
+import { useEffect, useState } from 'react';
+import { useAccount, useContractRead, useWriteContract, usePublicClient } from 'wagmi';
+import { formatEther, parseEther, Abi } from 'viem';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/toast/use-toast';
+import TokenFactoryV3ABI from '@/contracts/abi/TokenFactory_v3.json';
+import { Spinner } from '@/components/ui/Spinner';
+import { useNetwork } from '@/contexts/NetworkContext';
+import { getExplorerUrl } from '@/config/networks';
+import { InfoIcon } from '@/components/ui/InfoIcon';
+import { FACTORY_ADDRESSES } from '@/config/contracts';
+import { BrowserProvider } from 'ethers';
 
-interface Props {
+interface FactoryAddresses {
+  [chainId: number]: {
+    v1?: `0x${string}`;
+    v2?: `0x${string}`;
+    v3?: `0x${string}`;
+  };
+}
+
+interface FactoryOwnerControlsV3Props {
   isConnected: boolean;
-  address?: string;
+  address: string;
   provider: BrowserProvider | null;
 }
 
-export default function FactoryOwnerControls_v3({ isConnected, address, provider: externalProvider }: Props) {
+export default function FactoryOwnerControls_v3({ isConnected, address: factoryAddr, provider }: FactoryOwnerControlsV3Props) {
+  const { address } = useAccount();
   const { chainId } = useNetwork();
-  const [isOwner, setIsOwner] = useState(false);
-  const [loading, setLoading] = useState(false);
   const { toast } = useToast();
-  const [currentFee, setCurrentFee] = useState<string>('0');
-  const [newFee, setNewFee] = useState<string>('');
-  const [accumulatedFees, setAccumulatedFees] = useState<string>('0');
-  const [discountAddress, setDiscountAddress] = useState<string>('');
-  const [discountPercentage, setDiscountPercentage] = useState<string>('');
+  const publicClient = usePublicClient();
+  const [loading, setLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(true);
+  const [newFee, setNewFee] = useState('');
+  const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [balance, setBalance] = useState<bigint>(BigInt(0));
 
+  const factoryAddress = factoryAddr as `0x${string}`;
+
+  // Initialize mounting and fetch balance
   useEffect(() => {
-    checkOwnership();
-    loadFees();
-  }, [chainId, isConnected, address]);
+    setMounted(true);
+    if (mounted && factoryAddress && publicClient) {
+      const fetchBalance = async () => {
+        try {
+          const balance = await publicClient.getBalance({ address: factoryAddress });
+          setBalance(balance);
+        } catch (err) {
+          console.error('Error fetching balance:', err);
+        }
+      };
+      fetchBalance();
+    }
+  }, [mounted, factoryAddress, publicClient]);
 
-  const showToast = (type: 'success' | 'error', message: string) => {
-    toast({
-      variant: type === 'error' ? 'destructive' : 'default',
-      title: type === 'error' ? 'Error' : 'Success',
-      description: message,
-    });
+  // Refresh balance periodically
+  useEffect(() => {
+    if (!mounted || !factoryAddress || !publicClient) return;
+    
+    const interval = setInterval(async () => {
+      try {
+        const balance = await publicClient.getBalance({ address: factoryAddress });
+        setBalance(balance);
+      } catch (err) {
+        console.error('Error fetching balance:', err);
+      }
+    }, 10000); // Refresh every 10 seconds
+
+    return () => clearInterval(interval);
+  }, [mounted, factoryAddress, publicClient]);
+
+  if (!isConnected || !factoryAddr) {
+    return null;
+  }
+
+  // Factory Owner Info
+  const { data: owner } = useContractRead({
+    address: factoryAddress,
+    abi: TokenFactoryV3ABI.abi as unknown as Abi,
+    functionName: 'owner',
+    query: {
+      enabled: mounted && factoryAddress !== '0x0000000000000000000000000000000000000000',
+    }
+  }) as { data: string | undefined };
+
+  const { data: currentFee } = useContractRead({
+    address: factoryAddress,
+    abi: TokenFactoryV3ABI.abi as unknown as Abi,
+    functionName: 'deploymentFee',
+    query: {
+      enabled: mounted && factoryAddress !== '0x0000000000000000000000000000000000000000',
+    }
+  }) as { data: bigint | undefined };
+
+  // Write Contract Functions
+  const { writeContract } = useWriteContract();
+
+  const handleUpdateFee = async () => {
+    if (!newFee) {
+      toast({
+        title: 'Error',
+        description: 'Please enter a new fee amount',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    try {
+      await writeContract({
+        address: factoryAddress,
+        abi: TokenFactoryV3ABI.abi as unknown as Abi,
+        functionName: 'setDeploymentFee',
+        args: [parseEther(newFee)]
+      });
+      toast({
+        title: 'Success',
+        description: 'Deployment fee updated successfully',
+      });
+      setNewFee('');
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to update fee',
+        variant: 'destructive'
+      });
+    }
   };
 
-  async function checkOwnership() {
-    if (!externalProvider || !isConnected || !chainId || !address) return;
+  const handleWithdraw = async () => {
+    if (!balance || balance <= BigInt(0)) {
+      toast({
+        title: 'Error',
+        description: 'No fees available to withdraw',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    if (!publicClient) {
+      toast({
+        title: 'Error',
+        description: 'Client not available',
+        variant: 'destructive'
+      });
+      return;
+    }
 
     try {
-      const signer = await externalProvider.getSigner();
-      const userAddress = await signer.getAddress();
-      const factory = new Contract(address, TokenFactory_v3.abi, externalProvider);
-      const owner = await factory.owner();
-      setIsOwner(owner.toLowerCase() === userAddress.toLowerCase());
-    } catch (error) {
-      console.error('Error checking ownership:', error);
+      console.log('Attempting to withdraw fees from:', factoryAddress);
+      
+      // Use a minimal ABI for just the withdrawFees function
+      const withdrawFeesABI = [{
+        inputs: [],
+        name: 'withdrawFees',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function'
+      }] as const;
+
+      const { request } = await publicClient.simulateContract({
+        address: factoryAddress,
+        abi: withdrawFeesABI,
+        functionName: 'withdrawFees',
+        account: address,
+      });
+
+      console.log('Simulation successful, proceeding with transaction');
+
+      const result = await writeContract(request);
+      const hash = result as unknown as `0x${string}`;
+      console.log('Transaction hash:', hash);
+
+      toast({
+        title: 'Transaction Submitted',
+        description: 'Withdrawal transaction has been submitted. Please wait for confirmation.',
+      });
+
+      // Wait for transaction confirmation
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      console.log('Transaction receipt:', receipt);
+
+      if (receipt.status === 'success') {
+        toast({
+          title: 'Success',
+          description: 'Fees have been withdrawn successfully',
+        });
+
+        // Refresh the balance
+        const newBalance = await publicClient.getBalance({ address: factoryAddress });
+        setBalance(newBalance);
+      } else {
+        throw new Error('Transaction failed');
+      }
+    } catch (err) {
+      console.error('Withdraw error:', err);
+      console.error('Error details:', {
+        message: err instanceof Error ? err.message : 'Unknown error',
+        error: err
+      });
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to withdraw fees',
+        variant: 'destructive'
+      });
     }
+  };
+
+  // Update loading state
+  useEffect(() => {
+    if (!mounted) return;
+    setLoading(false);
+  }, [mounted]);
+
+  if (!mounted) {
+    return null;
   }
 
-  async function loadFees() {
-    if (!externalProvider || !isConnected || !chainId || !address) return;
+  const isOwner = address && owner && address.toLowerCase() === (owner as string).toLowerCase();
 
-    try {
-      const factory = new Contract(address, TokenFactory_v3.abi, externalProvider);
-
-      const fee = await factory.deploymentFee();
-      setCurrentFee(formatUnits(fee, 'ether'));
-
-      const balance = await externalProvider.getBalance(address);
-      setAccumulatedFees(formatUnits(balance, 'ether'));
-    } catch (error) {
-      console.error('Error loading fees:', error);
-    }
+  if (!isOwner) {
+    return null;
   }
-
-  async function updateDeploymentFee() {
-    if (!externalProvider || !isConnected || !chainId || !address) return;
-
-    try {
-      setLoading(true);
-      const signer = await externalProvider.getSigner();
-      const factory = new Contract(address, TokenFactory_v3.abi, signer);
-
-      const tx = await factory.setDeploymentFee(parseUnits(newFee, 'ether'));
-      showToast('success', 'Updating deployment fee...');
-      
-      await tx.wait();
-      showToast('success', 'Deployment fee updated successfully');
-      
-      await loadFees();
-      setNewFee('');
-    } catch (error: any) {
-      showToast('error', error.message || 'Failed to update deployment fee');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function withdrawFees() {
-    if (!externalProvider || !isConnected || !chainId || !address) return;
-
-    try {
-      setLoading(true);
-      const signer = await externalProvider.getSigner();
-      const factory = new Contract(address, TokenFactory_v3.abi, signer);
-
-      const tx = await factory.withdrawFees();
-      showToast('success', 'Withdrawing fees...');
-      
-      await tx.wait();
-      showToast('success', 'Fees withdrawn successfully');
-      
-      await loadFees();
-    } catch (error: any) {
-      showToast('error', error.message || 'Failed to withdraw fees');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function setAddressDiscount() {
-    if (!externalProvider || !isConnected || !chainId || !address) return;
-
-    try {
-      setLoading(true);
-      const signer = await externalProvider.getSigner();
-      const factory = new Contract(address, TokenFactory_v3.abi, signer);
-
-      // Calculate the discounted fee amount
-      const currentFeeWei = await factory.deploymentFee();
-      const discountedFee = currentFeeWei * BigInt(Number(discountPercentage)) / BigInt(100);
-      
-      const tx = await factory.setCustomDeploymentFee(discountAddress, discountedFee);
-      showToast('success', 'Setting address discount...');
-      
-      await tx.wait();
-      showToast('success', 'Address discount set successfully');
-      
-      setDiscountAddress('');
-      setDiscountPercentage('');
-    } catch (error: any) {
-      console.error('Error setting discount:', error);
-      showToast('error', error.message || 'Failed to set address discount');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  if (!isOwner) return null;
 
   return (
     <div className="form-card">
-      <h2 className="text-lg font-semibold text-text-primary mb-4">Factory Controls (V3)</h2>
-      <div className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          <div>
-            <p className="text-xs text-text-secondary">Current Fee</p>
-            <p className="text-sm font-medium text-text-primary">{currentFee} ETH</p>
-          </div>
-          <div>
-            <p className="text-xs text-text-secondary">Accumulated</p>
-            <p className="text-sm font-medium text-text-primary">{accumulatedFees} ETH</p>
-          </div>
+      <div
+        className="flex justify-between items-center cursor-pointer py-1"
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        <div className="flex items-center gap-1">
+          <h2 className="text-sm font-medium text-text-primary">Factory Owner Controls (V3)</h2>
+          <InfoIcon content="These controls are only available to the factory owner." />
         </div>
-
-        <div className="grid grid-cols-1 gap-2">
-          <div className="flex items-end gap-2">
-            <div className="flex-1">
-              <label className="form-label">
-                New Fee (ETH)
-              </label>
-              <input
-                type="number"
-                value={newFee}
-                onChange={(e) => setNewFee(e.target.value)}
-                placeholder="Enter new fee"
-                className="form-input"
-              />
-            </div>
-            <button
-              onClick={updateDeploymentFee}
-              disabled={loading || !newFee}
-              className="form-button-primary h-7"
-            >
-              {loading ? <Spinner className="w-3 h-3" /> : 'Update'}
-            </button>
-          </div>
-
-          <div className="flex items-end gap-2">
-            <div className="flex-1">
-              <label className="form-label">
-                Address
-              </label>
-              <input
-                type="text"
-                value={discountAddress}
-                onChange={(e) => setDiscountAddress(e.target.value)}
-                placeholder="0x..."
-                className="form-input"
-              />
-            </div>
-            <div className="w-24">
-              <label className="form-label">
-                Discount %
-              </label>
-              <input
-                type="number"
-                value={discountPercentage}
-                onChange={(e) => setDiscountPercentage(e.target.value)}
-                placeholder="0-100"
-                min="0"
-                max="100"
-                className="form-input"
-              />
-            </div>
-            <button
-              onClick={setAddressDiscount}
-              disabled={loading || !discountAddress || !discountPercentage}
-              className="form-button-primary h-7"
-            >
-              Set
-            </button>
-          </div>
-        </div>
-
-        <button
-          onClick={withdrawFees}
-          disabled={loading || Number(accumulatedFees) === 0}
-          className="form-button-secondary w-full h-7"
-        >
-          {loading ? <Spinner className="w-3 h-3" /> : 'Withdraw Fees'}
-        </button>
+        <span className="text-text-accent hover:text-blue-400">
+          {isExpanded ? '▼' : '▶'}
+        </span>
       </div>
+
+      {isExpanded && (
+        loading ? (
+          <div className="flex justify-center items-center py-1">
+            <Spinner className="w-4 h-4 text-text-primary" />
+          </div>
+        ) : (
+          <div className="space-y-4 mt-2">
+            {/* Factory Info */}
+            <div className="border border-border rounded-lg p-2 bg-gray-800">
+              <h3 className="text-sm font-medium text-text-primary mb-2">Factory Information</h3>
+              <div className="space-y-1 text-xs text-text-secondary">
+                <p>Factory Address: {factoryAddress}</p>
+                <p>Current Fee: {currentFee ? formatEther(currentFee) : '0'} ETH</p>
+                <p>Contract Balance: {balance ? formatEther(balance) : '0'} ETH</p>
+                <a
+                  href={getExplorerUrl(chainId, factoryAddress, 'address')}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-400 hover:text-blue-300"
+                >
+                  View on Explorer
+                </a>
+              </div>
+            </div>
+
+            {/* Fee Management */}
+            <div className="border border-border rounded-lg p-2 bg-gray-800">
+              <h3 className="text-sm font-medium text-text-primary mb-2">Fee Management</h3>
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <Input
+                    type="number"
+                    placeholder="New Fee (ETH)"
+                    value={newFee}
+                    onChange={(e) => setNewFee(e.target.value)}
+                    className="flex-1 h-7 text-xs bg-gray-900 border-gray-700 text-white"
+                  />
+                  <Button
+                    onClick={handleUpdateFee}
+                    className="h-7 text-xs px-3"
+                  >
+                    Update Fee
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* Withdraw Funds */}
+            <div className="border border-border rounded-lg p-2 bg-gray-800">
+              <h3 className="text-sm font-medium text-text-primary mb-2">Withdraw Funds</h3>
+              <div className="flex gap-2">
+                <Button
+                  onClick={handleWithdraw}
+                  className="h-7 text-xs px-3"
+                  disabled={!balance || balance <= BigInt(0)}
+                >
+                  Withdraw All Fees ({balance ? formatEther(balance) : '0'} ETH)
+                </Button>
+              </div>
+            </div>
+          </div>
+        )
+      )}
     </div>
   );
 } 

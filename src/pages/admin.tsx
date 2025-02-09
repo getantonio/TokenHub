@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useWallet } from '@contexts/WalletContext';
 import FactoryOwnerControls_v1 from '@components/features/admin/FactoryOwnerControls_v1';
 import FactoryOwnerControls_v2 from '@components/features/admin/FactoryOwnerControls_v2';
-import FactoryOwnerControls_v3 from '@components/features/token/FactoryOwnerControls_v3';
+import FactoryOwnerControls_v3 from '@components/features/admin/FactoryOwnerControls_v3';
 import { getNetworkContractAddress } from '@config/contracts';
 import { useNetwork } from '@contexts/NetworkContext';
 import { BrowserProvider } from 'ethers';

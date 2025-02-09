@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
-import { useAccount, useContractRead, useWriteContract, usePublicClient } from 'wagmi';
-import { formatEther, parseEther, Abi } from 'viem';
+import { useEffect, useState, forwardRef, useImperativeHandle, useMemo } from 'react';
+import { Contract } from 'ethers';
+import { formatEther, parseEther } from 'viem';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,489 +11,279 @@ import { Spinner } from '@/components/ui/Spinner';
 import { useNetwork } from '@/contexts/NetworkContext';
 import { getExplorerUrl } from '@/config/networks';
 import { InfoIcon } from '@/components/ui/InfoIcon';
-import { FACTORY_ADDRESSES } from '@/config/contracts';
-import { Contract } from 'ethers';
 import { shortenAddress } from '@/utils/address';
 
-interface TokenAdminTestProps {
-  tokenAddress: `0x${string}`;
-  factoryAddress?: `0x${string}`;
+interface Props {
+  isConnected: boolean;
+  address?: string;  // Factory address
+  provider: any;
 }
 
 interface TokenInfo {
   address: string;
   name: string;
   symbol: string;
-  totalSupply: bigint;
+  totalSupply: string;
+  owner: string;
   presaleInfo?: {
-    softCap: bigint;
-    hardCap: bigint;
-    minContribution: bigint;
-    maxContribution: bigint;
-    presaleRate: bigint;
-    startTime: bigint;
-    endTime: bigint;
+    softCap: string;
+    hardCap: string;
+    minContribution: string;
+    maxContribution: string;
+    presaleRate: string;
+    startTime: number;
+    endTime: number;
     whitelistEnabled: boolean;
     finalized: boolean;
-    totalContributed: bigint;
-    totalTokensSold: bigint;
+    totalContributed: string;
+    totalTokensSold: string;
+    contributorCount: number;
+    contributors: {
+      address: string;
+      contribution: string;
+      tokenAllocation: string;
+      isWhitelisted: boolean;
+    }[];
   };
   liquidityInfo?: {
-    percentage: bigint;
-    lockDuration: bigint;
-    unlockTime: bigint;
+    percentage: string;
+    lockDuration: string;
+    unlockTime: number;
     locked: boolean;
   };
   platformFee?: {
     recipient: string;
-    totalTokens: bigint;
+    totalTokens: string;
     vestingEnabled: boolean;
-    vestingDuration: bigint;
-    cliffDuration: bigint;
-    vestingStart: bigint;
-    tokensClaimed: bigint;
+    vestingDuration: number;
+    cliffDuration: number;
+    vestingStart: number;
+    tokensClaimed: string;
   };
 }
 
-interface PresaleInfo {
-  softCap: bigint;
-  hardCap: bigint;
-  minContribution: bigint;
-  maxContribution: bigint;
-  presaleRate: bigint;
-  startTime: bigint;
-  endTime: bigint;
-  whitelistEnabled: boolean;
-  finalized: boolean;
-  totalContributed: bigint;
-  totalTokensSold: bigint;
+export interface TCAP_v3Ref {
+  loadTokens: () => void;
 }
 
-interface LiquidityInfo {
-  percentage: bigint;
-  lockDuration: bigint;
-  unlockTime: bigint;
-  locked: boolean;
-}
-
-interface PlatformFeeInfo {
-  recipient: string;
-  totalTokens: bigint;
-  vestingEnabled: boolean;
-  vestingDuration: bigint;
-  cliffDuration: bigint;
-  vestingStart: bigint;
-  tokensClaimed: bigint;
-}
-
-interface VestingSchedule {
-  walletName: string;
-  amount: bigint;
-  period: bigint;
-  beneficiary: string;
-  claimed: bigint;
-  startTime: bigint;
-}
-
-interface TokenDetails {
-  address: string;
-  name: string;
-  symbol: string;
-  totalSupply: bigint;
-  owner: string;
-}
-
-export default function TCAP_v3({ tokenAddress, factoryAddress }: TokenAdminTestProps) {
-  const { address } = useAccount();
+const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAddress, provider: externalProvider }, ref) => {
+  const [tokens, setTokens] = useState<TokenInfo[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedToken, setSelectedToken] = useState<string | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [showOnlyRecent, setShowOnlyRecent] = useState(true);
   const { chainId } = useNetwork();
   const { toast } = useToast();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isExpanded, setIsExpanded] = useState(true);
-  const [selectedToken, setSelectedToken] = useState<`0x${string}` | null>(null);
-  const [transferAmount, setTransferAmount] = useState('');
-  const [transferTo, setTransferTo] = useState('');
-  const [isTransferPending, setIsTransferPending] = useState(false);
-  const [vestingSchedulesCount, setVestingSchedulesCount] = useState<number>(0);
-  const [selectedSchedule, setSelectedSchedule] = useState<number | null>(null);
-  const [mounted, setMounted] = useState(false);
-  const [errorTimeout, setErrorTimeout] = useState<NodeJS.Timeout | null>(null);
-  const [userTokens, setUserTokens] = useState<`0x${string}`[]>([]);
-  const [tokenDetails, setTokenDetails] = useState<Record<`0x${string}`, TokenDetails>>({});
-  const publicClient = usePublicClient();
 
-  const isZeroAddress = !tokenAddress || tokenAddress === '0x0000000000000000000000000000000000000000';
+  const displayedTokens = useMemo(() => {
+    if (showOnlyRecent) {
+      return tokens.slice(0, 3);
+    }
+    return tokens;
+  }, [tokens, showOnlyRecent]);
 
-  // Initialize mounting and fetch user's tokens
   useEffect(() => {
-    setMounted(true);
-    if (address && factoryAddress && publicClient) {
-      fetchUserTokens();
-    }
-    return () => {
-      if (errorTimeout) {
-        clearTimeout(errorTimeout);
-      }
-    };
-  }, [address, factoryAddress, publicClient]);
-
-  // Set selected token when tokenAddress prop changes
-  useEffect(() => {
-    if (tokenAddress && !isZeroAddress && publicClient) {
-      const hexTokenAddress = tokenAddress as `0x${string}`;
-      setSelectedToken(hexTokenAddress);
-      if (!tokenDetails[hexTokenAddress]) {
-        fetchTokenDetails(hexTokenAddress, publicClient);
-      }
-    }
-  }, [tokenAddress, publicClient]);
-
-  // Reset state when token address changes
-  useEffect(() => {
-    if (!mounted) return;
-
-    setLoading(true);
-    setError(null);
-
-    // Don't reset selected token if we have a valid token address
-    if (!tokenAddress || isZeroAddress) {
-      setSelectedToken(null);
-    }
-
-    setTransferAmount('');
-    setTransferTo('');
-    setVestingSchedulesCount(0);
-    setSelectedSchedule(null);
-
-    // Clear any existing error timeout
-    if (errorTimeout) {
-      clearTimeout(errorTimeout);
-      setErrorTimeout(null);
-    }
-
-    // If no token address or zero address, stop loading
-    if (isZeroAddress) {
-      setLoading(false);
-    }
-  }, [tokenAddress, mounted]);
-
-  const fetchUserTokens = async () => {
-    if (!publicClient || !factoryAddress || !address) return;
+    console.log('TCAP_v3 useEffect triggered with:', {
+      isConnected,
+      factoryAddress,
+      hasProvider: !!externalProvider
+    });
     
-    try {
-      setLoading(true);
-      
-      // Get all deployed tokens first
-      const allTokens = await publicClient.readContract({
-        address: factoryAddress,
-        abi: TokenFactoryV3ABI.abi as unknown as Abi,
-        functionName: 'getDeployedTokens'
-      }) as `0x${string}`[];
-
-      console.log('All deployed tokens:', allTokens);
-      
-      // Get user's tokens
-      const userCreatedTokens = await publicClient.readContract({
-        address: factoryAddress,
-        abi: TokenFactoryV3ABI.abi as unknown as Abi,
-        functionName: 'getTokensByUser',
-        args: [address]
-      }) as `0x${string}`[];
-
-      console.log('User created tokens:', userCreatedTokens);
-
-      // Use all tokens, but mark user's tokens
-      setUserTokens(allTokens);
-
-      // Fetch details for each token
-      for (const token of allTokens) {
-        await fetchTokenDetails(token, publicClient);
-      }
-      
-    } catch (err) {
-      console.error('Error fetching tokens:', err);
-      toast({
-        title: 'Error',
-        description: 'Failed to fetch tokens',
-        variant: 'destructive'
-      });
-    } finally {
-      setLoading(false);
+    if (isConnected && factoryAddress && externalProvider) {
+      loadTokens();
     }
+  }, [isConnected, factoryAddress, externalProvider]);
+
+  const getTokenContract = (tokenAddress: string, signer: any) => {
+    return new Contract(tokenAddress, [
+      // Basic token functions
+      'function name() view returns (string)',
+      'function symbol() view returns (string)',
+      'function totalSupply() view returns (uint256)',
+      'function owner() view returns (address)',
+      // Presale functions
+      'function presaleInfo() view returns (tuple(uint256 softCap, uint256 hardCap, uint256 minContribution, uint256 maxContribution, uint256 startTime, uint256 endTime, uint256 presaleRate, bool whitelistEnabled, bool finalized, uint256 totalContributed))',
+      'function getContributors() view returns (address[])',
+      'function getContributorCount() view returns (uint256)',
+      'function getContributorInfo(address) view returns (uint256 contribution, uint256 tokenAllocation, bool isWhitelisted)',
+      // Liquidity functions
+      'function liquidityInfo() view returns (tuple(uint256 percentage, uint256 lockDuration, uint256 unlockTime, bool locked))',
+      // Platform fee functions
+      'function platformFee() view returns (tuple(address recipient, uint256 totalTokens, bool vestingEnabled, uint256 vestingDuration, uint256 cliffDuration, uint256 vestingStart, uint256 tokensClaimed))'
+    ], signer);
   };
 
-  // Contract reads for token info
-  const { data: name, isError: nameError, isLoading: nameLoading } = useContractRead({
-    address: tokenAddress as `0x${string}`,
-    abi: TokenV3ABI.abi as unknown as Abi,
-    functionName: 'name',
-    query: {
-      enabled: mounted && !isZeroAddress,
-    }
-  }) as { data: string | undefined; isError: boolean; isLoading: boolean };
-
-  const { data: symbol, isError: symbolError, isLoading: symbolLoading } = useContractRead({
-    address: tokenAddress as `0x${string}`,
-    abi: TokenV3ABI.abi as unknown as Abi,
-    functionName: 'symbol',
-    query: {
-      enabled: mounted && !isZeroAddress,
-    }
-  }) as { data: string | undefined; isError: boolean; isLoading: boolean };
-
-  const { data: totalSupply, isError: totalSupplyError, isLoading: totalSupplyLoading } = useContractRead({
-    address: tokenAddress as `0x${string}`,
-    abi: TokenV3ABI.abi as unknown as Abi,
-    functionName: 'totalSupply',
-    query: {
-      enabled: mounted && !isZeroAddress,
-    }
-  }) as { data: bigint | undefined; isError: boolean; isLoading: boolean };
-
-  // Presale Info
-  const { data: presaleInfo, isError: presaleError, isLoading: presaleLoading } = useContractRead({
-    address: tokenAddress as `0x${string}`,
-    abi: TokenV3ABI.abi as unknown as Abi,
-    functionName: 'presaleInfo',
-    query: {
-      enabled: mounted && !isZeroAddress,
-    }
-  }) as { data: PresaleInfo | undefined; isError: boolean; isLoading: boolean };
-
-  // Liquidity Info
-  const { data: liquidityInfo, isError: liquidityError, isLoading: liquidityLoading } = useContractRead({
-    address: tokenAddress as `0x${string}`,
-    abi: TokenV3ABI.abi as unknown as Abi,
-    functionName: 'liquidityInfo',
-    query: {
-      enabled: mounted && !isZeroAddress,
-    }
-  }) as { data: LiquidityInfo | undefined; isError: boolean; isLoading: boolean };
-
-  // Platform Fee Info
-  const { data: platformFee, isError: platformFeeError, isLoading: platformFeeLoading } = useContractRead({
-    address: tokenAddress as `0x${string}`,
-    abi: TokenV3ABI.abi as unknown as Abi,
-    functionName: 'platformFee',
-    query: {
-      enabled: mounted && !isZeroAddress,
-    }
-  }) as { data: PlatformFeeInfo | undefined; isError: boolean; isLoading: boolean };
-
-  // Vesting Schedules Count
-  const { data: vestingCount, isLoading: vestingCountLoading } = useContractRead({
-    address: tokenAddress as `0x${string}`,
-    abi: TokenV3ABI.abi as unknown as Abi,
-    functionName: 'getVestingSchedulesCount',
-    query: {
-      enabled: mounted && !isZeroAddress,
-    }
-  }) as { data: bigint | undefined; isLoading: boolean };
-
-  // Selected Vesting Schedule
-  const { data: vestingSchedule, isLoading: vestingScheduleLoading } = useContractRead({
-    address: tokenAddress as `0x${string}`,
-    abi: TokenV3ABI.abi as unknown as Abi,
-    functionName: 'getVestingSchedule',
-    args: selectedSchedule !== null ? [BigInt(selectedSchedule)] : undefined,
-    query: {
-      enabled: mounted && !isZeroAddress && selectedSchedule !== null,
-    }
-  }) as { data: VestingSchedule | undefined; isLoading: boolean };
-
-  // Write Contract Functions
-  const { writeContract, isPending } = useWriteContract();
-
-  const refreshData = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      // Clear any existing error state and timeout
-      if (errorTimeout) {
-        clearTimeout(errorTimeout);
-        setErrorTimeout(null);
-      }
-
-      // Fetch user's tokens if we have the required data
-      if (address && factoryAddress) {
-        await fetchUserTokens();
-      }
-
-      // If we have a selected token, fetch its details again
-      if (selectedToken) {
-        await fetchTokenDetails(selectedToken, publicClient);
-      }
-      
-      // Force a re-render to refresh contract reads
-      setMounted(false);
-      setTimeout(() => setMounted(true), 100);
-      
-      toast({
-        title: 'Success',
-        description: 'Token data refreshed from blockchain',
-      });
-    } catch (err) {
-      console.error('Error refreshing data:', err);
-      setError('Failed to refresh token data');
-      toast({
-        title: 'Error',
-        description: 'Failed to refresh token data',
-        variant: 'destructive'
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (vestingCount) {
-      setVestingSchedulesCount(Number(vestingCount));
-    }
-  }, [vestingCount]);
-
-  // Effect to handle loading and error states
-  useEffect(() => {
-    if (!mounted) return;
-    
-    const isLoading = nameLoading || symbolLoading || totalSupplyLoading;
-    const hasError = nameError || symbolError || totalSupplyError;
-    
-    setLoading(isLoading);
-    
-    if (hasError) {
-      setError('Failed to load token information');
-    } else {
-      setError(null);
-    }
-  }, [
-    mounted,
-    nameLoading, symbolLoading, totalSupplyLoading,
-    nameError, symbolError, totalSupplyError
-  ]);
-
-  const handleTransfer = async () => {
-    if (!transferTo || !transferAmount) {
-      toast({
-        title: 'Error',
-        description: 'Please provide both recipient address and amount',
-        variant: 'destructive'
+  const loadTokens = async () => {
+    if (!externalProvider || !factoryAddress) {
+      console.log('TCAP_v3 loadTokens: Missing provider or factory address', {
+        hasProvider: !!externalProvider,
+        factoryAddress
       });
       return;
     }
 
     try {
-      setIsTransferPending(true);
-      await writeContract({
-        address: tokenAddress,
-        abi: TokenV3ABI.abi as unknown as Abi,
-        functionName: 'transfer',
-        args: [transferTo as `0x${string}`, parseEther(transferAmount)]
-      });
-      toast({
-        title: 'Transfer Initiated',
-        description: 'Your transfer has been initiated. Please wait for confirmation.',
-      });
-    } catch (err) {
-      toast({
-        title: 'Error',
-        description: err instanceof Error ? err.message : 'Failed to transfer tokens',
-        variant: 'destructive'
-      });
-    } finally {
-      setIsTransferPending(false);
-    }
-  };
+      console.log('TCAP_v3 loadTokens: Starting token load');
+      setIsLoading(true);
+      setError(null);
 
-  const handleClaimVested = async (scheduleIndex: number) => {
-    try {
-      await writeContract({
-        address: tokenAddress,
-        abi: TokenV3ABI.abi as unknown as Abi,
-        functionName: 'claimVestedTokens',
-        args: [BigInt(scheduleIndex)]
-      });
-      toast({
-        title: 'Claim Initiated',
-        description: 'Vested tokens claim has been initiated.',
-      });
-    } catch (err) {
-      toast({
-        title: 'Error',
-        description: err instanceof Error ? err.message : 'Failed to claim vested tokens',
-        variant: 'destructive'
-      });
-    }
-  };
+      const signer = await externalProvider.getSigner();
+      console.log('TCAP_v3: Got signer');
+      
+      const factory = new Contract(factoryAddress, [
+        'function getUserCreatedTokens(address user) view returns (address[])',
+        'function getTokenCreator(address token) view returns (address)',
+        'function isTokenCreator(address user, address token) view returns (bool)',
+        'function getUserTokenCount(address user) view returns (uint256)'
+      ], signer);
+      
+      console.log('TCAP_v3: Factory contract created with signer');
+      
+      const userAddress = await signer.getAddress();
+      console.log('TCAP_v3: Got user address:', userAddress);
+      
+      // Get tokens deployed by the connected user
+      console.log('TCAP_v3: Calling getUserCreatedTokens');
+      try {
+        const deployedTokens = await factory.getUserCreatedTokens(userAddress);
+        console.log('TCAP_v3: Deployed tokens:', deployedTokens);
 
-  const handleFinalizePresale = async () => {
-    try {
-      await writeContract({
-        address: tokenAddress,
-        abi: TokenV3ABI.abi as unknown as Abi,
-        functionName: 'finalizePresale',
-      });
-      toast({
-        title: 'Finalization Initiated',
-        description: 'Presale finalization has been initiated.',
-      });
-    } catch (err) {
-      toast({
-        title: 'Error',
-        description: err instanceof Error ? err.message : 'Failed to finalize presale',
-        variant: 'destructive'
-      });
-    }
-  };
-
-  // Fetch token details for a specific token
-  const fetchTokenDetails = async (token: `0x${string}`, client: any) => {
-    try {
-      const [name, symbol, totalSupply, owner] = await Promise.all([
-        client.readContract({
-          address: token,
-          abi: TokenV3ABI.abi as unknown as Abi,
-          functionName: 'name',
-        }),
-        client.readContract({
-          address: token,
-          abi: TokenV3ABI.abi as unknown as Abi,
-          functionName: 'symbol',
-        }),
-        client.readContract({
-          address: token,
-          abi: TokenV3ABI.abi as unknown as Abi,
-          functionName: 'totalSupply',
-        }),
-        client.readContract({
-          address: token,
-          abi: TokenV3ABI.abi as unknown as Abi,
-          functionName: 'owner',
-        })
-      ]);
-
-      setTokenDetails(prev => ({
-        ...prev,
-        [token]: { 
-          name: name as string, 
-          symbol: symbol as string,
-          totalSupply: totalSupply as bigint,
-          owner: owner as string,
-          address: token,
+        if (!Array.isArray(deployedTokens)) {
+          throw new Error('Unexpected response format from getUserCreatedTokens');
         }
-      }));
-    } catch (err) {
-      console.error('Error fetching token details for', token, ':', err);
+
+        const tokenPromises = deployedTokens.map(async (tokenAddress: string) => {
+          try {
+            const tokenContract = getTokenContract(tokenAddress, signer);
+
+            // Basic token info
+            const [name, symbol, totalSupply, owner] = await Promise.all([
+              tokenContract.name(),
+              tokenContract.symbol(),
+              tokenContract.totalSupply(),
+              tokenContract.owner()
+            ]);
+
+            // Get presale info with additional details
+            let presaleInfo;
+            let contributorInfo;
+            try {
+              const [info, contributorCount, contributors] = await Promise.all([
+                tokenContract.presaleInfo(),
+                tokenContract.getContributorCount(),
+                tokenContract.getContributors()
+              ]);
+
+              // Get detailed info for each contributor
+              const contributorDetails = await Promise.all(
+                contributors.map(async (addr: string) => {
+                  const details = await tokenContract.getContributorInfo(addr);
+                  return {
+                    address: addr,
+                    contribution: formatEther(details.contribution),
+                    tokenAllocation: formatEther(details.tokenAllocation),
+                    isWhitelisted: details.isWhitelisted
+                  };
+                })
+              );
+
+              presaleInfo = {
+                softCap: formatEther(info.softCap),
+                hardCap: formatEther(info.hardCap),
+                minContribution: formatEther(info.minContribution),
+                maxContribution: formatEther(info.maxContribution),
+                presaleRate: info.presaleRate.toString(),
+                startTime: Number(info.startTime),
+                endTime: Number(info.endTime),
+                whitelistEnabled: info.whitelistEnabled,
+                finalized: info.finalized,
+                totalContributed: formatEther(info.totalContributed),
+                totalTokensSold: formatEther(info.totalTokensSold || BigInt(0)),
+                contributorCount: Number(contributorCount),
+                contributors: contributorDetails
+              };
+            } catch (e) {
+              console.log('No presale info for token:', tokenAddress);
+            }
+
+            // Try to get liquidity info
+            let liquidityInfo;
+            try {
+              const info = await tokenContract.liquidityInfo();
+              liquidityInfo = {
+                percentage: info.percentage.toString(),
+                lockDuration: info.lockDuration.toString(),
+                unlockTime: Number(info.unlockTime),
+                locked: info.locked
+              };
+            } catch (e) {
+              console.log('No liquidity info for token:', tokenAddress);
+            }
+
+            // Try to get platform fee info
+            let platformFee;
+            try {
+              const info = await tokenContract.platformFee();
+              platformFee = {
+                recipient: info.recipient,
+                totalTokens: formatEther(info.totalTokens),
+                vestingEnabled: info.vestingEnabled,
+                vestingDuration: Number(info.vestingDuration),
+                cliffDuration: Number(info.cliffDuration),
+                vestingStart: Number(info.vestingStart),
+                tokensClaimed: formatEther(info.tokensClaimed)
+              };
+            } catch (e) {
+              console.log('No platform fee info for token:', tokenAddress);
+            }
+
+            return {
+              address: tokenAddress,
+              name,
+              symbol,
+              totalSupply: formatEther(totalSupply),
+              owner,
+              presaleInfo,
+              liquidityInfo,
+              platformFee
+            } as TokenInfo;
+          } catch (error) {
+            console.error(`Error loading token ${tokenAddress}:`, error);
+            return null;
+          }
+        });
+
+        const loadedTokens = (await Promise.all(tokenPromises))
+          .filter((token): token is TokenInfo => token !== null)
+          .sort((a, b) => a.name.localeCompare(b.name));
+
+        console.log('Loaded tokens:', loadedTokens);
+        setTokens(loadedTokens);
+      } catch (error) {
+        console.error('TCAP_v3 Error loading tokens:', error);
+        setError('Failed to load tokens. Please try again.');
+      }
+    } catch (error) {
+      console.error('TCAP_v3 Error loading tokens:', error);
+      setError('Failed to load tokens. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  if (!mounted) {
+  useImperativeHandle(ref, () => ({
+    loadTokens: () => {
+      console.log('TCAP_v3: loadTokens called via ref');
+      loadTokens();
+    }
+  }));
+
+  if (!isConnected) {
     return (
-      <div className="form-card">
-        <div className="flex justify-between items-center py-1">
-          <h2 className="text-sm font-medium text-text-primary">Token Creator Admin Controls (V3)</h2>
-          <Spinner className="w-4 h-4 text-text-primary" />
-        </div>
+      <div className="p-1 bg-gray-800 rounded-lg shadow-lg">
+        <h2 className="text-xs font-medium text-text-primary">Token Management (V3)</h2>
+        <p className="text-xs text-text-secondary">Please connect your wallet to manage tokens.</p>
       </div>
     );
   }
@@ -505,246 +295,284 @@ export default function TCAP_v3({ tokenAddress, factoryAddress }: TokenAdminTest
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <div className="flex items-center gap-1">
-          <h2 className="text-sm font-medium text-text-primary">Token Creator Admin Controls (V3)</h2>
-          {!isZeroAddress && name && symbol && (
-            <span className="text-xs text-text-secondary">
-              {name && symbol ? `${name.toString()} (${symbol.toString()})` : 'Loading...'}
-            </span>
-          )}
+          <h2 className="text-xs font-medium text-text-primary">Token Creator Admin Controls (V3)</h2>
+          <span className="text-xs text-text-secondary">
+            {showOnlyRecent ? `${Math.min(tokens.length, 3)}/${tokens.length}` : tokens.length} tokens
+          </span>
         </div>
         <div className="flex items-center gap-1">
           <button
             onClick={(e) => {
               e.stopPropagation();
-              refreshData();
+              setShowOnlyRecent(!showOnlyRecent);
             }}
-            className="btn-blue btn-small"
+            className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+          >
+            {showOnlyRecent ? 'Show All' : 'Show Recent'}
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              loadTokens();
+            }}
+            className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded ml-1"
           >
             Refresh
           </button>
-          <span className="text-text-accent hover:text-blue-400">
+          <span className="text-text-accent hover:text-blue-400 ml-1">
             {isExpanded ? '▼' : '▶'}
           </span>
         </div>
       </div>
 
       {isExpanded && (
-        <div className="mt-2 border-t border-border pt-2">
-          {/* User's Tokens List */}
-          {userTokens.length > 0 && (
-            <div className="mb-4 border border-border rounded-lg p-2 bg-gray-800/50">
-              <h3 className="text-sm font-medium text-text-primary mb-2">All Tokens ({userTokens.length})</h3>
-              <div className="grid gap-2">
-                {userTokens.map((token) => (
-                  <button
-                    key={token}
-                    onClick={() => setSelectedToken(token)}
-                    className={`w-full text-left p-2 rounded-md transition-colors ${
-                      token === selectedToken
-                        ? 'bg-blue-500/20 text-blue-400'
-                        : 'bg-gray-700/50 text-gray-300 hover:bg-gray-700'
-                    }`}
-                  >
-                    <div className="text-xs font-medium">{token}</div>
-                    {tokenDetails[token] && (
-                      <div className="text-xs text-gray-400">
-                        {tokenDetails[token].name} ({tokenDetails[token].symbol})
-                        <div>Supply: {formatEther(tokenDetails[token].totalSupply)}</div>
-                        <div>Owner: {tokenDetails[token].owner === address ? 'You' : shortenAddress(tokenDetails[token].owner)}</div>
+        isLoading ? (
+          <div className="flex justify-center items-center py-1">
+            <Spinner className="w-3 h-3 text-text-primary" />
+          </div>
+        ) : error ? (
+          <div className="text-center py-1 text-red-400 text-xs">
+            {error}
+          </div>
+        ) : tokens.length === 0 ? (
+          <div className="mt-1">
+            <p className="text-xs text-text-secondary">No V3 tokens found. Deploy a new token to get started.</p>
+          </div>
+        ) : (
+          <div className="space-y-1 mt-1">
+            {displayedTokens.map(token => (
+              <div key={token.address} className="border border-border rounded p-2 bg-gray-800">
+                <div className="flex justify-between items-start gap-2">
+                  <div>
+                    <h3 className="text-xs font-medium text-text-primary">{token.name} ({token.symbol})</h3>
+                    <p className="text-xs text-text-secondary mt-0.5">Token: {token.address}</p>
+                    <p className="text-xs text-text-secondary">Supply: {Number(token.totalSupply).toLocaleString()} {token.symbol}</p>
+                    {token.presaleInfo && (
+                      <div className="mt-0.5">
+                        <p className="text-xs text-text-secondary">
+                          Presale: {token.presaleInfo.finalized ? 'Finalized' : 'Active'} |
+                          Progress: {Number(token.presaleInfo.totalContributed) / Number(token.presaleInfo.hardCap) * 100}%
+                        </p>
                       </div>
                     )}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {loading ? (
-            <div className="flex justify-center items-center py-1">
-              <Spinner className="w-4 h-4 text-text-primary" />
-            </div>
-          ) : error ? (
-            <div className="text-center py-2 text-red-400">
-              {error}
-            </div>
-          ) : (
-            <>
-              {/* Token Details Section */}
-              {!isZeroAddress && name && symbol && (
-                <div className="border border-border rounded-lg p-2 bg-gray-800">
-                  <div className="flex justify-between items-start gap-2">
-                    <div>
-                      <h3 className="text-sm font-medium text-text-primary">
-                        {String(name)} ({String(symbol)})
-                      </h3>
-                      <p className="text-xs text-text-secondary mt-0.5">Token: {tokenAddress}</p>
-                      <p className="text-xs text-text-secondary">
-                        Supply: {totalSupply ? formatEther(totalSupply) : '0'} {String(symbol)}
-                      </p>
-                    </div>
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => setSelectedToken(selectedToken === tokenAddress ? null : tokenAddress)}
-                        className="btn-blue btn-small"
-                      >
-                        {selectedToken === tokenAddress ? 'Hide' : 'Manage'}
-                      </button>
-                    </div>
                   </div>
+                  <button
+                    onClick={() => setSelectedToken(selectedToken === token.address ? null : token.address)}
+                    className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+                  >
+                    {selectedToken === token.address ? 'Hide' : 'Manage'}
+                  </button>
+                </div>
 
-                  {selectedToken === tokenAddress && (
-                    <div className="mt-2 pt-2 border-t border-border">
-                      <div className="space-y-2">
-                        {/* Token Explorer */}
-                        <div className="flex flex-col gap-1">
-                          <h4 className="text-xs font-medium text-text-primary">Token Explorer</h4>
+                {selectedToken === token.address && (
+                  <div className="mt-2 pt-2 border-t border-border">
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* Token Explorer Section */}
+                      <div className="flex flex-col gap-1">
+                        <h4 className="text-xs font-medium text-text-primary mb-1">Token Explorer</h4>
+                        <div className="flex gap-1">
                           <a
-                            href={getExplorerUrl(chainId, tokenAddress, 'token')}
+                            href={getExplorerUrl(chainId, token.address, 'token')}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="btn-blue btn-small w-fit"
+                            className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
                           >
                             View on Explorer
                           </a>
-                        </div>
-
-                        {/* Presale Information */}
-                        {presaleInfo && (
-                          <div className="flex flex-col gap-1">
-                            <h4 className="text-xs font-medium text-text-primary">Presale Status</h4>
-                            <div className="grid grid-cols-2 gap-2 text-xs">
-                              <div>
-                                <p>Soft Cap: {formatEther((presaleInfo as PresaleInfo).softCap)} ETH</p>
-                                <p>Hard Cap: {formatEther((presaleInfo as PresaleInfo).hardCap)} ETH</p>
-                                <p>Min Contribution: {formatEther((presaleInfo as PresaleInfo).minContribution)} ETH</p>
-                                <p>Max Contribution: {formatEther((presaleInfo as PresaleInfo).maxContribution)} ETH</p>
-                              </div>
-                              <div>
-                                <p>Total Contributed: {formatEther((presaleInfo as PresaleInfo).totalContributed)} ETH</p>
-                                <p>Tokens Sold: {formatEther((presaleInfo as PresaleInfo).totalTokensSold)}</p>
-                                <p>Status: {(presaleInfo as PresaleInfo).finalized ? 'Finalized' : 'Active'}</p>
-                                {!(presaleInfo as PresaleInfo).finalized && (
-                                  <button
-                                    onClick={handleFinalizePresale}
-                                    className="btn-blue btn-small mt-1"
-                                  >
-                                    Finalize Presale
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Liquidity Information */}
-                        {liquidityInfo && (
-                          <div className="flex flex-col gap-1">
-                            <h4 className="text-xs font-medium text-text-primary">Liquidity Status</h4>
-                            <div className="text-xs">
-                              <p>Percentage: {Number((liquidityInfo as LiquidityInfo).percentage)}%</p>
-                              <p>Lock Duration: {Number((liquidityInfo as LiquidityInfo).lockDuration)} days</p>
-                              <p>Status: {(liquidityInfo as LiquidityInfo).locked ? 'Locked' : 'Unlocked'}</p>
-                              {(liquidityInfo as LiquidityInfo).locked && (
-                                <p>Unlocks: {new Date(Number((liquidityInfo as LiquidityInfo).unlockTime) * 1000).toLocaleString()}</p>
-                              )}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Platform Fee Information */}
-                        {platformFee && (
-                          <div className="flex flex-col gap-1">
-                            <h4 className="text-xs font-medium text-text-primary">Platform Fee</h4>
-                            <div className="text-xs">
-                              <p>Recipient: {(platformFee as PlatformFeeInfo).recipient}</p>
-                              <p>Total Tokens: {formatEther((platformFee as PlatformFeeInfo).totalTokens)}</p>
-                              <p>Vesting: {(platformFee as PlatformFeeInfo).vestingEnabled ? 'Enabled' : 'Disabled'}</p>
-                              {(platformFee as PlatformFeeInfo).vestingEnabled && (
-                                <>
-                                  <p>Vesting Duration: {Number((platformFee as PlatformFeeInfo).vestingDuration)} days</p>
-                                  <p>Cliff Duration: {Number((platformFee as PlatformFeeInfo).cliffDuration)} days</p>
-                                  <p>Tokens Claimed: {formatEther((platformFee as PlatformFeeInfo).tokensClaimed)}</p>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Vesting Schedules */}
-                        {vestingSchedulesCount > 0 && (
-                          <div className="flex flex-col gap-1">
-                            <h4 className="text-xs font-medium text-text-primary">Vesting Schedules</h4>
-                            <div className="flex gap-1">
-                              <select
-                                value={selectedSchedule === null ? '' : selectedSchedule}
-                                onChange={(e) => setSelectedSchedule(e.target.value ? Number(e.target.value) : null)}
-                                className="form-select h-7 text-xs"
-                              >
-                                <option value="">Select Schedule</option>
-                                {Array.from({ length: vestingSchedulesCount }, (_, i) => (
-                                  <option key={i} value={i}>Schedule {i + 1}</option>
-                                ))}
-                              </select>
-                              {selectedSchedule !== null && vestingSchedule && (
-                                <button
-                                  onClick={() => handleClaimVested(selectedSchedule)}
-                                  className="btn-blue btn-small"
-                                >
-                                  Claim Vested
-                                </button>
-                              )}
-                            </div>
-                            {selectedSchedule !== null && vestingSchedule && (
-                              <div className="text-xs mt-1">
-                                <p>Name: {vestingSchedule.walletName}</p>
-                                <p>Amount: {formatEther(vestingSchedule.amount)}</p>
-                                <p>Period: {Number(vestingSchedule.period)} days</p>
-                                <p>Claimed: {formatEther(vestingSchedule.claimed)}</p>
-                                <p>Start Time: {new Date(Number(vestingSchedule.startTime) * 1000).toLocaleString()}</p>
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Transfer Tokens */}
-                        <div className="flex flex-col gap-1">
-                          <div className="flex items-center gap-2">
-                            <h4 className="text-xs font-medium text-text-primary">Transfer Tokens</h4>
-                            <InfoIcon content="Transfer tokens to another address." />
-                          </div>
-                          <div className="flex gap-1">
-                            <Input
-                              type="text"
-                              placeholder="Recipient Address (0x...)"
-                              value={transferTo}
-                              onChange={(e) => setTransferTo(e.target.value)}
-                              className="flex-1 h-7 text-xs bg-gray-900 border-gray-700 text-white"
-                            />
-                            <Input
-                              type="number"
-                              placeholder="Amount"
-                              value={transferAmount}
-                              onChange={(e) => setTransferAmount(e.target.value)}
-                              className="w-32 h-7 text-xs bg-gray-900 border-gray-700 text-white"
-                            />
-                            <button
-                              onClick={handleTransfer}
-                              disabled={isTransferPending || isPending}
-                              className="btn-blue btn-small"
-                            >
-                              {isTransferPending || isPending ? 'Processing...' : 'Transfer'}
-                            </button>
-                          </div>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(token.address);
+                              toast({
+                                title: "Address Copied",
+                                description: "Token address copied to clipboard"
+                              });
+                            }}
+                            className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+                          >
+                            Copy Address
+                          </button>
                         </div>
                       </div>
+
+                      {/* Token Controls Section */}
+                      <div className="flex flex-col gap-1">
+                        <h4 className="text-xs font-medium text-text-primary mb-1">Token Controls</h4>
+                        <div className="grid grid-cols-2 gap-1">
+                          <button
+                            onClick={() => {/* TODO: Implement pause */}}
+                            className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+                          >
+                            Pause
+                          </button>
+                          <button
+                            onClick={() => {/* TODO: Implement blacklist */}}
+                            className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+                          >
+                            Blacklist
+                          </button>
+                          <button
+                            onClick={() => {/* TODO: Implement timelock */}}
+                            className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+                          >
+                            Time Lock
+                          </button>
+                          <button
+                            onClick={() => {/* TODO: Implement burn */}}
+                            className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+                          >
+                            Burn
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Presale Management Section */}
+                      {token.presaleInfo && (
+                        <div className="col-span-2">
+                          <h4 className="text-xs font-medium text-text-primary mb-1">Presale Management</h4>
+                          <div className="grid grid-cols-3 gap-3">
+                            <div>
+                              <p className="text-xs text-text-secondary">Soft Cap: {token.presaleInfo.softCap} ETH</p>
+                              <p className="text-xs text-text-secondary">Hard Cap: {token.presaleInfo.hardCap} ETH</p>
+                              <p className="text-xs text-text-secondary">Min/Max: {token.presaleInfo.minContribution}/{token.presaleInfo.maxContribution} ETH</p>
+                              <p className="text-xs text-text-secondary">Rate: {token.presaleInfo.presaleRate} tokens/ETH</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-text-secondary">Start: {new Date(token.presaleInfo.startTime * 1000).toLocaleString()}</p>
+                              <p className="text-xs text-text-secondary">End: {new Date(token.presaleInfo.endTime * 1000).toLocaleString()}</p>
+                              <p className="text-xs text-text-secondary">Contributors: {token.presaleInfo.contributorCount}</p>
+                              <p className="text-xs text-text-secondary">Total Raised: {token.presaleInfo.totalContributed} ETH</p>
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <button
+                                onClick={() => {/* TODO: Implement whitelist management */}}
+                                className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+                                disabled={token.presaleInfo.finalized}
+                              >
+                                Manage Whitelist
+                              </button>
+                              <button
+                                onClick={() => {/* TODO: Implement finalize */}}
+                                className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+                                disabled={token.presaleInfo.finalized || 
+                                  Number(token.presaleInfo.totalContributed) < Number(token.presaleInfo.softCap)}
+                              >
+                                Finalize Presale
+                              </button>
+                              <button
+                                onClick={() => {/* TODO: Implement emergency withdraw */}}
+                                className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+                                disabled={token.presaleInfo.finalized}
+                              >
+                                Emergency Withdraw
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Progress Bar */}
+                          <div className="w-full bg-gray-700 rounded-full h-1.5 mt-2">
+                            <div 
+                              className="bg-blue-600 h-1.5 rounded-full" 
+                              style={{ 
+                                width: `${Math.min(
+                                  (Number(token.presaleInfo.totalContributed) / Number(token.presaleInfo.hardCap)) * 100, 
+                                  100
+                                )}%` 
+                              }}
+                            ></div>
+                          </div>
+
+                          {/* Contributors List */}
+                          {token.presaleInfo.contributors.length > 0 && (
+                            <div className="mt-2">
+                              <h5 className="text-xs font-medium text-text-primary mb-1">Contributors</h5>
+                              <div className="max-h-32 overflow-y-auto">
+                                {token.presaleInfo.contributors.map((contributor, index) => (
+                                  <div key={index} className="text-xs text-text-secondary flex justify-between items-center py-0.5">
+                                    <span>{shortenAddress(contributor.address)}</span>
+                                    <span>{contributor.contribution} ETH = {contributor.tokenAllocation} {token.symbol}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Liquidity Management Section */}
+                      {token.liquidityInfo && (
+                        <div className="col-span-2">
+                          <h4 className="text-xs font-medium text-text-primary mb-1">Liquidity Management</h4>
+                          <div className="grid grid-cols-3 gap-3">
+                            <div className="col-span-2">
+                              <p className="text-xs text-text-secondary">Percentage: {token.liquidityInfo.percentage}% | Lock Duration: {token.liquidityInfo.lockDuration} days</p>
+                              <p className="text-xs text-text-secondary">Status: {token.liquidityInfo.locked ? 'Locked' : 'Unlocked'} | Unlock: {new Date(token.liquidityInfo.unlockTime * 1000).toLocaleString()}</p>
+                            </div>
+                            <div className="flex gap-1">
+                              <button
+                                onClick={() => {/* TODO: Implement lock extension */}}
+                                className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+                                disabled={!token.liquidityInfo.locked}
+                              >
+                                Extend Lock
+                              </button>
+                              <button
+                                onClick={() => {/* TODO: Implement unlock */}}
+                                className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+                                disabled={token.liquidityInfo.locked || 
+                                  Date.now() < token.liquidityInfo.unlockTime * 1000}
+                              >
+                                Unlock
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Platform Fee Section */}
+                      {token.platformFee && token.platformFee.vestingEnabled && (
+                        <div className="col-span-2">
+                          <h4 className="text-xs font-medium text-text-primary mb-1">Platform Fee</h4>
+                          <div className="grid grid-cols-3 gap-3">
+                            <div className="col-span-2">
+                              <p className="text-xs text-text-secondary">Total: {token.platformFee.totalTokens} | Claimed: {token.platformFee.tokensClaimed}</p>
+                              <p className="text-xs text-text-secondary">Vesting: {token.platformFee.vestingDuration} days | Cliff: {token.platformFee.cliffDuration} days</p>
+                            </div>
+                            <div>
+                              <button
+                                onClick={() => {/* TODO: Implement claim */}}
+                                className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+                                disabled={Date.now() < token.platformFee.vestingStart * 1000 + 
+                                  token.platformFee.cliffDuration * 24 * 60 * 60 * 1000}
+                              >
+                                Claim Tokens
+                              </button>
+                            </div>
+                          </div>
+                          
+                          {/* Vesting Progress Bar */}
+                          <div className="w-full bg-gray-700 rounded-full h-1.5 mt-2">
+                            <div 
+                              className="bg-blue-600 h-1.5 rounded-full" 
+                              style={{ 
+                                width: `${Math.min(
+                                  (Number(token.platformFee.tokensClaimed) / Number(token.platformFee.totalTokens)) * 100, 
+                                  100
+                                )}%` 
+                              }}
+                            ></div>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-        </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )
       )}
     </div>
   );
-} 
+});
+
+export default TCAP_v3; 

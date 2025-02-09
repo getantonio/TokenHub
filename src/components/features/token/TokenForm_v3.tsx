@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button";
 
 interface TokenFormV3Props {
   isConnected: boolean;
-  onSuccess?: (tokenAddress: `0x${string}`) => void;
+  onSuccess?: () => void;
   onError?: (error: any) => void;
 }
 
@@ -50,7 +50,11 @@ const formSchema = z.object({
   wallets: z.array(z.object({
     name: z.string().min(1, "Wallet name is required"),
     address: z.string().min(1, "Wallet address is required"),
-    percentage: z.coerce.number().min(0, "Percentage must be greater than or equal to 0")
+    percentage: z.coerce.number().min(0, "Percentage must be greater than or equal to 0"),
+    vestingEnabled: z.boolean().default(false),
+    vestingDuration: z.coerce.number().optional(),
+    cliffDuration: z.coerce.number().optional(),
+    vestingStartTime: z.string().optional()
   }))
 }).refine((data) => {
   try {
@@ -80,7 +84,18 @@ const formSchema = z.object({
     console.error("Validation error:", e);
     return false;
   }
-}, "Total allocation must equal 100% and all percentages must be greater than 0");
+}, "Total allocation must equal 100% and all percentages must be greater than 0")
+.refine((data) => {
+  // Validate vesting parameters if enabled
+  for (const wallet of data.wallets) {
+    if (wallet.vestingEnabled) {
+      if (!wallet.vestingDuration || wallet.vestingDuration <= 0) return false;
+      if (!wallet.vestingStartTime) return false;
+      if (wallet.cliffDuration && wallet.cliffDuration < 0) return false;
+    }
+  }
+  return true;
+}, "Invalid vesting parameters");
 
 type FormData = z.infer<typeof formSchema>;
 
@@ -129,6 +144,10 @@ const defaultValues = {
       name: 'Team',
       address: '',
       percentage: 20,
+      vestingEnabled: false,
+      vestingDuration: 365,
+      cliffDuration: 90,
+      vestingStartTime: getDefaultTimes().startTimeFormatted
     }
   ]
 };
@@ -252,7 +271,11 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
         wallets: data.wallets.map(wallet => ({
           name: wallet.name,
           address: wallet.address as `0x${string}`,
-          percentage: wallet.percentage
+          percentage: wallet.percentage,
+          vestingEnabled: wallet.vestingEnabled,
+          vestingDuration: wallet.vestingEnabled ? BigInt(wallet.vestingDuration! * 24 * 60 * 60) : BigInt(0), // Convert days to seconds
+          cliffDuration: wallet.vestingEnabled && wallet.cliffDuration ? BigInt(wallet.cliffDuration * 24 * 60 * 60) : BigInt(0),
+          vestingStartTime: wallet.vestingEnabled ? BigInt(Math.floor(new Date(wallet.vestingStartTime!).getTime() / 1000)) : BigInt(0)
         }))
       });
       
@@ -292,7 +315,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
         description: "Token created successfully",
       });
       
-      onSuccess?.(tokenAddress);
+      onSuccess?.();
     } catch (error: any) {
       console.error('Error creating token:', error);
       console.error('Error details:', {
@@ -324,6 +347,10 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
         name: `Wallet ${wallets.length + 1}`,
         address: address || '',
         percentage: remainingAllocation,
+        vestingEnabled: false,
+        vestingDuration: 365,
+        cliffDuration: 90,
+        vestingStartTime: getDefaultTimes().startTimeFormatted
       }
     ]);
   };
@@ -341,6 +368,10 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
       name: wallet.walletName,
       address: address || '0x0000000000000000000000000000000000000000',
       percentage: wallet.amount,
+      vestingEnabled: wallet.vestingEnabled,
+      vestingDuration: wallet.vestingDuration,
+      cliffDuration: wallet.cliffDuration,
+      vestingStartTime: wallet.vestingStartTime
     })));
   };
 
@@ -619,9 +650,9 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
           <div className="space-y-1">
             {form.watch('wallets').map((_, index) => (
               <div key={index} className="bg-gray-800/50 rounded-lg p-2">
-                <div className="grid gap-1">
+                <div className="grid gap-2">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-2">
                       <Input
                         {...form.register(`wallets.${index}.name`)}
                         placeholder="Wallet Name"
@@ -651,6 +682,46 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                       </Button>
                     </div>
                   </div>
+
+                  <div className="flex items-center gap-2 ml-4">
+                    <input
+                      type="checkbox"
+                      {...form.register(`wallets.${index}.vestingEnabled`)}
+                      className="form-checkbox"
+                    />
+                    <label className="text-xs text-gray-400">Enable Vesting</label>
+                  </div>
+
+                  {form.watch(`wallets.${index}.vestingEnabled`) && (
+                    <div className="grid grid-cols-3 gap-2 ml-4">
+                      <div>
+                        <label className="text-xs text-gray-400">Vesting Duration (days)</label>
+                        <Input
+                          {...form.register(`wallets.${index}.vestingDuration`)}
+                          type="number"
+                          placeholder="365"
+                          className="form-input h-7 text-sm bg-gray-700"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-400">Cliff Duration (days)</label>
+                        <Input
+                          {...form.register(`wallets.${index}.cliffDuration`)}
+                          type="number"
+                          placeholder="90"
+                          className="form-input h-7 text-sm bg-gray-700"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-400">Start Time</label>
+                        <Input
+                          {...form.register(`wallets.${index}.vestingStartTime`)}
+                          type="datetime-local"
+                          className="form-input h-7 text-sm bg-gray-700"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -718,54 +789,180 @@ const VESTING_PRESETS = {
     presalePercentage: 35,
     liquidityPercentage: 35,
     wallets: [
-      { walletName: 'Team', amount: 15, period: 365, beneficiary: '' },
-      { walletName: 'Marketing', amount: 10, period: 180, beneficiary: '' },
-      { walletName: 'Development', amount: 5, period: 365, beneficiary: '' }
+      { 
+        walletName: 'Team', 
+        amount: 15, 
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 90,
+        vestingStartTime: getDefaultTimes().startTimeFormatted
+      },
+      { 
+        walletName: 'Marketing', 
+        amount: 10, 
+        vestingEnabled: true,
+        vestingDuration: 180,
+        cliffDuration: 30,
+        vestingStartTime: getDefaultTimes().startTimeFormatted
+      },
+      { 
+        walletName: 'Development', 
+        amount: 5, 
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 60,
+        vestingStartTime: getDefaultTimes().startTimeFormatted
+      }
     ]
   },
   fair_launch: {
     presalePercentage: 45,
     liquidityPercentage: 35,
     wallets: [
-      { walletName: 'Team', amount: 10, period: 365, beneficiary: '' },
-      { walletName: 'Marketing', amount: 5, period: 180, beneficiary: '' },
-      { walletName: 'Development', amount: 5, period: 365, beneficiary: '' }
+      { 
+        walletName: 'Team', 
+        amount: 10, 
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 180,
+        vestingStartTime: getDefaultTimes().startTimeFormatted
+      },
+      { 
+        walletName: 'Marketing', 
+        amount: 5, 
+        vestingEnabled: true,
+        vestingDuration: 180,
+        cliffDuration: 30,
+        vestingStartTime: getDefaultTimes().startTimeFormatted
+      },
+      { 
+        walletName: 'Development', 
+        amount: 5, 
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 90,
+        vestingStartTime: getDefaultTimes().startTimeFormatted
+      }
     ]
   },
   community: {
     presalePercentage: 45,
     liquidityPercentage: 35,
     wallets: [
-      { walletName: 'Team', amount: 5, period: 365, beneficiary: '' },
-      { walletName: 'Marketing', amount: 10, period: 180, beneficiary: '' },
-      { walletName: 'Development', amount: 5, period: 365, beneficiary: '' }
+      { 
+        walletName: 'Team', 
+        amount: 5, 
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 90,
+        vestingStartTime: getDefaultTimes().startTimeFormatted
+      },
+      { 
+        walletName: 'Marketing', 
+        amount: 10, 
+        vestingEnabled: true,
+        vestingDuration: 180,
+        cliffDuration: 30,
+        vestingStartTime: getDefaultTimes().startTimeFormatted
+      },
+      { 
+        walletName: 'Development', 
+        amount: 5, 
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 60,
+        vestingStartTime: getDefaultTimes().startTimeFormatted
+      }
     ]
   },
   growth: {
     presalePercentage: 35,
     liquidityPercentage: 35,
     wallets: [
-      { walletName: 'Team', amount: 12, period: 365, beneficiary: '' },
-      { walletName: 'Marketing', amount: 15, period: 180, beneficiary: '' },
-      { walletName: 'Development', amount: 3, period: 365, beneficiary: '' }
+      { 
+        walletName: 'Team', 
+        amount: 12, 
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 180,
+        vestingStartTime: getDefaultTimes().startTimeFormatted
+      },
+      { 
+        walletName: 'Marketing', 
+        amount: 15, 
+        vestingEnabled: true,
+        vestingDuration: 180,
+        cliffDuration: 30,
+        vestingStartTime: getDefaultTimes().startTimeFormatted
+      },
+      { 
+        walletName: 'Development', 
+        amount: 3, 
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 90,
+        vestingStartTime: getDefaultTimes().startTimeFormatted
+      }
     ]
   },
   bootstrap: {
     presalePercentage: 40,
     liquidityPercentage: 40,
     wallets: [
-      { walletName: 'Team', amount: 8, period: 365, beneficiary: '' },
-      { walletName: 'Marketing', amount: 8, period: 180, beneficiary: '' },
-      { walletName: 'Development', amount: 4, period: 180, beneficiary: '' }
+      { 
+        walletName: 'Team', 
+        amount: 8, 
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 180,
+        vestingStartTime: getDefaultTimes().startTimeFormatted
+      },
+      { 
+        walletName: 'Marketing', 
+        amount: 8, 
+        vestingEnabled: true,
+        vestingDuration: 180,
+        cliffDuration: 30,
+        vestingStartTime: getDefaultTimes().startTimeFormatted
+      },
+      { 
+        walletName: 'Development', 
+        amount: 4, 
+        vestingEnabled: true,
+        vestingDuration: 180,
+        cliffDuration: 60,
+        vestingStartTime: getDefaultTimes().startTimeFormatted
+      }
     ]
   },
   governance: {
     presalePercentage: 35,
     liquidityPercentage: 35,
     wallets: [
-      { walletName: 'Team', amount: 10, period: 365, beneficiary: '' },
-      { walletName: 'Treasury', amount: 12, period: 365, beneficiary: '' },
-      { walletName: 'Development', amount: 8, period: 180, beneficiary: '' }
+      { 
+        walletName: 'Team', 
+        amount: 10, 
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 180,
+        vestingStartTime: getDefaultTimes().startTimeFormatted
+      },
+      { 
+        walletName: 'Treasury', 
+        amount: 12, 
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 90,
+        vestingStartTime: getDefaultTimes().startTimeFormatted
+      },
+      { 
+        walletName: 'Development', 
+        amount: 8, 
+        vestingEnabled: true,
+        vestingDuration: 180,
+        cliffDuration: 60,
+        vestingStartTime: getDefaultTimes().startTimeFormatted
+      }
     ]
   }
 };
