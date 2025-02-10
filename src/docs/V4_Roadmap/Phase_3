@@ -1,0 +1,23 @@
+Phase 3: Mining & Staking Infrastructure
+
+1. Mining Core (4 weeks)
+   ├── MiningBase
+   │   ├── PoW implementation
+   │   ├── PoS implementation
+   │   └── Hybrid system
+   │
+   ├── MiningPool
+   │   ├── Pool creation
+   │   ├── Reward distribution
+   │   └── Pool governance
+   │
+   └── GreenMining
+       ├── Energy tracking
+       ├── Carbon offsetting
+       └── Efficiency rewards
+
+2. Staking System (3 weeks)
+   └── StakingModule
+       ├── Flexible staking
+       ├── Reward calculation
+       └── Unstaking mechanisms

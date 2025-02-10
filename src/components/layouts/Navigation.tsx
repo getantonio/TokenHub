@@ -29,13 +29,23 @@ export function Navigation() {
 
               {isDropdownOpen && (
                 <div className="absolute top-full left-0 mt-1 w-48 bg-gray-800 rounded-md shadow-lg py-1 z-50">
-                  <Link href="/v1" className={cn(
+                  <Link href="/v4" className={cn(
                     'block px-4 py-2 text-sm',
-                    router.pathname === '/v1'
+                    router.pathname === '/v4'
                       ? 'text-blue-400'
                       : 'text-gray-400 hover:text-gray-200'
                   )}>
-                    Token Factory V1
+                    Token Factory V4
+                    <span className="ml-2 text-xs text-blue-400 opacity-75">Coming Soon</span>
+                  </Link>
+                  <div className="border-t border-gray-700/50 my-1"></div>
+                  <Link href="/v3" className={cn(
+                    'block px-4 py-2 text-sm',
+                    router.pathname === '/v3'
+                      ? 'text-blue-400'
+                      : 'text-gray-400 hover:text-gray-200'
+                  )}>
+                    Token Factory V3
                   </Link>
                   <Link href="/v2" className={cn(
                     'block px-4 py-2 text-sm',
@@ -45,13 +55,13 @@ export function Navigation() {
                   )}>
                     Token Factory V2
                   </Link>
-                  <Link href="/v3" className={cn(
+                  <Link href="/v1" className={cn(
                     'block px-4 py-2 text-sm',
-                    router.pathname === '/v3'
+                    router.pathname === '/v1'
                       ? 'text-blue-400'
                       : 'text-gray-400 hover:text-gray-200'
                   )}>
-                    Token Factory V3
+                    Token Factory V1
                   </Link>
                 </div>
               )}

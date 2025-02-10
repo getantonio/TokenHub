@@ -1,24 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useNetwork } from '@contexts/NetworkContext';
 import { NetworkIndicator } from '@components/common/NetworkIndicator';
-import { PresaleCountdown } from '@components/features/presale/PresaleCountdown';
 import Head from 'next/head';
-import type { MetaMaskInpageProvider } from '@metamask/providers';
-import { BrowserProvider, Contract, formatUnits, EventLog } from 'ethers';
-import TokenFactory_v2 from '../contracts/abi/TokenFactory_v2.json';
-import TokenTemplateV2 from '../contracts/abi/TokenTemplate_v2.json';
-import { getNetworkContractAddress } from '../config/contracts';
-import { getExplorerUrl } from '../config/networks';
 import { Spinner } from '../components/ui/Spinner';
-import { TokenIcon } from '../components/ui/TokenIcon';
-
-// Add ERC1967 proxy interface
-const ERC1967_ABI = [
-  "function implementation() external view returns (address)",
-  "function admin() external view returns (address)",
-  "function upgradeTo(address newImplementation) external",
-  "function upgradeToAndCall(address newImplementation, bytes memory data) external payable"
-];
+import { TokenSaleCard } from '@/components/features/token/TokenSaleCard';
+import { TokenListingCard } from '@/components/features/token/TokenListingCard';
 
 interface PresaleToken {
   address: string;
@@ -34,420 +20,190 @@ interface PresaleToken {
   totalContributed: string;
   isWhitelistEnabled: boolean;
   status: 'pending' | 'active' | 'ended';
+  userContribution?: string;
+  isWhitelisted?: boolean;
 }
 
 export default function PresalePage() {
-  const { chainId, isSupported } = useNetwork();
+  const { chainId } = useNetwork();
   const [presaleTokens, setPresaleTokens] = useState<PresaleToken[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [expandedToken, setExpandedToken] = useState<string | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [hiddenTokens, setHiddenTokens] = useState<string[]>([]);
-  const categories = [
-    'all',
-    'ending-soon',
-    'meme',
-    'gamefi',
-    'defi',
-    'security'
-  ];
+  const [activeTab, setActiveTab] = useState<'ending_soon' | 'active' | 'upcoming' | 'ended'>('active');
 
   useEffect(() => {
-    loadPresaleTokens();
-  }, [chainId]);
-
-  async function loadPresaleTokens() {
-    if (!chainId || !isSupported) {
-      setPresaleTokens([]);
-      setLoading(false);
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError(null);
-
-      if (!window.ethereum) {
-        throw new Error('No ethereum provider found');
+    // For now, let's add some sample tokens
+    const sampleTokens: PresaleToken[] = [
+      {
+        address: "0x1234567890123456789012345678901234567890",
+        name: "Sample Token 1",
+        symbol: "ST1",
+        softCap: "50",
+        hardCap: "100",
+        minContribution: "0.1",
+        maxContribution: "5",
+        presaleRate: "1000",
+        startTime: Math.floor(Date.now() / 1000) - 3600, // Started 1 hour ago
+        endTime: Math.floor(Date.now() / 1000) + 86400, // Ends in 24 hours
+        totalContributed: "35",
+        isWhitelistEnabled: true,
+        status: 'active',
+        userContribution: "2.5",
+        isWhitelisted: true
+      },
+      {
+        address: "0x0987654321098765432109876543210987654321",
+        name: "Sample Token 2",
+        symbol: "ST2",
+        softCap: "100",
+        hardCap: "200",
+        minContribution: "0.5",
+        maxContribution: "10",
+        presaleRate: "2000",
+        startTime: Math.floor(Date.now() / 1000) + 3600, // Starts in 1 hour
+        endTime: Math.floor(Date.now() / 1000) + 172800, // Ends in 48 hours
+        totalContributed: "0",
+        isWhitelistEnabled: false,
+        status: 'pending',
+      },
+      {
+        address: "0x5555555555555555555555555555555555555555",
+        name: "Sample Token 3",
+        symbol: "ST3",
+        softCap: "75",
+        hardCap: "150",
+        minContribution: "0.2",
+        maxContribution: "7",
+        presaleRate: "1500",
+        startTime: Math.floor(Date.now() / 1000) - 172800, // Started 48 hours ago
+        endTime: Math.floor(Date.now() / 1000) - 3600, // Ended 1 hour ago
+        totalContributed: "145",
+        isWhitelistEnabled: false,
+        status: 'ended',
+        userContribution: "5"
       }
+    ];
 
-      const provider = new BrowserProvider(window.ethereum);
-      const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddressV2');
-      
-      if (!factoryAddress) {
-        throw new Error('No V2 factory deployed on this network');
-      }
+    setPresaleTokens(sampleTokens);
+  }, []);
 
-      const factory = new Contract(factoryAddress, TokenFactory_v2.abi, provider);
-      const currentBlock = await provider.getBlockNumber();
-      const fromBlock = Math.max(0, currentBlock - 100000);
-
-      console.log(`\nSearching for events from block ${fromBlock} to ${currentBlock}`);
-
-      // Get TokenCreated events
-      const filter = factory.filters.TokenCreated();
-      const events = await factory.queryFilter(filter, fromBlock, currentBlock);
-      
-      console.log("Found events:", events.length);
-
-      const tokens: PresaleToken[] = [];
-      const processedAddresses = new Set<string>();
-
-      for (const event of events) {
-        try {
-          // Cast event to EventLog to access args
-          const eventLog = event as EventLog;
-          const { token: tokenAddr, name, symbol, owner } = eventLog.args;
-          
-          if (!tokenAddr || !ethers.isAddress(tokenAddr)) continue;
-          
-          const normalizedAddr = tokenAddr.toLowerCase();
-          if (processedAddresses.has(normalizedAddr)) continue;
-
-          const code = await provider.getCode(normalizedAddr);
-          if (code === '0x') continue;
-
-          // Create contract instance with the token ABI
-          const token = new Contract(tokenAddr, TokenTemplateV2.abi, provider);
-          
-          try {
-            // Get presale info
-            const presaleStatus = await token.getPresaleStatus().catch(() => ({
-              softCap: BigInt(0),
-              hardCap: BigInt(0),
-              minContribution: BigInt(0),
-              maxContribution: BigInt(0),
-              startTime: BigInt(0),
-              endTime: BigInt(0),
-              presaleRate: BigInt(0),
-              whitelistEnabled: false,
-              finalized: false,
-              totalContributed: BigInt(0)
-            }));
-
-            const currentTime = Math.floor(Date.now() / 1000);
-            let status: 'pending' | 'active' | 'ended';
-
-            if (currentTime < Number(presaleStatus.startTime)) {
-              status = 'pending';
-            } else if (currentTime > Number(presaleStatus.endTime) || presaleStatus.finalized) {
-              status = 'ended';
-            } else {
-              status = 'active';
-            }
-
-            // Only add tokens that have presale configured (non-zero hardCap)
-            if (presaleStatus.hardCap > BigInt(0)) {
-              tokens.push({
-                address: normalizedAddr,
-                name,
-                symbol,
-                softCap: formatUnits(presaleStatus.softCap, 18),
-                hardCap: formatUnits(presaleStatus.hardCap, 18),
-                minContribution: formatUnits(presaleStatus.minContribution, 18),
-                maxContribution: formatUnits(presaleStatus.maxContribution, 18),
-                presaleRate: formatUnits(presaleStatus.presaleRate, 18),
-                startTime: Number(presaleStatus.startTime),
-                endTime: Number(presaleStatus.endTime),
-                totalContributed: formatUnits(presaleStatus.totalContributed, 18),
-                isWhitelistEnabled: presaleStatus.whitelistEnabled,
-                status
-              });
-              processedAddresses.add(normalizedAddr);
-              console.log(`Successfully processed presale token: ${name} (${symbol}) at ${normalizedAddr}`);
-            }
-          } catch (error) {
-            console.error(`Error reading presale data for ${tokenAddr}:`, error);
-          }
-        } catch (error) {
-          console.error('Error loading token:', error);
-        }
-      }
-
-      setPresaleTokens(tokens);
-      if (tokens.length === 0) {
-        setError('No active presales found');
-      }
-    } catch (error) {
-      console.error('Error loading presale tokens:', error);
-      setError(error instanceof Error ? error.message : 'Failed to load presale tokens');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function getStatusBadgeClass(status: string) {
+  const mapPresaleStatus = (status: 'active' | 'pending' | 'ended'): 'live' | 'upcoming' | 'ended' => {
     switch (status) {
-      case 'active':
-        return 'status-active';
-      case 'pending':
-        return 'status-pending';
-      case 'ended':
-        return 'status-ended';
-      default:
-        return '';
+      case 'active': return 'live';
+      case 'pending': return 'upcoming';
+      case 'ended': return 'ended';
     }
-  }
-
-  const toggleExpand = (address: string) => {
-    setExpandedToken(expandedToken === address ? null : address);
   };
 
-  function getGlowColor(status: string) {
-    switch (status) {
-      case 'active':
-        return 'from-green-500/10 to-green-500/5';
-      case 'pending':
-        return 'from-yellow-500/10 to-yellow-500/5';
-      case 'ended':
-        return 'from-red-500/10 to-red-500/5';
-      default:
-        return 'from-blue-500/10 to-purple-500/10';
-    }
-  }
-
-  function formatCountdown(endTime: number) {
+  const getTimeLeft = (endTime: number) => {
     const now = Math.floor(Date.now() / 1000);
-    const diff = endTime - now;
-    if (diff <= 0) return 'Ended';
-    
-    const days = Math.floor(diff / (24 * 60 * 60));
-    const hours = Math.floor((diff % (24 * 60 * 60)) / (60 * 60));
-    const minutes = Math.floor((diff % (60 * 60)) / 60);
-    
-    return `${days}d ${hours}h ${minutes}m`;
-  }
+    return endTime - now;
+  };
 
-  function filterTokens(tokens: PresaleToken[]) {
-    return tokens.filter(token => {
-      if (hiddenTokens.includes(token.address)) return false;
-      
-      if (selectedCategory === 'all') return true;
-      if (selectedCategory === 'ending-soon') {
-        const timeLeft = token.endTime - Math.floor(Date.now() / 1000);
-        return token.status === 'active' && timeLeft < 24 * 60 * 60; // Less than 24 hours
-      }
-      // Add more category filters here
-      return true;
-    });
-  }
+  const sortedTokens = {
+    ending_soon: presaleTokens.filter(t => t.status === 'active' && getTimeLeft(t.endTime) < 24 * 3600),
+    active: presaleTokens.filter(t => t.status === 'active' && getTimeLeft(t.endTime) >= 24 * 3600),
+    upcoming: presaleTokens.filter(t => t.status === 'pending'),
+    ended: presaleTokens.filter(t => t.status === 'ended')
+  };
 
-  function hideToken(address: string) {
-    setHiddenTokens(prev => [...prev, address]);
-  }
-
-  function resetHiddenTokens() {
-    setHiddenTokens([]);
-  }
-
-  function getProgressBarColor(progress: number) {
-    if (progress >= 100) return 'bg-green-500';
-    if (progress >= 75) return 'bg-blue-500';
-    if (progress >= 50) return 'bg-yellow-500';
-    return 'bg-blue-500';
-  }
+  const tabConfig = {
+    ending_soon: { label: '🔥 Ending Soon', color: 'text-red-500 border-red-500' },
+    active: { label: '🟢 Active', color: 'text-green-500 border-green-500' },
+    upcoming: { label: '🔜 Upcoming', color: 'text-blue-500 border-blue-500' },
+    ended: { label: '⏳ Ended', color: 'text-gray-500 border-gray-500' }
+  };
 
   return (
-    <div className="min-h-screen bg-background-primary">
+    <div className="min-h-screen bg-gray-900">
       <Head>
-        <title>TokenHub.dev - Presale</title>
-        <meta name="description" content="View and participate in token presales" />
-        <link rel="icon" href="/favicon.ico" />
+        <title>Token Presales</title>
       </Head>
 
-      <main className="container mx-auto px-4 py-8">
-        <div className="max-w-6xl mx-auto">
-          <div className="flex justify-between items-center mb-4">
-            <div>
-              <h1 className="text-3xl font-bold text-white mb-2">Token Presales</h1>
-              <p className="text-gray-400">View and participate in token presales</p>
-            </div>
-            {hiddenTokens.length > 0 && (
-              <button
-                onClick={resetHiddenTokens}
-                className="px-4 py-2 text-sm font-medium rounded-md bg-gray-700 text-white hover:bg-gray-600 transition-colors"
-              >
-                Reset Hidden Tokens ({hiddenTokens.length})
-              </button>
-            )}
-          </div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex justify-between items-center mb-4">
+          <h1 className="text-3xl font-bold text-white">Token Presales</h1>
+          <NetworkIndicator />
+        </div>
 
-          <div className="flex space-x-2 mb-4 overflow-x-auto">
-            {categories.map(category => (
+        <div className="max-w-[66.666667%] mx-auto">
+          {/* Tabs */}
+          <div className="flex border-b border-gray-700 mb-4">
+            {Object.entries(tabConfig).map(([key, config]) => (
               <button
-                key={category}
-                onClick={() => setSelectedCategory(category)}
-                className={`px-4 py-1 text-sm font-medium rounded-full transition-colors ${
-                  selectedCategory === category
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-background-secondary text-gray-400 hover:text-white'
-                }`}
+                key={key}
+                className={`px-4 py-2 -mb-px font-medium ${
+                  activeTab === key 
+                    ? `${config.color} border-b-2` 
+                    : 'text-gray-400 border-transparent'
+                } hover:text-gray-300 transition-colors`}
+                onClick={() => setActiveTab(key as keyof typeof sortedTokens)}
               >
-                {category.charAt(0).toUpperCase() + category.slice(1)}
+                {config.label}
+                {sortedTokens[key as keyof typeof sortedTokens].length > 0 && (
+                  <span className="ml-2 text-xs">
+                    ({sortedTokens[key as keyof typeof sortedTokens].length})
+                  </span>
+                )}
               </button>
             ))}
           </div>
 
-          {loading ? (
-            <div className="flex justify-center items-center py-12">
-              <Spinner className="w-8 h-8 text-blue-500" />
+          {/* Active Tab Content */}
+          <div className="space-y-1">
+            {sortedTokens[activeTab].map((token) => (
+              <TokenSaleCard
+                key={token.address}
+                name={token.name}
+                symbol={token.symbol}
+                address={token.address}
+                presale={{
+                  softCap: token.softCap,
+                  hardCap: token.hardCap,
+                  minContribution: token.minContribution,
+                  maxContribution: token.maxContribution,
+                  presaleRate: token.presaleRate,
+                  startTime: token.startTime,
+                  endTime: token.endTime,
+                  totalContributed: token.totalContributed,
+                  isWhitelistEnabled: token.isWhitelistEnabled,
+                  userContribution: token.userContribution,
+                  isWhitelisted: token.isWhitelisted
+                }}
+                progress={(Number(token.totalContributed) / Number(token.hardCap)) * 100}
+                status={mapPresaleStatus(token.status)}
+                showBuyButton={activeTab !== 'ended'}
+                glowEffect={activeTab === 'ending_soon' ? 'danger' : activeTab === 'active' ? 'success' : 'none'}
+              />
+            ))}
+          </div>
+
+          {/* Token Listing Cards Section */}
+          <div className="mt-12 pt-8 border-t border-gray-700">
+            <h2 className="text-xl font-semibold text-white mb-4">Listed Tokens</h2>
+            <div className="space-y-4">
+              <TokenListingCard
+                name="Sample Listed Token 1"
+                symbol="SLT1"
+                price="0.05"
+                supply="1,000,000"
+                description="A sample listed token with active trading."
+                progress={75}
+                status="live"
+              />
+              <TokenListingCard
+                name="Sample Listed Token 2"
+                symbol="SLT2"
+                price="0.02"
+                supply="500,000"
+                description="Another sample token available for trading."
+                progress={45}
+                status="live"
+              />
             </div>
-          ) : error ? (
-            <div className="bg-red-900/20 border border-red-700 rounded-lg p-4">
-              <p className="text-red-500">{error}</p>
-            </div>
-          ) : presaleTokens.length === 0 ? (
-            <div className="bg-background-secondary rounded-lg p-6 text-center">
-              <p className="text-gray-400">No active presales found</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {filterTokens(presaleTokens).map(token => {
-                const progress = (Number(token.totalContributed) / Number(token.hardCap)) * 100;
-                const progressBarColor = getProgressBarColor(progress);
-
-                return (
-                  <div key={token.address} 
-                    className="relative bg-background-secondary rounded-lg border border-border hover:border-text-accent transition-colors overflow-hidden group"
-                  >
-                    <div className={`absolute inset-0 bg-gradient-to-r ${getGlowColor(token.status)} opacity-0 group-hover:opacity-100 transition-opacity animate-glow`} />
-                    
-                    <div className="relative">
-                      <div 
-                        onClick={() => toggleExpand(token.address)}
-                        className="flex items-center justify-between p-4 cursor-pointer"
-                      >
-                        <div className="flex items-center space-x-3">
-                          <TokenIcon size={32} address={token.address} />
-                          <div>
-                            <div className="flex items-center space-x-2">
-                              <h3 className="text-sm font-medium text-white">{token.name}</h3>
-                              <span className="text-xs text-gray-400">{token.symbol}</span>
-                              {token.isWhitelistEnabled && (
-                                <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400">
-                                  Whitelist
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center space-x-4 mt-0.5">
-                              <div className="flex items-center space-x-1">
-                                <span className="text-xs text-gray-400">Rate:</span>
-                                <span className="text-xs text-white">{token.presaleRate} tokens/ETH</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center space-x-4">
-                          <div className="text-right">
-                            <div className="text-xs text-gray-400">
-                              {token.status === 'active' && formatCountdown(token.endTime)}
-                              {token.status === 'pending' && 'Starting Soon'}
-                              {token.status === 'ended' && 'Ended'}
-                            </div>
-                            <div className="text-xs text-white mt-0.5">
-                              {token.totalContributed} / {token.hardCap} ETH
-                            </div>
-                          </div>
-                          <span className={`${getStatusBadgeClass(token.status)} text-xs px-2 py-1 rounded-full`}>
-                            {token.status.charAt(0).toUpperCase() + token.status.slice(1)}
-                          </span>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              hideToken(token.address);
-                            }}
-                            className="text-xs px-2 py-1 rounded bg-gray-500/10 text-gray-400 hover:bg-gray-500/20"
-                            title="Hide token"
-                          >
-                            hide
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Progress bar - always visible */}
-                      <div className="h-1 w-full bg-gray-700">
-                        <div
-                          className={`h-full ${progressBarColor} transition-all duration-500`}
-                          style={{ width: `${Math.min(progress, 100)}%` }}
-                        />
-                      </div>
-                      
-                      {/* Progress info - always visible */}
-                      <div className="flex justify-between items-center px-4 py-1 text-xs">
-                        <div className="flex items-center space-x-2">
-                          <span className={`${getStatusBadgeClass(token.status)} px-2 py-0.5 rounded-full`}>
-                            {token.status.charAt(0).toUpperCase() + token.status.slice(1)}
-                          </span>
-                          <span className="text-white">{token.totalContributed} / {token.hardCap} ETH</span>
-                        </div>
-                      </div>
-
-                      {expandedToken === token.address && (
-                        <div className="px-4 pb-4 pt-3 border-t border-border">
-                          <div className="grid grid-cols-2 gap-4 mb-4">
-                            <div>
-                              <p className="text-sm text-gray-400 mb-1">Soft Cap</p>
-                              <p className="text-sm font-medium text-white">{token.softCap} ETH</p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-gray-400 mb-1">Hard Cap</p>
-                              <p className="text-sm font-medium text-white">{token.hardCap} ETH</p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-gray-400 mb-1">Min Contribution</p>
-                              <p className="text-sm font-medium text-white">{token.minContribution} ETH</p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-gray-400 mb-1">Max Contribution</p>
-                              <p className="text-sm font-medium text-white">{token.maxContribution} ETH</p>
-                            </div>
-                          </div>
-
-                          <div className="flex justify-between items-center">
-                            <div className="space-y-1">
-                              <p className="text-sm text-gray-400">
-                                {token.status === 'pending' 
-                                  ? `Starts ${new Date(token.startTime * 1000).toLocaleDateString()}`
-                                  : token.status === 'active'
-                                  ? `Ends ${new Date(token.endTime * 1000).toLocaleDateString()}`
-                                  : 'Presale Ended'}
-                              </p>
-                              {token.status === 'active' && Number(token.totalContributed) < Number(token.softCap) && (
-                                <p className="text-xs text-yellow-400">
-                                  Soft cap not reached yet. Current: {token.totalContributed} ETH / Required: {token.softCap} ETH
-                                </p>
-                              )}
-                            </div>
-                            <div className="flex items-center space-x-3">
-                              <a
-                                href={getExplorerUrl(chainId, token.address, 'token')}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-sm text-text-accent hover:text-blue-400 transition-colors"
-                              >
-                                View on Explorer
-                              </a>
-                              <button
-                                className="px-4 py-2 text-sm font-medium rounded-md bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                disabled={token.status !== 'active' || Number(token.totalContributed) < Number(token.softCap)}
-                                title={Number(token.totalContributed) < Number(token.softCap) ? 'Soft cap must be reached before finalizing' : ''}
-                              >
-                                {token.status === 'pending' ? 'Starting Soon' : token.status === 'ended' ? 'Ended' : 'Contribute'}
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          </div>
         </div>
-      </main>
+      </div>
     </div>
   );
 } 
