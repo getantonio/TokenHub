@@ -73,6 +73,53 @@ interface TokenInfo {
     revoked: boolean;
     releasableAmount: string;
   };
+  createdAt?: number;
+}
+
+interface BlockDialogProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  tokenName: string;
+  tokenAddress: string;
+}
+
+function BlockDialog({ isOpen, onClose, onConfirm, tokenName, tokenAddress }: BlockDialogProps) {
+  return (
+    <Dialog open={isOpen} onClose={onClose}>
+      <div className="fixed inset-0 bg-black/50" aria-hidden="true" />
+      <div className="fixed inset-0 flex items-center justify-center p-4">
+        <div className="bg-gray-900 rounded-lg p-6 max-w-md w-full border border-red-500">
+          <h3 className="text-xl font-bold text-white mb-4">⚠️ Block Token Permanently</h3>
+          <div className="space-y-4">
+            <p className="text-gray-300">
+              Are you sure you want to block <span className="font-semibold text-white">{tokenName}</span>?
+            </p>
+            <p className="text-red-400 text-sm">
+              This action cannot be undone. The token will be permanently removed from your management panel.
+            </p>
+            <div className="bg-gray-800 p-3 rounded text-xs font-mono text-gray-300 break-all">
+              {tokenAddress}
+            </div>
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={onClose}
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-white"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={onConfirm}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded text-white"
+              >
+                Block Permanently
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Dialog>
+  );
 }
 
 export interface TCAP_v3Ref {
@@ -94,6 +141,10 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
   const [selectedTokenForSchedules, setSelectedTokenForSchedules] = useState<string | null>(null);
   const [vestingSchedules, setVestingSchedules] = useState<any[]>([]);
 
+  // Add these state variables after the existing ones
+  const [blockDialogOpen, setBlockDialogOpen] = useState(false);
+  const [tokenToBlock, setTokenToBlock] = useState<TokenInfo | null>(null);
+  
   const displayedTokens = useMemo(() => {
     if (showOnlyRecent) {
       return tokens.slice(0, 3);
@@ -146,6 +197,19 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
     ], signer);
   };
 
+  // Add this function to handle blocked tokens
+  const getBlockedTokens = (): string[] => {
+    const blocked = localStorage.getItem('blockedTokensV3');
+    return blocked ? JSON.parse(blocked) : [];
+  };
+
+  // Add this function to save blocked tokens
+  const saveBlockedToken = (tokenAddress: string) => {
+    const blocked = getBlockedTokens();
+    blocked.push(tokenAddress);
+    localStorage.setItem('blockedTokensV3', JSON.stringify(blocked));
+  };
+
   const loadTokens = async () => {
     if (!externalProvider || !factoryAddress) {
       console.log('TCAP_v3 loadTokens: Missing provider or factory address', {
@@ -158,8 +222,8 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
     try {
       console.log('TCAP_v3 loadTokens: Starting token load');
       setIsLoading(true);
-      setError(null);
-      
+    setError(null);
+
       const signer = await externalProvider.getSigner();
       console.log('TCAP_v3: Got signer');
       
@@ -185,130 +249,135 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
           throw new Error('Unexpected response format from getUserCreatedTokens');
         }
 
-        const tokenPromises = deployedTokens.map(async (tokenAddress: string) => {
-          try {
-            const tokenContract = getTokenContract(tokenAddress, signer);
-
-            // Basic token info
-            const [name, symbol, totalSupply, owner] = await Promise.all([
-              tokenContract.name(),
-              tokenContract.symbol(),
-              tokenContract.totalSupply(),
-              tokenContract.owner()
-            ]);
-
-            // Get presale info with additional details
-            let presaleInfo;
-            let contributorInfo;
+        const blockedTokens = getBlockedTokens();
+        
+        const tokenPromises = deployedTokens
+          .filter(token => !blockedTokens.includes(token)) // Filter out blocked tokens
+          .map(async (tokenAddress: string) => {
             try {
-              const [info, contributorCount, contributors] = await Promise.all([
-                tokenContract.presaleInfo(),
-                tokenContract.getContributorCount(),
-                tokenContract.getContributors()
+              const tokenContract = getTokenContract(tokenAddress, signer);
+
+              // Basic token info
+              const [name, symbol, totalSupply, owner] = await Promise.all([
+                tokenContract.name(),
+                tokenContract.symbol(),
+                tokenContract.totalSupply(),
+                tokenContract.owner()
               ]);
 
-              // Get detailed info for each contributor
-              const contributorDetails = await Promise.all(
-                contributors.map(async (addr: string) => {
-                  const details = await tokenContract.getContributorInfo(addr);
-                  return {
-                    address: addr,
-                    contribution: formatEther(details.contribution),
-                    tokenAllocation: formatEther(details.tokenAllocation),
-                    isWhitelisted: details.isWhitelisted
-                  };
-                })
-              );
+              // Get presale info with additional details
+              let presaleInfo;
+              let contributorInfo;
+              try {
+                const [info, contributorCount, contributors] = await Promise.all([
+                  tokenContract.presaleInfo(),
+                  tokenContract.getContributorCount(),
+                  tokenContract.getContributors()
+                ]);
 
-              presaleInfo = {
-                softCap: formatEther(info.softCap),
-                hardCap: formatEther(info.hardCap),
-                minContribution: formatEther(info.minContribution),
-                maxContribution: formatEther(info.maxContribution),
-                presaleRate: info.presaleRate.toString(),
-                startTime: Number(info.startTime),
-                endTime: Number(info.endTime),
-                whitelistEnabled: info.whitelistEnabled,
-                finalized: info.finalized,
-                totalContributed: formatEther(info.totalContributed),
-                totalTokensSold: formatEther(info.totalTokensSold || BigInt(0)),
-                contributorCount: Number(contributorCount),
-                contributors: contributorDetails
-              };
-            } catch (e) {
-              console.log('No presale info for token:', tokenAddress);
-            }
+                // Get detailed info for each contributor
+                const contributorDetails = await Promise.all(
+                  contributors.map(async (addr: string) => {
+                    const details = await tokenContract.getContributorInfo(addr);
+                    return {
+                      address: addr,
+                      contribution: formatEther(details.contribution),
+                      tokenAllocation: formatEther(details.tokenAllocation),
+                      isWhitelisted: details.isWhitelisted
+                    };
+                  })
+                );
 
-            // Try to get liquidity info
-            let liquidityInfo;
-            try {
-              const info = await tokenContract.liquidityInfo();
-              liquidityInfo = {
-                percentage: info.percentage.toString(),
-                lockDuration: info.lockDuration.toString(),
-                unlockTime: Number(info.unlockTime),
-                locked: info.locked
-              };
-            } catch (e) {
-              console.log('No liquidity info for token:', tokenAddress);
-            }
-
-            // Try to get platform fee info
-            let platformFee;
-            try {
-              const info = await tokenContract.platformFee();
-              platformFee = {
-                recipient: info.recipient,
-                totalTokens: formatEther(info.totalTokens),
-                vestingEnabled: info.vestingEnabled,
-                vestingDuration: Number(info.vestingDuration),
-                cliffDuration: Number(info.cliffDuration),
-                vestingStart: Number(info.vestingStart),
-                tokensClaimed: formatEther(info.tokensClaimed)
-              };
-            } catch (e) {
-              console.log('No platform fee info for token:', tokenAddress);
-            }
-
-            // Try to get vesting info
-            let vestingInfo;
-            try {
-              const hasVesting = await tokenContract.hasVestingSchedule(userAddress);
-              if (hasVesting) {
-                const scheduleInfo = await tokenContract.getVestingSchedule(userAddress);
-                vestingInfo = {
-                  hasVesting: true,
-                  totalAmount: formatEther(scheduleInfo.totalAmount),
-                  startTime: Number(scheduleInfo.startTime),
-                  cliffDuration: Number(scheduleInfo.cliffDuration),
-                  vestingDuration: Number(scheduleInfo.vestingDuration),
-                  releasedAmount: formatEther(scheduleInfo.releasedAmount),
-                  revocable: scheduleInfo.revocable,
-                  revoked: scheduleInfo.revoked,
-                  releasableAmount: formatEther(scheduleInfo.releasableAmount)
+                presaleInfo = {
+                  softCap: formatEther(info.softCap),
+                  hardCap: formatEther(info.hardCap),
+                  minContribution: formatEther(info.minContribution),
+                  maxContribution: formatEther(info.maxContribution),
+                  presaleRate: info.presaleRate.toString(),
+                  startTime: Number(info.startTime),
+                  endTime: Number(info.endTime),
+                  whitelistEnabled: info.whitelistEnabled,
+                  finalized: info.finalized,
+                  totalContributed: formatEther(info.totalContributed),
+                  totalTokensSold: formatEther(info.totalTokensSold || BigInt(0)),
+                  contributorCount: Number(contributorCount),
+                  contributors: contributorDetails
                 };
+              } catch (e) {
+                console.log('No presale info for token:', tokenAddress);
               }
-            } catch (e) {
-              console.log('No vesting info for token:', tokenAddress);
-            }
 
-            return {
+              // Try to get liquidity info
+              let liquidityInfo;
+              try {
+                const info = await tokenContract.liquidityInfo();
+                liquidityInfo = {
+                  percentage: info.percentage.toString(),
+                  lockDuration: info.lockDuration.toString(),
+                  unlockTime: Number(info.unlockTime),
+                  locked: info.locked
+                };
+              } catch (e) {
+                console.log('No liquidity info for token:', tokenAddress);
+              }
+
+              // Try to get platform fee info
+              let platformFee;
+              try {
+                const info = await tokenContract.platformFee();
+                platformFee = {
+                  recipient: info.recipient,
+                  totalTokens: formatEther(info.totalTokens),
+                  vestingEnabled: info.vestingEnabled,
+                  vestingDuration: Number(info.vestingDuration),
+                  cliffDuration: Number(info.cliffDuration),
+                  vestingStart: Number(info.vestingStart),
+                  tokensClaimed: formatEther(info.tokensClaimed)
+                };
+              } catch (e) {
+                console.log('No platform fee info for token:', tokenAddress);
+              }
+
+              // Try to get vesting info
+              let vestingInfo;
+              try {
+                const hasVesting = await tokenContract.hasVestingSchedule(userAddress);
+                if (hasVesting) {
+                  const scheduleInfo = await tokenContract.getVestingSchedule(userAddress);
+                  vestingInfo = {
+                    hasVesting: true,
+                    totalAmount: formatEther(scheduleInfo.totalAmount),
+                    startTime: Number(scheduleInfo.startTime),
+                    cliffDuration: Number(scheduleInfo.cliffDuration),
+                    vestingDuration: Number(scheduleInfo.vestingDuration),
+                    releasedAmount: formatEther(scheduleInfo.releasedAmount),
+                    revocable: scheduleInfo.revocable,
+                    revoked: scheduleInfo.revoked,
+                    releasableAmount: formatEther(scheduleInfo.releasableAmount)
+                  };
+                }
+              } catch (e) {
+                console.log('No vesting info for token:', tokenAddress);
+              }
+
+              return {
         address: tokenAddress,
-              name,
-              symbol,
-              totalSupply: formatEther(totalSupply),
-              owner,
-              presaleInfo,
-              liquidityInfo,
-              platformFee,
-              paused: await tokenContract.paused(),
-              vestingInfo
-            } as TokenInfo;
-          } catch (error) {
-            console.error(`Error loading token ${tokenAddress}:`, error);
-            return null;
-          }
-        });
+                name,
+                symbol,
+                totalSupply: formatEther(totalSupply),
+                owner,
+                presaleInfo,
+                liquidityInfo,
+                platformFee,
+                paused: await tokenContract.paused(),
+                vestingInfo,
+                createdAt: Date.now()
+              } as TokenInfo;
+            } catch (error) {
+              console.error(`Error loading token ${tokenAddress}:`, error);
+              return null;
+            }
+          });
 
         const loadedTokens = (await Promise.all(tokenPromises))
           .filter((token): token is TokenInfo => token !== null)
@@ -654,6 +723,28 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
     }
   };
 
+  // Add this function to handle blocking a token
+  const handleBlockToken = (token: TokenInfo) => {
+    setTokenToBlock(token);
+    setBlockDialogOpen(true);
+  };
+
+  // Add this function to confirm blocking a token
+  const confirmBlockToken = () => {
+    if (!tokenToBlock) return;
+    
+    saveBlockedToken(tokenToBlock.address);
+    setTokens(prev => prev.filter(t => t.address !== tokenToBlock.address));
+    setBlockDialogOpen(false);
+    setTokenToBlock(null);
+    
+    toast({
+      title: "Token Blocked",
+      description: "The token has been permanently removed from your management panel",
+      variant: "default"
+    });
+  };
+
   useImperativeHandle(ref, () => ({
     loadTokens: () => {
       console.log('TCAP_v3: loadTokens called via ref');
@@ -722,29 +813,39 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
             </div>
           ) : (
           <div className="space-y-1 mt-1">
-            {displayedTokens.map(token => (
+            {displayedTokens.map((token) => (
               <div key={token.address} className="border border-border rounded p-2 bg-gray-800">
                   <div className="flex justify-between items-start gap-2">
                     <div>
                     <h3 className="text-xs font-medium text-text-primary">{token.name} ({token.symbol})</h3>
                     <p className="text-xs text-text-secondary mt-0.5">Token: {token.address}</p>
                     <p className="text-xs text-text-secondary">Supply: {Number(token.totalSupply).toLocaleString()} {token.symbol}</p>
+                    <p className="text-xs text-text-secondary mt-0.5">Created: {new Date(token.createdAt || Date.now()).toLocaleString()}</p>
                     {token.presaleInfo && (
-                      <div className="mt-0.5">
+                      <div className="mt-1">
                       <p className="text-xs text-text-secondary">
-                          Presale: {token.presaleInfo.finalized ? 'Finalized' : 'Active'} |
-                          Progress: {Number(token.presaleInfo.totalContributed) / Number(token.presaleInfo.hardCap) * 100}%
+                          Presale: {Number(token.presaleInfo.totalContributed).toLocaleString()} ETH
+                          ({token.presaleInfo.contributorCount} contributors)
                       </p>
                     </div>
                     )}
                   </div>
-                      <button
-                    onClick={() => setSelectedToken(selectedToken === token.address ? null : token.address)}
-                    className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
-                      >
-                    {selectedToken === token.address ? 'Hide' : 'Manage'}
-                      </button>
+                  <div className="flex flex-col gap-1">
+                    <button
+                      onClick={() => setSelectedToken(selectedToken === token.address ? null : token.address)}
+                      className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+                    >
+                      {selectedToken === token.address ? 'Hide' : 'Manage'}
+                    </button>
+                    <button
+                      onClick={() => handleBlockToken(token)}
+                      className="px-1.5 py-0.5 text-xs bg-red-600/20 hover:bg-red-600/40 border border-red-600/40 rounded text-red-400 hover:text-red-300 transition-colors"
+                      title="Permanently remove from management panel"
+                    >
+                      Block
+                    </button>
                   </div>
+                </div>
 
                 {selectedToken === token.address && (
                     <div className="mt-2 pt-2 border-t border-border">
@@ -780,12 +881,12 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
                           <div className="flex flex-col gap-1">
                         <h4 className="text-xs font-medium text-text-primary mb-1">Token Controls</h4>
                         <div className="grid grid-cols-2 gap-1">
-                          <button
+                                  <button
                             onClick={() => handlePause(token.address)}
                             className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
-                          >
+                                  >
                             {token.paused ? 'Unpause' : 'Pause'}
-                          </button>
+                                  </button>
                           <button
                             onClick={() => handleBlacklist(token.address)}
                             className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
@@ -804,11 +905,11 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
                           >
                             Burn
                           </button>
-                        </div>
-                      </div>
+                              </div>
+                            </div>
 
                       {/* Vesting Management Section */}
-                      <div className="flex flex-col gap-1">
+                          <div className="flex flex-col gap-1">
                         <h4 className="text-xs font-medium text-text-primary mb-1">Vesting Management</h4>
                         <div className="space-x-2">
                           <button
@@ -835,7 +936,7 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
                           >
                             Vesting Schedules
                           </button>
-                        </div>
+                            </div>
                         
                         {token.vestingInfo?.hasVesting && (
                           <div className="mt-2">
@@ -863,34 +964,34 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
                         <div className="col-span-2">
                           <h4 className="text-xs font-medium text-text-primary mb-1">Presale Management</h4>
                           <div className="grid grid-cols-3 gap-3">
-                              <div>
+                            <div>
                               <p className="text-xs text-text-secondary">Soft Cap: {token.presaleInfo.softCap} ETH</p>
                               <p className="text-xs text-text-secondary">Hard Cap: {token.presaleInfo.hardCap} ETH</p>
                               <p className="text-xs text-text-secondary">Min/Max: {token.presaleInfo.minContribution}/{token.presaleInfo.maxContribution} ETH</p>
                               <p className="text-xs text-text-secondary">Rate: {token.presaleInfo.presaleRate} tokens/ETH</p>
-                              </div>
-                              <div>
+                            </div>
+                            <div>
                               <p className="text-xs text-text-secondary">Start: {new Date(token.presaleInfo.startTime * 1000).toLocaleString()}</p>
                               <p className="text-xs text-text-secondary">End: {new Date(token.presaleInfo.endTime * 1000).toLocaleString()}</p>
                               <p className="text-xs text-text-secondary">Contributors: {token.presaleInfo.contributorCount}</p>
                               <p className="text-xs text-text-secondary">Total Raised: {token.presaleInfo.totalContributed} ETH</p>
                             </div>
-                            <div className="flex flex-col gap-1">
-                                  <button
+                          <div className="flex flex-col gap-1">
+                              <button
                                 onClick={() => handleWhitelist(token.address)}
                                 className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
                                 disabled={token.presaleInfo.finalized}
                               >
                                 Manage Whitelist
                               </button>
-                                  <button
+                                <button
                                 onClick={() => handleFinalize(token.address)}
                                 className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
                                 disabled={token.presaleInfo.finalized || 
                                   Number(token.presaleInfo.totalContributed) < Number(token.presaleInfo.softCap)}
-                                  >
-                                    Finalize Presale
-                                  </button>
+                              >
+                                Finalize Presale
+                                </button>
                               <button
                                 onClick={() => handleEmergencyWithdraw(token.address)}
                                 className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
@@ -900,8 +1001,8 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
                               >
                                 Emergency Withdraw
                               </button>
-                              </div>
                             </div>
+                          </div>
 
                           {/* Progress Bar */}
                           <div className="w-full bg-gray-700 rounded-full h-1.5 mt-2">
@@ -927,83 +1028,17 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
                                     <span>{contributor.contribution} ETH = {contributor.tokenAllocation} {token.symbol}</span>
                                   </div>
                                 ))}
-                            </div>
-                          </div>
-                          )}
-                          </div>
-                        )}
-
-                      {/* Liquidity Management Section */}
-                      {token.liquidityInfo && (
-                        <div className="col-span-2">
-                          <h4 className="text-xs font-medium text-text-primary mb-1">Liquidity Management</h4>
-                          <div className="grid grid-cols-3 gap-3">
-                            <div className="col-span-2">
-                              <p className="text-xs text-text-secondary">Percentage: {token.liquidityInfo.percentage}% | Lock Duration: {token.liquidityInfo.lockDuration} days</p>
-                              <p className="text-xs text-text-secondary">Status: {token.liquidityInfo.locked ? 'Locked' : 'Unlocked'} | Unlock: {new Date(token.liquidityInfo.unlockTime * 1000).toLocaleString()}</p>
-                            </div>
-                            <div className="flex gap-1">
-                              <button
-                                onClick={() => {/* TODO: Implement lock extension */}}
-                                className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
-                                disabled={!token.liquidityInfo.locked}
-                              >
-                                Extend Lock
-                              </button>
-                                <button
-                                onClick={() => {/* TODO: Implement unlock */}}
-                                className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
-                                disabled={token.liquidityInfo.locked || 
-                                  Date.now() < token.liquidityInfo.unlockTime * 1000}
-                              >
-                                Unlock
-                                </button>
-                            </div>
                               </div>
-                          </div>
-                        )}
-
-                      {/* Platform Fee Section */}
-                      {token.platformFee && token.platformFee.vestingEnabled && (
-                        <div className="col-span-2">
-                          <h4 className="text-xs font-medium text-text-primary mb-1">Platform Fee</h4>
-                          <div className="grid grid-cols-3 gap-3">
-                            <div className="col-span-2">
-                              <p className="text-xs text-text-secondary">Total: {token.platformFee.totalTokens} | Claimed: {token.platformFee.tokensClaimed}</p>
-                              <p className="text-xs text-text-secondary">Vesting: {token.platformFee.vestingDuration} days | Cliff: {token.platformFee.cliffDuration} days</p>
-                          </div>
-                            <div>
-                            <button
-                                onClick={() => {/* TODO: Implement claim */}}
-                                className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
-                                disabled={Date.now() < token.platformFee.vestingStart * 1000 + 
-                                  token.platformFee.cliffDuration * 24 * 60 * 60 * 1000}
-                              >
-                                Claim Tokens
-                            </button>
-                          </div>
-                        </div>
-                          
-                          {/* Vesting Progress Bar */}
-                          <div className="w-full bg-gray-700 rounded-full h-1.5 mt-2">
-                            <div 
-                              className="bg-blue-600 h-1.5 rounded-full" 
-                              style={{ 
-                                width: `${Math.min(
-                                  (Number(token.platformFee.tokensClaimed) / Number(token.platformFee.totalTokens)) * 100, 
-                                  100
-                                )}%` 
-                              }}
-                            ></div>
-                      </div>
+                            </div>
+                              )}
+                            </div>
+                      )}
                     </div>
-                  )}
-                      </div>
-                </div>
-              )}
-                </div>
+                              </div>
+                            )}
+                          </div>
             ))}
-        </div>
+          </div>
         )
       )}
 
@@ -1015,13 +1050,13 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
         <div className="bg-gray-800 rounded-lg p-4 max-w-2xl w-full">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-lg font-medium text-white">Vesting Schedules</h3>
-            <button
+                            <button
               onClick={() => setShowVestingSchedules(false)}
               className="text-gray-400 hover:text-gray-300"
-            >
+                            >
               ×
-            </button>
-        </div>
+                            </button>
+                          </div>
           
           <div className="space-y-4">
             {vestingSchedules.length > 0 ? (
@@ -1050,11 +1085,11 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
                     </div>
                     <div>
                       <p className="text-gray-400">Cliff Duration</p>
-                      <p className="text-white">{schedule.cliffDuration} days</p>
+                      <p className="text-white">{Math.floor(Number(schedule.cliffDuration) / (24 * 60 * 60))} days</p>
                     </div>
                     <div>
                       <p className="text-gray-400">Vesting Duration</p>
-                      <p className="text-white">{schedule.vestingDuration} days</p>
+                      <p className="text-white">{Math.floor(Number(schedule.vestingDuration) / (24 * 60 * 60))} days</p>
                     </div>
                     <div>
                       <p className="text-gray-400">Status</p>
@@ -1068,10 +1103,24 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
               ))
             ) : (
               <p className="text-gray-400 text-center">No vesting schedules found</p>
-            )}
-          </div>
+          )}
+        </div>
         </div>
       </Dialog>
+
+      {/* Add the block dialog */}
+      {tokenToBlock && (
+        <BlockDialog
+          isOpen={blockDialogOpen}
+          onClose={() => {
+            setBlockDialogOpen(false);
+            setTokenToBlock(null);
+          }}
+          onConfirm={confirmBlockToken}
+          tokenName={tokenToBlock.name}
+          tokenAddress={tokenToBlock.address}
+        />
+      )}
     </div>
   );
 });
