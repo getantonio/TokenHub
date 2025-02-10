@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNetwork } from '@contexts/NetworkContext';
 import { useToast } from '@/components/ui/toast/use-toast';
 import TokenPreview from '@components/features/token/TokenPreview';
-import { InfoIcon } from '@components/ui/InfoIcon';
+import { InfoIcon } from '@/components/ui/InfoIcon';
 import { Spinner } from '@components/ui/Spinner';
 import { useTokenFactory } from '@/hooks/useTokenFactory';
 import { useAccount, usePublicClient } from 'wagmi';
@@ -15,6 +15,9 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import TokenDeploymentTest from './TokenDeploymentTest';
+import { Alert } from "@/components/ui/alert";
+import { Dialog } from '@/components/ui/dialog';
 
 interface TokenFormV3Props {
   isConnected: boolean;
@@ -27,6 +30,7 @@ const formSchema = z.object({
   symbol: z.string().min(1, "Symbol is required"),
   initialSupply: z.coerce.number().min(0, "Initial supply must be >= 0"),
   maxSupply: z.coerce.number().min(0, "Max supply must be >= 0"),
+  owner: z.string().min(1, "Owner address is required"),
   enableBlacklist: z.boolean(),
   enableTimeLock: z.boolean(),
   presaleRate: z.string().min(1, "Presale rate is required"),
@@ -91,16 +95,16 @@ const getDefaultTimes = () => {
 const defaultValues = {
   name: 'Test Token',
   symbol: 'TEST',
-  initialSupply: '1000000',
-  maxSupply: '2000000',
+  initialSupply: 1000000,
+  maxSupply: 2000000,
   owner: '',
   enableBlacklist: false,
   enableTimeLock: false,
   presaleRate: '0.001',
-  softCap: '50',
-  hardCap: '100',
-  minContribution: '0.1',
-  maxContribution: '10',
+  softCap: 50,
+  hardCap: 100,
+  minContribution: 0.1,
+  maxContribution: 10,
   startTime: getDefaultTimes().startTimeFormatted,
   endTime: getDefaultTimes().endTimeFormatted,
   presalePercentage: 40,
@@ -119,6 +123,13 @@ const defaultValues = {
   ]
 };
 
+type ValidationResult = {
+  category: string;
+  message: string;
+  details?: string[];
+  status: 'success' | 'warning' | 'error';
+};
+
 export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenFormV3Props) {
   const { chainId } = useNetwork();
   const { address } = useAccount();
@@ -127,6 +138,9 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
   const [loading, setLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
   const { createToken } = useTokenFactory();
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [showResults, setShowResults] = useState(false);
+  const [simulationResults, setSimulationResults] = useState<ValidationResult[]>([]);
 
   useEffect(() => {
     setMounted(true);
@@ -342,7 +356,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
       vestingEnabled: false,
       vestingDuration: 365, // Default to 1 year
       cliffDuration: 90,   // Default to 3 months
-      vestingStartTime: BigInt(Math.floor(Date.now() / 1000)) // Current timestamp
+      vestingStartTime: getDefaultTimes().startTimeFormatted
     };
     
     form.setValue('wallets', [...form.getValues('wallets'), newWallet]);
@@ -366,6 +380,323 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
       cliffDuration: wallet.cliffDuration,
       vestingStartTime: wallet.vestingStartTime
     })));
+  };
+
+  const validateTokenName = (name: string) => {
+    const nameLength = name.length;
+    const hasSpecialChars = /[^a-zA-Z0-9\s]/.test(name);
+    const commonWords = ['token', 'coin', 'finance', 'defi', 'swap'];
+    const containsCommonWord = commonWords.some(word => 
+      name.toLowerCase().includes(word)
+    );
+
+    if (nameLength < 3 || nameLength > 32) {
+      return {
+        category: 'Token Name',
+        status: 'error' as const,
+        message: 'Invalid name length',
+        details: ['Name should be between 3 and 32 characters']
+      };
+    }
+
+    if (hasSpecialChars) {
+      return {
+        category: 'Token Name',
+        status: 'warning' as const,
+        message: 'Contains special characters',
+        details: ['Consider using only letters, numbers, and spaces']
+      };
+    }
+
+    if (containsCommonWord) {
+      return {
+        category: 'Token Name',
+        status: 'warning' as const,
+        message: 'Contains common token terms',
+        details: ['Consider a more unique and memorable name']
+      };
+    }
+
+    return {
+      category: 'Token Name',
+      status: 'success' as const,
+      message: 'Valid token name',
+      details: ['Unique and appropriate length']
+    };
+  };
+
+  const validateSymbol = (symbol: string) => {
+    const isValid = /^[A-Z]{2,6}$/.test(symbol);
+    const isCommon = ['ETH', 'BTC', 'BNB', 'USDT', 'USDC'].includes(symbol);
+
+    if (!isValid) {
+      return {
+        category: 'Token Symbol',
+        status: 'error' as const,
+        message: 'Invalid symbol format',
+        details: [
+          'Should be 2-6 uppercase letters',
+          'No numbers or special characters'
+        ]
+      };
+    }
+
+    if (isCommon) {
+      return {
+        category: 'Token Symbol',
+        status: 'error' as const,
+        message: 'Reserved symbol',
+        details: ['This symbol is already in use by a major token']
+      };
+    }
+
+    return {
+      category: 'Token Symbol',
+      status: 'success' as const,
+      message: 'Valid symbol',
+      details: ['Follows standard format']
+    };
+  };
+
+  const validateSupply = (initialSupply: string, maxSupply: string) => {
+    const initial = Number(initialSupply);
+    const max = Number(maxSupply);
+
+    if (initial <= 0 || max <= 0) {
+      return {
+        category: 'Token Supply',
+        status: 'error' as const,
+        message: 'Invalid supply values',
+        details: ['Supply values must be greater than 0']
+      };
+    }
+
+    if (initial > max) {
+      return {
+        category: 'Token Supply',
+        status: 'error' as const,
+        message: 'Initial supply exceeds max supply',
+        details: ['Initial supply should be less than or equal to max supply']
+      };
+    }
+
+    if (max > 1e12) {
+      return {
+        category: 'Token Supply',
+        status: 'warning' as const,
+        message: 'Very large max supply',
+        details: [
+          'Consider reducing max supply for better tokenomics',
+          'Large supplies can be perceived as less valuable'
+        ]
+      };
+    }
+
+    return {
+      category: 'Token Supply',
+      status: 'success' as const,
+      message: 'Valid supply configuration',
+      details: ['Supply values are within reasonable ranges']
+    };
+  };
+
+  const validatePresale = (): ValidationResult => {
+    const formValues = form.getValues();
+    const softCap = Number(formValues.softCap);
+    const hardCap = Number(formValues.hardCap);
+    const minContribution = Number(formValues.minContribution);
+    const maxContribution = Number(formValues.maxContribution);
+
+    if (softCap >= hardCap) {
+      return {
+        category: 'Presale Configuration',
+        status: 'error',
+        message: 'Invalid caps',
+        details: ['Soft cap must be less than hard cap']
+      };
+    }
+
+    if (minContribution >= maxContribution) {
+      return {
+        category: 'Presale Configuration',
+        status: 'error',
+        message: 'Invalid contribution limits',
+        details: ['Minimum contribution must be less than maximum contribution']
+      };
+    }
+
+    if (softCap < hardCap * 0.5) {
+      return {
+        category: 'Presale Configuration',
+        status: 'warning',
+        message: 'Low soft cap',
+        details: ['Consider setting soft cap to at least 50% of hard cap']
+      };
+    }
+
+    return {
+      category: 'Presale Configuration',
+      status: 'success',
+      message: 'Valid presale configuration',
+      details: [
+        `Soft Cap: ${softCap} ETH`,
+        `Hard Cap: ${hardCap} ETH`,
+        `Min Contribution: ${minContribution} ETH`,
+        `Max Contribution: ${maxContribution} ETH`
+      ]
+    };
+  };
+
+  const validateVesting = (): ValidationResult => {
+    const formValues = form.getValues();
+    const teamWallet = formValues.wallets.find(w => 
+      w.name.toLowerCase().includes('team') || 
+      w.name.toLowerCase().includes('founder')
+    );
+
+    if (!teamWallet) {
+      return {
+        category: 'Vesting',
+        status: 'warning',
+        message: 'No team wallet found',
+        details: ['Consider adding a team wallet with vesting']
+      };
+    }
+
+    if (!teamWallet.vestingEnabled) {
+      return {
+        category: 'Vesting',
+        status: 'warning',
+        message: 'Team tokens not vested',
+        details: ['Consider enabling vesting for team tokens']
+      };
+    }
+
+    if (!teamWallet.vestingDuration || teamWallet.vestingDuration < 180) {
+      return {
+        category: 'Vesting',
+        status: 'warning',
+        message: 'Short vesting duration',
+        details: [
+          'Team tokens should be vested for at least 6 months',
+          'Consider adding a cliff period'
+        ]
+      };
+    }
+
+    return {
+      category: 'Vesting',
+      status: 'success',
+      message: 'Good vesting configuration',
+      details: formValues.wallets
+        .filter(w => w.vestingEnabled)
+        .map(w => `${w.name}: ${w.vestingDuration}d vesting, ${w.cliffDuration || 0}d cliff`)
+    };
+  };
+
+  const validateDistribution = (): ValidationResult => {
+    const formValues = form.getValues();
+    const totalPercentage = Number(formValues.presalePercentage) + 
+      Number(formValues.liquidityPercentage) +
+      formValues.wallets.reduce((sum, w) => sum + Number(w.percentage), 0);
+
+    if (totalPercentage !== 100) {
+      return {
+        category: 'Token Distribution',
+        status: 'error',
+        message: 'Invalid total allocation',
+        details: [`Total allocation is ${totalPercentage}%, should be 100%`]
+      };
+    }
+
+    const teamAllocation = formValues.wallets
+      .filter(w => w.name.toLowerCase().includes('team'))
+      .reduce((sum, w) => sum + Number(w.percentage), 0);
+
+    if (teamAllocation > 20) {
+      return {
+        category: 'Token Distribution',
+        status: 'warning',
+        message: 'High team allocation',
+        details: [
+          `Team allocation is ${teamAllocation}%`,
+          'Consider reducing team allocation to build trust'
+        ]
+      };
+    }
+
+    return {
+      category: 'Token Distribution',
+      status: 'success',
+      message: 'Good token distribution',
+      details: [
+        `Presale: ${formValues.presalePercentage}%`,
+        `Liquidity: ${formValues.liquidityPercentage}%`,
+        ...formValues.wallets.map(w => `${w.name}: ${w.percentage}%`)
+      ]
+    };
+  };
+
+  const validateLiquidity = (): ValidationResult => {
+    const formValues = form.getValues();
+    const liquidityPercentage = Number(formValues.liquidityPercentage);
+    const lockDuration = Number(formValues.liquidityLockDuration);
+
+    if (liquidityPercentage < 25) {
+      return {
+        category: 'Liquidity',
+        status: 'warning',
+        message: 'Low liquidity allocation',
+        details: [
+          'Recommend at least 25% for liquidity',
+          'Higher liquidity helps reduce price impact'
+        ]
+      };
+    }
+
+    if (lockDuration < 180) {
+      return {
+        category: 'Liquidity',
+        status: 'warning',
+        message: 'Short lock duration',
+        details: [
+          'Recommend locking liquidity for at least 180 days',
+          'Longer locks build more trust'
+        ]
+      };
+    }
+
+    return {
+      category: 'Liquidity',
+      status: 'success',
+      message: 'Good liquidity configuration',
+      details: [
+        `Liquidity allocation: ${liquidityPercentage}%`,
+        `Lock duration: ${lockDuration} days`
+      ]
+    };
+  };
+
+  const simulateDeployment = async () => {
+    setIsSimulating(true);
+    
+    // Simulate network delay
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    
+    const formValues = form.getValues();
+    const validations = [
+      validateTokenName(formValues.name),
+      validateSymbol(formValues.symbol),
+      validateSupply(formValues.initialSupply.toString(), formValues.maxSupply.toString()),
+      validatePresale(),
+      validateVesting(),
+      validateDistribution(),
+      validateLiquidity()
+    ];
+    
+    setSimulationResults(validations);
+    setShowResults(true);
+    setIsSimulating(false);
   };
 
   return (
@@ -761,31 +1092,49 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
         </div>
 
         <div className="form-actions mt-4">
-          <div className="flex items-center mr-2">
-            <InfoIcon content="Deployment fee will be charged in ETH. Make sure you have enough ETH to cover the fee and gas costs." />
+          <div className="flex items-center gap-2">
+            <div className="flex items-center mr-2">
+              <InfoIcon content="Deployment fee will be charged in ETH. Make sure you have enough ETH to cover the fee and gas costs." />
+            </div>
+            <Button
+              type="button"
+              onClick={simulateDeployment}
+              disabled={isSimulating || !isConnected}
+              variant="secondary"
+              className="bg-blue-600/20 hover:bg-blue-700/20 text-blue-400"
+            >
+              {isSimulating ? (
+                <>
+                  <span className="animate-spin mr-2">⟳</span>
+                  Analyzing...
+                </>
+              ) : (
+                'Test Deployment'
+              )}
+            </Button>
+            <Button 
+              type="submit"
+              disabled={!isConnected || loading || form.formState.isSubmitting}
+              className="form-button-primary"
+            >
+              {loading ? (
+                <>
+                  <Spinner className="w-4 h-4 mr-2" />
+                  Creating Token...
+                </>
+              ) : (
+                'Create Token'
+              )}
+            </Button>
           </div>
-          <Button 
-            type="submit"
-            disabled={!isConnected || loading || form.formState.isSubmitting}
-            className="form-button-primary"
-          >
-            {loading ? (
-              <>
-                <Spinner className="w-4 h-4 mr-2" />
-                Creating Token...
-              </>
-            ) : (
-              'Create Token'
-            )}
-          </Button>
         </div>
 
         <div className="mt-8">
           <TokenPreview
             name={form.watch("name")}
             symbol={form.watch("symbol")}
-            initialSupply={form.watch("initialSupply")}
-            maxSupply={form.watch("maxSupply")}
+            initialSupply={form.watch("initialSupply").toString()}
+            maxSupply={form.watch("maxSupply").toString()}
             distributionSegments={[
               { name: 'Presale', amount: Number(form.watch("presalePercentage")), percentage: Number(form.watch("presalePercentage")), color: '#0088FE' },
               { name: 'Liquidity', amount: Number(form.watch("liquidityPercentage")), percentage: Number(form.watch("liquidityPercentage")), color: '#00C49F' },
@@ -800,6 +1149,75 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
           />
         </div>
       </form>
+
+      <Dialog open={showResults} onClose={() => setShowResults(false)}>
+        <div className="bg-gray-800 rounded-lg shadow-xl p-6 max-w-xl w-full mx-4">
+          <div className="flex justify-between items-center mb-4">
+            <div>
+              <h2 className="text-lg font-medium text-white">Deployment Analysis</h2>
+              <p className="text-sm text-gray-400">Comprehensive check of your token configuration</p>
+            </div>
+            <button
+              onClick={() => setShowResults(false)}
+              className="text-gray-400 hover:text-white"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-2">
+            {simulationResults.map((result, index) => (
+              <div 
+                key={index} 
+                className={`bg-gray-900/50 rounded-lg p-3 border-l-2 ${
+                  result.status === 'error' ? 'border-red-500' : 
+                  result.status === 'warning' ? 'border-yellow-500' : 
+                  'border-green-500'
+                }`}
+              >
+                <div className="flex items-start gap-2">
+                  <div className={`mt-0.5 ${
+                    result.status === 'error' ? 'text-red-400' : 
+                    result.status === 'warning' ? 'text-yellow-400' : 
+                    'text-green-400'
+                  }`}>
+                    {result.status === 'error' ? '✖' : result.status === 'warning' ? '⚠' : '✓'}
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-medium text-sm text-white">{result.category}</h4>
+                    {result.details && (
+                      <ul className="mt-1 space-y-1">
+                        {result.details.map((detail, i) => (
+                          <li key={i} className="text-xs text-gray-400">• {detail}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="border-t border-gray-700 mt-4 pt-4">
+            {simulationResults.some(r => r.status === 'error') ? (
+              <Alert variant="error">
+                <h4 className="font-medium">⚠️ Deployment Not Recommended</h4>
+                <p className="text-sm mt-1">Critical issues found. Please address the errors before proceeding.</p>
+              </Alert>
+            ) : simulationResults.some(r => r.status === 'warning') ? (
+              <Alert variant="warning">
+                <h4 className="font-medium">⚠️ Deployment Possible with Caution</h4>
+                <p className="text-sm mt-1">Consider addressing the warnings to improve your token's security and adoption potential.</p>
+              </Alert>
+            ) : (
+              <Alert variant="success">
+                <h4 className="font-medium">✓ Ready for Deployment</h4>
+                <p className="text-sm mt-1">All checks passed. Your token configuration follows best practices.</p>
+              </Alert>
+            )}
+          </div>
+        </div>
+      </Dialog>
     </div>
   );
 }

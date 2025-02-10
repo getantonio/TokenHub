@@ -876,7 +876,7 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
                               <p className="text-xs text-text-secondary">Total Raised: {token.presaleInfo.totalContributed} ETH</p>
                             </div>
                             <div className="flex flex-col gap-1">
-                              <button
+                                  <button
                                 onClick={() => handleWhitelist(token.address)}
                                 className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
                                 disabled={token.presaleInfo.finalized}
@@ -900,8 +900,8 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
                               >
                                 Emergency Withdraw
                               </button>
+                              </div>
                             </div>
-                          </div>
 
                           {/* Progress Bar */}
                           <div className="w-full bg-gray-700 rounded-full h-1.5 mt-2">
@@ -927,8 +927,8 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
                                     <span>{contributor.contribution} ETH = {contributor.tokenAllocation} {token.symbol}</span>
                                   </div>
                                 ))}
-                              </div>
                             </div>
+                          </div>
                           )}
                           </div>
                         )}
@@ -971,18 +971,18 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
                             <div className="col-span-2">
                               <p className="text-xs text-text-secondary">Total: {token.platformFee.totalTokens} | Claimed: {token.platformFee.tokensClaimed}</p>
                               <p className="text-xs text-text-secondary">Vesting: {token.platformFee.vestingDuration} days | Cliff: {token.platformFee.cliffDuration} days</p>
-                            </div>
+                          </div>
                             <div>
-                              <button
+                            <button
                                 onClick={() => {/* TODO: Implement claim */}}
                                 className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
                                 disabled={Date.now() < token.platformFee.vestingStart * 1000 + 
                                   token.platformFee.cliffDuration * 24 * 60 * 60 * 1000}
                               >
                                 Claim Tokens
-                              </button>
-                            </div>
+                            </button>
                           </div>
+                        </div>
                           
                           {/* Vesting Progress Bar */}
                           <div className="w-full bg-gray-700 rounded-full h-1.5 mt-2">
@@ -995,12 +995,12 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
                                 )}%` 
                               }}
                             ></div>
-                          </div>
-                        </div>
-                      )}
                       </div>
                     </div>
                   )}
+                      </div>
+                </div>
+              )}
                 </div>
             ))}
         </div>
@@ -1021,7 +1021,7 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
             >
               ×
             </button>
-          </div>
+        </div>
           
           <div className="space-y-4">
             {vestingSchedules.length > 0 ? (
