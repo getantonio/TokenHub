@@ -13,7 +13,7 @@ async function main() {
   const TokenTemplate = await ethers.getContractFactory("TokenTemplate_v3");
   const tokenTemplate = await TokenTemplate.deploy({
     nonce: startNonce,
-    gasPrice: ethers.parseUnits("35", "gwei")
+    gasPrice: ethers.parseUnits("10", "gwei") // BSC typically uses lower gas prices
   });
 
   await tokenTemplate.waitForDeployment();
@@ -24,7 +24,7 @@ async function main() {
   const TokenFactory = await ethers.getContractFactory("TokenFactory_v3");
   const tokenFactory = await TokenFactory.deploy({
     nonce: startNonce + 1,
-    gasPrice: ethers.parseUnits("35", "gwei")
+    gasPrice: ethers.parseUnits("10", "gwei")
   });
 
   await tokenFactory.waitForDeployment();
@@ -34,19 +34,19 @@ async function main() {
   console.log("Initializing TokenFactory_v3...");
   const initTx = await tokenFactory.initialize(await tokenTemplate.getAddress(), {
     nonce: startNonce + 2,
-    gasPrice: ethers.parseUnits("35", "gwei")
+    gasPrice: ethers.parseUnits("10", "gwei")
   });
   await initTx.wait();
   console.log("TokenFactory_v3 initialized");
 
-  // Set deployment fee to 0.0001 ETH
+  // Set deployment fee to 0.001 BNB
   console.log("Setting deployment fee...");
-  const setFeeTx = await tokenFactory.setDeploymentFee(ethers.parseEther("0.0001"), {
+  const setFeeTx = await tokenFactory.setDeploymentFee(ethers.parseEther("0.001"), {
     nonce: startNonce + 3,
-    gasPrice: ethers.parseUnits("35", "gwei")
+    gasPrice: ethers.parseUnits("10", "gwei")
   });
   await setFeeTx.wait();
-  console.log("Deployment fee set to 0.0001 ETH");
+  console.log("Deployment fee set to 0.001 BNB");
 
   console.log("\nDeployment Summary:");
   console.log("-------------------");

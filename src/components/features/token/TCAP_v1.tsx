@@ -310,7 +310,7 @@ export default function TCAP_v1({ isConnected, address, provider: externalProvid
                       <div className="flex flex-col gap-1">
                         <h4 className="text-xs font-medium text-text-primary">Token Explorer</h4>
                         <a
-                          href={getExplorerUrl(chainId, token.address, 'token')}
+                          href={getExplorerUrl(chainId ?? undefined, token.address, 'token')}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="btn-blue btn-small w-fit"

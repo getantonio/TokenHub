@@ -214,7 +214,7 @@ export default function TCAP_test({ tokenAddress }: TokenAdminTestProps) {
                     <div className="flex flex-col gap-1">
                       <h4 className="text-xs font-medium text-text-primary">Token Explorer</h4>
                       <a
-                        href={getExplorerUrl(chainId, tokenAddress, 'token')}
+                        href={getExplorerUrl(chainId ?? undefined, tokenAddress, 'token')}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="btn-blue btn-small w-fit"

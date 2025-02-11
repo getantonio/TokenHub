@@ -55,7 +55,7 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const isSupported = chainId !== null && Object.values(SUPPORTED_NETWORKS).some(
-    network => network.chainId === chainId
+    network => network.id === chainId
   );
 
   return (

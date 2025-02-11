@@ -51,6 +51,12 @@ const config = {
       confirmations: 2,
       networkCheckTimeout: 100000,
       timeoutBlocks: 200
+    },
+    bscTestnet: {
+      url: "https://data-seed-prebsc-1-s1.binance.org:8545",
+      chainId: 97,
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+      gasPrice: 10000000000 // 10 gwei
     }
   },
   solidity: {
@@ -92,7 +98,8 @@ const config = {
       "sepolia": process.env.ETHERSCAN_API_KEY || "",
       "optimism-sepolia": process.env.OPTIMISM_API_KEY || "",
       "arbitrumsepolia": process.env.ARBITRUM_API_KEY || "",
-      "polygon-amoy": process.env.POLYGONSCAN_API_KEY
+      "polygon-amoy": process.env.POLYGONSCAN_API_KEY,
+      bscTestnet: process.env.BSCSCAN_API_KEY || ""
     },
     customChains: [
       {

@@ -408,7 +408,7 @@ export default function TokenForm_v1({ isConnected }: Props) {
                 </div>
                 <div className="flex space-x-2 mt-2">
                   <a
-                    href={`${getExplorerUrl(chainId, successInfo.tokenAddress, 'token')}`}
+                    href={`${getExplorerUrl(chainId ?? undefined, successInfo.tokenAddress, 'token')}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-blue-400 hover:text-blue-300 text-sm"

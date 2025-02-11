@@ -1,4 +1,4 @@
-import { useEffect, useState, forwardRef, useImperativeHandle, useMemo } from 'react';
+import { useEffect, useState, forwardRef, useImperativeHandle, useMemo, useRef } from 'react';
 import { Contract } from 'ethers';
 import { formatEther, parseEther } from 'viem';
 import { Card } from '@/components/ui/card';
@@ -145,6 +145,22 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
   const [blockDialogOpen, setBlockDialogOpen] = useState(false);
   const [tokenToBlock, setTokenToBlock] = useState<TokenInfo | null>(null);
   
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Add click-away listener
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsExpanded(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
   const displayedTokens = useMemo(() => {
     if (showOnlyRecent) {
       return tokens.slice(0, 3);
@@ -171,10 +187,19 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
       'function symbol() view returns (string)',
       'function totalSupply() view returns (uint256)',
       'function owner() view returns (address)',
+      'function balanceOf(address account) view returns (uint256)',
+      'function transfer(address to, uint256 amount) returns (bool)',
+      'function allowance(address owner, address spender) view returns (uint256)',
+      'function approve(address spender, uint256 amount) returns (bool)',
+      'function transferFrom(address from, address to, uint256 amount) returns (bool)',
       // Control functions
       'function pause() external',
       'function unpause() external',
       'function paused() view returns (bool)',
+      'function isPauser(address account) view returns (bool)',
+      'function addPauser(address account) external',
+      'function renouncePauser() external',
+      // Other existing functions...
       'function updateBlacklist(address[] calldata addresses, bool status) external',
       'function setTimeLock(address account, uint256 unlockTime) external',
       'function burn(uint256 amount) external',
@@ -397,14 +422,47 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
     }
   };
 
-  // Add token control functions
+  // Update handlePause with better error handling
   const handlePause = async (tokenAddress: string) => {
     try {
       const signer = await externalProvider.getSigner();
       const tokenContract = getTokenContract(tokenAddress, signer);
-      const isPaused = await tokenContract.paused();
       
-      const tx = await tokenContract[isPaused ? 'unpause' : 'pause']();
+      // First check if the user is the owner
+      const owner = await tokenContract.owner();
+      const currentUser = await signer.getAddress();
+      
+      if (owner.toLowerCase() !== currentUser.toLowerCase()) {
+        throw new Error('Only the token owner can pause/unpause transfers');
+      }
+
+      // Check if user is a pauser
+      const isPauser = await tokenContract.isPauser(currentUser);
+      if (!isPauser) {
+        throw new Error('You do not have pauser role');
+      }
+
+      // Check current pause state
+      const isPaused = await tokenContract.paused();
+      console.log('Current pause state:', isPaused);
+      
+      // Prepare the transaction
+      const method = isPaused ? 'unpause' : 'pause';
+      
+      // Estimate gas with a buffer
+      const gasEstimate = await tokenContract[method].estimateGas();
+      const gasLimit = gasEstimate + (gasEstimate / BigInt(5)); // Add 20% buffer
+      
+      // Send transaction with gas limit
+      const tx = await tokenContract[method]({
+        gasLimit,
+      });
+      
+      toast({
+        title: 'Transaction Pending',
+        description: `${isPaused ? 'Unpausing' : 'Pausing'} token transfers...`,
+      });
+      
       await tx.wait();
       
       toast({
@@ -413,11 +471,21 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
       });
       
       loadTokens();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error toggling pause:', error);
+      let errorMessage = 'Failed to toggle pause state.';
+      
+      if (error.message) {
+        errorMessage = error.message;
+      } else if (error.reason) {
+        errorMessage = error.reason;
+      } else if (error.code === 'CALL_EXCEPTION') {
+        errorMessage = 'Transaction failed. You may not have the required permissions or there might be a network issue.';
+      }
+
       toast({
         title: 'Error',
-        description: 'Failed to toggle pause state.',
+        description: errorMessage,
         variant: 'destructive'
       });
     }
@@ -762,24 +830,24 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
   }
 
   return (
-    <div className="form-card">
+    <div className="form-card" ref={containerRef}>
       <div
-        className="flex justify-between items-center cursor-pointer py-1"
+        className="flex justify-between items-center cursor-pointer py-2 px-1"
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <div className="flex items-center gap-1">
-          <h2 className="text-xs font-medium text-text-primary">Token Creator Admin Controls (V3)</h2>
-            <span className="text-xs text-text-secondary">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-medium text-text-primary">Token Creator Admin Controls (V3)</h2>
+          <span className="text-xs text-text-secondary">
             {showOnlyRecent ? `${Math.min(tokens.length, 3)}/${tokens.length}` : tokens.length} tokens
-            </span>
+          </span>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
           <button
             onClick={(e) => {
               e.stopPropagation();
               setShowOnlyRecent(!showOnlyRecent);
             }}
-            className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+            className="text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
           >
             {showOnlyRecent ? 'Show All' : 'Show Recent'}
           </button>
@@ -788,11 +856,11 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
               e.stopPropagation();
               loadTokens();
             }}
-            className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded ml-1"
+            className="text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
           >
             Refresh
           </button>
-          <span className="text-text-accent hover:text-blue-400 ml-1">
+          <span className="text-text-accent hover:text-blue-400 text-lg p-2 w-8 h-8 flex items-center justify-center">
             {isExpanded ? '▼' : '▶'}
           </span>
         </div>
@@ -819,6 +887,16 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
                     <div>
                     <h3 className="text-xs font-medium text-text-primary">{token.name} ({token.symbol})</h3>
                     <p className="text-xs text-text-secondary">Supply: {Number(token.totalSupply).toLocaleString()} {token.symbol}</p>
+                    <p className="text-xs mt-1">
+                      Status: {" "}
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                        token.paused 
+                        ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' 
+                        : 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                      }`}>
+                        {token.paused ? 'Paused' : 'Active'}
+                      </span>
+                    </p>
                     {token.presaleInfo && (
                       <div className="mt-1">
                       <p className="text-xs text-text-secondary">
@@ -853,7 +931,7 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
                         <h4 className="text-xs font-medium text-text-primary mb-1">Token Explorer</h4>
                         <div className="flex gap-1">
                           <a
-                            href={getExplorerUrl(chainId, token.address, 'token')}
+                            href={getExplorerUrl(chainId ?? undefined, token.address, 'token')}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"

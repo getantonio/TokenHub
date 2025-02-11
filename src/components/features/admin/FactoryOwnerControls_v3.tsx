@@ -254,7 +254,7 @@ export default function FactoryOwnerControls_v3({ isConnected, address: factoryA
                 <p>Current Fee: {currentFee ? formatEther(currentFee) : '0'} ETH</p>
                 <p>Contract Balance: {balance ? formatEther(balance) : '0'} ETH</p>
                 <a
-                  href={getExplorerUrl(chainId, factoryAddress, 'address')}
+                  href={getExplorerUrl(chainId ?? undefined, factoryAddress, 'address')}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-blue-400 hover:text-blue-300"

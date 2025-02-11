@@ -1102,42 +1102,34 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                             </li>
                             <li className="flex items-center gap-2 text-gray-300">
                               <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                              Liquidity (35%): Market operations
-                            </li>
-                            <li className="flex items-center gap-2 text-gray-300">
-                              <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
-                              Marketing (15%): Growth budget
+                              Liquidity (35%): Market stability
                             </li>
                             <li className="flex items-center gap-2 text-gray-300">
                               <span className="w-2 h-2 rounded-full bg-purple-500"></span>
-                              Team (12%): Core operations
-                            </li>
-                            <li className="flex items-center gap-2 text-gray-300">
-                              <span className="w-2 h-2 rounded-full bg-red-500"></span>
-                              Development (3%): Technical improvements
+                              Team & Marketing (30%): Development
                             </li>
                           </ul>
                         </div>
                         <div>
-                          <h4 className="text-sm font-medium text-white mb-2">Growth Focus</h4>
-                          <ul className="space-y-2 text-sm text-gray-300">
-                            <li className="flex items-center gap-2">
-                              <svg className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                              </svg>
-                              Aggressive marketing strategy
+                          <h4 className="text-sm font-medium text-white mb-2">Vesting Schedule</h4>
+                          <ul className="space-y-2 text-sm">
+                            <li className="flex items-center gap-2 text-gray-300">
+                              <InfoIcon content="The cliff period is a duration where tokens are locked and cannot be claimed. This helps ensure long-term commitment.">
+                                <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
+                                Cliff Period: 3 months
+                              </InfoIcon>
                             </li>
-                            <li className="flex items-center gap-2">
-                              <svg className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                              </svg>
-                              Rapid community building
+                            <li className="flex items-center gap-2 text-gray-300">
+                              <InfoIcon content="After the cliff period, tokens are gradually released over the vesting duration. This prevents large sell-offs and promotes sustainable growth.">
+                                <span className="w-2 h-2 rounded-full bg-orange-500"></span>
+                                Vesting Duration: 12 months
+                              </InfoIcon>
                             </li>
-                            <li className="flex items-center gap-2">
-                              <svg className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                              </svg>
-                              Exchange listing focus
+                            <li className="flex items-center gap-2 text-gray-300">
+                              <InfoIcon content="Linear vesting means tokens are released at a constant rate over time, ensuring fair and predictable distribution.">
+                                <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                                Linear Release Schedule
+                              </InfoIcon>
                             </li>
                           </ul>
                         </div>
