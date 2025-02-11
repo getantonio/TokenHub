@@ -1,4 +1,4 @@
-import TokenForm_V3 from '../components/features/token/TokenForm_V3';
+import TokenForm_v3 from '../components/features/token/TokenForm_v3';
 import TCAP_v3 from '../components/features/token/TCAP_v3';
 import { useAccount } from 'wagmi';
 import { useEffect, useState, useRef } from 'react';
@@ -74,7 +74,7 @@ export default function V3() {
         </div>
 
         <div className="space-y-4">
-          <TokenForm_V3 
+          <TokenForm_v3 
             isConnected={isConnected}
             onSuccess={handleSuccess}
           />

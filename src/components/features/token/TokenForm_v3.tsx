@@ -141,6 +141,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
   const [isSimulating, setIsSimulating] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const [simulationResults, setSimulationResults] = useState<ValidationResult[]>([]);
+  const [showTokenomicsInfo, setShowTokenomicsInfo] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -900,71 +901,325 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
 
         <div className="form-section col-span-2 bg-gray-900/50 rounded-lg p-2">
           <div className="mb-2">
-            <h3 className="text-lg font-medium text-white mb-1">
-              Distribution & Vesting
-            </h3>
-            <p className="text-sm text-gray-400">Configure token allocations and vesting schedules</p>
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div>
+                  <h3 className="text-lg font-medium text-white">Distribution & Vesting</h3>
+                  <p className="text-sm text-gray-400">Configure token allocations and vesting schedules</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-8 px-2 text-sm text-blue-400 hover:text-blue-300"
+                  onClick={() => {
+                    // Using the Dialog component to show tokenomics info
+                    setShowTokenomicsInfo(true);
+                  }}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <path d="M12 16v-4"></path>
+                    <path d="M12 8h.01"></path>
+                  </svg>
+                  Tokenomics Guide
+                </Button>
+              </div>
+              <select
+                onChange={(e) => applyPreset(e.target.value as keyof typeof VESTING_PRESETS)}
+                className="h-8 px-2 text-sm bg-gray-800 border border-gray-700 rounded-md text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-32"
+                defaultValue=""
+              >
+                <option value="" disabled>Select Preset</option>
+                <option value="standard">Standard</option>
+                <option value="fair_launch">Fair</option>
+                <option value="community">Community</option>
+                <option value="growth">Growth</option>
+                <option value="bootstrap">Bootstrap</option>
+                <option value="governance">Gov</option>
+              </select>
+            </div>
           </div>
-          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-4">
-            <Button
-              type="button"
-              onClick={() => applyPreset('standard')}
-              variant="secondary"
-              className="h-6 text-xs"
-            >
-              Standard
-            </Button>
-            <Button
-              type="button"
-              onClick={() => applyPreset('fair_launch')}
-              variant="secondary"
-              className="h-6 text-xs"
-            >
-              Fair
-            </Button>
-            <Button
-              type="button"
-              onClick={() => applyPreset('community')}
-              variant="secondary"
-              className="h-6 text-xs"
-            >
-              Community
-            </Button>
-            <Button
-              type="button"
-              onClick={() => applyPreset('growth')}
-              variant="secondary"
-              className="h-6 text-xs"
-            >
-              Growth
-            </Button>
-            <Button
-              type="button"
-              onClick={() => applyPreset('bootstrap')}
-              variant="secondary"
-              className="h-6 text-xs"
-            >
-              Bootstrap
-            </Button>
-            <Button
-              type="button"
-              onClick={() => applyPreset('governance')}
-              variant="secondary"
-              className="h-6 text-xs"
-            >
-              Gov
-            </Button>
-          </div>
-          
+
+          <Dialog open={showTokenomicsInfo} onClose={() => setShowTokenomicsInfo(false)}>
+            <div className="bg-gray-800 rounded-lg shadow-xl p-6 max-w-3xl w-full mx-4">
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h2 className="text-2xl font-semibold text-white flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    Token Distribution Guide
+                  </h2>
+                  <p className="text-gray-400 mt-1">Learn about different distribution models and their impact on your project</p>
+                </div>
+                <button onClick={() => setShowTokenomicsInfo(false)} className="text-gray-400 hover:text-white">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-2">
+                {/* Standard Distribution */}
+                <div className="bg-gradient-to-r from-blue-900/30 to-blue-800/10 rounded-lg p-6 border border-blue-800/50">
+                  <div className="flex items-start gap-4">
+                    <div className="bg-blue-500/20 rounded-lg p-2">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-lg font-medium text-blue-400 mb-2">Standard Distribution (35/35/30)</h3>
+                      <p className="text-gray-300 mb-3">A balanced approach suitable for most projects, offering stability and growth potential</p>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <h4 className="text-sm font-medium text-white mb-2">Allocation Breakdown</h4>
+                          <ul className="space-y-2 text-sm">
+                            <li className="flex items-center gap-2 text-gray-300">
+                              <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                              Presale (35%): Initial investor allocation
+                            </li>
+                            <li className="flex items-center gap-2 text-gray-300">
+                              <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                              Liquidity (35%): Market stability
+                            </li>
+                            <li className="flex items-center gap-2 text-gray-300">
+                              <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+                              Team (15%): Long-term development
+                            </li>
+                            <li className="flex items-center gap-2 text-gray-300">
+                              <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
+                              Marketing (10%): Growth initiatives
+                            </li>
+                            <li className="flex items-center gap-2 text-gray-300">
+                              <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                              Development (5%): Future improvements
+                            </li>
+                          </ul>
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-medium text-white mb-2">Key Benefits</h4>
+                          <ul className="space-y-2 text-sm text-gray-300">
+                            <li className="flex items-center gap-2">
+                              <svg className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                              Balanced liquidity for price stability
+                            </li>
+                            <li className="flex items-center gap-2">
+                              <svg className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                              Fair team allocation with vesting
+                            </li>
+                            <li className="flex items-center gap-2">
+                              <svg className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                              Sustainable marketing budget
+                            </li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Fair Launch */}
+                <div className="bg-gradient-to-r from-green-900/30 to-green-800/10 rounded-lg p-6 border border-green-800/50">
+                  <div className="flex items-start gap-4">
+                    <div className="bg-green-500/20 rounded-lg p-2">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-lg font-medium text-green-400 mb-2">Fair Launch Model (45/35/20)</h3>
+                      <p className="text-gray-300 mb-3">Community-focused distribution emphasizing public participation and fair access</p>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <h4 className="text-sm font-medium text-white mb-2">Distribution Strategy</h4>
+                          <ul className="space-y-2 text-sm">
+                            <li className="flex items-center gap-2 text-gray-300">
+                              <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                              Presale (45%): Maximum community allocation
+                            </li>
+                            <li className="flex items-center gap-2 text-gray-300">
+                              <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                              Liquidity (35%): Strong market foundation
+                            </li>
+                            <li className="flex items-center gap-2 text-gray-300">
+                              <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
+                              Team & Marketing (20%): Lean operations
+                            </li>
+                          </ul>
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-medium text-white mb-2">Advantages</h4>
+                          <ul className="space-y-2 text-sm text-gray-300">
+                            <li className="flex items-center gap-2">
+                              <svg className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                              Higher community ownership
+                            </li>
+                            <li className="flex items-center gap-2">
+                              <svg className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                              Reduced whale concentration
+                            </li>
+                            <li className="flex items-center gap-2">
+                              <svg className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                              Better price discovery
+                            </li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Growth Model */}
+                <div className="bg-gradient-to-r from-purple-900/30 to-purple-800/10 rounded-lg p-6 border border-purple-800/50">
+                  <div className="flex items-start gap-4">
+                    <div className="bg-purple-500/20 rounded-lg p-2">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-lg font-medium text-purple-400 mb-2">Growth Model (35/35/30)</h3>
+                      <p className="text-gray-300 mb-3">Marketing-focused distribution designed for rapid expansion and market penetration</p>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <h4 className="text-sm font-medium text-white mb-2">Strategic Allocation</h4>
+                          <ul className="space-y-2 text-sm">
+                            <li className="flex items-center gap-2 text-gray-300">
+                              <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                              Presale (35%): Initial raise
+                            </li>
+                            <li className="flex items-center gap-2 text-gray-300">
+                              <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                              Liquidity (35%): Market operations
+                            </li>
+                            <li className="flex items-center gap-2 text-gray-300">
+                              <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
+                              Marketing (15%): Growth budget
+                            </li>
+                            <li className="flex items-center gap-2 text-gray-300">
+                              <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+                              Team (12%): Core operations
+                            </li>
+                            <li className="flex items-center gap-2 text-gray-300">
+                              <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                              Development (3%): Technical improvements
+                            </li>
+                          </ul>
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-medium text-white mb-2">Growth Focus</h4>
+                          <ul className="space-y-2 text-sm text-gray-300">
+                            <li className="flex items-center gap-2">
+                              <svg className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                              Aggressive marketing strategy
+                            </li>
+                            <li className="flex items-center gap-2">
+                              <svg className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                              Rapid community building
+                            </li>
+                            <li className="flex items-center gap-2">
+                              <svg className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                              Exchange listing focus
+                            </li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Best Practices */}
+                <div className="bg-gradient-to-r from-amber-900/30 to-amber-800/10 rounded-lg p-6 border border-amber-800/50">
+                  <div className="flex items-start gap-4">
+                    <div className="bg-amber-500/20 rounded-lg p-2">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-lg font-medium text-amber-400 mb-2">Key Considerations & Best Practices</h3>
+                      <div className="grid grid-cols-2 gap-6">
+                        <div>
+                          <h4 className="text-sm font-medium text-white mb-2">Essential Rules</h4>
+                          <ul className="space-y-3 text-sm">
+                            <li className="flex items-start gap-2 text-gray-300">
+                              <svg className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                              </svg>
+                              <span>Never allocate less than 25% to liquidity to ensure price stability</span>
+                            </li>
+                            <li className="flex items-start gap-2 text-gray-300">
+                              <svg className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                              </svg>
+                              <span>Always implement vesting for team tokens (minimum 6 months)</span>
+                            </li>
+                            <li className="flex items-start gap-2 text-gray-300">
+                              <svg className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                              </svg>
+                              <span>Keep team allocation under 20% to maintain trust</span>
+                            </li>
+                          </ul>
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-medium text-white mb-2">Advanced Tips</h4>
+                          <ul className="space-y-3 text-sm">
+                            <li className="flex items-start gap-2 text-gray-300">
+                              <svg className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                              </svg>
+                              <span>Consider implementing cliff periods for large allocations</span>
+                            </li>
+                            <li className="flex items-start gap-2 text-gray-300">
+                              <svg className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                              </svg>
+                              <span>Split marketing allocation into time-locked tranches</span>
+                            </li>
+                            <li className="flex items-start gap-2 text-gray-300">
+                              <svg className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                              </svg>
+                              <span>Reserve small allocation for future partnerships</span>
+                            </li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Dialog>
+
           <div className="bg-gray-800/50 rounded-lg p-1 mb-2">
             <div className="space-y-2">
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center justify-between mb-4">
                 <h4 className="text-sm font-medium text-white">Token Distribution</h4>
-                <div className="text-xs text-gray-400">
+                <div className="text-sm font-medium">
                   {(() => {
                     const total = Number(form.watch("presalePercentage")) + Number(form.watch("liquidityPercentage")) + form.watch('wallets').reduce((sum, wallet) => sum + Number(wallet.percentage), 0);
                     return (
-                      <span className={total > 100 ? 'text-red-400' : 'text-gray-400'}>
+                      <span className={total > 100 ? 'text-red-400' : 'text-white'}>
                         Total: {total}%
                         {total > 100 && ' (exceeds 100%)'}
                       </span>
@@ -973,9 +1228,10 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                 </div>
               </div>
               
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-3 gap-2 mt-2">
                 {/* Presale */}
                 <div className="relative">
+                  <div className="absolute -top-4 left-0 text-xs text-gray-400">Presale</div>
                   <Input
                     {...form.register("presalePercentage")}
                     type="number"
@@ -985,11 +1241,11 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                   <div className="absolute inset-y-0 right-0 flex items-center">
                     <span className="text-sm text-gray-400 mr-3">%</span>
                   </div>
-                  <div className="absolute -top-5 left-0 text-xs text-gray-400">Presale</div>
                 </div>
                 
                 {/* Liquidity */}
                 <div className="relative">
+                  <div className="absolute -top-4 left-0 text-xs text-gray-400">Liquidity</div>
                   <Input
                     {...form.register("liquidityPercentage")}
                     type="number"
@@ -999,7 +1255,6 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                   <div className="absolute inset-y-0 right-0 flex items-center">
                     <span className="text-sm text-gray-400 mr-3">%</span>
                   </div>
-                  <div className="absolute -top-5 left-0 text-xs text-gray-400">Liquidity</div>
                 </div>
               </div>
             </div>

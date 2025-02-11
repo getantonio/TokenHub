@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNetwork } from '@contexts/NetworkContext';
 import { NetworkIndicator } from '@components/common/NetworkIndicator';
-import TokenForm_V1 from '@/components/features/token/TokenForm_V1';
+import TokenForm_v1 from '@/components/features/token/TokenForm_v1';
 import TCAP_v1 from '@/components/features/token/TCAP_v1';
 import { BrowserProvider } from 'ethers';
 import { FACTORY_ADDRESSES } from '@/config/contracts';
@@ -60,7 +60,7 @@ export default function V1Page() {
           </div>
 
           <div className="space-y-4">
-            <TokenForm_V1 isConnected={isConnected} />
+            <TokenForm_v1 isConnected={isConnected} />
             
             <TCAP_v1 
               isConnected={isConnected}

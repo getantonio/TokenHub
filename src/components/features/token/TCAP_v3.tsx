@@ -818,9 +818,7 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
                   <div className="flex justify-between items-start gap-2">
                     <div>
                     <h3 className="text-xs font-medium text-text-primary">{token.name} ({token.symbol})</h3>
-                    <p className="text-xs text-text-secondary mt-0.5">Token: {token.address}</p>
                     <p className="text-xs text-text-secondary">Supply: {Number(token.totalSupply).toLocaleString()} {token.symbol}</p>
-                    <p className="text-xs text-text-secondary mt-0.5">Created: {new Date(token.createdAt || Date.now()).toLocaleString()}</p>
                     {token.presaleInfo && (
                       <div className="mt-1">
                       <p className="text-xs text-text-secondary">
