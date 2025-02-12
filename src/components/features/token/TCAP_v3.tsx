@@ -12,7 +12,7 @@ import { useNetwork } from '@/contexts/NetworkContext';
 import { getExplorerUrl } from '@/config/networks';
 import { InfoIcon } from '@/components/ui/InfoIcon';
 import { shortenAddress } from '@/utils/address';
-import { Dialog } from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 
 interface Props {
   isConnected: boolean;
@@ -86,9 +86,8 @@ interface BlockDialogProps {
 
 function BlockDialog({ isOpen, onClose, onConfirm, tokenName, tokenAddress }: BlockDialogProps) {
   return (
-    <Dialog open={isOpen} onClose={onClose}>
-      <div className="fixed inset-0 bg-black/50" aria-hidden="true" />
-      <div className="fixed inset-0 flex items-center justify-center p-4">
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent>
         <div className="bg-gray-900 rounded-lg p-6 max-w-md w-full border border-red-500">
           <h3 className="text-xl font-bold text-white mb-4">⚠️ Block Token Permanently</h3>
           <div className="space-y-4">
@@ -117,7 +116,7 @@ function BlockDialog({ isOpen, onClose, onConfirm, tokenName, tokenAddress }: Bl
             </div>
           </div>
         </div>
-      </div>
+      </DialogContent>
     </Dialog>
   );
 }
@@ -903,6 +902,12 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
                           Presale: {Number(token.presaleInfo.totalContributed).toLocaleString()} ETH
                           ({token.presaleInfo.contributorCount} contributors)
                       </p>
+                      <p className="text-xs text-text-secondary">
+                          Start: {new Date(token.presaleInfo.startTime * 1000).toLocaleString()}
+                      </p>
+                      <p className="text-xs text-text-secondary">
+                          End: {new Date(token.presaleInfo.endTime * 1000).toLocaleString()}
+                      </p>
                     </div>
                     )}
                   </div>
@@ -1121,67 +1126,69 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
       {/* Add the vesting schedules popup */}
       <Dialog 
         open={showVestingSchedules} 
-        onClose={() => setShowVestingSchedules(false)}
+        onOpenChange={(open) => setShowVestingSchedules(open)}
       >
-        <div className="bg-gray-800 rounded-lg p-4 max-w-2xl w-full">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-medium text-white">Vesting Schedules</h3>
-                            <button
-              onClick={() => setShowVestingSchedules(false)}
-              className="text-gray-400 hover:text-gray-300"
-                            >
-              ×
-                            </button>
-                          </div>
-          
-          <div className="space-y-4">
-            {vestingSchedules.length > 0 ? (
-              vestingSchedules.map((schedule, index) => (
-                <div key={index} className="bg-gray-700/50 rounded-lg p-3">
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div>
-                      <p className="text-gray-400">Beneficiary</p>
-                      <p className="text-white">{shortenAddress(schedule.beneficiary)}</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-400">Total Amount</p>
-                      <p className="text-white">{schedule.totalAmount}</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-400">Released Amount</p>
-                      <p className="text-white">{schedule.releasedAmount}</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-400">Releasable Amount</p>
-                      <p className="text-white">{schedule.releasableAmount}</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-400">Start Time</p>
-                      <p className="text-white">{schedule.startTime}</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-400">Cliff Duration</p>
-                      <p className="text-white">{Math.floor(Number(schedule.cliffDuration) / (24 * 60 * 60))} days</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-400">Vesting Duration</p>
-                      <p className="text-white">{Math.floor(Number(schedule.vestingDuration) / (24 * 60 * 60))} days</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-400">Status</p>
-                      <p className="text-white">
-                        {schedule.revoked ? 'Revoked' : 'Active'}
-                        {schedule.revocable && !schedule.revoked && ' (Revocable)'}
-                      </p>
+        <DialogContent className="bg-gray-800 p-0">
+          <div className="p-4 max-w-2xl w-full">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium text-white">Vesting Schedules</h3>
+              <button
+                onClick={() => setShowVestingSchedules(false)}
+                className="text-gray-400 hover:text-gray-300"
+              >
+                ×
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              {vestingSchedules.length > 0 ? (
+                vestingSchedules.map((schedule, index) => (
+                  <div key={index} className="bg-gray-700/50 rounded-lg p-3">
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <p className="text-gray-400">Beneficiary</p>
+                        <p className="text-white">{shortenAddress(schedule.beneficiary)}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-400">Total Amount</p>
+                        <p className="text-white">{schedule.totalAmount}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-400">Released Amount</p>
+                        <p className="text-white">{schedule.releasedAmount}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-400">Releasable Amount</p>
+                        <p className="text-white">{schedule.releasableAmount}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-400">Start Time</p>
+                        <p className="text-white">{schedule.startTime}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-400">Cliff Duration</p>
+                        <p className="text-white">{Math.floor(Number(schedule.cliffDuration) / (24 * 60 * 60))} days</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-400">Vesting Duration</p>
+                        <p className="text-white">{Math.floor(Number(schedule.vestingDuration) / (24 * 60 * 60))} days</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-400">Status</p>
+                        <p className="text-white">
+                          {schedule.revoked ? 'Revoked' : 'Active'}
+                          {schedule.revocable && !schedule.revoked && ' (Revocable)'}
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))
-            ) : (
-              <p className="text-gray-400 text-center">No vesting schedules found</p>
-          )}
-        </div>
-        </div>
+                ))
+              ) : (
+                <p className="text-gray-400 text-center">No vesting schedules found</p>
+              )}
+            </div>
+          </div>
+        </DialogContent>
       </Dialog>
 
       {/* Add the block dialog */}

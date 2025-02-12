@@ -4,7 +4,7 @@ import { getNetworkContractAddress } from '@config/contracts';
 import { useNetwork } from '@contexts/NetworkContext';
 import TokenFactory_v1 from '@contracts/abi/TokenFactory_v1.json';
 import TokenTemplate_v1 from '@contracts/abi/TokenTemplate_v1.json';
-import { getExplorerUrl } from '@config/networks';
+import { getExplorerUrl, getNetworkName } from '@config/networks';
 import TokenPreview from '@components/features/token/TokenPreview';
 import { InfoIcon } from '@components/ui/InfoIcon';
 import type { TokenConfig } from '../../../types/token-config';
@@ -20,6 +20,8 @@ import { Label } from '@components/ui/label';
 import { Switch } from '@components/ui/switch';
 import { FACTORY_ADDRESSES } from '@config/contracts';
 import TokenFactoryV1 from '@contracts/abi/TokenFactory_v1.json';
+import { EmailValidationDialog } from '@/components/ui/EmailValidationDialog';
+import { mailchainService } from '@/services/mailchain';
 
 const TokenFactoryABI = TokenFactory_v1.abi;
 const TokenTemplateABI = TokenTemplate_v1.abi;
@@ -75,6 +77,8 @@ export default function TokenForm_v1({ isConnected }: Props) {
   const { chainId } = useNetwork();
   const [provider, setProvider] = useState<BrowserProvider | null>(null);
   const { toast } = useToast();
+  const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
+  const [verifiedEmail, setVerifiedEmail] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && window.ethereum) {
@@ -142,6 +146,11 @@ export default function TokenForm_v1({ isConnected }: Props) {
     e.preventDefault();
     if (!isConnected) {
       setError("Please connect your wallet first");
+      return;
+    }
+
+    if (!verifiedEmail) {
+      setIsEmailDialogOpen(true);
       return;
     }
     
@@ -223,6 +232,20 @@ export default function TokenForm_v1({ isConnected }: Props) {
       });
 
       showToast('success', 'Token created successfully!', txExplorerUrl);
+
+      if (tokenAddress && verifiedEmail) {
+        try {
+          await mailchainService.sendDeploymentNotification(
+            verifiedEmail,
+            tokenAddress,
+            formData.name,
+            getNetworkName(chainId),
+            getExplorerUrl(chainId, tokenAddress, 'token') || '#'
+          );
+        } catch (error) {
+          console.error('Failed to send deployment notification:', error);
+        }
+      }
 
     } catch (error: any) {
       console.error('Error creating token:', error);
@@ -542,13 +565,23 @@ export default function TokenForm_v1({ isConnected }: Props) {
 
             <div className="flex justify-end items-center space-x-2">
               <InfoIcon content="Deployment fee will be charged in ETH. Make sure you have enough ETH to cover the fee and gas costs." />
-              <button
-                type="submit"
-                disabled={!isConnected || isLoading || deploymentFee === 'Not available on this network'}
-                className={`inline-flex justify-center rounded-md border border-transparent bg-blue-500/20 py-2 px-4 text-sm font-medium text-blue-400 shadow-sm hover:bg-blue-500/30 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:ring-offset-2 ${(!isConnected || isLoading || deploymentFee === 'Not available on this network') ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                {isLoading ? 'Creating...' : !isConnected ? 'Connect Wallet to Deploy' : deploymentFee === 'Not available on this network' ? 'Not Available on this Network' : 'Create Token'}
-              </button>
+              {!verifiedEmail ? (
+                <button
+                  type="button"
+                  onClick={() => setIsEmailDialogOpen(true)}
+                  className="inline-flex justify-center rounded-md border border-transparent bg-blue-500/20 py-2 px-4 text-sm font-medium text-blue-400 shadow-sm hover:bg-blue-500/30 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:ring-offset-2"
+                >
+                  Verify Email to Deploy
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={!isConnected || isLoading || deploymentFee === 'Not available on this network'}
+                  className={`inline-flex justify-center rounded-md border border-transparent bg-blue-500/20 py-2 px-4 text-sm font-medium text-blue-400 shadow-sm hover:bg-blue-500/30 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:ring-offset-2 ${(!isConnected || isLoading || deploymentFee === 'Not available on this network') ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  {isLoading ? 'Creating...' : !isConnected ? 'Connect Wallet to Deploy' : deploymentFee === 'Not available on this network' ? 'Not Available on this Network' : 'Create Token'}
+                </button>
+              )}
             </div>
           </form>
         </div>
@@ -563,6 +596,15 @@ export default function TokenForm_v1({ isConnected }: Props) {
           />
         </div>
       </div>
+
+      <EmailValidationDialog
+        isOpen={isEmailDialogOpen}
+        onClose={() => setIsEmailDialogOpen(false)}
+        onValidated={(email) => {
+          setVerifiedEmail(email);
+          setIsEmailDialogOpen(false);
+        }}
+      />
     </div>
   );
 }
