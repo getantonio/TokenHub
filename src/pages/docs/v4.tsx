@@ -1,6 +1,7 @@
 import Head from 'next/head';
 import Link from 'next/link';
 import { Card } from '@/components/ui/card';
+import { Footer } from '@/components/layouts/Footer';
 
 export default function V4DocsPage() {
   const features = [
@@ -104,6 +105,7 @@ export default function V4DocsPage() {
           </div>
         </div>
       </main>
+      <Footer />
     </div>
   );
 } 

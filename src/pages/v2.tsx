@@ -4,6 +4,7 @@ import { NetworkIndicator } from '@components/common/NetworkIndicator';
 import { TokenFormV2 } from '@components/features/token/TokenForm_V2';
 import Head from 'next/head';
 import type { MetaMaskInpageProvider } from '@metamask/providers';
+import { Footer } from '@/components/layouts/Footer';
 
 export default function V2Page() {
   const [isConnected, setIsConnected] = useState(false);
@@ -55,6 +56,7 @@ export default function V2Page() {
           <TokenFormV2 isConnected={isConnected} />
         </div>
       </main>
+      <Footer />
     </div>
   );
 }

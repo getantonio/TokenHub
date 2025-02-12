@@ -5,6 +5,7 @@ import Head from 'next/head';
 import { Spinner } from '../components/ui/Spinner';
 import { TokenSaleCard } from '@/components/features/token/TokenSaleCard';
 import { TokenListingCard } from '@/components/features/token/TokenListingCard';
+import { Footer } from '@/components/layouts/Footer';
 
 interface PresaleToken {
   address: string;
@@ -117,93 +118,98 @@ export default function PresalePage() {
   return (
     <div className="min-h-screen bg-gray-900">
       <Head>
-        <title>Token Presales</title>
+        <title>TokenHub.dev - Presale</title>
+        <meta name="description" content="Manage your token presale with TokenHub.dev" />
+        <link rel="icon" href="/favicon.ico" />
       </Head>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex justify-between items-center mb-4">
-          <h1 className="text-3xl font-bold text-white">Token Presales</h1>
-          <NetworkIndicator />
-        </div>
-
-        <div className="max-w-[66.666667%] mx-auto">
-          {/* Tabs */}
-          <div className="flex border-b border-gray-700 mb-4">
-            {Object.entries(tabConfig).map(([key, config]) => (
-              <button
-                key={key}
-                className={`px-4 py-2 -mb-px font-medium ${
-                  activeTab === key 
-                    ? `${config.color} border-b-2` 
-                    : 'text-gray-400 border-transparent'
-                } hover:text-gray-300 transition-colors`}
-                onClick={() => setActiveTab(key as keyof typeof sortedTokens)}
-              >
-                {config.label}
-                {sortedTokens[key as keyof typeof sortedTokens].length > 0 && (
-                  <span className="ml-2 text-xs">
-                    ({sortedTokens[key as keyof typeof sortedTokens].length})
-                  </span>
-                )}
-              </button>
-            ))}
+      <main className="container mx-auto px-4 py-2">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="flex justify-between items-center mb-4">
+            <h1 className="text-3xl font-bold text-white">Token Presales</h1>
+            <NetworkIndicator />
           </div>
 
-          {/* Active Tab Content */}
-          <div className="space-y-1">
-            {sortedTokens[activeTab].map((token) => (
-              <TokenSaleCard
-                key={token.address}
-                name={token.name}
-                symbol={token.symbol}
-                address={token.address}
-                presale={{
-                  softCap: token.softCap,
-                  hardCap: token.hardCap,
-                  minContribution: token.minContribution,
-                  maxContribution: token.maxContribution,
-                  presaleRate: token.presaleRate,
-                  startTime: token.startTime,
-                  endTime: token.endTime,
-                  totalContributed: token.totalContributed,
-                  isWhitelistEnabled: token.isWhitelistEnabled,
-                  userContribution: token.userContribution,
-                  isWhitelisted: token.isWhitelisted
-                }}
-                progress={(Number(token.totalContributed) / Number(token.hardCap)) * 100}
-                status={mapPresaleStatus(token.status)}
-                showBuyButton={activeTab !== 'ended'}
-                glowEffect={activeTab === 'ending_soon' ? 'danger' : activeTab === 'active' ? 'success' : 'none'}
-              />
-            ))}
-          </div>
+          <div className="max-w-[66.666667%] mx-auto">
+            {/* Tabs */}
+            <div className="flex border-b border-gray-700 mb-4">
+              {Object.entries(tabConfig).map(([key, config]) => (
+                <button
+                  key={key}
+                  className={`px-4 py-2 -mb-px font-medium ${
+                    activeTab === key 
+                      ? `${config.color} border-b-2` 
+                      : 'text-gray-400 border-transparent'
+                  } hover:text-gray-300 transition-colors`}
+                  onClick={() => setActiveTab(key as keyof typeof sortedTokens)}
+                >
+                  {config.label}
+                  {sortedTokens[key as keyof typeof sortedTokens].length > 0 && (
+                    <span className="ml-2 text-xs">
+                      ({sortedTokens[key as keyof typeof sortedTokens].length})
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
 
-          {/* Token Listing Cards Section */}
-          <div className="mt-12 pt-8 border-t border-gray-700">
-            <h2 className="text-xl font-semibold text-white mb-4">Listed Tokens</h2>
-            <div className="space-y-4">
-              <TokenListingCard
-                name="Sample Listed Token 1"
-                symbol="SLT1"
-                price="0.05"
-                supply="1,000,000"
-                description="A sample listed token with active trading."
-                progress={75}
-                status="live"
-              />
-              <TokenListingCard
-                name="Sample Listed Token 2"
-                symbol="SLT2"
-                price="0.02"
-                supply="500,000"
-                description="Another sample token available for trading."
-                progress={45}
-                status="live"
-              />
+            {/* Active Tab Content */}
+            <div className="space-y-1">
+              {sortedTokens[activeTab].map((token) => (
+                <TokenSaleCard
+                  key={token.address}
+                  name={token.name}
+                  symbol={token.symbol}
+                  address={token.address}
+                  presale={{
+                    softCap: token.softCap,
+                    hardCap: token.hardCap,
+                    minContribution: token.minContribution,
+                    maxContribution: token.maxContribution,
+                    presaleRate: token.presaleRate,
+                    startTime: token.startTime,
+                    endTime: token.endTime,
+                    totalContributed: token.totalContributed,
+                    isWhitelistEnabled: token.isWhitelistEnabled,
+                    userContribution: token.userContribution,
+                    isWhitelisted: token.isWhitelisted
+                  }}
+                  progress={(Number(token.totalContributed) / Number(token.hardCap)) * 100}
+                  status={mapPresaleStatus(token.status)}
+                  showBuyButton={activeTab !== 'ended'}
+                  glowEffect={activeTab === 'ending_soon' ? 'danger' : activeTab === 'active' ? 'success' : 'none'}
+                />
+              ))}
+            </div>
+
+            {/* Token Listing Cards Section */}
+            <div className="mt-12 pt-8 border-t border-gray-700">
+              <h2 className="text-xl font-semibold text-white mb-4">Listed Tokens</h2>
+              <div className="space-y-4">
+                <TokenListingCard
+                  name="Sample Listed Token 1"
+                  symbol="SLT1"
+                  price="0.05"
+                  supply="1,000,000"
+                  description="A sample listed token with active trading."
+                  progress={75}
+                  status="live"
+                />
+                <TokenListingCard
+                  name="Sample Listed Token 2"
+                  symbol="SLT2"
+                  price="0.02"
+                  supply="500,000"
+                  description="Another sample token available for trading."
+                  progress={45}
+                  status="live"
+                />
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </main>
+      <Footer />
     </div>
   );
 } 

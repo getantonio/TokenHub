@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { Card, CardContent } from '@components/ui/card';
 import Head from 'next/head';
 import { TokenFeatureCard_V4 } from '@/components/features/token/TokenFeatureCard_V4';
+import { Footer } from '@/components/layouts/Footer';
 
 export default function HomePage() {
   const currentVersions = [
@@ -76,15 +77,9 @@ export default function HomePage() {
               </Link>
             ))}
           </div>
-
-          <div className="mt-8 text-center">
-            <p className="text-gray-400 text-sm">
-              Need help? Check out our <Link href="/docs" className="text-blue-400 hover:underline">documentation</Link> or 
-              join our <a href="https://discord.gg/tokenhub" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">Discord community</a>.
-            </p>
-          </div>
         </div>
       </main>
+      <Footer />
     </div>
   );
 }

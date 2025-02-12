@@ -20,8 +20,6 @@ import { Label } from '@components/ui/label';
 import { Switch } from '@components/ui/switch';
 import { FACTORY_ADDRESSES } from '@config/contracts';
 import TokenFactoryV1 from '@contracts/abi/TokenFactory_v1.json';
-import { EmailValidationDialog } from '@/components/ui/EmailValidationDialog';
-import { mailchainService } from '@/services/mailchain';
 
 const TokenFactoryABI = TokenFactory_v1.abi;
 const TokenTemplateABI = TokenTemplate_v1.abi;
@@ -77,8 +75,6 @@ export default function TokenForm_v1({ isConnected }: Props) {
   const { chainId } = useNetwork();
   const [provider, setProvider] = useState<BrowserProvider | null>(null);
   const { toast } = useToast();
-  const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
-  const [verifiedEmail, setVerifiedEmail] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && window.ethereum) {
@@ -92,11 +88,6 @@ export default function TokenForm_v1({ isConnected }: Props) {
       console.log("V1 Factory address set to:", address);
     }
   }, [chainId]);
-
-  // Update preview whenever form data changes
-  useEffect(() => {
-    // This effect is not used in the current implementation
-  }, [formData]);
 
   // Fetch deployment fee when component mounts
   useEffect(() => {
@@ -146,11 +137,6 @@ export default function TokenForm_v1({ isConnected }: Props) {
     e.preventDefault();
     if (!isConnected) {
       setError("Please connect your wallet first");
-      return;
-    }
-
-    if (!verifiedEmail) {
-      setIsEmailDialogOpen(true);
       return;
     }
     
@@ -233,20 +219,6 @@ export default function TokenForm_v1({ isConnected }: Props) {
 
       showToast('success', 'Token created successfully!', txExplorerUrl);
 
-      if (tokenAddress && verifiedEmail) {
-        try {
-          await mailchainService.sendDeploymentNotification(
-            verifiedEmail,
-            tokenAddress,
-            formData.name,
-            getNetworkName(chainId),
-            getExplorerUrl(chainId, tokenAddress, 'token') || '#'
-          );
-        } catch (error) {
-          console.error('Failed to send deployment notification:', error);
-        }
-      }
-
     } catch (error: any) {
       console.error('Error creating token:', error);
       showToast('error', error.message || 'Failed to create token');
@@ -261,154 +233,6 @@ export default function TokenForm_v1({ isConnected }: Props) {
       ...prev,
       [name]: type === 'checkbox' ? checked : value
     }));
-  };
-
-  const loadTokens = async () => {
-    if (!isConnected || !chainId || !provider || typeof window === 'undefined') {
-      console.log("Missing dependencies:", { isConnected, chainId, hasProvider: !!provider, isBrowser: typeof window !== 'undefined' });
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-      const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddress');
-      if (!factoryAddress) {
-        console.error("Factory address not found for this network");
-        showToast('error', 'TokenFactory V1 is not deployed on this network');
-        setIsLoading(false);
-        return;
-      }
-      console.log("Loading V1 tokens from factory at:", factoryAddress);
-      
-      const factory = new Contract(factoryAddress, TokenFactoryABI, provider);
-      console.log("Factory contract initialized");
-
-      // Try to get all deployed tokens first
-      try {
-        const deployedTokens = await factory.getDeployedTokens();
-        console.log("Found deployedTokens:", deployedTokens);
-        
-        if (deployedTokens && deployedTokens.length > 0) {
-          const tokenPromises = deployedTokens.map(async (tokenAddr: string) => {
-            try {
-              const token = new Contract(tokenAddr, TokenTemplateABI, provider);
-              const [name, symbol, totalSupply, blacklistEnabled, timeLockEnabled] = await Promise.all([
-                token.name().catch(() => ''),
-                token.symbol().catch(() => ''),
-                token.totalSupply().catch(() => BigInt(0)),
-                token.blacklistEnabled().catch(() => false),
-                token.timeLockEnabled().catch(() => false)
-              ]);
-
-              return {
-                address: tokenAddr,
-                name,
-                symbol,
-                totalSupply: formatUnits(totalSupply, TOKEN_DECIMALS),
-                blacklistEnabled,
-                timeLockEnabled
-              };
-            } catch (error) {
-              console.error(`Error checking token ${tokenAddr}:`, error);
-              return null;
-            }
-          });
-
-          const tokenResults = await Promise.all(tokenPromises);
-          const validTokens = tokenResults.filter(Boolean);
-          if (validTokens.length > 0) {
-            console.log("Setting tokens from direct method:", validTokens);
-            // setTokens(validTokens as TokenInfo[]);
-            return;
-          }
-        }
-      } catch (error) {
-        console.error("deployedTokens failed, trying event logs...", error);
-      }
-
-      // Fallback to event logs
-      const currentBlock = await provider.getBlockNumber();
-      const fromBlock = Math.max(0, currentBlock - 200000); // Look back further
-
-      console.log(`\nSearching for events from block ${fromBlock} to ${currentBlock}`);
-
-      // Get all logs from the factory contract
-      const logs = await provider.getLogs({
-        address: factoryAddress,
-        fromBlock,
-        toBlock: currentBlock
-      });
-      console.log("Found logs:", logs.length);
-
-      const foundTokens: TokenInfo[] = [];
-      const processedAddresses = new Set<string>();
-
-      for (const log of logs) {
-        try {
-          const parsedLog = factory.interface.parseLog({
-            topics: log.topics ? log.topics.map(t => t || '') : [],
-            data: log.data || '0x'
-          });
-
-          if (!parsedLog || parsedLog.name !== 'TokenCreated') {
-            console.log("Skipping non-TokenCreated log:", parsedLog?.name);
-            continue;
-          }
-
-          console.log("Processing TokenCreated event:", {
-            token: parsedLog.args[0],
-            name: parsedLog.args[1],
-            symbol: parsedLog.args[2]
-          });
-
-          const tokenAddr = parsedLog.args[0] as string;
-          if (!tokenAddr || !ethers.isAddress(tokenAddr)) continue;
-
-          const normalizedAddr = tokenAddr.toLowerCase();
-          if (processedAddresses.has(normalizedAddr)) continue;
-
-          const code = await provider.getCode(normalizedAddr);
-          if (code === '0x') continue;
-
-          console.log("Checking token contract at:", normalizedAddr);
-          const token = new Contract(normalizedAddr, TokenTemplateABI, provider);
-          const [name, symbol, totalSupply, blacklistEnabled, timeLockEnabled] = await Promise.all([
-            token.name().catch(() => ''),
-            token.symbol().catch(() => ''),
-            token.totalSupply().catch(() => BigInt(0)),
-            token.blacklistEnabled().catch(() => false),
-            token.timeLockEnabled().catch(() => false)
-          ]);
-
-          if (!foundTokens.some(t => t.address.toLowerCase() === normalizedAddr)) {
-            foundTokens.push({
-              address: normalizedAddr,
-              name,
-              symbol,
-              totalSupply: formatUnits(totalSupply, TOKEN_DECIMALS),
-              blacklistEnabled,
-              timeLockEnabled
-            });
-            processedAddresses.add(normalizedAddr);
-          }
-        } catch (error) {
-          console.error("Error processing log:", error);
-        }
-      }
-
-      if (foundTokens.length > 0) {
-        console.log("Setting found tokens:", foundTokens);
-        // setTokens(foundTokens);
-      } else {
-        console.log("No tokens found");
-        // setTokens([]);
-      }
-    } catch (error) {
-      console.error("Error in loadTokens:", error);
-      showToast('error', 'Failed to load tokens');
-    } finally {
-      setIsLoading(false);
-    }
   };
 
   return (
@@ -565,23 +389,13 @@ export default function TokenForm_v1({ isConnected }: Props) {
 
             <div className="flex justify-end items-center space-x-2">
               <InfoIcon content="Deployment fee will be charged in ETH. Make sure you have enough ETH to cover the fee and gas costs." />
-              {!verifiedEmail ? (
-                <button
-                  type="button"
-                  onClick={() => setIsEmailDialogOpen(true)}
-                  className="inline-flex justify-center rounded-md border border-transparent bg-blue-500/20 py-2 px-4 text-sm font-medium text-blue-400 shadow-sm hover:bg-blue-500/30 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:ring-offset-2"
-                >
-                  Verify Email to Deploy
-                </button>
-              ) : (
-                <button
-                  type="submit"
-                  disabled={!isConnected || isLoading || deploymentFee === 'Not available on this network'}
-                  className={`inline-flex justify-center rounded-md border border-transparent bg-blue-500/20 py-2 px-4 text-sm font-medium text-blue-400 shadow-sm hover:bg-blue-500/30 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:ring-offset-2 ${(!isConnected || isLoading || deploymentFee === 'Not available on this network') ? 'opacity-50 cursor-not-allowed' : ''}`}
-                >
-                  {isLoading ? 'Creating...' : !isConnected ? 'Connect Wallet to Deploy' : deploymentFee === 'Not available on this network' ? 'Not Available on this Network' : 'Create Token'}
-                </button>
-              )}
+              <button
+                type="submit"
+                disabled={!isConnected || isLoading || deploymentFee === 'Not available on this network'}
+                className={`inline-flex justify-center rounded-md border border-transparent bg-blue-500/20 py-2 px-4 text-sm font-medium text-blue-400 shadow-sm hover:bg-blue-500/30 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:ring-offset-2 ${(!isConnected || isLoading || deploymentFee === 'Not available on this network') ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                {isLoading ? 'Creating...' : !isConnected ? 'Connect Wallet to Deploy' : deploymentFee === 'Not available on this network' ? 'Not Available on this Network' : 'Create Token'}
+              </button>
             </div>
           </form>
         </div>
@@ -596,15 +410,6 @@ export default function TokenForm_v1({ isConnected }: Props) {
           />
         </div>
       </div>
-
-      <EmailValidationDialog
-        isOpen={isEmailDialogOpen}
-        onClose={() => setIsEmailDialogOpen(false)}
-        onValidated={(email) => {
-          setVerifiedEmail(email);
-          setIsEmailDialogOpen(false);
-        }}
-      />
     </div>
   );
 }

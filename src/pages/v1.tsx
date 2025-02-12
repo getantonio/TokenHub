@@ -6,6 +6,7 @@ import TCAP_v1 from '@/components/features/token/TCAP_v1';
 import { BrowserProvider } from 'ethers';
 import { FACTORY_ADDRESSES } from '@/config/contracts';
 import Head from 'next/head';
+import { Footer } from '@/components/layouts/Footer';
 import type { MetaMaskInpageProvider } from '@metamask/providers';
 
 export default function V1Page() {
@@ -70,6 +71,7 @@ export default function V1Page() {
           </div>
         </div>
       </main>
+      <Footer />
     </div>
   );
 }

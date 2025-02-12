@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import TokenForm_V4 from '@/components/features/token/TokenForm_V4';
 import { useAccount } from 'wagmi';
+import { Footer } from '@/components/layouts/Footer';
 
 export default function V4Page() {
   const { chainId } = useNetwork();
@@ -59,11 +60,11 @@ export default function V4Page() {
     <div className="min-h-screen bg-gray-900">
       <Head>
         <title>TokenHub.dev - Token Factory v4</title>
-        <meta name="description" content="Next generation token creation platform with advanced economics and distribution" />
+        <meta name="description" content="Create your own token with TokenHub.dev v4" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-2">
         <div className="max-w-6xl mx-auto">
           {/* Header */}
           <div className="flex justify-between items-start mb-8">
@@ -169,6 +170,7 @@ export default function V4Page() {
           )}
         </div>
       </main>
+      <Footer />
     </div>
   );
 } 
