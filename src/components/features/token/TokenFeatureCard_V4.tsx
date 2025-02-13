@@ -12,8 +12,8 @@ export function TokenFeatureCard_V4({ onLearnMore }: TokenFeatureCardV4Props) {
 
   const features = [
     {
-      title: 'Dynamic Tax System',
-      description: 'Flexible tax rates with automated distribution',
+      title: 'Dynamic Fee System',
+      description: 'Flexible fee rates with automated distribution',
       icon: '⚡',
       details: [
         'Dynamic rates based on volume',

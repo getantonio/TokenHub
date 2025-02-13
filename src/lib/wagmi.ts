@@ -3,8 +3,10 @@ import { mainnet, sepolia, arbitrumSepolia, optimismSepolia } from 'viem/chains'
 import { http } from 'viem';
 import { polygonAmoy, bscMainnet, bscTestnet } from '@/config/chains';
 import { getDefaultConfig } from '@rainbow-me/rainbowkit';
+import { createConfig } from 'wagmi';
+import { injected, metaMask, walletConnect } from 'wagmi/connectors';
 
-const projectId = process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID || 'development';
+const projectId = process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID || 'YOUR_PROJECT_ID';
 if (!process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID) {
   console.warn('Warning: NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID is not set. Some features may not work correctly.');
 }
@@ -42,10 +44,13 @@ const supportedChains = [
   bscTestnet
 ] as const;
 
-export const config = getDefaultConfig({
-  appName: 'Token Factory',
-  projectId,
+export const config = createConfig({
   chains: supportedChains,
+  connectors: [
+    injected(),
+    metaMask(),
+    walletConnect({ projectId })
+  ],
   transports: {
     [mainnet.id]: http(),
     [sepolia.id]: http(),

@@ -17,6 +17,13 @@ export default function HomePage() {
       icon: '🔒'
     },
     {
+      version: 'v2_DirectDEX',
+      title: 'Factory v2 DirectDEX',
+      description: 'Create and instantly list your token on DEX with advanced trading controls',
+      features: ['Instant DEX listing', 'Multi-DEX support', 'Marketing & Dev fees', 'Anti-bot protection'],
+      icon: '🚀'
+    },
+    {
       version: 'v2',
       title: 'Factory v2',
       description: 'Advanced token with built-in presale functionality',
@@ -29,6 +36,18 @@ export default function HomePage() {
       description: 'Basic ERC20 token with essential features',
       features: ['Blacklist system', 'Time locks', 'Basic transfers', 'Owner controls'],
       icon: '🔑'
+    },
+    {
+      version: 'v4',
+      title: 'Factory v4',
+      description: 'Create tokens with a Dynamic Fee System that adapts to market conditions',
+      features: [
+        'Dynamic fee rates',
+        'Auto-liquidity generation',
+        'Holder rewards',
+        'Anti-bot protection'
+      ],
+      icon: '⚡'
     }
   ];
 

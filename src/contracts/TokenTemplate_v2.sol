@@ -8,6 +8,8 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
+import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
+import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
 
 contract TokenTemplate_v2 is 
     Initializable,
@@ -19,6 +21,7 @@ contract TokenTemplate_v2 is
     ReentrancyGuardUpgradeable
 {
     string public constant VERSION = "2.0.0";
+    bytes32 public constant VERSION_HASH = keccak256(abi.encodePacked(VERSION));
     
     struct PresaleInfo {
         uint256 softCap;
@@ -52,6 +55,27 @@ contract TokenTemplate_v2 is
     uint256 public platformFeeVestingStart;
     uint256 public platformFeeTokensClaimed;
 
+    // Enhanced trading controls
+    bool public tradingEnabled;
+    uint256 public tradingStartTime;
+    uint256 public maxTxAmount;
+    uint256 public maxWalletAmount;
+    
+    // Tax system
+    uint256 public buyTaxPercentage;
+    uint256 public sellTaxPercentage;
+    address public taxWallet;
+    mapping(address => bool) public isExcludedFromTax;
+    
+    // Anti-bot
+    mapping(address => uint256) public lastTrade;
+    uint256 public cooldownTime;
+    uint256 public snipingProtectionTime;
+    uint256 public launchTime;
+    
+    // DEX pairs
+    mapping(address => bool) public isDexPair;
+    
     // Events
     event PresaleStarted(
         uint256 softCap,
@@ -67,6 +91,15 @@ contract TokenTemplate_v2 is
     event PresaleFinalized(uint256 totalContributed, uint256 tokensDistributed);
     event ContributionRefunded(address contributor, uint256 amount);
     event PlatformFeeClaimed(uint256 amount);
+    event TradingEnabled(bool status);
+    event TradingStartTimeSet(uint256 timestamp);
+    event MaxTxAmountSet(uint256 amount);
+    event MaxWalletAmountSet(uint256 amount);
+    event TaxUpdated(string taxType, uint256 percentage);
+    event TaxWalletUpdated(address newWallet);
+    event PairAdded(address pair);
+    event CooldownUpdated(uint256 time);
+    event SnipingProtectionUpdated(uint256 time);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -287,4 +320,122 @@ contract TokenTemplate_v2 is
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+
+    // DEX pair management
+    function setDexPair(address pair, bool status) external onlyOwner {
+        isDexPair[pair] = status;
+        emit PairAdded(pair);
+    }
+    
+    // Tax management
+    function setBuyTaxPercentage(uint256 percentage) external onlyOwner {
+        require(percentage <= 20, "Max 20%");
+        buyTaxPercentage = percentage;
+        emit TaxUpdated("buy", percentage);
+    }
+    
+    function setSellTaxPercentage(uint256 percentage) external onlyOwner {
+        require(percentage <= 20, "Max 20%");
+        sellTaxPercentage = percentage;
+        emit TaxUpdated("sell", percentage);
+    }
+    
+    function setTaxWallet(address wallet) external onlyOwner {
+        require(wallet != address(0), "Invalid address");
+        taxWallet = wallet;
+        emit TaxWalletUpdated(wallet);
+    }
+    
+    function excludeFromTax(address account, bool excluded) external onlyOwner {
+        isExcludedFromTax[account] = excluded;
+    }
+    
+    // Anti-bot settings
+    function setCooldownTime(uint256 time) external onlyOwner {
+        cooldownTime = time;
+        emit CooldownUpdated(time);
+    }
+    
+    function setSnipingProtectionTime(uint256 time) external onlyOwner {
+        snipingProtectionTime = time;
+        emit SnipingProtectionUpdated(time);
+    }
+    
+    function _transfer(
+        address from,
+        address to,
+        uint256 amount
+    ) internal virtual override {
+        require(from != address(0), "Transfer from zero");
+        require(to != address(0), "Transfer to zero");
+        
+        // Trading checks
+        if (from != owner() && to != owner()) {
+            require(tradingEnabled, "Trading not enabled");
+            if (tradingStartTime > 0) {
+                require(block.timestamp >= tradingStartTime, "Trading not started");
+            }
+            
+            // Sniping protection
+            if (launchTime > 0 && block.timestamp - launchTime <= snipingProtectionTime) {
+                require(!isDexPair[from], "Sniping protection");
+            }
+            
+            // Cooldown check
+            if (cooldownTime > 0) {
+                require(block.timestamp >= lastTrade[from] + cooldownTime, "Cooldown active");
+                lastTrade[from] = block.timestamp;
+            }
+            
+            // Amount checks
+            if (maxTxAmount > 0) {
+                require(amount <= maxTxAmount, "Exceeds max tx");
+            }
+            if (maxWalletAmount > 0 && !isDexPair[to]) {
+                require(balanceOf(to) + amount <= maxWalletAmount, "Exceeds wallet max");
+            }
+        }
+        
+        // Tax calculation
+        uint256 taxAmount = 0;
+        if (!isExcludedFromTax[from] && !isExcludedFromTax[to]) {
+            if (isDexPair[from]) {  // Buy
+                taxAmount = (amount * buyTaxPercentage) / 100;
+            } else if (isDexPair[to]) {  // Sell
+                taxAmount = (amount * sellTaxPercentage) / 100;
+            }
+        }
+        
+        if (taxAmount > 0) {
+            super._transfer(from, taxWallet, taxAmount);
+            amount -= taxAmount;
+        }
+        
+        super._transfer(from, to, amount);
+    }
+    
+    // Trading control functions
+    function setTradingEnabled(bool _status) external onlyOwner {
+        tradingEnabled = _status;
+        if (_status && launchTime == 0) {
+            launchTime = block.timestamp;
+        }
+        emit TradingEnabled(_status);
+    }
+    
+    function setTradingStartTime(uint256 _timestamp) external onlyOwner {
+        require(_timestamp > block.timestamp, "Invalid time");
+        tradingStartTime = _timestamp;
+        emit TradingStartTimeSet(_timestamp);
+    }
+    
+    function setMaxTxAmount(uint256 _amount) external onlyOwner {
+        maxTxAmount = _amount;
+        emit MaxTxAmountSet(_amount);
+    }
+    
+    function setMaxWalletAmount(uint256 _amount) external onlyOwner {
+        maxWalletAmount = _amount;
+        emit MaxWalletAmountSet(_amount);
+    }
 } 

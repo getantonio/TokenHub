@@ -7,18 +7,21 @@ import Link from 'next/link';
 import TokenForm_V4 from '@/components/features/token/TokenForm_V4';
 import { useAccount } from 'wagmi';
 import { Footer } from '@/components/layouts/Footer';
+import { useRouter } from 'next/router';
+import { ConnectWallet } from '@/components/common/ConnectWallet';
 
 export default function V4Page() {
   const { chainId } = useNetwork();
   const { isConnected } = useAccount();
+  const router = useRouter();
   const [showFeatures, setShowFeatures] = useState(true);
   
   const features = [
     {
-      title: 'Dynamic Tax System',
-      description: 'A flexible and adaptive tax mechanism that responds to market conditions.',
+      title: 'Dynamic Fee System',
+      description: 'A flexible and adaptive fee mechanism that responds to market conditions.',
       details: [
-        'Dynamic tax rates that adjust based on market activity and volume',
+        'Dynamic fee rates that adjust based on market activity and volume',
         'Automated fee distribution to designated wallets and purposes',
         'Auto-liquidity generation to maintain price stability',
         'Configurable tax brackets and thresholds'
@@ -137,8 +140,8 @@ export default function V4Page() {
                 </div>
               </Card>
 
-              {/* Features */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Features Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                 {features.map((feature, index) => (
                   <Card key={index} className="p-6 bg-gray-800/50 border border-gray-700/50">
                     <h3 className="text-xl font-bold text-white mb-2">{feature.title}</h3>
@@ -154,19 +157,110 @@ export default function V4Page() {
                   </Card>
                 ))}
               </div>
+
+              {/* Dynamic Fee System */}
+              <Card className="p-6 bg-gray-800/50 border border-gray-700/50">
+                <h3 className="text-xl font-bold text-white mb-4">Dynamic Fee System</h3>
+                <p className="text-gray-400 mb-6">
+                  A flexible and adaptive fee mechanism that responds to market conditions. Our Dynamic Fee System is designed to support your token's long-term growth and sustainability. 
+                  Unlike traditional fee systems, our fees are strategically allocated to benefit your token's ecosystem:
+                </p>
+
+                <div className="grid md:grid-cols-2 gap-6 mb-6">
+                  <div className="bg-gray-700/50 p-4 rounded-lg border border-blue-500/20">
+                    <h4 className="font-semibold text-blue-400 mb-2">Automatic Liquidity Generation</h4>
+                    <ul className="space-y-2 text-gray-300">
+                      <li className="flex items-center"><span className="text-blue-400 mr-2">•</span>Automatically adds to liquidity pool</li>
+                      <li className="flex items-center"><span className="text-blue-400 mr-2">•</span>Reduces price impact of trades</li>
+                      <li className="flex items-center"><span className="text-blue-400 mr-2">•</span>Creates price stability</li>
+                      <li className="flex items-center"><span className="text-blue-400 mr-2">•</span>Builds sustainable trading volume</li>
+                    </ul>
+                  </div>
+
+                  <div className="bg-gray-700/50 p-4 rounded-lg border border-green-500/20">
+                    <h4 className="font-semibold text-green-400 mb-2">Holder Rewards</h4>
+                    <ul className="space-y-2 text-gray-300">
+                      <li className="flex items-center"><span className="text-green-400 mr-2">•</span>Redistributes fees to holders</li>
+                      <li className="flex items-center"><span className="text-green-400 mr-2">•</span>Incentivizes long-term holding</li>
+                      <li className="flex items-center"><span className="text-green-400 mr-2">•</span>Rewards loyal community members</li>
+                      <li className="flex items-center"><span className="text-green-400 mr-2">•</span>Reduces selling pressure</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="bg-gray-700/50 p-4 rounded-lg border border-gray-600/50 mb-6">
+                  <h4 className="font-semibold text-white mb-2">How It Works</h4>
+                  <ol className="space-y-4 text-gray-300">
+                    <li className="flex items-start">
+                      <span className="text-blue-400 mr-2">1.</span>
+                      Fees are collected on trades based on market conditions
+                    </li>
+                    <li className="flex items-start">
+                      <span className="text-blue-400 mr-2">2.</span>
+                      Smart contract automatically distributes fees:
+                      <ul className="ml-6 mt-2 space-y-1">
+                        <li className="flex items-center"><span className="text-blue-400 mr-2">•</span>40% to liquidity pool</li>
+                        <li className="flex items-center"><span className="text-blue-400 mr-2">•</span>40% to holder rewards</li>
+                        <li className="flex items-center"><span className="text-blue-400 mr-2">•</span>20% to development & marketing</li>
+                      </ul>
+                    </li>
+                    <li className="flex items-start">
+                      <span className="text-blue-400 mr-2">3.</span>
+                      System adjusts fees based on:
+                      <ul className="ml-6 mt-2 space-y-1">
+                        <li className="flex items-center"><span className="text-blue-400 mr-2">•</span>Trading volume</li>
+                        <li className="flex items-center"><span className="text-blue-400 mr-2">•</span>Market volatility</li>
+                        <li className="flex items-center"><span className="text-blue-400 mr-2">•</span>Liquidity levels</li>
+                      </ul>
+                    </li>
+                  </ol>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div className="bg-gray-700/50 p-4 rounded-lg border border-yellow-500/20">
+                    <h4 className="font-semibold text-yellow-400 mb-2">Key Benefits</h4>
+                    <ul className="space-y-2 text-gray-300">
+                      <li className="flex items-center"><span className="text-yellow-400 mr-2">•</span>Self-sustaining liquidity growth</li>
+                      <li className="flex items-center"><span className="text-yellow-400 mr-2">•</span>Reduced manipulation risk</li>
+                      <li className="flex items-center"><span className="text-yellow-400 mr-2">•</span>Fair distribution of rewards</li>
+                      <li className="flex items-center"><span className="text-yellow-400 mr-2">•</span>Sustainable token economics</li>
+                    </ul>
+                  </div>
+
+                  <div className="bg-gray-700/50 p-4 rounded-lg border border-purple-500/20">
+                    <h4 className="font-semibold text-purple-400 mb-2">Advanced Features</h4>
+                    <ul className="space-y-2 text-gray-300">
+                      <li className="flex items-center"><span className="text-purple-400 mr-2">•</span>Anti-whale mechanisms</li>
+                      <li className="flex items-center"><span className="text-purple-400 mr-2">•</span>Flash trade protection</li>
+                      <li className="flex items-center"><span className="text-purple-400 mr-2">•</span>Volume-based fee adjustment</li>
+                      <li className="flex items-center"><span className="text-purple-400 mr-2">•</span>Transparent fee tracking</li>
+                    </ul>
+                  </div>
+                </div>
+              </Card>
             </>
           ) : (
-            <TokenForm_V4 
-              isConnected={isConnected}
-              onSuccess={() => {
-                // TODO: Handle success
-                console.log('Token deployed successfully');
-              }}
-              onError={(error) => {
-                // TODO: Handle error
-                console.error('Error deploying token:', error);
-              }}
-            />
+            <div className="grid gap-6">
+              {!isConnected ? (
+                <div className="text-center p-8 bg-gray-800/50 rounded-lg border border-gray-700/50">
+                  <h2 className="text-2xl font-bold text-white mb-4">Connect Your Wallet</h2>
+                  <p className="text-gray-400 mb-6">Connect your wallet to create a token with our Dynamic Fee System</p>
+                  <ConnectWallet />
+                </div>
+              ) : (
+                <TokenForm_V4
+                  isConnected={isConnected}
+                  onSuccess={() => {
+                    // TODO: Handle success
+                    console.log('Token deployed successfully');
+                  }}
+                  onError={(error) => {
+                    // TODO: Handle error
+                    console.error('Error deploying token:', error);
+                  }}
+                />
+              )}
+            </div>
           )}
         </div>
       </main>
