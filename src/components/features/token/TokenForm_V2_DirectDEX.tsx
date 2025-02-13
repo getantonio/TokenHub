@@ -9,6 +9,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/components/ui/use-toast';
 import { parseEther } from 'viem';
+import dynamic from 'next/dynamic';
+
+const ConnectWalletButton = dynamic(
+  () => import('@/components/wallet/ConnectWallet').then(mod => mod.ConnectWallet),
+  { ssr: false }
+);
 
 interface TokenFormProps {
   isConnected: boolean;
@@ -76,34 +82,44 @@ export function TokenForm_V2_DirectDEX({ isConnected }: TokenFormProps) {
     }
   };
 
+  if (!isConnected) {
+    return (
+      <div className="text-center p-8 bg-card rounded-lg border">
+        <h2 className="text-2xl font-bold mb-4">Connect Your Wallet</h2>
+        <p className="text-gray-600 mb-6">Connect your wallet to create a token with instant DEX listing</p>
+        <ConnectWalletButton />
+      </div>
+    );
+  }
+
   return (
-    <Card className="p-4 bg-gray-800/50 border border-gray-700/50">
-      <form onSubmit={handleSubmit} className="space-y-4">
+    <Card className="bg-gray-800/50 border border-gray-700/50 p-6">
+      <form onSubmit={handleSubmit} className="space-y-6">
         {/* Token Information */}
-        <div className="space-y-3">
-          <h3 className="text-sm font-medium text-white">Token Information</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div className="space-y-1.5">
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold text-white">Token Information</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
               <Label htmlFor="name" className="text-sm text-gray-300">Token Name</Label>
               <Input
                 id="name"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 placeholder="My Token"
-                className="bg-gray-700/50 border-gray-600 h-9"
+                className="bg-gray-900/50 border-gray-700 text-white placeholder:text-gray-500"
               />
             </div>
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <Label htmlFor="symbol" className="text-sm text-gray-300">Token Symbol</Label>
               <Input
                 id="symbol"
                 value={formData.symbol}
                 onChange={(e) => setFormData({ ...formData, symbol: e.target.value })}
                 placeholder="TKN"
-                className="bg-gray-700/50 border-gray-600 h-9"
+                className="bg-gray-900/50 border-gray-700 text-white placeholder:text-gray-500"
               />
             </div>
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <Label htmlFor="totalSupply" className="text-sm text-gray-300">Total Supply</Label>
               <Input
                 id="totalSupply"
@@ -111,17 +127,17 @@ export function TokenForm_V2_DirectDEX({ isConnected }: TokenFormProps) {
                 value={formData.totalSupply}
                 onChange={(e) => setFormData({ ...formData, totalSupply: e.target.value })}
                 placeholder="1000000"
-                className="bg-gray-700/50 border-gray-600 h-9"
+                className="bg-gray-900/50 border-gray-700 text-white placeholder:text-gray-500"
               />
             </div>
           </div>
         </div>
 
         {/* Liquidity Settings */}
-        <div className="space-y-3">
-          <h3 className="text-sm font-medium text-white">Liquidity Settings</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div className="space-y-1.5">
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold text-white">Liquidity Settings</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
               <Label htmlFor="initialLiquidityInETH" className="text-sm text-gray-300">Initial Liquidity (ETH)</Label>
               <Input
                 id="initialLiquidityInETH"
@@ -129,10 +145,10 @@ export function TokenForm_V2_DirectDEX({ isConnected }: TokenFormProps) {
                 value={formData.initialLiquidityInETH}
                 onChange={(e) => setFormData({ ...formData, initialLiquidityInETH: e.target.value })}
                 placeholder="1"
-                className="bg-gray-700/50 border-gray-600 h-9"
+                className="bg-gray-900/50 border-gray-700 text-white placeholder:text-gray-500"
               />
             </div>
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <Label htmlFor="listingPriceInETH" className="text-sm text-gray-300">Listing Price (ETH)</Label>
               <Input
                 id="listingPriceInETH"
@@ -140,17 +156,17 @@ export function TokenForm_V2_DirectDEX({ isConnected }: TokenFormProps) {
                 value={formData.listingPriceInETH}
                 onChange={(e) => setFormData({ ...formData, listingPriceInETH: e.target.value })}
                 placeholder="0.0001"
-                className="bg-gray-700/50 border-gray-600 h-9"
+                className="bg-gray-900/50 border-gray-700 text-white placeholder:text-gray-500"
               />
             </div>
           </div>
         </div>
 
         {/* Fee Configuration */}
-        <div className="space-y-3">
-          <h3 className="text-sm font-medium text-white">Fee Configuration</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div className="space-y-1.5">
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold text-white">Fee Configuration</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-2">
               <Label htmlFor="marketingFee" className="text-sm text-gray-300">Marketing Fee (%)</Label>
               <Input
                 id="marketingFee"
@@ -158,10 +174,10 @@ export function TokenForm_V2_DirectDEX({ isConnected }: TokenFormProps) {
                 value={formData.marketingFee}
                 onChange={(e) => setFormData({ ...formData, marketingFee: e.target.value })}
                 placeholder="2"
-                className="bg-gray-700/50 border-gray-600 h-9"
+                className="bg-gray-900/50 border-gray-700 text-white placeholder:text-gray-500"
               />
             </div>
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <Label htmlFor="developmentFee" className="text-sm text-gray-300">Development Fee (%)</Label>
               <Input
                 id="developmentFee"
@@ -169,10 +185,10 @@ export function TokenForm_V2_DirectDEX({ isConnected }: TokenFormProps) {
                 value={formData.developmentFee}
                 onChange={(e) => setFormData({ ...formData, developmentFee: e.target.value })}
                 placeholder="3"
-                className="bg-gray-700/50 border-gray-600 h-9"
+                className="bg-gray-900/50 border-gray-700 text-white placeholder:text-gray-500"
               />
             </div>
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <Label htmlFor="autoLiquidityFee" className="text-sm text-gray-300">Auto-Liquidity Fee (%)</Label>
               <Input
                 id="autoLiquidityFee"
@@ -180,17 +196,17 @@ export function TokenForm_V2_DirectDEX({ isConnected }: TokenFormProps) {
                 value={formData.autoLiquidityFee}
                 onChange={(e) => setFormData({ ...formData, autoLiquidityFee: e.target.value })}
                 placeholder="2"
-                className="bg-gray-700/50 border-gray-600 h-9"
+                className="bg-gray-900/50 border-gray-700 text-white placeholder:text-gray-500"
               />
             </div>
           </div>
         </div>
 
         {/* Trading Controls */}
-        <div className="space-y-3">
-          <h3 className="text-sm font-medium text-white">Trading Controls</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div className="space-y-1.5">
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold text-white">Trading Controls</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
               <Label htmlFor="maxTxAmount" className="text-sm text-gray-300">Max Transaction Amount</Label>
               <Input
                 id="maxTxAmount"
@@ -198,10 +214,10 @@ export function TokenForm_V2_DirectDEX({ isConnected }: TokenFormProps) {
                 value={formData.maxTxAmount}
                 onChange={(e) => setFormData({ ...formData, maxTxAmount: e.target.value })}
                 placeholder="1000"
-                className="bg-gray-700/50 border-gray-600 h-9"
+                className="bg-gray-900/50 border-gray-700 text-white placeholder:text-gray-500"
               />
             </div>
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <Label htmlFor="maxWalletAmount" className="text-sm text-gray-300">Max Wallet Amount</Label>
               <Input
                 id="maxWalletAmount"
@@ -209,24 +225,25 @@ export function TokenForm_V2_DirectDEX({ isConnected }: TokenFormProps) {
                 value={formData.maxWalletAmount}
                 onChange={(e) => setFormData({ ...formData, maxWalletAmount: e.target.value })}
                 placeholder="2000"
-                className="bg-gray-700/50 border-gray-600 h-9"
+                className="bg-gray-900/50 border-gray-700 text-white placeholder:text-gray-500"
               />
             </div>
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <Label htmlFor="tradingStartTime" className="text-sm text-gray-300">Trading Start Time</Label>
               <Input
                 id="tradingStartTime"
                 type="datetime-local"
                 value={formData.tradingStartTime}
                 onChange={(e) => setFormData({ ...formData, tradingStartTime: e.target.value })}
-                className="bg-gray-700/50 border-gray-600 h-9"
+                className="bg-gray-900/50 border-gray-700 text-white"
               />
             </div>
-            <div className="flex items-center space-x-2 h-9">
+            <div className="flex items-center space-x-2">
               <Switch
                 id="enableTrading"
                 checked={formData.enableTrading}
                 onCheckedChange={(checked) => setFormData({ ...formData, enableTrading: checked })}
+                className="data-[state=checked]:bg-blue-600"
               />
               <Label htmlFor="enableTrading" className="text-sm text-gray-300">Enable Trading at Launch</Label>
             </div>
@@ -234,21 +251,21 @@ export function TokenForm_V2_DirectDEX({ isConnected }: TokenFormProps) {
         </div>
 
         {/* DEX Selection */}
-        <div className="space-y-3">
-          <h3 className="text-sm font-medium text-white">DEX Selection</h3>
-          <div className="space-y-1.5">
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold text-white">DEX Selection</h3>
+          <div className="space-y-2">
             <Label htmlFor="selectedDEX" className="text-sm text-gray-300">Select DEX</Label>
             <Select
               value={formData.selectedDEX}
               onValueChange={(value) => setFormData({ ...formData, selectedDEX: value })}
             >
-              <SelectTrigger className="bg-gray-700/50 border-gray-600 h-9">
+              <SelectTrigger className="bg-gray-900/50 border-gray-700 text-white">
                 <SelectValue placeholder="Select a DEX" />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="pancakeswap">PancakeSwap</SelectItem>
-                <SelectItem value="uniswap">Uniswap</SelectItem>
-                <SelectItem value="sushiswap">SushiSwap</SelectItem>
+              <SelectContent className="bg-gray-800 border-gray-700">
+                <SelectItem value="pancakeswap" className="text-white hover:bg-gray-700">PancakeSwap</SelectItem>
+                <SelectItem value="uniswap" className="text-white hover:bg-gray-700">Uniswap</SelectItem>
+                <SelectItem value="sushiswap" className="text-white hover:bg-gray-700">SushiSwap</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -256,8 +273,8 @@ export function TokenForm_V2_DirectDEX({ isConnected }: TokenFormProps) {
 
         <Button 
           type="submit" 
-          className="w-full bg-blue-600 hover:bg-blue-700 h-9"
-          disabled={!isConnected || isLoading}
+          className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+          disabled={isLoading}
         >
           {isLoading ? "Creating..." : "Create & List Token"}
         </Button>
