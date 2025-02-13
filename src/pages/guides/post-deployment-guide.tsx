@@ -35,57 +35,46 @@ interface Section {
 export default function PostDeploymentGuidePage() {
   const sections: Section[] = [
     {
-      title: "Immediate Post-Deployment Steps",
+      title: "Finding Your Contract",
       content: [
         {
-          subtitle: "Contract Verification",
+          subtitle: "Through TokenHub Interface",
           items: [
-            "Verify contract on blockchain explorer",
-            "Submit source code and ABI",
-            "Add contract description and documentation",
-            "Ensure all functions are properly documented"
-          ],
-          details: {
-            title: "How to Verify Your Contract",
-            networks: [
-              {
-                name: "BNB Smart Chain",
-                steps: [
-                  "Go to BscScan.com and search for your token contract address",
-                  "Click on the 'Contract' tab",
-                  "Click 'Verify and Publish'",
-                  "Select 'Solidity (Single file)' as compiler type",
-                  "Choose compiler version '0.8.22'",
-                  "Enable optimization (200 runs)",
-                  "Copy and paste your contract source code",
-                  "Click 'Verify and Publish'"
-                ]
-              },
-              {
-                name: "Arbitrum Sepolia",
-                steps: [
-                  "Visit Arbiscan Sepolia and locate your contract",
-                  "Navigate to the 'Code' tab",
-                  "Select 'Verify & Publish'",
-                  "Choose Solidity compiler v0.8.22",
-                  "Enable optimization with 200 runs",
-                  "Submit verification"
-                ]
-              },
-              {
-                name: "Optimism Sepolia",
-                steps: [
-                  "Go to Optimism Sepolia Explorer",
-                  "Find your contract and go to 'Code' tab",
-                  "Click 'Verify Contract'",
-                  "Use compiler version 0.8.22",
-                  "Enable optimization (200 runs)",
-                  "Submit for verification"
-                ]
-              }
-            ]
-          }
+            "Navigate to the version page where you created your token (v1, v2, or v3)",
+            "Look for the 'Your Tokens' or 'Token List' section below the creation form",
+            "Find your token in the list - it will show the token name, symbol, and contract address",
+            "Click the contract address to copy it or view it on the blockchain explorer"
+          ]
         },
+        {
+          subtitle: "Through Transaction History",
+          items: [
+            "Open your wallet (e.g., MetaMask)",
+            "Go to Activity/History",
+            "Find the token creation transaction",
+            "Click on the transaction to view details",
+            "The contract address will be listed in the transaction details"
+          ]
+        }
+      ]
+    },
+    {
+      title: "Contract Verification",
+      content: [
+        {
+          subtitle: "Verifying Your Token Contract",
+          items: [
+            "Go to your token address on the blockchain explorer (e.g., Etherscan)",
+            "Click on the 'Contract' tab",
+            "Click on 'Verify Proxy Contract'",
+            "The explorer will automatically detect and verify your proxy contract"
+          ]
+        }
+      ]
+    },
+    {
+      title: "Security and Management",
+      content: [
         {
           subtitle: "Security Checks",
           items: [
@@ -183,29 +172,6 @@ export default function PostDeploymentGuidePage() {
           ]
         }
       ]
-    },
-    {
-      title: "Ongoing Management",
-      content: [
-        {
-          subtitle: "Monitoring",
-          items: [
-            "Track token metrics",
-            "Monitor holder growth",
-            "Analyze trading patterns",
-            "Watch for unusual activity"
-          ]
-        },
-        {
-          subtitle: "Development",
-          items: [
-            "Plan feature updates",
-            "Consider contract upgrades",
-            "Implement community feedback",
-            "Expand token utility"
-          ]
-        }
-      ]
     }
   ];
 
@@ -251,30 +217,6 @@ export default function PostDeploymentGuidePage() {
                     {subsection.details && (
                       <div className="mt-6 border-t border-gray-700 pt-6">
                         <h4 className="text-lg font-semibold text-white mb-4">{subsection.details.title}</h4>
-                        
-                        {subsection.details.networks && (
-                          <Tabs defaultValue={subsection.details.networks[0].name} className="w-full">
-                            <TabsList className="w-full justify-start mb-4">
-                              {subsection.details.networks.map((network) => (
-                                <TabsTrigger key={network.name} value={network.name}>
-                                  {network.name}
-                                </TabsTrigger>
-                              ))}
-                            </TabsList>
-                            {subsection.details.networks.map((network) => (
-                              <TabsContent key={network.name} value={network.name}>
-                                <div className="space-y-2">
-                                  {network.steps.map((step, stepIndex) => (
-                                    <p key={stepIndex} className="text-gray-300">
-                                      {stepIndex + 1}. {step}
-                                    </p>
-                                  ))}
-                                </div>
-                              </TabsContent>
-                            ))}
-                          </Tabs>
-                        )}
-
                         {subsection.details.steps && (
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {subsection.details.steps.map((step, stepIndex) => (

@@ -49,7 +49,7 @@
       ]
     },
     "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts/access/Ownable.sol": {
-      "lastModificationDate": 1739206084327,
+      "lastModificationDate": 1739403020843,
       "contentHash": "5a20b2cad87ddb61c7a3a6af21289e28",
       "sourceName": "@openzeppelin/contracts/access/Ownable.sol",
       "solcConfig": {
@@ -95,7 +95,7 @@
       ]
     },
     "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts/token/ERC20/ERC20.sol": {
-      "lastModificationDate": 1739206083779,
+      "lastModificationDate": 1739403020317,
       "contentHash": "3ae5166c6827a9cf1a7a462d1632b464",
       "sourceName": "@openzeppelin/contracts/token/ERC20/ERC20.sol",
       "solcConfig": {
@@ -143,7 +143,7 @@
       ]
     },
     "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts/utils/Context.sol": {
-      "lastModificationDate": 1739206083425,
+      "lastModificationDate": 1739403020050,
       "contentHash": "f07feb4a44b1a4872370da5aa70e8e46",
       "sourceName": "@openzeppelin/contracts/utils/Context.sol",
       "solcConfig": {
@@ -187,7 +187,7 @@
       ]
     },
     "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts/token/ERC20/IERC20.sol": {
-      "lastModificationDate": 1739206084155,
+      "lastModificationDate": 1739403020693,
       "contentHash": "df36f7051335cd1e748b1b6463b7fdd3",
       "sourceName": "@openzeppelin/contracts/token/ERC20/IERC20.sol",
       "solcConfig": {
@@ -231,7 +231,7 @@
       ]
     },
     "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol": {
-      "lastModificationDate": 1739206084162,
+      "lastModificationDate": 1739403020697,
       "contentHash": "909ab67fc5c25033fe6cd364f8c056f9",
       "sourceName": "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol",
       "solcConfig": {
@@ -422,7 +422,7 @@
       ]
     },
     "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts/security/ReentrancyGuard.sol": {
-      "lastModificationDate": 1739206084349,
+      "lastModificationDate": 1739403020862,
       "contentHash": "1535f8c0c68463f8c1b5239f7584e71f",
       "sourceName": "@openzeppelin/contracts/security/ReentrancyGuard.sol",
       "solcConfig": {
@@ -466,7 +466,7 @@
       ]
     },
     "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol": {
-      "lastModificationDate": 1739206083729,
+      "lastModificationDate": 1739403020273,
       "contentHash": "3fc3c7c0a2956f36e766691bb9473b06",
       "sourceName": "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol",
       "solcConfig": {
@@ -513,7 +513,7 @@
       ]
     },
     "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol": {
-      "lastModificationDate": 1739206084365,
+      "lastModificationDate": 1739403020882,
       "contentHash": "a70d53f7e468306c02c529ecaa1d59c5",
       "sourceName": "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol",
       "solcConfig": {
@@ -560,7 +560,7 @@
       ]
     },
     "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol": {
-      "lastModificationDate": 1739206084434,
+      "lastModificationDate": 1739403020965,
       "contentHash": "c50df4f62eb9ef48d89b3a48a57e3bf5",
       "sourceName": "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol",
       "solcConfig": {
@@ -608,7 +608,7 @@
       ]
     },
     "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol": {
-      "lastModificationDate": 1739206084326,
+      "lastModificationDate": 1739403020843,
       "contentHash": "b0970a564d121abf9adfff8d1a01eb16",
       "sourceName": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol",
       "solcConfig": {
@@ -653,8 +653,56 @@
         "Initializable"
       ]
     },
+    "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PausableUpgradeable.sol": {
+      "lastModificationDate": 1739403020425,
+      "contentHash": "089f35d9d45ae7349a7c05651e2efea3",
+      "sourceName": "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PausableUpgradeable.sol",
+      "solcConfig": {
+        "version": "0.8.22",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata",
+                "devdoc",
+                "userdoc",
+                "storageLayout",
+                "evm.gasEstimates"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          },
+          "metadata": {
+            "useLiteralContent": true
+          }
+        }
+      },
+      "imports": [
+        "../ERC20Upgradeable.sol",
+        "../../../security/PausableUpgradeable.sol",
+        "../../../proxy/utils/Initializable.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.0"
+      ],
+      "artifacts": [
+        "ERC20PausableUpgradeable"
+      ]
+    },
     "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol": {
-      "lastModificationDate": 1739206083922,
+      "lastModificationDate": 1739403020454,
       "contentHash": "a7a59a8d3ad24a7b40ba5f34f0c1d47f",
       "sourceName": "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol",
       "solcConfig": {
@@ -702,56 +750,8 @@
         "ERC20Upgradeable"
       ]
     },
-    "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PausableUpgradeable.sol": {
-      "lastModificationDate": 1739206083894,
-      "contentHash": "089f35d9d45ae7349a7c05651e2efea3",
-      "sourceName": "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PausableUpgradeable.sol",
-      "solcConfig": {
-        "version": "0.8.22",
-        "settings": {
-          "viaIR": true,
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "evmVersion": "paris",
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata",
-                "devdoc",
-                "userdoc",
-                "storageLayout",
-                "evm.gasEstimates"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          },
-          "metadata": {
-            "useLiteralContent": true
-          }
-        }
-      },
-      "imports": [
-        "../ERC20Upgradeable.sol",
-        "../../../security/PausableUpgradeable.sol",
-        "../../../proxy/utils/Initializable.sol"
-      ],
-      "versionPragmas": [
-        "^0.8.0"
-      ],
-      "artifacts": [
-        "ERC20PausableUpgradeable"
-      ]
-    },
     "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol": {
-      "lastModificationDate": 1739206083678,
+      "lastModificationDate": 1739403020228,
       "contentHash": "b6dfb72ff1fd764f725ec4db364b1b20",
       "sourceName": "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol",
       "solcConfig": {
@@ -797,7 +797,7 @@
       ]
     },
     "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts-upgradeable/utils/AddressUpgradeable.sol": {
-      "lastModificationDate": 1739206083591,
+      "lastModificationDate": 1739403020199,
       "contentHash": "c30c805386fda8a42ff515da963d3a95",
       "sourceName": "@openzeppelin/contracts-upgradeable/utils/AddressUpgradeable.sol",
       "solcConfig": {
@@ -841,7 +841,7 @@
       ]
     },
     "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts-upgradeable/interfaces/draft-IERC1822Upgradeable.sol": {
-      "lastModificationDate": 1739206083774,
+      "lastModificationDate": 1739403020312,
       "contentHash": "a6883cfd85607b16c121a02728369eb3",
       "sourceName": "@openzeppelin/contracts-upgradeable/interfaces/draft-IERC1822Upgradeable.sol",
       "solcConfig": {
@@ -885,7 +885,7 @@
       ]
     },
     "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts-upgradeable/proxy/ERC1967/ERC1967UpgradeUpgradeable.sol": {
-      "lastModificationDate": 1739206083882,
+      "lastModificationDate": 1739403020413,
       "contentHash": "e186f91201ca317278fffbf1ea60cea0",
       "sourceName": "@openzeppelin/contracts-upgradeable/proxy/ERC1967/ERC1967UpgradeUpgradeable.sol",
       "solcConfig": {
@@ -936,7 +936,7 @@
       ]
     },
     "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts-upgradeable/proxy/beacon/IBeaconUpgradeable.sol": {
-      "lastModificationDate": 1739206084136,
+      "lastModificationDate": 1739403020680,
       "contentHash": "21bffd733b4ca013e125a0ffe2e52254",
       "sourceName": "@openzeppelin/contracts-upgradeable/proxy/beacon/IBeaconUpgradeable.sol",
       "solcConfig": {
@@ -979,52 +979,8 @@
         "IBeaconUpgradeable"
       ]
     },
-    "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts-upgradeable/utils/StorageSlotUpgradeable.sol": {
-      "lastModificationDate": 1739206084419,
-      "contentHash": "02cf959b00ba5c650708472f195f8b29",
-      "sourceName": "@openzeppelin/contracts-upgradeable/utils/StorageSlotUpgradeable.sol",
-      "solcConfig": {
-        "version": "0.8.22",
-        "settings": {
-          "viaIR": true,
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "evmVersion": "paris",
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata",
-                "devdoc",
-                "userdoc",
-                "storageLayout",
-                "evm.gasEstimates"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          },
-          "metadata": {
-            "useLiteralContent": true
-          }
-        }
-      },
-      "imports": [],
-      "versionPragmas": [
-        "^0.8.0"
-      ],
-      "artifacts": [
-        "StorageSlotUpgradeable"
-      ]
-    },
     "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts-upgradeable/interfaces/IERC1967Upgradeable.sol": {
-      "lastModificationDate": 1739206084195,
+      "lastModificationDate": 1739403020752,
       "contentHash": "a5421a5e611067b9202e83329fbf6fc7",
       "sourceName": "@openzeppelin/contracts-upgradeable/interfaces/IERC1967Upgradeable.sol",
       "solcConfig": {
@@ -1067,10 +1023,10 @@
         "IERC1967Upgradeable"
       ]
     },
-    "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol": {
-      "lastModificationDate": 1739206084209,
-      "contentHash": "9a9398a7dbda9d014f04d5eb0fb581fd",
-      "sourceName": "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol",
+    "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts-upgradeable/utils/StorageSlotUpgradeable.sol": {
+      "lastModificationDate": 1739403020951,
+      "contentHash": "02cf959b00ba5c650708472f195f8b29",
+      "sourceName": "@openzeppelin/contracts-upgradeable/utils/StorageSlotUpgradeable.sol",
       "solcConfig": {
         "version": "0.8.22",
         "settings": {
@@ -1108,57 +1064,11 @@
         "^0.8.0"
       ],
       "artifacts": [
-        "IERC20Upgradeable"
-      ]
-    },
-    "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts-upgradeable/token/ERC20/extensions/IERC20MetadataUpgradeable.sol": {
-      "lastModificationDate": 1739206084201,
-      "contentHash": "9efcd5467a7f0bf533910ee8a267adb2",
-      "sourceName": "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/IERC20MetadataUpgradeable.sol",
-      "solcConfig": {
-        "version": "0.8.22",
-        "settings": {
-          "viaIR": true,
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "evmVersion": "paris",
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata",
-                "devdoc",
-                "userdoc",
-                "storageLayout",
-                "evm.gasEstimates"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          },
-          "metadata": {
-            "useLiteralContent": true
-          }
-        }
-      },
-      "imports": [
-        "../IERC20Upgradeable.sol"
-      ],
-      "versionPragmas": [
-        "^0.8.0"
-      ],
-      "artifacts": [
-        "IERC20MetadataUpgradeable"
+        "StorageSlotUpgradeable"
       ]
     },
     "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol": {
-      "lastModificationDate": 1739206084367,
+      "lastModificationDate": 1739403020884,
       "contentHash": "6a4b611a83035a19370ecd7eb445d4fc",
       "sourceName": "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol",
       "solcConfig": {
@@ -1204,8 +1114,98 @@
         "PausableUpgradeable"
       ]
     },
+    "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol": {
+      "lastModificationDate": 1739403020764,
+      "contentHash": "9a9398a7dbda9d014f04d5eb0fb581fd",
+      "sourceName": "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol",
+      "solcConfig": {
+        "version": "0.8.22",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata",
+                "devdoc",
+                "userdoc",
+                "storageLayout",
+                "evm.gasEstimates"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          },
+          "metadata": {
+            "useLiteralContent": true
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.0"
+      ],
+      "artifacts": [
+        "IERC20Upgradeable"
+      ]
+    },
+    "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts-upgradeable/token/ERC20/extensions/IERC20MetadataUpgradeable.sol": {
+      "lastModificationDate": 1739403020757,
+      "contentHash": "9efcd5467a7f0bf533910ee8a267adb2",
+      "sourceName": "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/IERC20MetadataUpgradeable.sol",
+      "solcConfig": {
+        "version": "0.8.22",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata",
+                "devdoc",
+                "userdoc",
+                "storageLayout",
+                "evm.gasEstimates"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          },
+          "metadata": {
+            "useLiteralContent": true
+          }
+        }
+      },
+      "imports": [
+        "../IERC20Upgradeable.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.0"
+      ],
+      "artifacts": [
+        "IERC20MetadataUpgradeable"
+      ]
+    },
     "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts/proxy/Proxy.sol": {
-      "lastModificationDate": 1739206084341,
+      "lastModificationDate": 1739403020854,
       "contentHash": "40b3d81a836d50ff47e03893dcaaf204",
       "sourceName": "@openzeppelin/contracts/proxy/Proxy.sol",
       "solcConfig": {
@@ -1249,7 +1249,7 @@
       ]
     },
     "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts/proxy/ERC1967/ERC1967Upgrade.sol": {
-      "lastModificationDate": 1739206083736,
+      "lastModificationDate": 1739403020302,
       "contentHash": "a127706394bead18392601a20d44867a",
       "sourceName": "@openzeppelin/contracts/proxy/ERC1967/ERC1967Upgrade.sol",
       "solcConfig": {
@@ -1298,52 +1298,8 @@
         "ERC1967Upgrade"
       ]
     },
-    "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts/utils/StorageSlot.sol": {
-      "lastModificationDate": 1739206084387,
-      "contentHash": "682f7dd1f2e1147c8390e7575deceb2d",
-      "sourceName": "@openzeppelin/contracts/utils/StorageSlot.sol",
-      "solcConfig": {
-        "version": "0.8.22",
-        "settings": {
-          "viaIR": true,
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "evmVersion": "paris",
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata",
-                "devdoc",
-                "userdoc",
-                "storageLayout",
-                "evm.gasEstimates"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          },
-          "metadata": {
-            "useLiteralContent": true
-          }
-        }
-      },
-      "imports": [],
-      "versionPragmas": [
-        "^0.8.0"
-      ],
-      "artifacts": [
-        "StorageSlot"
-      ]
-    },
     "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts/interfaces/IERC1967.sol": {
-      "lastModificationDate": 1739206084151,
+      "lastModificationDate": 1739403020690,
       "contentHash": "d0d060231a45da7a1eecbb5cd286fa40",
       "sourceName": "@openzeppelin/contracts/interfaces/IERC1967.sol",
       "solcConfig": {
@@ -1386,10 +1342,10 @@
         "IERC1967"
       ]
     },
-    "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts/utils/Address.sol": {
-      "lastModificationDate": 1739206083341,
-      "contentHash": "211ffd288c1588ba8c10eae668ca3c66",
-      "sourceName": "@openzeppelin/contracts/utils/Address.sol",
+    "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts/utils/StorageSlot.sol": {
+      "lastModificationDate": 1739403020901,
+      "contentHash": "682f7dd1f2e1147c8390e7575deceb2d",
+      "sourceName": "@openzeppelin/contracts/utils/StorageSlot.sol",
       "solcConfig": {
         "version": "0.8.22",
         "settings": {
@@ -1424,14 +1380,58 @@
       },
       "imports": [],
       "versionPragmas": [
-        "^0.8.1"
+        "^0.8.0"
       ],
       "artifacts": [
-        "Address"
+        "StorageSlot"
+      ]
+    },
+    "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts/proxy/beacon/IBeacon.sol": {
+      "lastModificationDate": 1739403020612,
+      "contentHash": "b6bd23bf19e90b771337037706470933",
+      "sourceName": "@openzeppelin/contracts/proxy/beacon/IBeacon.sol",
+      "solcConfig": {
+        "version": "0.8.22",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata",
+                "devdoc",
+                "userdoc",
+                "storageLayout",
+                "evm.gasEstimates"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          },
+          "metadata": {
+            "useLiteralContent": true
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.0"
+      ],
+      "artifacts": [
+        "IBeacon"
       ]
     },
     "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts/interfaces/draft-IERC1822.sol": {
-      "lastModificationDate": 1739206083559,
+      "lastModificationDate": 1739403020174,
       "contentHash": "2858d98e74e67987ec81b39605230b74",
       "sourceName": "@openzeppelin/contracts/interfaces/draft-IERC1822.sol",
       "solcConfig": {
@@ -1474,10 +1474,10 @@
         "IERC1822Proxiable"
       ]
     },
-    "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts/proxy/beacon/IBeacon.sol": {
-      "lastModificationDate": 1739206084074,
-      "contentHash": "b6bd23bf19e90b771337037706470933",
-      "sourceName": "@openzeppelin/contracts/proxy/beacon/IBeacon.sol",
+    "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts/utils/Address.sol": {
+      "lastModificationDate": 1739403019982,
+      "contentHash": "211ffd288c1588ba8c10eae668ca3c66",
+      "sourceName": "@openzeppelin/contracts/utils/Address.sol",
       "solcConfig": {
         "version": "0.8.22",
         "settings": {
@@ -1512,10 +1512,10 @@
       },
       "imports": [],
       "versionPragmas": [
-        "^0.8.0"
+        "^0.8.1"
       ],
       "artifacts": [
-        "IBeacon"
+        "Address"
       ]
     },
     "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/src/contracts/TokenFactory_v3.sol": {
@@ -1620,7 +1620,7 @@
       ]
     },
     "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol": {
-      "lastModificationDate": 1739206084375,
+      "lastModificationDate": 1739403020893,
       "contentHash": "2c309ab8cb953d5db2a280f534c113cd",
       "sourceName": "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol",
       "solcConfig": {
@@ -1666,7 +1666,7 @@
       ]
     },
     "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/node_modules/@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20BurnableUpgradeable.sol": {
-      "lastModificationDate": 1739206083887,
+      "lastModificationDate": 1739403020419,
       "contentHash": "1e8bd1aac96ccd418df6d677cc3b3663",
       "sourceName": "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20BurnableUpgradeable.sol",
       "solcConfig": {

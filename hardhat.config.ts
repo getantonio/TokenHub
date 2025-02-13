@@ -62,7 +62,7 @@ const config = {
       confirmations: 3,     // Wait for 3 confirmations
       networkCheckTimeout: 100000,
       timeoutBlocks: 200,
-      verifyApiKey: process.env.BSCSCAN_API_KEY
+      verifyApiKey: "Z8FQT28BE7RR34GR5D8RMX6YGQ6AS6JSR2"
     },
     bsc: {
       url: "https://bsc-dataseed1.binance.org",
@@ -115,8 +115,8 @@ const config = {
     apiKey: {
       "sepolia": process.env.ETHERSCAN_API_KEY || "",
       "optimism-sepolia": process.env.OPTIMISM_API_KEY || "",
-      "arbitrumsepolia": process.env.ARBITRUM_API_KEY || "",
-      "polygon-amoy": process.env.POLYGONSCAN_API_KEY,
+      "arbitrumsepolia": process.env.ARBISCAN_API_KEY || "",
+      "polygon-amoy": process.env.POLYGONSCAN_API_KEY || "",
       bscTestnet: process.env.BSCSCAN_API_KEY || "",
       bsc: process.env.BSCSCAN_API_KEY || ""
     },
@@ -143,6 +143,14 @@ const config = {
         urls: {
           apiURL: "https://api-amoy.polygonscan.com/api",
           browserURL: "https://www.oklink.com/amoy"
+        }
+      },
+      {
+        network: "bscTestnet",
+        chainId: 97,
+        urls: {
+          apiURL: "https://api-testnet.bscscan.com/api",
+          browserURL: "https://testnet.bscscan.com"
         }
       }
     ]

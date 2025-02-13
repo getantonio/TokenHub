@@ -5,6 +5,8 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import "./TokenTemplate_v1.sol";
+import "./LiquidityLocker_v1.sol";
+import "./FairLaunch_v1.sol";
 
 contract TokenFactory_v1 is Ownable, ReentrancyGuard {
     string public constant VERSION = "1.0.0";
@@ -25,6 +27,14 @@ contract TokenFactory_v1 is Ownable, ReentrancyGuard {
     // Template implementation
     TokenTemplate_v1 public immutable tokenImplementation;
     
+    // Track all deployed fairlaunches
+    address[] private deployedFairLaunches;
+    mapping(address => address) private tokenToFairLaunch;
+    mapping(address => address) private fairLaunchToToken;
+    
+    // Liquidity locker
+    LiquidityLocker_v1 public immutable liquidityLocker;
+    
     // Events
     event TokenCreated(
         address indexed token,
@@ -39,14 +49,23 @@ contract TokenFactory_v1 is Ownable, ReentrancyGuard {
     );
     
     event DeploymentFeeUpdated(uint256 newFee);
+    
+    event FairLaunchCreated(
+        address indexed token,
+        address indexed fairLaunch,
+        uint256 totalSellingAmount,
+        uint256 softCap,
+        uint256 startTime,
+        uint256 endTime
+    );
 
-    constructor(uint256 initialFee) {
+    constructor(uint256 initialFee, address _liquidityLocker) {
         deploymentFee = initialFee;
         emit DeploymentFeeUpdated(initialFee);
         
         // Deploy implementation contract without initializing it
         tokenImplementation = new TokenTemplate_v1();
-        // The implementation contract's constructor already calls _disableInitializers()
+        liquidityLocker = LiquidityLocker_v1(_liquidityLocker);
     }
 
     function createToken(
@@ -121,5 +140,63 @@ contract TokenFactory_v1 is Ownable, ReentrancyGuard {
     function withdrawFees() external onlyOwner {
         (bool success, ) = msg.sender.call{value: address(this).balance}("");
         require(success, "Transfer failed");
+    }
+
+    function createFairLaunch(
+        address token,
+        uint256 totalSellingAmount,
+        uint256 softCap,
+        uint256 maxContributionPerUser,
+        uint256 liquidityPercent,
+        uint256 startTime,
+        uint256 endTime,
+        uint256 liquidityLockTime,
+        address router
+    ) external payable nonReentrant {
+        require(msg.value >= deploymentFee, "Insufficient deployment fee");
+        require(tokenDeployer[token] == msg.sender, "Not token owner");
+        require(tokenToFairLaunch[token] == address(0), "Fairlaunch exists");
+        
+        FairLaunch_v1 fairLaunch = new FairLaunch_v1(
+            token,
+            totalSellingAmount,
+            softCap,
+            maxContributionPerUser,
+            liquidityPercent,
+            startTime,
+            endTime,
+            liquidityLockTime,
+            router
+        );
+        
+        // Transfer ownership to creator
+        fairLaunch.transferOwnership(msg.sender);
+        
+        // Track the fairlaunch
+        address fairLaunchAddress = address(fairLaunch);
+        deployedFairLaunches.push(fairLaunchAddress);
+        tokenToFairLaunch[token] = fairLaunchAddress;
+        fairLaunchToToken[fairLaunchAddress] = token;
+        
+        emit FairLaunchCreated(
+            token,
+            fairLaunchAddress,
+            totalSellingAmount,
+            softCap,
+            startTime,
+            endTime
+        );
+    }
+    
+    function getFairLaunchByToken(address token) external view returns (address) {
+        return tokenToFairLaunch[token];
+    }
+    
+    function getTokenByFairLaunch(address fairLaunch) external view returns (address) {
+        return fairLaunchToToken[fairLaunch];
+    }
+    
+    function getAllFairLaunches() external view returns (address[] memory) {
+        return deployedFairLaunches;
     }
 } 
