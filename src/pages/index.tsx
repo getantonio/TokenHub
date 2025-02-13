@@ -4,8 +4,10 @@ import { Card, CardContent } from '@components/ui/card';
 import Head from 'next/head';
 import { TokenFeatureCard_V4 } from '@/components/features/token/TokenFeatureCard_V4';
 import { Footer } from '@/components/layouts/Footer';
+import { useRouter } from 'next/router';
 
 export default function HomePage() {
+  const router = useRouter();
   const currentVersions = [
     {
       version: 'v3',
@@ -45,7 +47,7 @@ export default function HomePage() {
 
           {/* V4 Feature Card */}
           <div className="mb-8">
-            <TokenFeatureCard_V4 onLearnMore={() => window.open('/docs/v4', '_blank')} />
+            <TokenFeatureCard_V4 onLearnMore={() => router.push('/v4')} />
           </div>
 
           {/* Current Versions */}

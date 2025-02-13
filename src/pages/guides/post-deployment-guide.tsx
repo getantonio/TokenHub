@@ -3,9 +3,37 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { Footer } from '@/components/layouts/Footer';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+
+interface NetworkVerification {
+  name: string;
+  steps: string[];
+}
+
+interface SecurityStep {
+  name: string;
+  instructions: string[];
+}
+
+interface SectionDetails {
+  title: string;
+  networks?: NetworkVerification[];
+  steps?: SecurityStep[];
+}
+
+interface Subsection {
+  subtitle: string;
+  items: string[];
+  details?: SectionDetails;
+}
+
+interface Section {
+  title: string;
+  content: Subsection[];
+}
 
 export default function PostDeploymentGuidePage() {
-  const sections = [
+  const sections: Section[] = [
     {
       title: "Immediate Post-Deployment Steps",
       content: [
@@ -16,7 +44,47 @@ export default function PostDeploymentGuidePage() {
             "Submit source code and ABI",
             "Add contract description and documentation",
             "Ensure all functions are properly documented"
-          ]
+          ],
+          details: {
+            title: "How to Verify Your Contract",
+            networks: [
+              {
+                name: "BNB Smart Chain",
+                steps: [
+                  "Go to BscScan.com and search for your token contract address",
+                  "Click on the 'Contract' tab",
+                  "Click 'Verify and Publish'",
+                  "Select 'Solidity (Single file)' as compiler type",
+                  "Choose compiler version '0.8.22'",
+                  "Enable optimization (200 runs)",
+                  "Copy and paste your contract source code",
+                  "Click 'Verify and Publish'"
+                ]
+              },
+              {
+                name: "Arbitrum Sepolia",
+                steps: [
+                  "Visit Arbiscan Sepolia and locate your contract",
+                  "Navigate to the 'Code' tab",
+                  "Select 'Verify & Publish'",
+                  "Choose Solidity compiler v0.8.22",
+                  "Enable optimization with 200 runs",
+                  "Submit verification"
+                ]
+              },
+              {
+                name: "Optimism Sepolia",
+                steps: [
+                  "Go to Optimism Sepolia Explorer",
+                  "Find your contract and go to 'Code' tab",
+                  "Click 'Verify Contract'",
+                  "Use compiler version 0.8.22",
+                  "Enable optimization (200 runs)",
+                  "Submit for verification"
+                ]
+              }
+            ]
+          }
         },
         {
           subtitle: "Security Checks",
@@ -25,7 +93,48 @@ export default function PostDeploymentGuidePage() {
             "Verify ownership transfer",
             "Check token parameters",
             "Confirm token supply and distribution"
-          ]
+          ],
+          details: {
+            title: "Essential Security Checks",
+            steps: [
+              {
+                name: "Ownership Verification",
+                instructions: [
+                  "Check current owner: Call owner() function",
+                  "Verify it matches your wallet address",
+                  "Test ownership transfer to a backup wallet",
+                  "Transfer back to main wallet"
+                ]
+              },
+              {
+                name: "Token Parameters",
+                instructions: [
+                  "Verify token name and symbol",
+                  "Check decimals (usually 18)",
+                  "Confirm total supply matches intended amount",
+                  "Verify transfer restrictions if any"
+                ]
+              },
+              {
+                name: "Function Testing",
+                instructions: [
+                  "Test basic transfers with small amounts",
+                  "Verify tax collection if enabled",
+                  "Test blacklist functions if implemented",
+                  "Check timelock functionality"
+                ]
+              },
+              {
+                name: "Distribution Verification",
+                instructions: [
+                  "Confirm initial token allocation",
+                  "Verify vesting schedules if used",
+                  "Check presale distribution if applicable",
+                  "Validate liquidity pool setup"
+                ]
+              }
+            ]
+          }
         }
       ]
     },
@@ -130,7 +239,7 @@ export default function PostDeploymentGuidePage() {
                 {section.content.map((subsection, subIndex) => (
                   <Card key={subIndex} className="p-6 bg-gray-800 border-gray-700">
                     <h3 className="text-xl font-semibold text-white mb-4">{subsection.subtitle}</h3>
-                    <ul className="space-y-2">
+                    <ul className="space-y-2 mb-6">
                       {subsection.items.map((item, itemIndex) => (
                         <li key={itemIndex} className="flex items-start text-gray-300">
                           <span className="text-blue-400 mr-2">•</span>
@@ -138,6 +247,52 @@ export default function PostDeploymentGuidePage() {
                         </li>
                       ))}
                     </ul>
+
+                    {subsection.details && (
+                      <div className="mt-6 border-t border-gray-700 pt-6">
+                        <h4 className="text-lg font-semibold text-white mb-4">{subsection.details.title}</h4>
+                        
+                        {subsection.details.networks && (
+                          <Tabs defaultValue={subsection.details.networks[0].name} className="w-full">
+                            <TabsList className="w-full justify-start mb-4">
+                              {subsection.details.networks.map((network) => (
+                                <TabsTrigger key={network.name} value={network.name}>
+                                  {network.name}
+                                </TabsTrigger>
+                              ))}
+                            </TabsList>
+                            {subsection.details.networks.map((network) => (
+                              <TabsContent key={network.name} value={network.name}>
+                                <div className="space-y-2">
+                                  {network.steps.map((step, stepIndex) => (
+                                    <p key={stepIndex} className="text-gray-300">
+                                      {stepIndex + 1}. {step}
+                                    </p>
+                                  ))}
+                                </div>
+                              </TabsContent>
+                            ))}
+                          </Tabs>
+                        )}
+
+                        {subsection.details.steps && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {subsection.details.steps.map((step, stepIndex) => (
+                              <div key={stepIndex} className="bg-gray-800/50 p-4 rounded-lg">
+                                <h5 className="text-white font-semibold mb-2">{step.name}</h5>
+                                <ul className="space-y-2">
+                                  {step.instructions.map((instruction, instIndex) => (
+                                    <li key={instIndex} className="text-gray-300 text-sm">
+                                      • {instruction}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </Card>
                 ))}
               </div>

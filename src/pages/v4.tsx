@@ -129,7 +129,7 @@ export default function V4Page() {
                     Join Discord Community
                   </a>
                   <Link
-                    href="/docs/v4"
+                    href="/v4"
                     className="inline-flex items-center px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors"
                   >
                     View Documentation
