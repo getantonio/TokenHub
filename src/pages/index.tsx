@@ -73,7 +73,11 @@ export default function HomePage() {
           <h2 className="text-xl font-semibold text-white mb-4">Current Versions</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {currentVersions.map((version) => (
-              <Link key={version.version} href={`/${version.version}`} className="block">
+              <Link 
+                key={version.version} 
+                href={version.version === 'v2_DirectDEX' ? '/v2-direct-dex' : `/${version.version.toLowerCase()}`}
+                className="block"
+              >
                 <Card className="h-full bg-gray-800 hover:bg-gray-750 transition-colors border border-gray-700/50 hover:border-gray-600/50">
                   <CardContent className="p-4">
                     <div className="flex items-start gap-3 mb-3">
