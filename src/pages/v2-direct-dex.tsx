@@ -5,6 +5,7 @@ import { useRouter } from 'next/router';
 import dynamic from 'next/dynamic';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Footer } from '@/components/layout/Footer';
+import { Web3ModalProvider } from '@/components/providers/Web3ModalProvider';
 
 // Dynamically import components that use client-side features
 const TokenForm = dynamic(
@@ -12,45 +13,45 @@ const TokenForm = dynamic(
   { ssr: false }
 );
 
-const ConnectWalletButton = dynamic(
-  () => import('@/components/wallet/ConnectWallet').then(mod => mod.ConnectWallet),
+const ConnectButton = dynamic(
+  () => import('@/components/wallet/ConnectButton').then(mod => mod.ConnectButton),
   { ssr: false }
 );
 
-export default function V2DirectDEXPage() {
+function V2DirectDEXContent() {
   const { isConnected } = useAccount();
   const router = useRouter();
   
   return (
-    <div className="min-h-screen bg-gray-900">
-      <div className="container mx-auto px-4 py-8">
+    <div className="min-h-screen bg-background-primary">
+      <div className="container mx-auto px-4 py-4">
         <div className="max-w-6xl mx-auto">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-white mb-2">Token Factory v2 DirectDEX</h1>
-            <p className="text-gray-400">Create and instantly list your token on DEX with advanced trading controls.</p>
+          <div className="mb-6">
+            <h1 className="text-2xl font-bold text-text-primary mb-2">Token Factory v2 DirectDEX</h1>
+            <p className="text-text-secondary">Create and instantly list your token on DEX with advanced trading controls.</p>
           </div>
           
-          <Tabs defaultValue="features" className="space-y-8">
-            <TabsList className="bg-gray-800/50 border border-gray-700/50 p-1 rounded-lg">
+          <Tabs defaultValue="features" className="space-y-4">
+            <TabsList className="bg-background-secondary border border-border p-1 rounded-lg">
               <TabsTrigger 
                 value="features"
-                className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-gray-400 rounded-md px-6"
+                className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-text-secondary rounded-md px-6"
               >
                 Features
               </TabsTrigger>
               <TabsTrigger 
                 value="create"
-                className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-gray-400 rounded-md px-6"
+                className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-text-secondary rounded-md px-6"
               >
                 Create Token
               </TabsTrigger>
             </TabsList>
             
-            <TabsContent value="features" className="space-y-6">
-              <div className="grid gap-6 md:grid-cols-2">
-                <div className="bg-gray-800/50 p-6 rounded-lg border border-gray-700/50">
-                  <h3 className="text-xl font-semibold text-white mb-4">Advanced Token Features</h3>
-                  <ul className="space-y-3 text-gray-300">
+            <TabsContent value="features" className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="bg-background-secondary p-4 rounded-lg border border-border">
+                  <h3 className="text-lg font-semibold text-text-primary mb-3">Advanced Token Features</h3>
+                  <ul className="space-y-2 text-text-secondary">
                     <li className="flex items-center">
                       <span className="text-blue-400 mr-2">•</span>
                       Dynamic fee system that adapts to market conditions
@@ -69,9 +70,9 @@ export default function V2DirectDEXPage() {
                     </li>
                   </ul>
                 </div>
-                <div className="bg-gray-800/50 p-6 rounded-lg border border-gray-700/50">
-                  <h3 className="text-xl font-semibold text-white mb-4">Trading Controls</h3>
-                  <ul className="space-y-3 text-gray-300">
+                <div className="bg-background-secondary p-4 rounded-lg border border-border">
+                  <h3 className="text-lg font-semibold text-text-primary mb-3">Trading Controls</h3>
+                  <ul className="space-y-2 text-text-secondary">
                     <li className="flex items-center">
                       <span className="text-blue-400 mr-2">•</span>
                       Customizable transaction limits
@@ -95,10 +96,10 @@ export default function V2DirectDEXPage() {
             
             <TabsContent value="create">
               {!isConnected ? (
-                <div className="text-center py-10 bg-gray-800/50 rounded-lg border border-gray-700/50">
-                  <h2 className="text-2xl font-bold text-white mb-4">Connect Your Wallet</h2>
-                  <p className="text-gray-400 mb-6">Please connect your wallet to create and list a token</p>
-                  <ConnectWalletButton />
+                <div className="text-center py-6 bg-background-secondary rounded-lg border border-border">
+                  <h2 className="text-xl font-bold text-text-primary mb-3">Connect Your Wallet</h2>
+                  <p className="text-text-secondary mb-4">Please connect your wallet to create and list a token</p>
+                  <ConnectButton />
                 </div>
               ) : (
                 <TokenForm isConnected={isConnected} />
@@ -109,5 +110,13 @@ export default function V2DirectDEXPage() {
       </div>
       <Footer />
     </div>
+  );
+}
+
+export default function V2DirectDEXPage() {
+  return (
+    <Web3ModalProvider>
+      <V2DirectDEXContent />
+    </Web3ModalProvider>
   );
 } 

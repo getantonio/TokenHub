@@ -55,6 +55,14 @@ export function Navigation() {
                   )}>
                     Token Factory V2
                   </Link>
+                  <Link href="/v2-direct-dex" className={cn(
+                    'block px-4 py-2 text-sm',
+                    router.pathname === '/v2-direct-dex'
+                      ? 'text-blue-400'
+                      : 'text-gray-400 hover:text-gray-200'
+                  )}>
+                    Token Factory V2 DirectDEX
+                  </Link>
                   <Link href="/v1" className={cn(
                     'block px-4 py-2 text-sm',
                     router.pathname === '/v1'
