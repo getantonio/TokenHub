@@ -9,9 +9,15 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { useToast } from '@/components/ui/use-toast';
+import { useToast } from '@/components/ui/toast/use-toast';
 import { HelpCircle, Calculator } from 'lucide-react';
-import { useAccount } from 'wagmi';
+import { useAccount, useWalletClient } from 'wagmi';
+import { parseEther, formatEther } from 'viem';
+import { useNetwork } from '@/contexts/NetworkContext';
+import { getNetworkContractAddress } from '@/config/contracts';
+import { Contract, Interface } from 'ethers';
+import TokenFactoryV2DirectDEXABI from '@/contracts/abi/TokenFactory_v2_DirectDEX.json';
+import { BrowserProvider } from 'ethers';
 
 interface TokenFormV2DirectDEXProps {
   onSuccess?: () => void;
@@ -27,6 +33,8 @@ interface ValidationResult {
 
 export function TokenForm_V2DirectDEX({ onSuccess, onError }: TokenFormV2DirectDEXProps) {
   const { isConnected } = useAccount();
+  const { chainId } = useNetwork();
+  const { data: walletClient } = useWalletClient();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [showCalculator, setShowCalculator] = useState(false);
@@ -86,9 +94,9 @@ export function TokenForm_V2DirectDEX({ onSuccess, onError }: TokenFormV2DirectD
     }
   }, [formData.totalSupply, formData.maxTxPercentage, formData.maxWalletPercentage]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!isConnected) {
+    if (!isConnected || !walletClient) {
       toast({
         title: "Wallet Connection Required",
         description: "Please connect your wallet to create a token",
@@ -99,12 +107,71 @@ export function TokenForm_V2DirectDEX({ onSuccess, onError }: TokenFormV2DirectD
     
     setIsLoading(true);
     try {
-      // TODO: Implement token deployment
-      toast({
-        title: "Success",
-        description: "Token created and listed successfully!",
+      const provider = new BrowserProvider(walletClient as any);
+      const signer = await provider.getSigner();
+      
+      // Get factory address for current network
+      const factoryAddress = chainId ? getNetworkContractAddress(chainId, 'factoryAddressV2DirectDEX') : null;
+      if (!factoryAddress) {
+        throw new Error('DirectDEX factory not deployed on this network');
+      }
+
+      // Create contract instance
+      const factoryInterface = new Interface(TokenFactoryV2DirectDEXABI.abi);
+      const factory = new Contract(factoryAddress, factoryInterface, signer);
+
+      // Get listing fee
+      const listingFee = await factory.getListingFee();
+      console.log('Listing fee:', formatEther(listingFee), 'ETH');
+
+      // Calculate token amounts
+      const maxTxAmount = (parseFloat(formData.totalSupply) * parseFloat(formData.maxTxPercentage)) / 100;
+      const maxWalletAmount = (parseFloat(formData.totalSupply) * parseFloat(formData.maxWalletPercentage)) / 100;
+
+      // Prepare listing parameters
+      const listingParams = {
+        name: formData.name,
+        symbol: formData.symbol,
+        totalSupply: parseEther(formData.totalSupply),
+        initialLiquidityInETH: parseEther(formData.initialLiquidityInETH),
+        listingPriceInETH: parseEther(formData.listingPriceInETH),
+        maxTxAmount: parseEther(maxTxAmount.toString()),
+        maxWalletAmount: parseEther(maxWalletAmount.toString()),
+        enableTrading: formData.enableTrading,
+        tradingStartTime: formData.tradingStartTime ? Math.floor(new Date(formData.tradingStartTime).getTime() / 1000) : 0,
+        dexName: formData.selectedDEX,
+        enableBuyTax: true,
+        enableSellTax: true,
+        buyTaxPercentage: 5, // 5% buy tax
+        sellTaxPercentage: 5  // 5% sell tax
+      };
+
+      // Create and list token
+      const tx = await factory.createAndListToken(listingParams, {
+        value: listingFee + parseEther(formData.initialLiquidityInETH)
       });
-      onSuccess?.();
+
+      toast({
+        title: "Transaction Submitted",
+        description: "Your token is being created and listed...",
+      });
+
+      const receipt = await tx.wait();
+      console.log('Transaction receipt:', receipt);
+
+      // Get token address from event
+      const tokenListedEvent = receipt.events?.find((event: any) => event.event === 'TokenListed');
+      if (tokenListedEvent) {
+        const tokenAddress = tokenListedEvent.args?.token;
+        toast({
+          title: "Success",
+          description: `Token created and listed at ${tokenAddress}`,
+        });
+      }
+
+      if (onSuccess) {
+        onSuccess();
+      }
     } catch (error) {
       console.error('Error creating token:', error);
       toast({
@@ -112,7 +179,9 @@ export function TokenForm_V2DirectDEX({ onSuccess, onError }: TokenFormV2DirectD
         description: error instanceof Error ? error.message : 'Failed to create token',
         variant: "destructive",
       });
-      onError?.(error as Error);
+      if (onError) {
+        onError(error as Error);
+      }
     } finally {
       setIsLoading(false);
     }
