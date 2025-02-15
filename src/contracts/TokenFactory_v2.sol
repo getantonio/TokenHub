@@ -29,8 +29,11 @@ contract TokenFactory_v2 is Initializable, OwnableUpgradeable, UUPSUpgradeable, 
     uint256 public platformFeeCliffDuration;   // Cliff duration in seconds
     bool public platformFeeVestingEnabled;     // Whether vesting is enabled
     
-    // Array to track all deployed tokens
+    // Enhanced token tracking
     address[] public deployedTokens;
+    mapping(address => address[]) private userCreatedTokens;
+    mapping(address => mapping(address => bool)) private isUserToken;
+    mapping(address => address) private tokenCreator;
 
     // Events
     event DeploymentFeeUpdated(uint256 newFee);
@@ -225,7 +228,12 @@ contract TokenFactory_v2 is Initializable, OwnableUpgradeable, UUPSUpgradeable, 
         );
 
         address token = address(proxy);
+        
+        // Enhanced token tracking
         deployedTokens.push(token);
+        userCreatedTokens[msg.sender].push(token);
+        isUserToken[msg.sender][token] = true;
+        tokenCreator[token] = msg.sender;
 
         emit TokenCreated(
             token,
@@ -264,5 +272,22 @@ contract TokenFactory_v2 is Initializable, OwnableUpgradeable, UUPSUpgradeable, 
     function withdrawFees() external onlyOwner {
         (bool success, ) = msg.sender.call{value: address(this).balance}("");
         require(success, "Transfer failed");
+    }
+
+    // Enhanced token retrieval functions
+    function getUserCreatedTokens(address user) external view returns (address[] memory) {
+        return userCreatedTokens[user];
+    }
+
+    function isTokenCreator(address user, address token) external view returns (bool) {
+        return isUserToken[user][token];
+    }
+
+    function getTokenCreator(address token) external view returns (address) {
+        return tokenCreator[token];
+    }
+
+    function getUserTokenCount(address user) external view returns (uint256) {
+        return userCreatedTokens[user].length;
     }
 }

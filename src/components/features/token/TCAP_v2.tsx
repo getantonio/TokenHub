@@ -112,40 +112,42 @@ export default function TokenAdminV2({ address }: TokenAdminV2Props) {
 
   useEffect(() => {
     const initProvider = async () => {
-      if (publicClient) {
+      if (typeof window !== 'undefined' && window.ethereum) {
         try {
-          // Check if wallet is connected first
-          const provider = (publicClient as unknown as { provider: { request: (args: { method: string }) => Promise<string[]> } }).provider;
-          const accounts = await provider.request({ 
-            method: 'eth_accounts' 
-          });
-          
-          if (accounts && accounts.length > 0) {
-            setProvider(new BrowserProvider(publicClient as any));
-          } else {
-            console.log('No accounts found, wallet not connected');
-            setProvider(null);
-          }
+          const provider = new BrowserProvider(window.ethereum);
+          setProvider(provider);
+          // Clear any previous errors
+          setError(null);
         } catch (error) {
           console.error('Error initializing provider:', error);
           setProvider(null);
+          setError('Failed to initialize provider');
+        }
+      } else {
+        setProvider(null);
+      }
+    };
+    
+    if (isConnected) {
+      initProvider();
+    }
+  }, [isConnected, chainId]);
+
+  useEffect(() => {
+    const initSigner = async () => {
+      if (provider && isConnected) {
+        try {
+          const signer = await provider.getSigner();
+          setSigner(signer);
+        } catch (error) {
+          console.error('Error initializing signer:', error);
+          setSigner(null);
         }
       }
     };
     
-    initProvider();
-  }, [publicClient]);
-
-  useEffect(() => {
-    const initSigner = async () => {
-      if (walletClient) {
-        const provider = new BrowserProvider(walletClient as any);
-        const signer = await provider.getSigner();
-        setSigner(signer);
-      }
-    };
     initSigner();
-  }, [walletClient]);
+  }, [provider, isConnected]);
 
   useEffect(() => {
     if (isConnected && chainId && provider && walletAddress) {
@@ -155,7 +157,22 @@ export default function TokenAdminV2({ address }: TokenAdminV2Props) {
         hasProvider: !!provider,
         walletAddress
       });
-      loadTokens();
+      
+      // Reset state when network changes
+      setTokens([]);
+      setError(null);
+      setIsLoading(true);
+      
+      // Add small delay to ensure provider is ready after network change
+      const timeoutId = setTimeout(() => {
+        loadTokens().catch(err => {
+          console.error('Error loading tokens:', err);
+          setError('Failed to load tokens. Please try refreshing the page.');
+          setIsLoading(false);
+        });
+      }, 500);
+      
+      return () => clearTimeout(timeoutId);
     }
   }, [isConnected, chainId, provider, walletAddress]);
 
@@ -220,103 +237,121 @@ export default function TokenAdminV2({ address }: TokenAdminV2Props) {
       
       const signer = await provider.getSigner();
       const factory = new Contract(factoryV2Address, [
-        'function getUserCreatedTokens(address user) view returns (address[])',
-        'function getTokenCreator(address token) view returns (address)',
-        'function isTokenCreator(address user, address token) view returns (bool)',
-        'function getUserTokenCount(address user) view returns (uint256)'
+        'function getDeployedTokens() view returns (address[])',
+        'function getUserCreatedTokens(address) view returns (address[])',
+        'function isTokenCreator(address,address) view returns (bool)',
+        'function getTokenCreator(address) view returns (address)'
       ], signer);
       
       const userAddress = await signer.getAddress();
       console.log('TCAP_v2: Got user address:', userAddress);
       
-      // Get tokens deployed by the connected user
+      // Get user's tokens directly using the new function
       console.log('TCAP_v2: Calling getUserCreatedTokens');
-      try {
-        const deployedTokens = await factory.getUserCreatedTokens(userAddress);
-        console.log('TCAP_v2: Deployed tokens:', deployedTokens);
+      const userTokens = await factory.getUserCreatedTokens(userAddress);
+      console.log('TCAP_v2: User tokens:', userTokens);
 
-        if (!Array.isArray(deployedTokens)) {
-          throw new Error('Unexpected response format from getUserCreatedTokens');
+      if (!Array.isArray(userTokens)) {
+        throw new Error('Unexpected response format from getUserCreatedTokens');
+      }
+
+      const tokenPromises = userTokens.map(async (tokenAddress: string) => {
+        try {
+          // Create contract instances with explicit ABIs
+          const erc20Contract = new Contract(tokenAddress, [
+            'function name() view returns (string)',
+            'function symbol() view returns (string)',
+            'function totalSupply() view returns (uint256)',
+            'function decimals() view returns (uint8)',
+            'function balanceOf(address) view returns (uint256)'
+          ], provider);
+
+          const tokenContract = new Contract(tokenAddress, [
+            'function blacklistEnabled() view returns (bool)',
+            'function timeLockEnabled() view returns (bool)',
+            'function presaleInfo() view returns (tuple(uint256,uint256,uint256,uint256,uint256,uint256,uint256,bool,bool,uint256))',
+            'function platformFee() view returns (tuple(address,uint256,bool,uint256,uint256,uint256,uint256))'
+          ], provider);
+
+          // Basic token info with error handling
+          const [name, symbol, totalSupply, decimals] = await Promise.all([
+            erc20Contract.name().catch(() => 'Unknown Name'),
+            erc20Contract.symbol().catch(() => 'Unknown Symbol'),
+            erc20Contract.totalSupply().catch(() => BigInt(0)),
+            erc20Contract.decimals().catch(() => 18)
+          ]);
+
+          // Get feature flags and presale info with error handling
+          const [blacklistEnabled, timeLockEnabled, presaleData] = await Promise.all([
+            tokenContract.blacklistEnabled().catch(() => false),
+            tokenContract.timeLockEnabled().catch(() => false),
+            tokenContract.presaleInfo().catch(() => [
+              BigInt(0), BigInt(0), BigInt(0), BigInt(0), 
+              BigInt(0), BigInt(0), BigInt(0), false, false, BigInt(0)
+            ])
+          ]);
+
+          // Get platform fee info with error handling
+          const platformFee = await tokenContract.platformFee().catch(() => ({
+            recipient: '0x0000000000000000000000000000000000000000',
+            totalTokens: BigInt(0),
+            vestingEnabled: false,
+            vestingDuration: BigInt(0),
+            cliffDuration: BigInt(0),
+            vestingStart: BigInt(0),
+            tokensClaimed: BigInt(0)
+          }));
+
+          return {
+            address: tokenAddress,
+            name,
+            symbol,
+            totalSupply: formatUnits(totalSupply, decimals),
+            displayTotalSupply: Number(formatUnits(totalSupply, decimals)).toLocaleString(undefined, {
+              maximumFractionDigits: 0
+            }),
+            blacklistEnabled,
+            timeLockEnabled,
+            presaleInfo: {
+              softCap: formatUnits(presaleData[0], decimals),
+              hardCap: formatUnits(presaleData[1], decimals),
+              minContribution: formatUnits(presaleData[2], decimals),
+              maxContribution: formatUnits(presaleData[3], decimals),
+              startTime: Number(presaleData[4]),
+              endTime: Number(presaleData[5]),
+              presaleRate: formatUnits(presaleData[6], decimals),
+              whitelistEnabled: presaleData[7],
+              finalized: presaleData[8],
+              totalContributed: formatUnits(presaleData[9], decimals)
+            },
+            platformFee: {
+              recipient: platformFee.recipient,
+              totalTokens: formatUnits(platformFee.totalTokens || BigInt(0), decimals),
+              vestingEnabled: platformFee.vestingEnabled,
+              vestingDuration: Number(platformFee.vestingDuration),
+              cliffDuration: Number(platformFee.cliffDuration),
+              vestingStart: Number(platformFee.vestingStart),
+              tokensClaimed: formatUnits(platformFee.tokensClaimed || BigInt(0), decimals)
+            },
+            createdAt: Date.now()
+          } as TokenInfo;
+        } catch (error) {
+          console.error(`Error loading token ${tokenAddress}:`, error);
+          return null;
         }
+      });
 
-        const tokenPromises = deployedTokens.map(async (tokenAddress: string) => {
-          try {
-            const erc20Contract = new Contract(tokenAddress, ERC20_ABI, provider);
-            const tokenContract = new Contract(tokenAddress, TokenTemplate_v2.abi, provider);
-
-            // Basic token info
-            const [name, symbol, totalSupply, decimals] = await Promise.all([
-              erc20Contract.name(),
-              erc20Contract.symbol(),
-              erc20Contract.totalSupply(),
-              erc20Contract.decimals()
-            ]);
-
-            // Get feature flags and presale info
-            const [blacklistEnabled, timeLockEnabled, presaleData] = await Promise.all([
-              tokenContract.blacklistEnabled(),
-              tokenContract.timeLockEnabled(),
-              tokenContract.presaleInfo()
-            ]);
-
-            // Get platform fee info
-            const platformFee = await tokenContract.platformFee();
-
-            return {
-              address: tokenAddress,
-              name,
-              symbol,
-              totalSupply: formatUnits(totalSupply, decimals),
-              displayTotalSupply: Number(formatUnits(totalSupply, decimals)).toLocaleString(undefined, {
-                maximumFractionDigits: 0
-              }),
-              blacklistEnabled,
-              timeLockEnabled,
-              presaleInfo: {
-                softCap: formatUnits(presaleData[0], decimals),
-                hardCap: formatUnits(presaleData[1], decimals),
-                minContribution: formatUnits(presaleData[2], decimals),
-                maxContribution: formatUnits(presaleData[3], decimals),
-                startTime: Number(presaleData[4]),
-                endTime: Number(presaleData[5]),
-                presaleRate: formatUnits(presaleData[6], decimals),
-                whitelistEnabled: presaleData[7],
-                finalized: presaleData[8],
-                totalContributed: formatUnits(presaleData[9], decimals)
-              },
-              platformFee: {
-                recipient: platformFee.recipient,
-                totalTokens: formatUnits(platformFee.totalTokens, decimals),
-                vestingEnabled: platformFee.vestingEnabled,
-                vestingDuration: Number(platformFee.vestingDuration),
-                cliffDuration: Number(platformFee.cliffDuration),
-                vestingStart: Number(platformFee.vestingStart),
-                tokensClaimed: formatUnits(platformFee.tokensClaimed, decimals)
-              },
-              createdAt: Date.now() // Add creation time for sorting
-            } as TokenInfo;
-          } catch (error) {
-            console.error(`Error loading token ${tokenAddress}:`, error);
-            return null;
-          }
+      const loadedTokens = (await Promise.all(tokenPromises))
+        .filter((token): token is TokenInfo => token !== null)
+        .sort((a, b) => {
+          const timeA = a.createdAt || 0;
+          const timeB = b.createdAt || 0;
+          return timeB - timeA;
         });
 
-        const loadedTokens = (await Promise.all(tokenPromises))
-          .filter((token): token is TokenInfo => token !== null)
-          .sort((a, b) => {
-            // Sort by creation time (newest first)
-            const timeA = a.createdAt || 0;
-            const timeB = b.createdAt || 0;
-            return timeB - timeA;
-          });
-
-        console.log('Loaded tokens:', loadedTokens);
-        setTokens(loadedTokens);
-        showToast('success', `Found ${loadedTokens.length} tokens`);
-      } catch (error: any) {
-        console.error('TCAP_v2 Error loading tokens:', error);
-        showToast('error', 'Failed to load tokens. Please try again.');
-      }
+      console.log('Loaded tokens:', loadedTokens);
+      setTokens(loadedTokens);
+      showToast('success', `Found ${loadedTokens.length} tokens`);
     } catch (error: any) {
       console.error('TCAP_v2 Error:', error);
       showToast('error', error.message || 'Failed to load tokens');
@@ -580,11 +615,19 @@ export default function TokenAdminV2({ address }: TokenAdminV2Props) {
   const checkOwnership = async () => {
     if (!address || !provider || !walletAddress) return;
     try {
-      const factory = new Contract(address, TokenFactory_v2.abi, provider);
-      const owner = await factory.owner();
-      setIsOwner(owner.toLowerCase() === walletAddress.toLowerCase());
+      const factory = new Contract(address, [
+        'function owner() view returns (address)'
+      ], provider);
+      
+      const owner = await factory.owner().catch(() => null);
+      if (owner) {
+        setIsOwner(owner.toLowerCase() === walletAddress.toLowerCase());
+      } else {
+        setIsOwner(false);
+      }
     } catch (error) {
       console.error('Error checking ownership:', error);
+      setIsOwner(false);
     }
   };
 

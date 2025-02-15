@@ -63,8 +63,8 @@ const TOKEN_DECIMALS = 18;
 
 const getDefaultTimes = () => {
   const now = new Date();
-  const startTime = new Date(now.getTime() + 3600000);
-  const endTime = new Date(now.getTime() + 86400000);
+  const startTime = new Date(now.getTime() + 24 * 3600000); // 24 hours in the future
+  const endTime = new Date(now.getTime() + 48 * 3600000);   // 48 hours in the future
   return {
     startTime: startTime.toISOString().slice(0, 16),
     endTime: endTime.toISOString().slice(0, 16)
@@ -204,11 +204,7 @@ export function TokenFormV2({ isConnected, onSuccess, onError }: TokenFormV2Prop
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isConnected) {
-      useToastToast({
-        title: "Wallet Connection Required",
-        description: "Please connect your wallet to create a token",
-        variant: "destructive"
-      });
+      setError("Please connect your wallet first");
       return;
     }
     
@@ -223,23 +219,46 @@ export function TokenFormV2({ isConnected, onSuccess, onError }: TokenFormV2Prop
 
       const provider = new BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
+      const userAddress = await signer.getAddress();
       const chainId = Number(await window.ethereum.request({ method: 'eth_chainId' }));
       
       const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddressV2');
       if (!factoryAddress) {
-        throw new Error("TokenFactory V2 is not yet deployed on this network.");
+        console.error("Factory address not found for this network");
+        showToast('error', 'TokenFactory V2 is not deployed on this network');
+        setLoading(false);
+        return;
       }
 
       const factory = new Contract(factoryAddress, TokenFactory_v2.abi, signer);
-      const fee = await factory.getDeploymentFee(await signer.getAddress());
-      
+      const fee = await factory.getDeploymentFee(userAddress);
+
+      // Convert form data to contract parameters
       const initialSupplyWei = parseUnits(formData.initialSupply, TOKEN_DECIMALS);
       const maxSupplyWei = parseUnits(formData.maxSupply, TOKEN_DECIMALS);
-      const startTimeUnix = Math.floor(new Date(formData.startTime).getTime() / 1000);
-      const endTimeUnix = Math.floor(new Date(formData.endTime).getTime() / 1000);
+      const presaleRateWei = parseUnits(formData.presaleRate, TOKEN_DECIMALS);
+      const minContributionWei = parseUnits(formData.minContribution, 'ether');
+      const maxContributionWei = parseUnits(formData.maxContribution, 'ether');
+      const presaleCapWei = parseUnits(formData.presaleCap, 'ether');
+      const startTime = Math.floor(new Date(formData.startTime).getTime() / 1000);
+      const endTime = Math.floor(new Date(formData.endTime).getTime() / 1000);
 
-      showToast('success', 'Preparing transaction...');
+      // Prepare transaction parameters based on network
+      let txParams: any = {
+        value: fee
+      };
 
+      // Special handling for Polygon Amoy
+      if (chainId === 80002) {
+        txParams = {
+          ...txParams,
+          gasLimit: 3000000,
+          gasPrice: parseUnits("50", "gwei"),
+          type: 0 // Legacy transaction type
+        };
+      }
+
+      // Create token with appropriate parameters
       const tx = await factory.createToken(
         formData.name,
         formData.symbol,
@@ -247,49 +266,54 @@ export function TokenFormV2({ isConnected, onSuccess, onError }: TokenFormV2Prop
         maxSupplyWei,
         formData.enableBlacklist,
         formData.enableTimeLock,
-        parseUnits(formData.presaleRate, 18),
-        parseUnits(formData.minContribution, 18),
-        parseUnits(formData.maxContribution, 18),
-        parseUnits(formData.presaleCap, 18),
-        startTimeUnix,
-        endTimeUnix,
-        { value: fee }
+        presaleRateWei,
+        minContributionWei,
+        maxContributionWei,
+        presaleCapWei,
+        startTime,
+        endTime,
+        txParams
       );
 
-      showToast('success', 'Transaction submitted. Waiting for confirmation...', getExplorerUrl(chainId, tx.hash, 'tx'));
+      showToast('success', 'Transaction submitted. Waiting for confirmation...');
       
       const receipt = await tx.wait();
       let tokenAddress = null;
       
-      // Find TokenCreated event
+      // Parse logs to find token address
       for (const log of receipt.logs) {
         try {
-          const parsedLog = factory.interface.parseLog(log);
-          if (parsedLog && parsedLog.name === 'TokenCreated') {
-            tokenAddress = parsedLog.args.token;
+          const parsed = factory.interface.parseLog(log as unknown as { topics: string[], data: string });
+          if (parsed?.name === "TokenCreated") {
+            tokenAddress = parsed.args[0];
             break;
           }
         } catch (e) {
-          // Skip logs that can't be parsed
           continue;
         }
       }
 
-      if (tokenAddress) {
-        setSuccessInfo({
-          tokenAddress,
-          tokenName: formData.name,
-          tokenSymbol: formData.symbol
-        });
-        showToast('success', 'Token created successfully!', getExplorerUrl(chainId, tokenAddress, 'address'));
-        if (onSuccess) {
-          onSuccess();
-        }
+      if (!tokenAddress) {
+        throw new Error("Could not find token address in transaction logs");
+      }
+
+      const explorerUrl = getExplorerUrl(chainId, tokenAddress, 'token');
+      const txExplorerUrl = getExplorerUrl(chainId, tx.hash, 'tx');
+
+      setSuccessInfo({
+        tokenAddress,
+        tokenName: formData.name,
+        tokenSymbol: formData.symbol,
+      });
+
+      showToast('success', 'Token created successfully!', txExplorerUrl);
+      
+      if (onSuccess) {
+        onSuccess();
       }
 
     } catch (error: any) {
       console.error('Error creating token:', error);
-      setError(error.message || 'Failed to create token');
       showToast('error', error.message || 'Failed to create token');
       if (onError) {
         onError(error);
@@ -521,10 +545,19 @@ export function TokenFormV2({ isConnected, onSuccess, onError }: TokenFormV2Prop
               <InfoIcon content="Deployment fee will be charged in ETH. Make sure you have enough ETH to cover the fee and gas costs." />
               <Button 
                 type="submit" 
-                className="w-sm bg-blue-600 hover:bg-blue-700 text-white h-9"
-                disabled={!isConnected}
+                className="w-32 bg-blue-600 hover:bg-blue-700 text-white h-9 relative"
+                disabled={!isConnected || loading}
               >
-                {isConnected ? "Create Token" : "Connect Wallet to Deploy"}
+                {loading ? (
+                  <div className="flex items-center justify-center">
+                    <Spinner className="w-4 h-4 mr-2" />
+                    <span>Creating...</span>
+                  </div>
+                ) : isConnected ? (
+                  "Create Token"
+                ) : (
+                  "Connect Wallet"
+                )}
               </Button>
             </div>
           </form>

@@ -45,12 +45,16 @@ const config = {
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : undefined,
       chainId: 80002,
       verifyApiKey: process.env.POLYGONSCAN_API_KEY,
-      gasPrice: 35000000000,  // 35 gwei (higher than pending tx)
-      gas: 1500000,  // 1.5M gas limit
-      timeout: 180000,  // 3 minutes
-      confirmations: 2,
+      gasPrice: 50000000000,  // 50 gwei
+      gas: 3000000,  // 3M gas limit
+      timeout: 300000,  // 5 minutes
+      confirmations: 3,
       networkCheckTimeout: 100000,
-      timeoutBlocks: 200
+      timeoutBlocks: 200,
+      allowUnlimitedContractSize: true,
+      throwOnTransactionFailures: true,
+      throwOnCallFailures: true,
+      loggingEnabled: true  // Added for better debugging
     },
     bscTestnet: {
       url: "https://data-seed-prebsc-1-s1.binance.org:8545",

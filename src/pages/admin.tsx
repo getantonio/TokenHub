@@ -27,10 +27,15 @@ export default function AdminPage() {
   const factoryV2Address = chainId ? getNetworkContractAddress(chainId, 'factoryAddressV2') : undefined;
   const factoryV3Address = chainId ? getNetworkContractAddress(chainId, 'factoryAddressV3') : undefined;
 
-  console.log('Debug Factory V3:', {
+  console.log('Admin Page - Network State:', {
     chainId,
-    factoryV3Address,
-    isConnected
+    isConnected,
+    hasProvider: !!provider,
+    factoryAddresses: {
+      v1: factoryV1Address,
+      v2: factoryV2Address,
+      v3: factoryV3Address
+    }
   });
 
   return (

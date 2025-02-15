@@ -107,6 +107,7 @@ export function TokenForm_V2DirectDEX({ onSuccess, onError }: TokenFormV2DirectD
   const [ethPrice] = useState(2000); // Mock ETH price for demo
   const [listingFee, setListingFee] = useState<string>('0.01'); // Fixed listing fee in ETH to match contract
   const [totalValueWei, setTotalValueWei] = useState<bigint>(BigInt(0)); // Store total value in Wei
+  const [hasProvider, setHasProvider] = useState<boolean>(false);
   
   const [formData, setFormData] = useState<FormData>({
     // Basic Token Info
@@ -146,6 +147,37 @@ export function TokenForm_V2DirectDEX({ onSuccess, onError }: TokenFormV2DirectD
     enableAntiBot: true,
     enableMaxWallet: true,
   });
+
+  // Check for provider availability
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.ethereum) {
+      setHasProvider(true);
+    }
+  }, []);
+
+  // Add logging for wallet state
+  useEffect(() => {
+    console.log('Wallet state:', {
+      isConnected,
+      chainId,
+      hasProvider,
+      hasWalletClient: !!walletClient
+    });
+  }, [isConnected, chainId, walletClient, hasProvider]);
+
+  // Update button text based on connection state
+  const getButtonText = () => {
+    if (isLoading) return "Creating...";
+    if (!hasProvider) return "Install Wallet";
+    if (!isConnected) return "Connect Wallet";
+    if (!chainId) return "Select Network";
+    return "Create Token";
+  };
+
+  // Disable button if requirements not met
+  const isButtonDisabled = () => {
+    return !hasProvider || !isConnected || !chainId || isLoading;
+  };
 
   // Calculate USD value
   const calculateUsdValue = (tokenAmount: string, pricePerToken: string): string => {
@@ -200,10 +232,21 @@ export function TokenForm_V2DirectDEX({ onSuccess, onError }: TokenFormV2DirectD
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!isConnected) {
+    
+    // Basic validation
+    if (!hasProvider) {
       toast({
-        title: "Wallet Connection Required",
-        description: "Please connect your wallet to create a token",
+        title: "Wallet Required",
+        description: "Please install a Web3 wallet like MetaMask",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!isConnected || !chainId) {
+      toast({
+        title: "Connection Required",
+        description: "Please connect your wallet and select the correct network",
         variant: "destructive"
       });
       return;
@@ -229,46 +272,60 @@ export function TokenForm_V2DirectDEX({ onSuccess, onError }: TokenFormV2DirectD
       return;
     }
 
-    // Validate network and DEX combination
-    const supportedDEXes = chainId ? networkDEXMap[chainId] : undefined;
-    if (!supportedDEXes?.includes(formData.selectedDEX)) {
-      throw new Error(`Invalid DEX selection for network ${chainId}. Supported DEXes: ${supportedDEXes?.join(', ') || 'None'}`);
+    // Validate fees
+    const totalFees = parseInt(formData.marketingFee) + parseInt(formData.developmentFee) + parseInt(formData.autoLiquidityFee);
+    if (totalFees > 25) {
+      toast({
+        title: "Invalid Fees",
+        description: "Total fees cannot exceed 25%",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (parseInt(formData.marketingFee) <= 0 || parseInt(formData.developmentFee) <= 0 || parseInt(formData.autoLiquidityFee) <= 0) {
+      toast({
+        title: "Invalid Fees",
+        description: "All fees must be greater than 0",
+        variant: "destructive"
+      });
+      return;
     }
 
     try {
       setIsLoading(true);
       const provider = new BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
-      const userAddress = await signer.getAddress();
 
       // Get factory contract
-      if (!chainId) {
-        throw new Error("Network not supported");
-      }
-      
       const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddressV2DirectDEX');
       if (!factoryAddress) {
         throw new Error("Contract not deployed on this network");
       }
 
-      // Create contract instance with interface
+      // Create contract instance
       const factoryContract = new Contract(
         factoryAddress,
-        TokenFactoryV2DirectDEXABI,  // Use ABI directly instead of wrapping in Interface
+        TokenFactoryV2DirectDEXABI,
         signer
       );
 
-      // Prepare the listing parameters as a struct
+      // Calculate exact values in Wei
+      const initialLiquidityWei = parseEther(formData.initialLiquidityInETH);
+      const listingFeeWei = parseEther(listingFee);
+      const totalValueRequired = initialLiquidityWei + listingFeeWei;
+
+      // Prepare listing parameters
       const listingParams = {
         name: formData.name.trim(),
         symbol: formData.symbol.trim().toUpperCase(),
         totalSupply: parseEther(formData.totalSupply),
-        initialLiquidityInETH: parseEther(formData.initialLiquidityInETH),
+        initialLiquidityInETH: initialLiquidityWei,
         listingPriceInETH: parseEther(formData.listingPriceInETH),
         maxTxAmount: parseEther(formData.maxTxAmount),
         maxWalletAmount: parseEther(formData.maxWalletAmount),
         enableTrading: formData.enableTrading,
-        tradingStartTime: formData.enableTrading ? Math.floor(new Date(formData.tradingStartTime).getTime() / 1000) : 0,
+        tradingStartTime: formData.enableTrading ? Math.floor(Date.now() / 1000) + 300 : 0, // 5 minutes from now if enabled
         dexName: formData.selectedDEX,
         marketingFeePercentage: parseInt(formData.marketingFee),
         marketingWallet: formData.marketingWallet,
@@ -277,90 +334,86 @@ export function TokenForm_V2DirectDEX({ onSuccess, onError }: TokenFormV2DirectD
         autoLiquidityFeePercentage: parseInt(formData.autoLiquidityFee)
       };
 
-      // Debug log the contract setup
-      const encodedData = factoryContract.interface.encodeFunctionData('createAndListToken', [listingParams]);
-      const createAndListTokenFunction = factoryContract.interface.getFunction('createAndListToken');
-      console.log('Contract setup:', {
-        factoryAddress,
-        chainId,
-        functionSignature: createAndListTokenFunction?.format() || 'unknown',
-        listingParams,
-        encodedData
+      // Debug logs
+      console.log('Validation:', {
+        totalFees,
+        hasValidWallets: formData.marketingWallet.length === 42 && formData.developmentWallet.length === 42,
+        requiredValue: formatEther(totalValueRequired),
+        dexName: formData.selectedDEX
       });
 
-      // Get gas estimate with value included
-      const gasEstimate = await signer.estimateGas({
+      // Encode function call
+      const encodedData = factoryContract.interface.encodeFunctionData('createAndListToken', [listingParams]);
+      
+      // Get gas estimate
+      let gasEstimate = await signer.estimateGas({
         to: factoryAddress,
         data: encodedData,
-        value: totalValueWei,
-        gasLimit: 3000000 // Set a higher initial gas limit for estimation
+        value: totalValueRequired
       });
 
       // Add 20% buffer to gas estimate
-      const gasLimit = Math.floor(Number(gasEstimate) * 1.2);
+      let gasLimit = Math.floor(Number(gasEstimate) * 1.2);
 
-      console.log('Transaction parameters:', {
+      // Send transaction
+      let transaction = await signer.sendTransaction({
         to: factoryAddress,
         data: encodedData,
-        value: totalValueWei.toString(),
-        gasLimit: gasLimit,
-        gasPrice: 10000000000 // 10 gwei
-      });
-
-      // Send the transaction with optimized gas settings for BSC
-      const transaction = await signer.sendTransaction({
-        to: factoryAddress,
-        data: encodedData,
-        value: totalValueWei,
-        gasLimit: gasLimit,
-        gasPrice: 10000000000 // 10 gwei
+        value: totalValueRequired,
+        gasLimit,
+        gasPrice: 10000000000 // 10 gwei for BSC
       });
 
       console.log('Transaction sent:', transaction.hash);
 
-      // Wait for confirmation and check receipt
+      // Wait for transaction receipt
       const receipt = await transaction.wait();
+      
       if (!receipt) {
-        throw new Error("No transaction receipt received");
+        throw new Error("Transaction failed - no receipt received");
       }
       
-      console.log('Transaction receipt:', receipt);
-      
-      if (receipt.status === 0) {
-        throw new Error("Transaction failed. Please check the transaction on the block explorer for more details.");
-      }
-
-      // Get token address from event logs
+      // Get token created event
       const tokenCreatedEvent = receipt.logs.find(
-        (log: any) => {
+        (log) => {
           try {
-            const parsed = factoryContract.interface.parseLog(log);
-            return parsed?.name === 'TokenListed';
+            if (!log || !log.topics || !log.topics[0] || !factoryContract.interface) return false;
+            const eventTopicHash = factoryContract.interface.getEvent('TokenCreated')?.topicHash;
+            if (!eventTopicHash) return false;
+            return log.topics[0] === eventTopicHash;
           } catch {
             return false;
           }
         }
       );
-      
+
       if (!tokenCreatedEvent) {
-        throw new Error("Token creation succeeded but no TokenListed event found");
+        throw new Error("Transaction succeeded but no TokenCreated event found");
       }
 
-      const parsedLog = factoryContract.interface.parseLog(tokenCreatedEvent);
-      const tokenAddress = parsedLog?.args?.token || 'Unknown';
+      try {
+        const eventLog = factoryContract.interface.parseLog({
+          topics: tokenCreatedEvent.topics as string[],
+          data: tokenCreatedEvent.data,
+        });
 
-      if (tokenAddress === 'Unknown') {
-        throw new Error("Token address not found in event logs");
+        if (!eventLog || !eventLog.args.tokenAddress) {
+          throw new Error("Failed to parse token address from event");
+        }
+
+        const tokenAddress = eventLog.args.tokenAddress as string;
+        
+        toast({
+          title: "Token Created Successfully",
+          description: `Token address: ${tokenAddress}`,
+          variant: "default"
+        });
+
+        onSuccess?.();
+      } catch (parseError) {
+        console.error('Error parsing event log:', parseError);
+        throw new Error("Failed to parse token creation event");
       }
-
-      // Success!
-      toast({
-        title: "🎉 Token Created Successfully!",
-        description: `Your token has been created and listed on ${formData.selectedDEX}.\n\nToken Address: ${tokenAddress}`,
-        variant: "default"
-      });
-
-      onSuccess?.();
     } catch (error: unknown) {
       console.error('Error creating token:', error);
       let errorMessage = "An error occurred while creating the token";
@@ -851,10 +904,10 @@ export function TokenForm_V2DirectDEX({ onSuccess, onError }: TokenFormV2DirectD
 
           <Button 
             type="submit" 
-            disabled={!isConnected || isLoading}
+            disabled={isButtonDisabled()}
             className="bg-blue-600 hover:bg-blue-700 text-white w-auto px-6"
           >
-            {isLoading ? "Creating..." : isConnected ? "Create Token" : "Connect Wallet to Deploy"}
+            {getButtonText()}
           </Button>
         </form>
 
