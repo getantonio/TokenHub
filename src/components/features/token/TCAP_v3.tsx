@@ -405,7 +405,12 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
 
         const loadedTokens = (await Promise.all(tokenPromises))
           .filter((token): token is TokenInfo => token !== null)
-          .sort((a, b) => a.name.localeCompare(b.name));
+          .sort((a, b) => {
+            // Sort by creation time (newest first)
+            const timeA = a.createdAt || 0;
+            const timeB = b.createdAt || 0;
+            return timeB - timeA;
+          });
 
         console.log('Loaded tokens:', loadedTokens);
         setTokens(loadedTokens);

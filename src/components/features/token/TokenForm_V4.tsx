@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import TokenPreview from '@/components/features/token/TokenPreview';
+import { useToast } from '@/components/ui/use-toast';
 
 interface TokenFormV4Props {
   isConnected: boolean;
@@ -53,6 +54,7 @@ interface FormData {
 }
 
 export default function TokenForm_V4({ isConnected, onSuccess, onError }: TokenFormV4Props) {
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<'basic' | 'tax' | 'tokenomics' | 'supply' | 'distribution'>('basic');
   const form = useForm<FormData>({
     defaultValues: {
@@ -81,7 +83,11 @@ export default function TokenForm_V4({ isConnected, onSuccess, onError }: TokenF
 
   const handleSubmit = async (data: FormData) => {
     if (!isConnected) {
-      alert('Please connect your wallet first');
+      toast({
+        title: "Wallet Connection Required",
+        description: "Please connect your wallet to create a token",
+        variant: "destructive"
+      });
       return;
     }
 
@@ -304,12 +310,12 @@ export default function TokenForm_V4({ isConnected, onSuccess, onError }: TokenF
             </div>
           </div>
 
-          <Button
-            type="submit"
+          <Button 
+            type="submit" 
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white h-9"
             disabled={!isConnected}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2"
           >
-            {isConnected ? 'Deploy Token' : 'Connect Wallet to Deploy'}
+            {isConnected ? "Create Token" : "Connect Wallet to Deploy"}
           </Button>
         </form>
       </Card>

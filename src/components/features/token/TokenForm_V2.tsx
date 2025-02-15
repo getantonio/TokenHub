@@ -15,9 +15,19 @@ import { Label } from '@components/ui/label';
 import { Switch } from '@components/ui/switch';
 import { Button } from '@components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@components/ui/card';
+import dynamic from 'next/dynamic';
+import { useForm } from 'react-hook-form';
+import { Badge } from '@/components/ui/badge';
+
+const ConnectWalletButton = dynamic(
+  () => import('@/components/wallet/ConnectWallet').then(mod => mod.ConnectWallet),
+  { ssr: false }
+);
 
 interface TokenFormV2Props {
   isConnected: boolean;
+  onSuccess?: () => void;
+  onError?: (error: Error) => void;
 }
 
 interface FormData {
@@ -77,7 +87,7 @@ const defaultValues: FormData = {
   customOwner: ''
 };
 
-export function TokenFormV2({ isConnected }: TokenFormV2Props) {
+export function TokenFormV2({ isConnected, onSuccess, onError }: TokenFormV2Props) {
   const { chainId } = useNetwork();
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -194,7 +204,11 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isConnected) {
-      setError("Please connect your wallet first");
+      useToastToast({
+        title: "Wallet Connection Required",
+        description: "Please connect your wallet to create a token",
+        variant: "destructive"
+      });
       return;
     }
     
@@ -268,12 +282,18 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
           tokenSymbol: formData.symbol
         });
         showToast('success', 'Token created successfully!', getExplorerUrl(chainId, tokenAddress, 'address'));
+        if (onSuccess) {
+          onSuccess();
+        }
       }
 
     } catch (error: any) {
       console.error('Error creating token:', error);
       setError(error.message || 'Failed to create token');
       showToast('error', error.message || 'Failed to create token');
+      if (onError) {
+        onError(error);
+      }
     } finally {
       setLoading(false);
     }
@@ -301,6 +321,13 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
   return (
     <div className="container mx-auto px-1 py-1">
       <div className="max-w-4xl mx-auto space-y-2">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-bold text-white">Create Your Token</h2>
+          <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/50">
+            Development
+          </Badge>
+        </div>
+
         <div className="form-container form-compact">
           <form onSubmit={handleSubmit} className="space-y-1">
             <div className="form-grid">
@@ -490,26 +517,15 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
               </div>
             </div>
 
-            <div className="form-actions">
-              <div className="flex items-center mr-2">
-                <InfoIcon content="Deployment fee will be charged in ETH. Make sure you have enough ETH to cover the fee and gas costs." />
-              </div>
-              <button
-                type="submit"
-                disabled={!isConnected || loading}
-                className="form-button-primary"
+            <div className="flex justify-end items-center space-x-2">
+              <InfoIcon content="Deployment fee will be charged in ETH. Make sure you have enough ETH to cover the fee and gas costs." />
+              <Button 
+                type="submit" 
+                className="w-sm bg-blue-600 hover:bg-blue-700 text-white h-9"
+                disabled={!isConnected}
               >
-                {loading ? (
-                  <>
-                    <Spinner className="mr-2" />
-                    Creating...
-                  </>
-                ) : !isConnected ? (
-                  'Connect Wallet to Deploy'
-                ) : (
-                  'Create Token'
-                )}
-              </button>
+                {isConnected ? "Create Token" : "Connect Wallet to Deploy"}
+              </Button>
             </div>
           </form>
         </div>
@@ -519,17 +535,14 @@ export function TokenFormV2({ isConnected }: TokenFormV2Props) {
           <TokenPreview
             name={formData.name}
             symbol={formData.symbol}
-            initialSupply={formData.maxSupply}
+            initialSupply={formData.initialSupply}
             maxSupply={formData.maxSupply}
           />
           
           <div className="form-card">
-          
             <div className="form-card-body">
               <TokenAdminV2
-                isConnected={isConnected}
                 address={successInfo?.tokenAddress}
-                provider={provider}
               />
             </div>
           </div>

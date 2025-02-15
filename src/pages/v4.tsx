@@ -1,14 +1,19 @@
 import { useEffect, useState } from 'react';
 import { useNetwork } from '@contexts/NetworkContext';
+import { useAccount } from 'wagmi';
 import Head from 'next/head';
+import dynamic from 'next/dynamic';
+import { useRouter } from 'next/router';
+import TokenForm_V4 from '@/components/features/token/TokenForm_V4';
+import { Footer } from '@/components/layouts/Footer';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
-import TokenForm_V4 from '@/components/features/token/TokenForm_V4';
-import { useAccount } from 'wagmi';
-import { Footer } from '@/components/layouts/Footer';
-import { useRouter } from 'next/router';
-import { ConnectWallet } from '@/components/common/ConnectWallet';
+
+const ConnectWalletButton = dynamic(
+  () => import('@/components/wallet/ConnectWallet').then(mod => mod.ConnectWallet),
+  { ssr: false }
+);
 
 export default function V4Page() {
   const { chainId } = useNetwork();
@@ -67,7 +72,7 @@ export default function V4Page() {
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
-      <main className="container mx-auto px-4 py-2">
+      <main className="container mx-auto px-4 py-8">
         <div className="max-w-6xl mx-auto">
           {/* Header */}
           <div className="flex justify-between items-start mb-8">
@@ -241,25 +246,17 @@ export default function V4Page() {
             </>
           ) : (
             <div className="grid gap-6">
-              {!isConnected ? (
-                <div className="text-center p-8 bg-gray-800/50 rounded-lg border border-gray-700/50">
-                  <h2 className="text-2xl font-bold text-white mb-4">Connect Your Wallet</h2>
-                  <p className="text-gray-400 mb-6">Connect your wallet to create a token with our Dynamic Fee System</p>
-                  <ConnectWallet />
-                </div>
-              ) : (
-                <TokenForm_V4
-                  isConnected={isConnected}
-                  onSuccess={() => {
-                    // TODO: Handle success
-                    console.log('Token deployed successfully');
-                  }}
-                  onError={(error) => {
-                    // TODO: Handle error
-                    console.error('Error deploying token:', error);
-                  }}
-                />
-              )}
+              <TokenForm_V4
+                isConnected={isConnected}
+                onSuccess={() => {
+                  // TODO: Handle success
+                  console.log('Token deployed successfully');
+                }}
+                onError={(error) => {
+                  // TODO: Handle error
+                  console.error('Error deploying token:', error);
+                }}
+              />
             </div>
           )}
         </div>

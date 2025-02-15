@@ -10,6 +10,30 @@ export default function HomePage() {
   const router = useRouter();
   const currentVersions = [
     {
+      version: 'v5',
+      title: 'Factory v5',
+      description: 'Create synthetic tokens pegged to real-world assets with advanced price tracking',
+      features: [
+        'Price oracle integration',
+        'Elastic supply mechanism',
+        'Automated rebase system',
+        'Collateral management'
+      ],
+      icon: '📈'
+    },
+    {
+      version: 'v4',
+      title: 'Factory v4',
+      description: 'Create tokens with a Dynamic Fee System that adapts to market conditions',
+      features: [
+        'Dynamic fee rates',
+        'Auto-liquidity generation',
+        'Holder rewards',
+        'Anti-bot protection'
+      ],
+      icon: '⚡'
+    },
+    {
       version: 'v3',
       title: 'Factory v3',
       description: 'Complete token solution with vesting schedules and multi-wallet distribution',
@@ -36,18 +60,6 @@ export default function HomePage() {
       description: 'Basic ERC20 token with essential features',
       features: ['Blacklist system', 'Time locks', 'Basic transfers', 'Owner controls'],
       icon: '🔑'
-    },
-    {
-      version: 'v4',
-      title: 'Factory v4',
-      description: 'Create tokens with a Dynamic Fee System that adapts to market conditions',
-      features: [
-        'Dynamic fee rates',
-        'Auto-liquidity generation',
-        'Holder rewards',
-        'Anti-bot protection'
-      ],
-      icon: '⚡'
     }
   ];
 

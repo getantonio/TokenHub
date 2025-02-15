@@ -3,19 +3,20 @@ import { mainnet, sepolia, arbitrumSepolia, optimismSepolia } from 'viem/chains'
 import { http } from 'viem';
 import { polygonAmoy, bscMainnet, bscTestnet } from '@/config/chains';
 import { getDefaultConfig } from '@rainbow-me/rainbowkit';
-import { createConfig } from 'wagmi';
-import { injected, metaMask, walletConnect } from 'wagmi/connectors';
 
-const projectId = process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID || 'YOUR_PROJECT_ID';
-if (!process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID) {
-  console.warn('Warning: NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID is not set. Some features may not work correctly.');
+const projectId = process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID;
+if (!projectId) {
+  throw new Error(
+    'NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID environment variable is not set. ' +
+    'Get your project ID from https://cloud.walletconnect.com/'
+  );
 }
 
 // Debug: Log available networks
 console.log('Available networks:', {
   bscMainnet: bscMainnet?.id,
   bscTestnet: bscTestnet?.id,
-  projectId
+  projectId: projectId.slice(0, 6) + '...' // Only log part of the project ID for security
 });
 
 // Customize Arbitrum Sepolia settings
@@ -44,13 +45,10 @@ const supportedChains = [
   bscTestnet
 ] as const;
 
-export const config = createConfig({
+export const config = getDefaultConfig({
+  appName: 'Token Factory',
+  projectId,
   chains: supportedChains,
-  connectors: [
-    injected(),
-    metaMask(),
-    walletConnect({ projectId })
-  ],
   transports: {
     [mainnet.id]: http(),
     [sepolia.id]: http(),

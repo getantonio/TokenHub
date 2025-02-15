@@ -4,17 +4,13 @@ import { useAccount } from 'wagmi';
 import { useRouter } from 'next/router';
 import dynamic from 'next/dynamic';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Footer } from '@/components/layout/Footer';
+import { Footer } from '@/components/layouts/Footer';
 import { Web3ModalProvider } from '@/components/providers/Web3ModalProvider';
+import Head from 'next/head';
 
 // Dynamically import components that use client-side features
-const TokenForm = dynamic(
-  () => import('@/components/features/token/TokenForm_V2_DirectDEX').then(mod => mod.TokenForm_V2_DirectDEX),
-  { ssr: false }
-);
-
-const ConnectButton = dynamic(
-  () => import('@/components/wallet/ConnectButton').then(mod => mod.ConnectButton),
+const TokenForm_V2DirectDEX = dynamic(
+  () => import('@/components/features/token/TokenForm_V2DirectDEX').then(mod => mod.TokenForm_V2DirectDEX),
   { ssr: false }
 );
 
@@ -24,6 +20,12 @@ function V2DirectDEXContent() {
   
   return (
     <div className="min-h-screen bg-background-primary">
+      <Head>
+        <title>TokenHub.dev - Token Factory v2 DirectDEX</title>
+        <meta name="description" content="Create and instantly list your token on DEX with advanced trading controls." />
+        <link rel="icon" href="/favicon.ico" />
+      </Head>
+
       <div className="container mx-auto px-4 py-4">
         <div className="max-w-6xl mx-auto">
           <div className="mb-6">
@@ -95,15 +97,16 @@ function V2DirectDEXContent() {
             </TabsContent>
             
             <TabsContent value="create">
-              {!isConnected ? (
-                <div className="text-center py-6 bg-background-secondary rounded-lg border border-border">
-                  <h2 className="text-xl font-bold text-text-primary mb-3">Connect Your Wallet</h2>
-                  <p className="text-text-secondary mb-4">Please connect your wallet to create and list a token</p>
-                  <ConnectButton />
-                </div>
-              ) : (
-                <TokenForm isConnected={isConnected} />
-              )}
+              <TokenForm_V2DirectDEX
+                onSuccess={() => {
+                  // TODO: Handle success
+                  console.log('Token deployed successfully');
+                }}
+                onError={(error) => {
+                  // TODO: Handle error
+                  console.error('Error deploying token:', error);
+                }}
+              />
             </TabsContent>
           </Tabs>
         </div>

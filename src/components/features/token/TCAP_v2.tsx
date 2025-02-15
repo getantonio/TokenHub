@@ -11,6 +11,7 @@ import { AbiCoder } from 'ethers';
 import { Button } from '@components/ui/button';
 import { Card } from '@components/ui/card';
 import { useToast } from '@/components/ui/toast/use-toast';
+import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
 
 const TOKEN_DECIMALS = 18;
 
@@ -34,9 +35,7 @@ const ERC20_ABI = [
 ];
 
 interface TokenAdminV2Props {
-  isConnected: boolean;
   address?: string;
-  provider: BrowserProvider | null;
 }
 
 interface TokenInfo {
@@ -69,6 +68,7 @@ interface TokenInfo {
   };
   userContribution?: string;
   displayTotalSupply?: string;
+  createdAt?: number;
 }
 
 interface ToastMessage {
@@ -82,15 +82,19 @@ interface LockInfo {
   lockUntil?: number;
 }
 
-export default function TokenAdminV2({ isConnected, address, provider: externalProvider }: TokenAdminV2Props) {
+export default function TokenAdminV2({ address }: TokenAdminV2Props) {
   const { chainId } = useNetwork();
+  const { isConnected, address: walletAddress } = useAccount();
+  const publicClient = usePublicClient();
+  const { data: walletClient } = useWalletClient();
+  const [provider, setProvider] = useState<BrowserProvider | null>(null);
+  const [signer, setSigner] = useState<ethers.JsonRpcSigner | null>(null);
   const [tokens, setTokens] = useState<TokenInfo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
   const [selectedToken, setSelectedToken] = useState<string | null>(null);
   const [blacklistAddress, setBlacklistAddress] = useState('');
   const [lockInfo, setLockInfo] = useState<LockInfo>({ address: '', duration: 30 });
-  const [currentWallet, setCurrentWallet] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const [hiddenTokens, setHiddenTokens] = useState<string[]>(() => {
     if (typeof window !== 'undefined') {
@@ -107,38 +111,59 @@ export default function TokenAdminV2({ isConnected, address, provider: externalP
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isConnected && chainId && externalProvider && address) {
-      console.log("Dependencies changed, reloading tokens:", {
-        isConnected,
-        chainId,
-        hasProvider: !!externalProvider,
-        address
-      });
-      loadTokens();
-    }
-  }, [isConnected, chainId, externalProvider, address]);
-
-  useEffect(() => {
-    const updateWallet = async () => {
-      if (isConnected && window.ethereum && externalProvider) {
+    const initProvider = async () => {
+      if (publicClient) {
         try {
-          const signer = await externalProvider.getSigner();
-          const address = await signer.getAddress();
-          setCurrentWallet(address);
+          // Check if wallet is connected first
+          const provider = (publicClient as unknown as { provider: { request: (args: { method: string }) => Promise<string[]> } }).provider;
+          const accounts = await provider.request({ 
+            method: 'eth_accounts' 
+          });
+          
+          if (accounts && accounts.length > 0) {
+            setProvider(new BrowserProvider(publicClient as any));
+          } else {
+            console.log('No accounts found, wallet not connected');
+            setProvider(null);
+          }
         } catch (error) {
-          console.error("Error getting wallet address:", error);
+          console.error('Error initializing provider:', error);
+          setProvider(null);
         }
       }
     };
-
-    updateWallet();
-  }, [isConnected, externalProvider]);
+    
+    initProvider();
+  }, [publicClient]);
 
   useEffect(() => {
-    if (isConnected && address && externalProvider) {
+    const initSigner = async () => {
+      if (walletClient) {
+        const provider = new BrowserProvider(walletClient as any);
+        const signer = await provider.getSigner();
+        setSigner(signer);
+      }
+    };
+    initSigner();
+  }, [walletClient]);
+
+  useEffect(() => {
+    if (isConnected && chainId && provider && walletAddress) {
+      console.log("Dependencies changed, reloading tokens:", {
+        isConnected,
+        chainId,
+        hasProvider: !!provider,
+        walletAddress
+      });
+      loadTokens();
+    }
+  }, [isConnected, chainId, provider, walletAddress]);
+
+  useEffect(() => {
+    if (isConnected && address && walletAddress) {
       checkOwnership();
     }
-  }, [isConnected, address, externalProvider, currentWallet]);
+  }, [isConnected, address, walletAddress]);
 
   useEffect(() => {
     localStorage.setItem('hiddenTokensV2', JSON.stringify(hiddenTokens));
@@ -168,16 +193,19 @@ export default function TokenAdminV2({ isConnected, address, provider: externalP
   };
 
   const loadTokens = async () => {
-    if (!isConnected || !window.ethereum || !chainId || !externalProvider) {
-      console.error("Missing dependencies");
+    if (!isConnected || !chainId || !provider) {
+      console.error("Missing dependencies:", {
+        isConnected,
+        chainId,
+        hasProvider: !!provider
+      });
+      showToast('error', 'Please connect your wallet to continue');
       return;
     }
 
     try {
       setIsLoading(true);
       setError(null);
-
-      const signer = await externalProvider.getSigner();
       
       const factoryV2Address = chainId ? getNetworkContractAddress(Number(chainId), 'factoryAddressV2') : null;
       if (!factoryV2Address) {
@@ -190,165 +218,107 @@ export default function TokenAdminV2({ isConnected, address, provider: externalP
         factoryV2Address
       });
       
-      const factoryV2 = new Contract(factoryV2Address, TokenFactory_v2.abi, externalProvider);
-      const currentBlock = await externalProvider.getBlockNumber();
+      const signer = await provider.getSigner();
+      const factory = new Contract(factoryV2Address, [
+        'function getUserCreatedTokens(address user) view returns (address[])',
+        'function getTokenCreator(address token) view returns (address)',
+        'function isTokenCreator(address user, address token) view returns (bool)',
+        'function getUserTokenCount(address user) view returns (uint256)'
+      ], signer);
       
-      // Use a much smaller block range for Optimism Sepolia
-      const blockRange = chainId === 11155420 ? 1000 : 100000; // 1k blocks for Optimism, 100k for others
-      let fromBlock = Math.max(0, currentBlock - blockRange);
-
-      console.log(`\nSearching for events from block ${fromBlock} to ${currentBlock} (range: ${blockRange} blocks)`);
-
+      const userAddress = await signer.getAddress();
+      console.log('TCAP_v2: Got user address:', userAddress);
+      
+      // Get tokens deployed by the connected user
+      console.log('TCAP_v2: Calling getUserCreatedTokens');
       try {
-        // Get TokenCreated events with retries
-        const maxRetries = 3;
-        let events: EventLog[] = [];
-        let retryCount = 0;
-        let error: Error | null = null;
+        const deployedTokens = await factory.getUserCreatedTokens(userAddress);
+        console.log('TCAP_v2: Deployed tokens:', deployedTokens);
 
-        while (retryCount < maxRetries) {
-          try {
-            const filter = factoryV2.filters.TokenCreated();
-            events = await factoryV2.queryFilter(filter, fromBlock, currentBlock) as EventLog[];
-            error = null;
-            break;
-          } catch (e) {
-            error = e as Error;
-            retryCount++;
-            console.log(`Attempt ${retryCount} failed, ${maxRetries - retryCount} retries left`);
-            // If this is Optimism Sepolia and we're getting RPC errors, reduce block range
-            if (chainId === 11155420 && retryCount < maxRetries) {
-              const newRange = Math.floor(blockRange / (retryCount + 1));
-              fromBlock = Math.max(0, currentBlock - newRange);
-              console.log(`Reducing block range to ${newRange} blocks`);
-            }
-            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1s between retries
-          }
+        if (!Array.isArray(deployedTokens)) {
+          throw new Error('Unexpected response format from getUserCreatedTokens');
         }
 
-        if (error) {
-          throw error;
-        }
-        
-        console.log("Found events:", events.length);
-
-        const foundTokens: TokenInfo[] = [];
-        const processedAddresses = new Set<string>();
-        let errors = 0;
-
-        for (const event of events) {
+        const tokenPromises = deployedTokens.map(async (tokenAddress: string) => {
           try {
-            // Cast event to EventLog to access args
-            const eventLog = event as EventLog;
-            const { token: tokenAddr, name, symbol, owner } = eventLog.args;
-            
-            if (!tokenAddr || !ethers.isAddress(tokenAddr)) {
-              console.log(`Invalid token address: ${tokenAddr}`);
-              continue;
-            }
-            
-            const normalizedAddr = tokenAddr.toLowerCase();
-            if (processedAddresses.has(normalizedAddr)) {
-              console.log(`Token already processed: ${normalizedAddr}`);
-              continue;
-            }
+            const erc20Contract = new Contract(tokenAddress, ERC20_ABI, provider);
+            const tokenContract = new Contract(tokenAddress, TokenTemplate_v2.abi, provider);
 
-            const code = await externalProvider.getCode(normalizedAddr);
-            if (code === '0x') {
-              console.log(`No code at address: ${normalizedAddr}`);
-              continue;
-            }
+            // Basic token info
+            const [name, symbol, totalSupply, decimals] = await Promise.all([
+              erc20Contract.name(),
+              erc20Contract.symbol(),
+              erc20Contract.totalSupply(),
+              erc20Contract.decimals()
+            ]);
 
-            console.log("Processing token:", {
-              address: normalizedAddr,
+            // Get feature flags and presale info
+            const [blacklistEnabled, timeLockEnabled, presaleData] = await Promise.all([
+              tokenContract.blacklistEnabled(),
+              tokenContract.timeLockEnabled(),
+              tokenContract.presaleInfo()
+            ]);
+
+            // Get platform fee info
+            const platformFee = await tokenContract.platformFee();
+
+            return {
+              address: tokenAddress,
               name,
               symbol,
-              owner
-            });
-
-            // Create contract instance with both ERC20 and Template ABIs
-            const erc20Contract = new Contract(normalizedAddr, ERC20_ABI, externalProvider);
-            const tokenContract = new Contract(normalizedAddr, TokenTemplate_v2.abi, externalProvider);
-
-            // Check initialization by trying to get basic token info
-            try {
-              const [totalSupply, decimals] = await Promise.all([
-                erc20Contract.totalSupply(),
-                erc20Contract.decimals()
-              ]);
-
-              console.log(`Token info loaded successfully:`, {
-                address: normalizedAddr,
-                totalSupply: formatUnits(totalSupply, decimals),
-                decimals
-              });
-
-              // If we get here, the token is initialized
-              foundTokens.push({
-                address: normalizedAddr,
-                name,
-                symbol,
-                totalSupply: formatUnits(totalSupply, decimals),
-                blacklistEnabled: false,
-                timeLockEnabled: false,
-                presaleInfo: {
-                  softCap: "0",
-                  hardCap: "0",
-                  minContribution: "0",
-                  maxContribution: "0",
-                  startTime: 0,
-                  endTime: 0,
-                  presaleRate: "0",
-                  whitelistEnabled: false,
-                  finalized: false,
-                  totalContributed: "0"
-                },
-                platformFee: {
-                  recipient: ethers.ZeroAddress,
-                  totalTokens: "0",
-                  vestingEnabled: false,
-                  vestingDuration: 0,
-                  cliffDuration: 0,
-                  vestingStart: 0,
-                  tokensClaimed: "0"
-                }
-              });
-              
-              processedAddresses.add(normalizedAddr);
-              console.log(`Successfully processed token: ${name} (${symbol}) at ${normalizedAddr}`);
-            } catch (error) {
-              console.log(`Token ${normalizedAddr} initialization check failed:`, error);
-              continue;
-            }
+              totalSupply: formatUnits(totalSupply, decimals),
+              displayTotalSupply: Number(formatUnits(totalSupply, decimals)).toLocaleString(undefined, {
+                maximumFractionDigits: 0
+              }),
+              blacklistEnabled,
+              timeLockEnabled,
+              presaleInfo: {
+                softCap: formatUnits(presaleData[0], decimals),
+                hardCap: formatUnits(presaleData[1], decimals),
+                minContribution: formatUnits(presaleData[2], decimals),
+                maxContribution: formatUnits(presaleData[3], decimals),
+                startTime: Number(presaleData[4]),
+                endTime: Number(presaleData[5]),
+                presaleRate: formatUnits(presaleData[6], decimals),
+                whitelistEnabled: presaleData[7],
+                finalized: presaleData[8],
+                totalContributed: formatUnits(presaleData[9], decimals)
+              },
+              platformFee: {
+                recipient: platformFee.recipient,
+                totalTokens: formatUnits(platformFee.totalTokens, decimals),
+                vestingEnabled: platformFee.vestingEnabled,
+                vestingDuration: Number(platformFee.vestingDuration),
+                cliffDuration: Number(platformFee.cliffDuration),
+                vestingStart: Number(platformFee.vestingStart),
+                tokensClaimed: formatUnits(platformFee.tokensClaimed, decimals)
+              },
+              createdAt: Date.now() // Add creation time for sorting
+            } as TokenInfo;
           } catch (error) {
-            console.error("Error processing event:", error);
-            errors++;
+            console.error(`Error loading token ${tokenAddress}:`, error);
+            return null;
           }
-        }
+        });
 
-        if (foundTokens.length > 0) {
-          console.log("Setting found tokens:", foundTokens);
-          setTokens(foundTokens);
-          showToast('success', `Found ${foundTokens.length} tokens`);
+        const loadedTokens = (await Promise.all(tokenPromises))
+          .filter((token): token is TokenInfo => token !== null)
+          .sort((a, b) => {
+            // Sort by creation time (newest first)
+            const timeA = a.createdAt || 0;
+            const timeB = b.createdAt || 0;
+            return timeB - timeA;
+          });
 
-          // After setting the basic token info, load additional data in the background
-          loadAdditionalTokenData(foundTokens);
-        } else {
-          console.log("No initialized tokens found");
-          setTokens([]);
-          showToast('success', 'No tokens found in the last ' + (blockRange / 6500).toFixed(1) + ' days');
-        }
+        console.log('Loaded tokens:', loadedTokens);
+        setTokens(loadedTokens);
+        showToast('success', `Found ${loadedTokens.length} tokens`);
       } catch (error: any) {
-        console.error('Error querying events:', error);
-        // Try with an even smaller range if the query failed
-        if (chainId === 11155420 && error.message.includes('Response has no error or result')) {
-          showToast('error', 'Event query failed. Please try again in a few minutes.');
-        } else {
-          showToast('error', 'Failed to query token events: ' + error.message);
-        }
+        console.error('TCAP_v2 Error loading tokens:', error);
+        showToast('error', 'Failed to load tokens. Please try again.');
       }
     } catch (error: any) {
-      console.error('Error loading tokens:', error);
+      console.error('TCAP_v2 Error:', error);
       showToast('error', error.message || 'Failed to load tokens');
     } finally {
       setIsLoading(false);
@@ -356,7 +326,7 @@ export default function TokenAdminV2({ isConnected, address, provider: externalP
   };
 
   const loadAdditionalTokenData = async (tokens: TokenInfo[]) => {
-    if (!externalProvider) return;
+    if (!provider) return;
 
     let presaleErrors = 0;
     let platformFeeErrors = 0;
@@ -364,8 +334,8 @@ export default function TokenAdminV2({ isConnected, address, provider: externalP
     for (const token of tokens) {
       try {
         // Create contract instances
-        const erc20Contract = new Contract(token.address, ERC20_ABI, externalProvider);
-        const tokenContract = new Contract(token.address, TokenTemplate_v2.abi, externalProvider);
+        const erc20Contract = new Contract(token.address, ERC20_ABI, provider);
+        const tokenContract = new Contract(token.address, TokenTemplate_v2.abi, provider);
 
         // First get basic ERC20 info
         const [totalSupply, decimals] = await Promise.all([
@@ -493,12 +463,10 @@ export default function TokenAdminV2({ isConnected, address, provider: externalP
   };
 
   const handleBlacklist = async (tokenAddress: string, addressToBlacklist: string, blacklist: boolean) => {
-    if (!isConnected || !window.ethereum) return;
+    if (!isConnected || !signer) return;
 
     try {
       setIsLoading(true);
-      const provider = new BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
       const token = new Contract(tokenAddress, TokenTemplate_v2.abi, signer);
 
       const tx = await token[blacklist ? 'blacklist' : 'unblacklist'](addressToBlacklist);
@@ -517,9 +485,9 @@ export default function TokenAdminV2({ isConnected, address, provider: externalP
   };
 
   const handleSetLockTime = async (tokenAddress: string, addressToLock: string, durationDays: number) => {
-    if (!isConnected || !window.ethereum) return;
+    if (!isConnected || !signer) return;
 
-    if (addressToLock.toLowerCase() === currentWallet?.toLowerCase()) {
+    if (addressToLock.toLowerCase() === walletAddress?.toLowerCase()) {
       if (!window.confirm('Warning: You are about to lock your own address. This will prevent you from transferring tokens. Are you sure?')) {
         return;
       }
@@ -527,8 +495,6 @@ export default function TokenAdminV2({ isConnected, address, provider: externalP
 
     try {
       setIsLoading(true);
-      const provider = new BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
       const token = new Contract(tokenAddress, TokenTemplate_v2.abi, signer);
 
       const lockUntil = Math.floor(Date.now() / 1000) + (durationDays * 24 * 60 * 60);
@@ -549,13 +515,11 @@ export default function TokenAdminV2({ isConnected, address, provider: externalP
   };
 
   const checkLockTime = async (tokenAddress: string, addressToCheck: string) => {
-    if (!isConnected || !window.ethereum) return;
+    if (!isConnected || !provider) return;
 
     try {
       setIsLoading(true);
-      const provider = new BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      const token = new Contract(tokenAddress, TokenTemplate_v2.abi, signer);
+      const token = new Contract(tokenAddress, TokenTemplate_v2.abi, provider);
 
       const lockTime = await token.getTimeLock(addressToCheck);
       const currentTime = Math.floor(Date.now() / 1000);
@@ -575,12 +539,10 @@ export default function TokenAdminV2({ isConnected, address, provider: externalP
   };
 
   const handleFinalizePresale = async (tokenAddress: string) => {
-    if (!isConnected || !window.ethereum) return;
+    if (!isConnected || !signer) return;
 
     try {
       setIsLoading(true);
-      const provider = new BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
       const token = new Contract(tokenAddress, TokenTemplate_v2.abi, signer);
 
       const tx = await token.finalize();
@@ -616,23 +578,21 @@ export default function TokenAdminV2({ isConnected, address, provider: externalP
   }
 
   const checkOwnership = async () => {
-    if (!address || !externalProvider || !currentWallet) return;
+    if (!address || !provider || !walletAddress) return;
     try {
-      const factory = new Contract(address, TokenFactory_v2.abi, externalProvider);
+      const factory = new Contract(address, TokenFactory_v2.abi, provider);
       const owner = await factory.owner();
-      setIsOwner(owner.toLowerCase() === currentWallet.toLowerCase());
+      setIsOwner(owner.toLowerCase() === walletAddress.toLowerCase());
     } catch (error) {
       console.error('Error checking ownership:', error);
     }
   };
 
   const handleOwnerAction = async (action: string) => {
-    if (!isConnected || !window.ethereum || !address) return;
+    if (!isConnected || !walletAddress || !address || !signer) return;
 
     try {
       setIsLoading(true);
-      const provider = new BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
       const factory = new Contract(address, TokenFactory_v2.abi, signer);
 
       let tx;

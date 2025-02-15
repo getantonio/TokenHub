@@ -1,5 +1,5 @@
 import '@rainbow-me/rainbowkit/styles.css';
-import { RainbowKitProvider } from '@rainbow-me/rainbowkit';
+import { RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit';
 import { WagmiConfig } from 'wagmi';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { config } from '@/lib/wagmi';
@@ -44,7 +44,18 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   return (
     <WagmiConfig config={config}>
       <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider modalSize="compact">
+        <RainbowKitProvider 
+          theme={darkTheme({
+            accentColor: '#3b82f6',
+            accentColorForeground: 'white',
+            borderRadius: 'medium'
+          })}
+          modalSize="compact"
+          appInfo={{
+            appName: 'Token Factory',
+            learnMoreUrl: 'https://tokenfactory.xyz/docs',
+          }}
+        >
           <div ref={navRef}>
             {children}
           </div>

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useWallet } from '@contexts/WalletContext';
+import { useAccount, usePublicClient } from 'wagmi';
 import FactoryOwnerControls_v1 from '@components/features/admin/FactoryOwnerControls_v1';
 import FactoryOwnerControls_v2 from '@components/features/admin/FactoryOwnerControls_v2';
 import FactoryOwnerControls_v3 from '@components/features/admin/FactoryOwnerControls_v3';
@@ -12,15 +12,16 @@ import Head from 'next/head';
 import { Footer } from '@/components/layouts/Footer';
 
 export default function AdminPage() {
-  const { isConnected } = useWallet();
+  const { isConnected } = useAccount();
   const { chainId } = useNetwork();
+  const publicClient = usePublicClient();
   const [provider, setProvider] = useState<BrowserProvider | null>(null);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.ethereum) {
-      setProvider(new BrowserProvider(window.ethereum));
+    if (publicClient) {
+      setProvider(new BrowserProvider(publicClient as any));
     }
-  }, []);
+  }, [publicClient]);
 
   const factoryV1Address = chainId ? getNetworkContractAddress(chainId, 'factoryAddress') : undefined;
   const factoryV2Address = chainId ? getNetworkContractAddress(chainId, 'factoryAddressV2') : undefined;
