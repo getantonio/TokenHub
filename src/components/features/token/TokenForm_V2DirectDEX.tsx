@@ -15,7 +15,7 @@ import { useAccount, useWalletClient } from 'wagmi';
 import { parseEther, formatEther } from 'viem';
 import { useNetwork } from '@/contexts/NetworkContext';
 import { getNetworkContractAddress } from '@/config/contracts';
-import { Contract, Interface } from 'ethers';
+import { Contract } from 'ethers';
 import TokenFactoryV2DirectDEXABI from '@/contracts/abi/TokenFactory_v2_DirectDEX.json';
 import { BrowserProvider } from 'ethers';
 import type { InterfaceAbi } from 'ethers';
@@ -89,6 +89,14 @@ interface ListingParams {
   autoLiquidityFeePercentage: number;
 }
 
+const networkDEXMap: { [key: number]: string[] } = {
+  11155111: ['uniswap-test'], // Sepolia
+  97: ['pancakeswap-test'], // BSC Testnet
+  421614: ['uniswap-test'], // Arbitrum Sepolia
+  11155420: ['uniswap-test'], // Optimism Sepolia
+  80002: ['uniswap-test'] // Polygon Amoy
+};
+
 export function TokenForm_V2DirectDEX({ onSuccess, onError }: TokenFormV2DirectDEXProps) {
   const { isConnected } = useAccount();
   const { chainId } = useNetwork();
@@ -97,44 +105,46 @@ export function TokenForm_V2DirectDEX({ onSuccess, onError }: TokenFormV2DirectD
   const [isLoading, setIsLoading] = useState(false);
   const [showCalculator, setShowCalculator] = useState(false);
   const [ethPrice] = useState(2000); // Mock ETH price for demo
+  const [listingFee, setListingFee] = useState<string>('0.01'); // Fixed listing fee in ETH to match contract
+  const [totalValueWei, setTotalValueWei] = useState<bigint>(BigInt(0)); // Store total value in Wei
   
   const [formData, setFormData] = useState<FormData>({
     // Basic Token Info
     name: '',
     symbol: '',
-    totalSupply: '1000000000',  // 1 billion tokens
+    totalSupply: '1000000',
     
     // Liquidity Settings
-    initialLiquidityInETH: '0.1',  // 0.1 ETH
-    listingPriceInETH: '0.0001',   // 0.0001 ETH
+    initialLiquidityInETH: '0.1',
+    listingPriceInETH: '0.0001',
     
     // Trading Controls
-    maxTxAmount: '',
-    maxWalletAmount: '',
-    maxTxPercentage: '2',      // 2% of total supply
-    maxWalletPercentage: '4',  // 4% of total supply
-    enableTrading: true,
-    tradingStartTime: '',
+    maxTxAmount: '10000',
+    maxWalletAmount: '20000',
+    maxTxPercentage: '1',
+    maxWalletPercentage: '2',
+    enableTrading: false,
+    tradingStartTime: (Math.floor(Date.now() / 1000) + 300).toString(), // 5 minutes from now
     
     // Fee Configuration
-    marketingFee: '5',         // 5% marketing fee
-    developmentFee: '3',       // 3% development fee
-    autoLiquidityFee: '2',     // 2% auto-liquidity fee
+    marketingFee: '2',
+    developmentFee: '1',
+    autoLiquidityFee: '2',
     enableBuyTax: true,
     enableSellTax: true,
     buyTaxPercentage: '5',
     sellTaxPercentage: '5',
     
     // Wallet Configuration
-    marketingWallet: walletClient?.account.address || '',  // Use connected wallet as default
-    developmentWallet: walletClient?.account.address || '', // Use connected wallet as default
+    marketingWallet: '',
+    developmentWallet: '',
     
     // DEX Selection
     selectedDEX: 'pancakeswap-test',
     
     // Security Settings
     enableAntiBot: true,
-    enableMaxWallet: true
+    enableMaxWallet: true,
   });
 
   // Calculate USD value
@@ -160,6 +170,34 @@ export function TokenForm_V2DirectDEX({ onSuccess, onError }: TokenFormV2DirectD
     }
   }, [formData.totalSupply, formData.maxTxPercentage, formData.maxWalletPercentage]);
 
+  // Update total value when initial liquidity changes
+  useEffect(() => {
+    const calculateTotal = async () => {
+      try {
+        if (!chainId || !isConnected) return;
+        
+        // Calculate total value - ensure we're using exact Wei values
+        const initialLiquidityInWei = parseEther(formData.initialLiquidityInETH || '0');
+        const listingFeeWei = parseEther(listingFee); // Use hardcoded listing fee
+        const totalValue = initialLiquidityInWei + listingFeeWei;
+        setTotalValueWei(totalValue);
+
+        console.log('Updated total value:', {
+          initialLiquidityWei: initialLiquidityInWei.toString(),
+          listingFeeWei: listingFeeWei.toString(),
+          totalValueWei: totalValue.toString(),
+          initialLiquidityETH: formData.initialLiquidityInETH,
+          listingFeeETH: listingFee,
+          totalValueETH: formatEther(totalValue)
+        });
+      } catch (error) {
+        console.error('Error calculating total value:', error);
+      }
+    };
+
+    calculateTotal();
+  }, [formData.initialLiquidityInETH, chainId, isConnected, listingFee]);
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!isConnected) {
@@ -171,162 +209,174 @@ export function TokenForm_V2DirectDEX({ onSuccess, onError }: TokenFormV2DirectD
       return;
     }
 
-    setIsLoading(true);
+    // Validate required fields
+    if (!formData.name || !formData.symbol) {
+      toast({
+        title: "Missing Required Fields",
+        description: "Token name and symbol are required",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Validate wallet addresses
+    if (!formData.marketingWallet || !formData.developmentWallet) {
+      toast({
+        title: "Missing Wallet Addresses",
+        description: "Marketing and development wallet addresses are required",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Validate network and DEX combination
+    const supportedDEXes = chainId ? networkDEXMap[chainId] : undefined;
+    if (!supportedDEXes?.includes(formData.selectedDEX)) {
+      throw new Error(`Invalid DEX selection for network ${chainId}. Supported DEXes: ${supportedDEXes?.join(', ') || 'None'}`);
+    }
+
     try {
-      if (!chainId) {
-        throw new Error('Network not connected');
-      }
-
-      const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddressV2DirectDEX');
-      if (!factoryAddress) {
-        throw new Error('Factory contract not deployed on this network');
-      }
-
-      // Validate form data
-      if (!formData.name || !formData.symbol || !formData.totalSupply) {
-        throw new Error('Please fill in all required fields');
-      }
-
-      // Validate fees
-      if (!formData.marketingFee || Number(formData.marketingFee) <= 0) {
-        throw new Error('Marketing fee must be greater than 0%');
-      }
-      if (!formData.developmentFee || Number(formData.developmentFee) <= 0) {
-        throw new Error('Development fee must be greater than 0%');
-      }
-      if (!formData.autoLiquidityFee || Number(formData.autoLiquidityFee) <= 0) {
-        throw new Error('Auto-liquidity fee must be greater than 0%');
-      }
-
-      // Validate wallet addresses
-      const addressRegex = /^0x[a-fA-F0-9]{40}$/;
-      if (!formData.marketingWallet || !addressRegex.test(formData.marketingWallet)) {
-        throw new Error('Please provide a valid marketing wallet address');
-      }
-      if (!formData.developmentWallet || !addressRegex.test(formData.developmentWallet)) {
-        throw new Error('Please provide a valid development wallet address');
-      }
-
-      // Validate DEX name
-      const validDexNames = ['uniswap-test', 'pancakeswap-test', 'uniswap', 'pancakeswap', 'sushiswap'];
-      if (!validDexNames.includes(formData.selectedDEX)) {
-        throw new Error('Invalid DEX selection');
-      }
-
-      // Validate liquidity
-      if (Number(formData.initialLiquidityInETH) < 0.1) {
-        throw new Error('Initial liquidity must be at least 0.1 ETH');
-      }
-      if (Number(formData.listingPriceInETH) <= 0) {
-        throw new Error('Listing price must be greater than 0');
-      }
-
-      // Validate tax percentages
-      if (formData.enableBuyTax && (Number(formData.buyTaxPercentage) < 0 || Number(formData.buyTaxPercentage) > 10)) {
-        throw new Error('Buy tax must be between 0% and 10%');
-      }
-      if (formData.enableSellTax && (Number(formData.sellTaxPercentage) < 0 || Number(formData.sellTaxPercentage) > 10)) {
-        throw new Error('Sell tax must be between 0% and 10%');
-      }
-
-      // Validate total fees
-      const totalFees = Number(formData.marketingFee) + Number(formData.developmentFee) + Number(formData.autoLiquidityFee);
-      if (totalFees > 25) {
-        throw new Error('Total fees cannot exceed 25%');
-      }
-
-      // Get signer
+      setIsLoading(true);
       const provider = new BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
+      const userAddress = await signer.getAddress();
 
-      // Create contract instance
-      const factoryInterface = new Interface(TokenFactoryV2DirectDEXABI as InterfaceAbi);
-      const factory = new Contract(factoryAddress, factoryInterface, signer);
-
-      // Check if DEX is configured
-      const dexRouter = await factory.getDEXRouter(formData.selectedDEX);
-      if (!dexRouter.isActive || dexRouter.router === '0x0000000000000000000000000000000000000000') {
-        throw new Error(`Selected DEX "${formData.selectedDEX}" is not available. Please contact the administrator.`);
+      // Get factory contract
+      if (!chainId) {
+        throw new Error("Network not supported");
+      }
+      
+      const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddressV2DirectDEX');
+      if (!factoryAddress) {
+        throw new Error("Contract not deployed on this network");
       }
 
-      // Prepare parameters for contract
-      const params: ListingParams = {
-        name: formData.name,
-        symbol: formData.symbol.toUpperCase(),
+      // Create contract instance with interface
+      const factoryContract = new Contract(
+        factoryAddress,
+        TokenFactoryV2DirectDEXABI,  // Use ABI directly instead of wrapping in Interface
+        signer
+      );
+
+      // Prepare the listing parameters as a struct
+      const listingParams = {
+        name: formData.name.trim(),
+        symbol: formData.symbol.trim().toUpperCase(),
         totalSupply: parseEther(formData.totalSupply),
         initialLiquidityInETH: parseEther(formData.initialLiquidityInETH),
         listingPriceInETH: parseEther(formData.listingPriceInETH),
         maxTxAmount: parseEther(formData.maxTxAmount),
         maxWalletAmount: parseEther(formData.maxWalletAmount),
         enableTrading: formData.enableTrading,
-        tradingStartTime: formData.enableTrading ? Math.floor(Date.now() / 1000) : 0,
+        tradingStartTime: formData.enableTrading ? Math.floor(new Date(formData.tradingStartTime).getTime() / 1000) : 0,
         dexName: formData.selectedDEX,
-        marketingFeePercentage: Number(formData.marketingFee),
+        marketingFeePercentage: parseInt(formData.marketingFee),
         marketingWallet: formData.marketingWallet,
-        developmentFeePercentage: Number(formData.developmentFee),
+        developmentFeePercentage: parseInt(formData.developmentFee),
         developmentWallet: formData.developmentWallet,
-        autoLiquidityFeePercentage: Number(formData.autoLiquidityFee)
+        autoLiquidityFeePercentage: parseInt(formData.autoLiquidityFee)
       };
 
-      // Validate all parameters are present
-      const requiredParams: Array<keyof ListingParams> = [
-        'name', 'symbol', 'totalSupply', 'initialLiquidityInETH', 'listingPriceInETH',
-        'maxTxAmount', 'maxWalletAmount', 'enableTrading', 'tradingStartTime', 'dexName',
-        'marketingFeePercentage', 'marketingWallet', 'developmentFeePercentage',
-        'developmentWallet', 'autoLiquidityFeePercentage'
-      ];
+      // Debug log the contract setup
+      const encodedData = factoryContract.interface.encodeFunctionData('createAndListToken', [listingParams]);
+      const createAndListTokenFunction = factoryContract.interface.getFunction('createAndListToken');
+      console.log('Contract setup:', {
+        factoryAddress,
+        chainId,
+        functionSignature: createAndListTokenFunction?.format() || 'unknown',
+        listingParams,
+        encodedData
+      });
 
-      for (const param of requiredParams) {
-        if (params[param] === undefined || params[param] === null || 
-            (typeof params[param] === 'string' && params[param] === '')) {
-          throw new Error(`Missing required parameter: ${param}`);
-        }
+      // Get gas estimate with value included
+      const gasEstimate = await signer.estimateGas({
+        to: factoryAddress,
+        data: encodedData,
+        value: totalValueWei,
+        gasLimit: 3000000 // Set a higher initial gas limit for estimation
+      });
+
+      // Add 20% buffer to gas estimate
+      const gasLimit = Math.floor(Number(gasEstimate) * 1.2);
+
+      console.log('Transaction parameters:', {
+        to: factoryAddress,
+        data: encodedData,
+        value: totalValueWei.toString(),
+        gasLimit: gasLimit,
+        gasPrice: 10000000000 // 10 gwei
+      });
+
+      // Send the transaction with optimized gas settings for BSC
+      const transaction = await signer.sendTransaction({
+        to: factoryAddress,
+        data: encodedData,
+        value: totalValueWei,
+        gasLimit: gasLimit,
+        gasPrice: 10000000000 // 10 gwei
+      });
+
+      console.log('Transaction sent:', transaction.hash);
+
+      // Wait for confirmation and check receipt
+      const receipt = await transaction.wait();
+      if (!receipt) {
+        throw new Error("No transaction receipt received");
       }
-
-      // Get listing fee
-      const listingFee = await factory.getListingFee();
-      const totalValue = parseEther(formData.initialLiquidityInETH) + listingFee;
-
-      // Log the parameters for debugging
-      console.log('Contract Parameters:', {
-        ...params,
-        totalValue: formatEther(totalValue),
-        listingFee: formatEther(listingFee),
-        initialLiquidityInETH: formatEther(params.initialLiquidityInETH),
-        listingPriceInETH: formatEther(params.listingPriceInETH)
-      });
-
-      // Create token with the total value (initial liquidity + listing fee)
-      const tx = await factory.createAndListToken(params, {
-        value: totalValue,
-        gasLimit: 5000000 // Set a higher gas limit
-      });
-
-      // Wait for transaction
-      const receipt = await tx.wait();
       
-      // Get token address from event
-      const tokenListedEvent = receipt.events?.find((e: { event: string }) => e.event === 'TokenListed');
-      const tokenAddress = tokenListedEvent?.args?.token;
-
-      toast({
-        title: "Success",
-        description: "Token created and listed successfully!",
-      });
-
-      if (onSuccess) {
-        onSuccess();
+      console.log('Transaction receipt:', receipt);
+      
+      if (receipt.status === 0) {
+        throw new Error("Transaction failed. Please check the transaction on the block explorer for more details.");
       }
 
-    } catch (error) {
-      console.error('Error creating token:', error);
+      // Get token address from event logs
+      const tokenCreatedEvent = receipt.logs.find(
+        (log: any) => {
+          try {
+            const parsed = factoryContract.interface.parseLog(log);
+            return parsed?.name === 'TokenListed';
+          } catch {
+            return false;
+          }
+        }
+      );
+      
+      if (!tokenCreatedEvent) {
+        throw new Error("Token creation succeeded but no TokenListed event found");
+      }
+
+      const parsedLog = factoryContract.interface.parseLog(tokenCreatedEvent);
+      const tokenAddress = parsedLog?.args?.token || 'Unknown';
+
+      if (tokenAddress === 'Unknown') {
+        throw new Error("Token address not found in event logs");
+      }
+
+      // Success!
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : 'Failed to create token',
-        variant: "destructive",
+        title: "🎉 Token Created Successfully!",
+        description: `Your token has been created and listed on ${formData.selectedDEX}.\n\nToken Address: ${tokenAddress}`,
+        variant: "default"
       });
-      if (onError) {
-        onError(error as Error);
+
+      onSuccess?.();
+    } catch (error: unknown) {
+      console.error('Error creating token:', error);
+      let errorMessage = "An error occurred while creating the token";
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      
+      toast({
+        title: "Error Creating Token",
+        description: errorMessage,
+        variant: "destructive"
+      });
+      
+      if (error instanceof Error) {
+        onError?.(error);
       }
     } finally {
       setIsLoading(false);
@@ -376,7 +426,7 @@ export function TokenForm_V2DirectDEX({ onSuccess, onError }: TokenFormV2DirectD
   };
 
   return (
-    <Card className="p-6 bg-gray-800/50 border border-gray-700/50">
+    <Card className="p-4 bg-gray-800/50 border border-gray-700/50">
       <div className="flex justify-between items-start mb-6">
         <div>
           <h2 className="text-xl font-bold text-white mb-1">Create Token</h2>
@@ -431,13 +481,13 @@ export function TokenForm_V2DirectDEX({ onSuccess, onError }: TokenFormV2DirectD
           <div className="space-y-3">
             <h3 className="text-base font-semibold text-white flex items-center">
               Liquidity Settings
-              <InfoTooltip text="Initial liquidity is locked in the DEX pool to enable trading. Minimum requirement is 0.1 ETH. Higher liquidity means less price impact per trade." />
+              <InfoTooltip text="Initial liquidity is locked in the DEX pool to enable trading. Note: A fixed listing fee of 0.01 ETH will be added to your initial liquidity amount." />
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label htmlFor="initialLiquidityInETH" className="text-sm text-white flex items-center">
                   Initial Liquidity (ETH)
-                  <InfoTooltip text="Minimum: 0.1 ETH. This amount will be locked in the liquidity pool to enable trading." />
+                  <InfoTooltip text="Minimum: 0.1 ETH. This amount plus the listing fee (0.01 ETH) will be required for deployment." />
                 </Label>
                 <Input
                   id="initialLiquidityInETH"
@@ -446,7 +496,7 @@ export function TokenForm_V2DirectDEX({ onSuccess, onError }: TokenFormV2DirectD
                   step="0.1"
                   value={formData.initialLiquidityInETH}
                   onChange={(e) => setFormData({ ...formData, initialLiquidityInETH: e.target.value })}
-                  placeholder="1"
+                  placeholder="0.1"
                   className="bg-gray-900/50 border-gray-700 text-white placeholder:text-gray-500 h-8"
                 />
               </div>
@@ -725,6 +775,24 @@ export function TokenForm_V2DirectDEX({ onSuccess, onError }: TokenFormV2DirectD
                 <div className="space-y-2">
                   <div className="text-sm text-gray-400">
                     <div className="flex justify-between">
+                      <span>Initial Liquidity:</span>
+                      <span>{formData.initialLiquidityInETH} ETH</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Listing Fee:</span>
+                      <span>{listingFee} ETH</span>
+                    </div>
+                    <div className="flex justify-between font-semibold text-white border-t border-gray-700 mt-2 pt-2">
+                      <span>Total Required:</span>
+                      <span className="text-blue-400">{formatEther(totalValueWei)} ETH</span>
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      * You must send exactly {formatEther(totalValueWei)} ETH for the transaction to succeed
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      * This includes {formData.initialLiquidityInETH} ETH for liquidity + {listingFee} ETH listing fee
+                    </div>
+                    <div className="flex justify-between mt-4">
                       <span>Max Transaction Value:</span>
                       <span>{calculateUsdValue(formData.maxTxAmount, formData.listingPriceInETH)}</span>
                     </div>
@@ -757,20 +825,26 @@ export function TokenForm_V2DirectDEX({ onSuccess, onError }: TokenFormV2DirectD
                   <SelectValue placeholder="Select a DEX" />
                 </SelectTrigger>
                 <SelectContent className="bg-gray-800 border-gray-700">
-                  <SelectItem value="pancakeswap-test" className="text-white hover:bg-gray-700">PancakeSwap (BSC Testnet)</SelectItem>
-                  <SelectItem value="uniswap-test" className="text-white hover:bg-gray-700">Uniswap (Sepolia)</SelectItem>
-                  <SelectItem value="pancakeswap" className="text-white hover:bg-gray-700">PancakeSwap</SelectItem>
-                  <SelectItem value="uniswap" className="text-white hover:bg-gray-700">Uniswap</SelectItem>
-                  <SelectItem value="sushiswap" className="text-white hover:bg-gray-700">SushiSwap</SelectItem>
+                  {chainId === 11155111 && (
+                    <SelectItem value="uniswap-test" className="text-white hover:bg-gray-700">Uniswap (Sepolia)</SelectItem>
+                  )}
+                  {chainId === 97 && (
+                    <SelectItem value="pancakeswap-test" className="text-white hover:bg-gray-700">PancakeSwap (BSC Testnet)</SelectItem>
+                  )}
+                  {chainId === 421614 && (
+                    <SelectItem value="uniswap-test" className="text-white hover:bg-gray-700">Uniswap (Arbitrum Sepolia)</SelectItem>
+                  )}
+                  {chainId === 11155420 && (
+                    <SelectItem value="uniswap-test" className="text-white hover:bg-gray-700">Uniswap (Optimism Sepolia)</SelectItem>
+                  )}
+                  {chainId === 80002 && (
+                    <SelectItem value="uniswap-test" className="text-white hover:bg-gray-700">Uniswap (Polygon Amoy)</SelectItem>
+                  )}
                 </SelectContent>
               </Select>
               <div className="mt-2 text-sm text-gray-400">
-                <p>Test Networks Available:</p>
-                <ul className="list-disc list-inside text-xs mt-1 space-y-1">
-                  <li>BSC Testnet (Chain ID: 97)</li>
-                  <li>Sepolia (Chain ID: 11155111)</li>
-                  <li>Arbitrum Sepolia (Chain ID: 421614)</li>
-                </ul>
+                <p>Current Network: {chainId ? `Chain ID: ${chainId}` : 'Not Connected'}</p>
+                <p>Supported DEXes: {chainId && networkDEXMap[chainId as keyof typeof networkDEXMap]?.join(', ') || 'None'}</p>
               </div>
             </div>
           </div>

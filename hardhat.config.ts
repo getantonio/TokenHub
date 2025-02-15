@@ -62,7 +62,7 @@ const config = {
       confirmations: 3,     // Wait for 3 confirmations
       networkCheckTimeout: 100000,
       timeoutBlocks: 200,
-      verifyApiKey: "Z8FQT28BE7RR34GR5D8RMX6YGQ6AS6JSR2"
+      verifyApiKey: process.env.BSCSCAN_API_KEY
     },
     bsc: {
       url: "https://bsc-dataseed1.binance.org",

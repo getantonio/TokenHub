@@ -1,12 +1,14 @@
 'use client';
 
-import { useAccount } from 'wagmi';
+import { useAccount, usePublicClient } from 'wagmi';
 import { useRouter } from 'next/router';
 import dynamic from 'next/dynamic';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Footer } from '@/components/layouts/Footer';
 import { Web3ModalProvider } from '@/components/providers/Web3ModalProvider';
 import { ToastProvider } from '@/components/ui/toast/use-toast';
+import { useNetwork } from '@/contexts/NetworkContext';
+import { getNetworkContractAddress } from '@/config/contracts';
 import Head from 'next/head';
 
 // Dynamically import components that use client-side features
@@ -15,9 +17,18 @@ const TokenForm_V2DirectDEX = dynamic(
   { ssr: false }
 );
 
+const TCAP_v2DirectDEX = dynamic(
+  () => import('@/components/features/token/TCAP_v2DirectDEX'),
+  { ssr: false }
+);
+
 function V2DirectDEXContent() {
   const { isConnected } = useAccount();
+  const publicClient = usePublicClient();
+  const { chainId } = useNetwork();
   const router = useRouter();
+  
+  const factoryAddress = chainId ? getNetworkContractAddress(chainId, 'factoryAddressV2DirectDEX') : null;
   
   return (
     <div className="min-h-screen bg-background-primary">
@@ -47,6 +58,12 @@ function V2DirectDEXContent() {
                 className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-text-secondary rounded-md px-6"
               >
                 Create Token
+              </TabsTrigger>
+              <TabsTrigger 
+                value="tokens"
+                className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-text-secondary rounded-md px-6"
+              >
+                Your Tokens
               </TabsTrigger>
             </TabsList>
             
@@ -108,6 +125,20 @@ function V2DirectDEXContent() {
                   console.error('Error deploying token:', error);
                 }}
               />
+            </TabsContent>
+
+            <TabsContent value="tokens">
+              {isConnected ? (
+                <TCAP_v2DirectDEX
+                  isConnected={isConnected}
+                  address={factoryAddress || undefined}
+                  provider={publicClient}
+                />
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-text-secondary">Please connect your wallet to view your tokens.</p>
+                </div>
+              )}
             </TabsContent>
           </Tabs>
         </div>

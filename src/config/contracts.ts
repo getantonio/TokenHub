@@ -36,7 +36,7 @@ export const contractAddresses: { [key: number]: ContractAddresses } = {
     factoryAddress: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V1 || '',
     factoryAddressV2: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V2 || '',
     factoryAddressV3: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V3 || '',
-    factoryAddressV2DirectDEX: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V2_DIRECTDEX || ''
+    factoryAddressV2DirectDEX: '0xE1c68Cb8a037aC4E92eE2a7a30fEFA989c15Bc45'
   },
   56: { // BSC Mainnet
     factoryAddress: process.env.NEXT_PUBLIC_BSC_FACTORY_ADDRESS_V1 || '',
@@ -82,7 +82,7 @@ export const FACTORY_ADDRESSES: Record<string, Record<number, string>> = {
     [ChainId.ARBITRUM_SEPOLIA]: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V2_DIRECTDEX || '',
     [ChainId.OPTIMISM_SEPOLIA]: process.env.NEXT_PUBLIC_OPSEPOLIA_FACTORY_ADDRESS_V2_DIRECTDEX || '',
     [ChainId.POLYGON_AMOY]: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V2_DIRECTDEX || '',
-    [ChainId.BSC_TESTNET]: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V2_DIRECTDEX || '',
+    [ChainId.BSC_TESTNET]: '0xE1c68Cb8a037aC4E92eE2a7a30fEFA989c15Bc45',
     [ChainId.BSC_MAINNET]: process.env.NEXT_PUBLIC_BSC_FACTORY_ADDRESS_V2_DIRECTDEX || '',
   }
 };

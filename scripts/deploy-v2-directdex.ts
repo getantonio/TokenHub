@@ -1,5 +1,5 @@
-import { ethers } from 'hardhat';
-import '@nomicfoundation/hardhat-ethers';
+const { ethers } = require('hardhat');
+require('@nomicfoundation/hardhat-ethers');
 
 async function main() {
     try {
@@ -19,7 +19,7 @@ async function main() {
             ethers.parseEther("20000"),                    // maxWalletAmount (2% of total)
             false,                                         // enableTrading (false initially)
             Math.floor(Date.now() / 1000) + 3600,         // tradingStartTime (1 hour from now)
-            "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D", // Uniswap V2 Router
+            "0xD99D1c33F9fC3444f8101754aBC46c52416550D1", // PancakeSwap Router Testnet
             5,                                             // marketingFeePercentage (5%)
             3,                                             // developmentFeePercentage (3%)
             2,                                             // autoLiquidityFeePercentage (2%)
@@ -43,14 +43,14 @@ async function main() {
         const factoryAddress = await tokenFactory.getAddress();
         console.log("TokenFactory_v2_DirectDEX deployed to:", factoryAddress);
 
-        // Add Uniswap V2 as supported DEX
-        console.log("\nAdding Uniswap V2 as supported DEX...");
+        // Add PancakeSwap as supported DEX
+        console.log("\nAdding PancakeSwap as supported DEX...");
         const addDexTx = await tokenFactory.addDEX(
-            "uniswap-test",
-            "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D" // Uniswap V2 Router
+            "pancakeswap-test",
+            "0xD99D1c33F9fC3444f8101754aBC46c52416550D1" // PancakeSwap Router Testnet
         );
         await addDexTx.wait();
-        console.log("Added Uniswap V2 as supported DEX");
+        console.log("Added PancakeSwap as supported DEX");
 
         // Verify the deployment
         console.log("\nDeployment Summary:");
