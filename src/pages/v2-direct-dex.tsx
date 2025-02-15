@@ -6,6 +6,7 @@ import dynamic from 'next/dynamic';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Footer } from '@/components/layouts/Footer';
 import { Web3ModalProvider } from '@/components/providers/Web3ModalProvider';
+import { ToastProvider } from '@/components/ui/toast/use-toast';
 import Head from 'next/head';
 
 // Dynamically import components that use client-side features
@@ -118,8 +119,10 @@ function V2DirectDEXContent() {
 
 export default function V2DirectDEXPage() {
   return (
-    <Web3ModalProvider>
-      <V2DirectDEXContent />
-    </Web3ModalProvider>
+    <ToastProvider>
+      <Web3ModalProvider>
+        <V2DirectDEXContent />
+      </Web3ModalProvider>
+    </ToastProvider>
   );
 } 

@@ -8,18 +8,7 @@ async function main() {
         console.log("Account balance:", (await deployer.provider.getBalance(deployer.address)).toString());
         console.log("Nonce:", await deployer.getNonce());
 
-        // Deploy TokenFactory_v2_DirectDEX first
-        console.log("\nDeploying TokenFactory_v2_DirectDEX...");
-        const TokenFactory = await ethers.getContractFactory("TokenFactory_v2_DirectDEX");
-        const tokenFactory = await TokenFactory.deploy(
-            ethers.parseEther("0.01")  // 0.01 ETH listing fee
-        );
-
-        await tokenFactory.waitForDeployment();
-        const factoryAddress = await tokenFactory.getAddress();
-        console.log("TokenFactory_v2_DirectDEX deployed to:", factoryAddress);
-
-        // Deploy TokenTemplate_v2DirectDEX
+        // Deploy TokenTemplate_v2DirectDEX first
         console.log("\nDeploying TokenTemplate_v2DirectDEX...");
         const TokenTemplate = await ethers.getContractFactory("TokenTemplate_v2DirectDEX");
         const tokenTemplate = await TokenTemplate.deploy(
@@ -36,12 +25,23 @@ async function main() {
             2,                                             // autoLiquidityFeePercentage (2%)
             deployer.address,                              // marketingWallet
             deployer.address,                              // developmentWallet
-            factoryAddress                                 // autoLiquidityWallet (factory contract)
+            deployer.address                               // autoLiquidityWallet (temporary)
         );
 
         await tokenTemplate.waitForDeployment();
         const tokenTemplateAddress = await tokenTemplate.getAddress();
         console.log("TokenTemplate_v2DirectDEX deployed to:", tokenTemplateAddress);
+
+        // Deploy TokenFactory_v2_DirectDEX
+        console.log("\nDeploying TokenFactory_v2_DirectDEX...");
+        const TokenFactory = await ethers.getContractFactory("TokenFactory_v2_DirectDEX");
+        const tokenFactory = await TokenFactory.deploy(
+            ethers.parseEther("0.01")  // 0.01 ETH listing fee
+        );
+
+        await tokenFactory.waitForDeployment();
+        const factoryAddress = await tokenFactory.getAddress();
+        console.log("TokenFactory_v2_DirectDEX deployed to:", factoryAddress);
 
         // Add Uniswap V2 as supported DEX
         console.log("\nAdding Uniswap V2 as supported DEX...");

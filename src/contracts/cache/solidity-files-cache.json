@@ -1758,8 +1758,8 @@
       ]
     },
     "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/src/contracts/TokenTemplate_v2DirectDEX.sol": {
-      "lastModificationDate": 1739581893738,
-      "contentHash": "a13c1ed84012baa6eb3b83fed80bc831",
+      "lastModificationDate": 1739585287585,
+      "contentHash": "c37c83223a280b3b256a0e19caa32852",
       "sourceName": "src/contracts/TokenTemplate_v2DirectDEX.sol",
       "solcConfig": {
         "version": "0.8.22",
@@ -1803,12 +1803,13 @@
         "^0.8.20"
       ],
       "artifacts": [
+        "ITokenFactory",
         "TokenTemplate_v2DirectDEX"
       ]
     },
     "/Users/antcofx/Documents/DEVELOPMENT/TokenFactory/src/contracts/TokenFactory_v2_DirectDEX.sol": {
-      "lastModificationDate": 1739419558371,
-      "contentHash": "75172d434c34a6117461ba9391905e99",
+      "lastModificationDate": 1739584769728,
+      "contentHash": "d59b06d9436a6d6eeb200971a67c501b",
       "sourceName": "src/contracts/TokenFactory_v2_DirectDEX.sol",
       "solcConfig": {
         "version": "0.8.22",
@@ -1848,7 +1849,7 @@
         "@openzeppelin/contracts/token/ERC20/IERC20.sol",
         "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol",
         "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol",
-        "./TokenTemplate_v2.sol"
+        "./TokenTemplate_v2DirectDEX.sol"
       ],
       "versionPragmas": [
         "0.8.22"

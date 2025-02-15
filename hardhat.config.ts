@@ -7,8 +7,8 @@ const config = {
   paths: {
     sources: "./src/contracts",
     tests: "./src/test",
-    cache: "./src/contracts/cache",
-    artifacts: "./src/contracts/artifacts"
+    cache: "./cache",
+    artifacts: "./artifacts"
   },
   defaultNetwork: "hardhat",
   networks: {

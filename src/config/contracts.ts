@@ -12,7 +12,7 @@ export const contractAddresses: { [key: number]: ContractAddresses } = {
     factoryAddress: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V1 || '',
     factoryAddressV2: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V2 || '',
     factoryAddressV3: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V3 || '',
-    factoryAddressV2DirectDEX: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V2_DIRECTDEX || ''
+    factoryAddressV2DirectDEX: '0xE5dB0C6eF854ace899f970794541F5b351d0341F'
   },
   421614: { // Arbitrum Sepolia
     factoryAddress: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V1 || '',

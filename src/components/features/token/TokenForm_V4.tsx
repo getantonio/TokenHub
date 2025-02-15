@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import TokenPreview from '@/components/features/token/TokenPreview';
-import { useToast } from '@/components/ui/use-toast';
+import { useToast } from '@/components/ui/toast/use-toast';
 
 interface TokenFormV4Props {
   isConnected: boolean;

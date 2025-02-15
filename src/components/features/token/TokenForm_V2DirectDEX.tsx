@@ -18,6 +18,7 @@ import { getNetworkContractAddress } from '@/config/contracts';
 import { Contract, Interface } from 'ethers';
 import TokenFactoryV2DirectDEXABI from '@/contracts/abi/TokenFactory_v2_DirectDEX.json';
 import { BrowserProvider } from 'ethers';
+import type { InterfaceAbi } from 'ethers';
 
 interface TokenFormV2DirectDEXProps {
   onSuccess?: () => void;
@@ -31,6 +32,63 @@ interface ValidationResult {
   details?: string[];
 }
 
+interface FormData {
+  // Basic Token Info
+  name: string;
+  symbol: string;
+  totalSupply: string;
+  
+  // Liquidity Settings
+  initialLiquidityInETH: string;
+  listingPriceInETH: string;
+  
+  // Trading Controls
+  maxTxAmount: string;
+  maxWalletAmount: string;
+  maxTxPercentage: string;
+  maxWalletPercentage: string;
+  enableTrading: boolean;
+  tradingStartTime: string;
+  
+  // Fee Configuration
+  marketingFee: string;
+  developmentFee: string;
+  autoLiquidityFee: string;
+  enableBuyTax: boolean;
+  enableSellTax: boolean;
+  buyTaxPercentage: string;
+  sellTaxPercentage: string;
+  
+  // Wallet Configuration
+  marketingWallet: string;
+  developmentWallet: string;
+  
+  // DEX Selection
+  selectedDEX: string;
+  
+  // Security Settings
+  enableAntiBot: boolean;
+  enableMaxWallet: boolean;
+}
+
+interface ListingParams {
+  name: string;
+  symbol: string;
+  totalSupply: bigint;
+  initialLiquidityInETH: bigint;
+  listingPriceInETH: bigint;
+  maxTxAmount: bigint;
+  maxWalletAmount: bigint;
+  enableTrading: boolean;
+  tradingStartTime: number;
+  dexName: string;
+  marketingFeePercentage: number;
+  marketingWallet: string;
+  developmentFeePercentage: number;
+  developmentWallet: string;
+  autoLiquidityFeePercentage: number;
+}
+
 export function TokenForm_V2DirectDEX({ onSuccess, onError }: TokenFormV2DirectDEXProps) {
   const { isConnected } = useAccount();
   const { chainId } = useNetwork();
@@ -40,31 +98,39 @@ export function TokenForm_V2DirectDEX({ onSuccess, onError }: TokenFormV2DirectD
   const [showCalculator, setShowCalculator] = useState(false);
   const [ethPrice] = useState(2000); // Mock ETH price for demo
   
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     // Basic Token Info
     name: '',
     symbol: '',
-    totalSupply: '',
+    totalSupply: '1000000000',  // 1 billion tokens
     
     // Liquidity Settings
-    initialLiquidityInETH: '',
-    listingPriceInETH: '',
+    initialLiquidityInETH: '0.1',  // 0.1 ETH
+    listingPriceInETH: '0.0001',   // 0.0001 ETH
     
     // Trading Controls
     maxTxAmount: '',
     maxWalletAmount: '',
-    maxTxPercentage: '2', // Default 2% of total supply
-    maxWalletPercentage: '4', // Default 4% of total supply
+    maxTxPercentage: '2',      // 2% of total supply
+    maxWalletPercentage: '4',  // 4% of total supply
     enableTrading: true,
     tradingStartTime: '',
     
     // Fee Configuration
-    marketingFee: '',
-    developmentFee: '',
-    autoLiquidityFee: '',
+    marketingFee: '5',         // 5% marketing fee
+    developmentFee: '3',       // 3% development fee
+    autoLiquidityFee: '2',     // 2% auto-liquidity fee
+    enableBuyTax: true,
+    enableSellTax: true,
+    buyTaxPercentage: '5',
+    sellTaxPercentage: '5',
+    
+    // Wallet Configuration
+    marketingWallet: walletClient?.account.address || '',  // Use connected wallet as default
+    developmentWallet: walletClient?.account.address || '', // Use connected wallet as default
     
     // DEX Selection
-    selectedDEX: 'pancakeswap',
+    selectedDEX: 'pancakeswap-test',
     
     // Security Settings
     enableAntiBot: true,
@@ -96,7 +162,7 @@ export function TokenForm_V2DirectDEX({ onSuccess, onError }: TokenFormV2DirectD
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!isConnected || !walletClient) {
+    if (!isConnected) {
       toast({
         title: "Wallet Connection Required",
         description: "Please connect your wallet to create a token",
@@ -104,74 +170,154 @@ export function TokenForm_V2DirectDEX({ onSuccess, onError }: TokenFormV2DirectD
       });
       return;
     }
-    
+
     setIsLoading(true);
     try {
-      const provider = new BrowserProvider(walletClient as any);
-      const signer = await provider.getSigner();
-      
-      // Get factory address for current network
-      const factoryAddress = chainId ? getNetworkContractAddress(chainId, 'factoryAddressV2DirectDEX') : null;
-      if (!factoryAddress) {
-        throw new Error('DirectDEX factory not deployed on this network');
+      if (!chainId) {
+        throw new Error('Network not connected');
       }
 
+      const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddressV2DirectDEX');
+      if (!factoryAddress) {
+        throw new Error('Factory contract not deployed on this network');
+      }
+
+      // Validate form data
+      if (!formData.name || !formData.symbol || !formData.totalSupply) {
+        throw new Error('Please fill in all required fields');
+      }
+
+      // Validate fees
+      if (!formData.marketingFee || Number(formData.marketingFee) <= 0) {
+        throw new Error('Marketing fee must be greater than 0%');
+      }
+      if (!formData.developmentFee || Number(formData.developmentFee) <= 0) {
+        throw new Error('Development fee must be greater than 0%');
+      }
+      if (!formData.autoLiquidityFee || Number(formData.autoLiquidityFee) <= 0) {
+        throw new Error('Auto-liquidity fee must be greater than 0%');
+      }
+
+      // Validate wallet addresses
+      const addressRegex = /^0x[a-fA-F0-9]{40}$/;
+      if (!formData.marketingWallet || !addressRegex.test(formData.marketingWallet)) {
+        throw new Error('Please provide a valid marketing wallet address');
+      }
+      if (!formData.developmentWallet || !addressRegex.test(formData.developmentWallet)) {
+        throw new Error('Please provide a valid development wallet address');
+      }
+
+      // Validate DEX name
+      const validDexNames = ['uniswap-test', 'pancakeswap-test', 'uniswap', 'pancakeswap', 'sushiswap'];
+      if (!validDexNames.includes(formData.selectedDEX)) {
+        throw new Error('Invalid DEX selection');
+      }
+
+      // Validate liquidity
+      if (Number(formData.initialLiquidityInETH) < 0.1) {
+        throw new Error('Initial liquidity must be at least 0.1 ETH');
+      }
+      if (Number(formData.listingPriceInETH) <= 0) {
+        throw new Error('Listing price must be greater than 0');
+      }
+
+      // Validate tax percentages
+      if (formData.enableBuyTax && (Number(formData.buyTaxPercentage) < 0 || Number(formData.buyTaxPercentage) > 10)) {
+        throw new Error('Buy tax must be between 0% and 10%');
+      }
+      if (formData.enableSellTax && (Number(formData.sellTaxPercentage) < 0 || Number(formData.sellTaxPercentage) > 10)) {
+        throw new Error('Sell tax must be between 0% and 10%');
+      }
+
+      // Validate total fees
+      const totalFees = Number(formData.marketingFee) + Number(formData.developmentFee) + Number(formData.autoLiquidityFee);
+      if (totalFees > 25) {
+        throw new Error('Total fees cannot exceed 25%');
+      }
+
+      // Get signer
+      const provider = new BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+
       // Create contract instance
-      const factoryInterface = new Interface(TokenFactoryV2DirectDEXABI.abi);
+      const factoryInterface = new Interface(TokenFactoryV2DirectDEXABI as InterfaceAbi);
       const factory = new Contract(factoryAddress, factoryInterface, signer);
 
-      // Get listing fee
-      const listingFee = await factory.getListingFee();
-      console.log('Listing fee:', formatEther(listingFee), 'ETH');
+      // Check if DEX is configured
+      const dexRouter = await factory.getDEXRouter(formData.selectedDEX);
+      if (!dexRouter.isActive || dexRouter.router === '0x0000000000000000000000000000000000000000') {
+        throw new Error(`Selected DEX "${formData.selectedDEX}" is not available. Please contact the administrator.`);
+      }
 
-      // Calculate token amounts
-      const maxTxAmount = (parseFloat(formData.totalSupply) * parseFloat(formData.maxTxPercentage)) / 100;
-      const maxWalletAmount = (parseFloat(formData.totalSupply) * parseFloat(formData.maxWalletPercentage)) / 100;
-
-      // Prepare listing parameters
-      const listingParams = {
+      // Prepare parameters for contract
+      const params: ListingParams = {
         name: formData.name,
-        symbol: formData.symbol,
+        symbol: formData.symbol.toUpperCase(),
         totalSupply: parseEther(formData.totalSupply),
         initialLiquidityInETH: parseEther(formData.initialLiquidityInETH),
         listingPriceInETH: parseEther(formData.listingPriceInETH),
-        maxTxAmount: parseEther(maxTxAmount.toString()),
-        maxWalletAmount: parseEther(maxWalletAmount.toString()),
+        maxTxAmount: parseEther(formData.maxTxAmount),
+        maxWalletAmount: parseEther(formData.maxWalletAmount),
         enableTrading: formData.enableTrading,
-        tradingStartTime: formData.tradingStartTime ? Math.floor(new Date(formData.tradingStartTime).getTime() / 1000) : 0,
+        tradingStartTime: formData.enableTrading ? Math.floor(Date.now() / 1000) : 0,
         dexName: formData.selectedDEX,
-        enableBuyTax: true,
-        enableSellTax: true,
-        buyTaxPercentage: 5, // 5% buy tax
-        sellTaxPercentage: 5  // 5% sell tax
+        marketingFeePercentage: Number(formData.marketingFee),
+        marketingWallet: formData.marketingWallet,
+        developmentFeePercentage: Number(formData.developmentFee),
+        developmentWallet: formData.developmentWallet,
+        autoLiquidityFeePercentage: Number(formData.autoLiquidityFee)
       };
 
-      // Create and list token
-      const tx = await factory.createAndListToken(listingParams, {
-        value: listingFee + parseEther(formData.initialLiquidityInETH)
+      // Validate all parameters are present
+      const requiredParams: Array<keyof ListingParams> = [
+        'name', 'symbol', 'totalSupply', 'initialLiquidityInETH', 'listingPriceInETH',
+        'maxTxAmount', 'maxWalletAmount', 'enableTrading', 'tradingStartTime', 'dexName',
+        'marketingFeePercentage', 'marketingWallet', 'developmentFeePercentage',
+        'developmentWallet', 'autoLiquidityFeePercentage'
+      ];
+
+      for (const param of requiredParams) {
+        if (params[param] === undefined || params[param] === null || 
+            (typeof params[param] === 'string' && params[param] === '')) {
+          throw new Error(`Missing required parameter: ${param}`);
+        }
+      }
+
+      // Get listing fee
+      const listingFee = await factory.getListingFee();
+      const totalValue = parseEther(formData.initialLiquidityInETH) + listingFee;
+
+      // Log the parameters for debugging
+      console.log('Contract Parameters:', {
+        ...params,
+        totalValue: formatEther(totalValue),
+        listingFee: formatEther(listingFee),
+        initialLiquidityInETH: formatEther(params.initialLiquidityInETH),
+        listingPriceInETH: formatEther(params.listingPriceInETH)
       });
+
+      // Create token with the total value (initial liquidity + listing fee)
+      const tx = await factory.createAndListToken(params, {
+        value: totalValue,
+        gasLimit: 5000000 // Set a higher gas limit
+      });
+
+      // Wait for transaction
+      const receipt = await tx.wait();
+      
+      // Get token address from event
+      const tokenListedEvent = receipt.events?.find((e: { event: string }) => e.event === 'TokenListed');
+      const tokenAddress = tokenListedEvent?.args?.token;
 
       toast({
-        title: "Transaction Submitted",
-        description: "Your token is being created and listed...",
+        title: "Success",
+        description: "Token created and listed successfully!",
       });
-
-      const receipt = await tx.wait();
-      console.log('Transaction receipt:', receipt);
-
-      // Get token address from event
-      const tokenListedEvent = receipt.events?.find((event: any) => event.event === 'TokenListed');
-      if (tokenListedEvent) {
-        const tokenAddress = tokenListedEvent.args?.token;
-        toast({
-          title: "Success",
-          description: `Token created and listed at ${tokenAddress}`,
-        });
-      }
 
       if (onSuccess) {
         onSuccess();
       }
+
     } catch (error) {
       console.error('Error creating token:', error);
       toast({
@@ -327,54 +473,161 @@ export function TokenForm_V2DirectDEX({ onSuccess, onError }: TokenFormV2DirectD
               Fee Configuration
               <InfoTooltip text="Fees are collected on each trade and distributed automatically. Total fees cannot exceed 10%." />
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="marketingFee" className="text-sm text-white flex items-center">
-                  Marketing Fee (%)
-                  <InfoTooltip text="Percentage of each trade sent to marketing wallet. Max: 5%" />
-                </Label>
-                <Input
-                  id="marketingFee"
-                  type="number"
-                  min="0"
-                  max="5"
-                  value={formData.marketingFee}
-                  onChange={(e) => setFormData({ ...formData, marketingFee: e.target.value })}
-                  placeholder="2"
-                  className="bg-gray-900/50 border-gray-700 text-white placeholder:text-gray-500 h-8"
-                />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {/* Buy Tax Configuration */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm text-white">Buy Tax Configuration</Label>
+                  <Switch
+                    id="enableBuyTax"
+                    checked={formData.enableBuyTax}
+                    onCheckedChange={(checked) => setFormData({ ...formData, enableBuyTax: checked })}
+                    className="data-[state=checked]:bg-blue-600"
+                  />
+                </div>
+                {formData.enableBuyTax && (
+                  <div>
+                    <Label htmlFor="buyTaxPercentage" className="text-sm text-white flex items-center">
+                      Buy Tax (%)
+                      <InfoTooltip text="Percentage fee applied to buy transactions. Max: 10%" />
+                    </Label>
+                    <Input
+                      id="buyTaxPercentage"
+                      type="number"
+                      min="0"
+                      max="10"
+                      value={formData.buyTaxPercentage}
+                      onChange={(e) => setFormData({ ...formData, buyTaxPercentage: e.target.value })}
+                      placeholder="5"
+                      className="bg-gray-900/50 border-gray-700 text-white placeholder:text-gray-500 h-8"
+                    />
+                  </div>
+                )}
               </div>
-              <div className="space-y-1">
-                <Label htmlFor="developmentFee" className="text-sm text-white flex items-center">
-                  Development Fee (%)
-                  <InfoTooltip text="Percentage of each trade sent to development wallet. Max: 5%" />
-                </Label>
-                <Input
-                  id="developmentFee"
-                  type="number"
-                  min="0"
-                  max="5"
-                  value={formData.developmentFee}
-                  onChange={(e) => setFormData({ ...formData, developmentFee: e.target.value })}
-                  placeholder="3"
-                  className="bg-gray-900/50 border-gray-700 text-white placeholder:text-gray-500 h-8"
-                />
+
+              {/* Sell Tax Configuration */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm text-white">Sell Tax Configuration</Label>
+                  <Switch
+                    id="enableSellTax"
+                    checked={formData.enableSellTax}
+                    onCheckedChange={(checked) => setFormData({ ...formData, enableSellTax: checked })}
+                    className="data-[state=checked]:bg-blue-600"
+                  />
+                </div>
+                {formData.enableSellTax && (
+                  <div>
+                    <Label htmlFor="sellTaxPercentage" className="text-sm text-white flex items-center">
+                      Sell Tax (%)
+                      <InfoTooltip text="Percentage fee applied to sell transactions. Max: 10%" />
+                    </Label>
+                    <Input
+                      id="sellTaxPercentage"
+                      type="number"
+                      min="0"
+                      max="10"
+                      value={formData.sellTaxPercentage}
+                      onChange={(e) => setFormData({ ...formData, sellTaxPercentage: e.target.value })}
+                      placeholder="5"
+                      className="bg-gray-900/50 border-gray-700 text-white placeholder:text-gray-500 h-8"
+                    />
+                  </div>
+                )}
               </div>
-              <div className="space-y-1">
-                <Label htmlFor="autoLiquidityFee" className="text-sm text-white flex items-center">
-                  Auto-Liquidity Fee (%)
-                  <InfoTooltip text="Percentage of each trade automatically added to liquidity. Max: 3%" />
-                </Label>
-                <Input
-                  id="autoLiquidityFee"
-                  type="number"
-                  min="0"
-                  max="3"
-                  value={formData.autoLiquidityFee}
-                  onChange={(e) => setFormData({ ...formData, autoLiquidityFee: e.target.value })}
-                  placeholder="2"
-                  className="bg-gray-900/50 border-gray-700 text-white placeholder:text-gray-500 h-8"
-                />
+
+              {/* Fee Distribution */}
+              <div className="md:col-span-2 space-y-3">
+                <Label className="text-sm text-white">Fee Distribution</Label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {/* Marketing Fee and Wallet */}
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label htmlFor="marketingFee" className="text-sm text-white flex items-center">
+                          Marketing Fee (%)
+                          <InfoTooltip text="Percentage of each trade sent to marketing wallet. Max: 5%" />
+                        </Label>
+                        <Input
+                          id="marketingFee"
+                          type="number"
+                          min="0"
+                          max="5"
+                          value={formData.marketingFee}
+                          onChange={(e) => setFormData({ ...formData, marketingFee: e.target.value })}
+                          placeholder="2"
+                          className="bg-gray-900/50 border-gray-700 text-white placeholder:text-gray-500 h-8"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="marketingWallet" className="text-sm text-white flex items-center">
+                          Marketing Wallet
+                          <InfoTooltip text="Address that will receive the marketing fees" />
+                        </Label>
+                        <Input
+                          id="marketingWallet"
+                          value={formData.marketingWallet}
+                          onChange={(e) => setFormData({ ...formData, marketingWallet: e.target.value })}
+                          placeholder="0x..."
+                          className="bg-gray-900/50 border-gray-700 text-white placeholder:text-gray-500 h-8"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Development Fee and Wallet */}
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label htmlFor="developmentFee" className="text-sm text-white flex items-center">
+                          Development Fee (%)
+                          <InfoTooltip text="Percentage of each trade sent to development wallet. Max: 3%" />
+                        </Label>
+                        <Input
+                          id="developmentFee"
+                          type="number"
+                          min="0"
+                          max="3"
+                          value={formData.developmentFee}
+                          onChange={(e) => setFormData({ ...formData, developmentFee: e.target.value })}
+                          placeholder="2"
+                          className="bg-gray-900/50 border-gray-700 text-white placeholder:text-gray-500 h-8"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="developmentWallet" className="text-sm text-white flex items-center">
+                          Development Wallet
+                          <InfoTooltip text="Address that will receive the development fees" />
+                        </Label>
+                        <Input
+                          id="developmentWallet"
+                          value={formData.developmentWallet}
+                          onChange={(e) => setFormData({ ...formData, developmentWallet: e.target.value })}
+                          placeholder="0x..."
+                          className="bg-gray-900/50 border-gray-700 text-white placeholder:text-gray-500 h-8"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Auto-Liquidity Fee */}
+                  <div className="md:col-span-2">
+                    <Label htmlFor="autoLiquidityFee" className="text-sm text-white flex items-center">
+                      Auto-Liquidity Fee (%)
+                      <InfoTooltip text="Percentage of each trade automatically added to liquidity. Max: 2%. Managed by the factory contract." />
+                    </Label>
+                    <Input
+                      id="autoLiquidityFee"
+                      type="number"
+                      min="0"
+                      max="2"
+                      value={formData.autoLiquidityFee}
+                      onChange={(e) => setFormData({ ...formData, autoLiquidityFee: e.target.value })}
+                      placeholder="1"
+                      className="bg-gray-900/50 border-gray-700 text-white placeholder:text-gray-500 h-8"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           </div>
