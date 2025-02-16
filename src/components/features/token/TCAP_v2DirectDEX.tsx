@@ -1,11 +1,16 @@
-import { useState, useEffect, useRef, forwardRef } from 'react';
-import { Contract, BrowserProvider, formatEther, Log } from 'ethers';
+import { useState, useEffect, useRef, forwardRef, ReactNode } from 'react';
+import { Contract, BrowserProvider, formatEther, Log, EventLog, Result, parseEther } from 'ethers';
 import { useNetwork } from '@/contexts/NetworkContext';
 import { useToast } from '@/components/ui/toast/use-toast';
-import { Card } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/Spinner';
 import { getNetworkContractAddress } from '@/config/contracts';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import TokenFactoryV2DirectDEXABI from '@/contracts/abi/TokenFactory_v2_DirectDEX.json';
+import { contractAddresses } from '@/config/contracts';
 
 interface Props {
   isConnected: boolean;
@@ -42,21 +47,27 @@ interface TokenInfo {
   createdAt?: number;
 }
 
-interface TokenListedEvent extends Log {
-  args: {
+interface TokenListedEvent extends EventLog {
+  args: Result & {
     token: string;
     owner: string;
-    initialLiquidity?: bigint;
-    listingPrice?: bigint;
+    initialLiquidity: bigint;
+    listingPrice: bigint;
   };
-  blockTimestamp?: number;
 }
 
 interface TCAP_v2DirectDEXRef {
   loadTokens: () => void;
 }
 
-const TCAP_v2DirectDEX = forwardRef<TCAP_v2DirectDEXRef, Props>(({ isConnected, address: factoryAddress, provider: externalProvider }, ref) => {
+interface ListingParams {
+  token: string;
+  initialLiquidityInETH: string;
+  listingPriceInETH: string;
+  dexName: string;
+}
+
+const TCAP_v2DirectDEX = forwardRef<TCAP_v2DirectDEXRef, Props>(({ isConnected, address: factoryAddress, provider: externalProvider }, ref): ReactNode => {
   const [tokens, setTokens] = useState<TokenInfo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,6 +75,13 @@ const TCAP_v2DirectDEX = forwardRef<TCAP_v2DirectDEXRef, Props>(({ isConnected, 
   const { chainId } = useNetwork();
   const { toast } = useToast();
   const containerRef = useRef<HTMLDivElement>(null);
+  const [listingParams, setListingParams] = useState<ListingParams>({
+    token: '',
+    initialLiquidityInETH: '',
+    listingPriceInETH: '',
+    dexName: ''
+  });
+  const [listingFee, setListingFee] = useState<string>('0');
 
   const displayedTokens = showOnlyRecent ? tokens.slice(0, 3) : tokens;
 
@@ -104,98 +122,117 @@ const TCAP_v2DirectDEX = forwardRef<TCAP_v2DirectDEXRef, Props>(({ isConnected, 
       console.log('Loading tokens from factory:', factoryAddress);
       const provider = new BrowserProvider(externalProvider);
       const signer = await provider.getSigner();
-      const userAddress = await signer.getAddress();
 
       const factory = new Contract(factoryAddress, [
         'function isListed(address token) view returns (bool)',
         'function tokenDEX(address token) view returns (string)',
-        'function getDEXRouter(string) view returns (tuple(string name, address router, bool isActive))'
+        'function getDEXRouter(string) view returns (tuple(string name, address router, bool isActive))',
+        'function listTokenOnDEX(address token, uint256 initialLiquidityInETH, uint256 listingPriceInETH, string memory dexName) payable returns (bool)',
+        'function getListingFee() view returns (uint256)'
       ], signer);
 
-      // Get all token creation events
+      // Get all token listing events
       const filter = factory.filters.TokenListed();
-      const events = (await factory.queryFilter(filter)).map(event => event as unknown as TokenListedEvent);
+      const events = await factory.queryFilter(filter);
       
-      const tokenPromises = events
-        .filter(event => event.args?.owner === userAddress)
-        .map(async (event) => {
-          const tokenAddress = event.args?.token;
-          
-          try {
-            const tokenContract = getTokenContract(tokenAddress, signer);
-            
-            // Get basic token info
-            const [
-              name,
-              symbol,
-              totalSupply,
-              owner,
-              tradingEnabled,
-              tradingStartTime,
-              maxTxAmount,
-              maxWalletAmount,
-              dexRouter,
-              dexPair,
-              marketingFee,
-              developmentFee,
-              autoLiquidityFee,
+      const userAddress = await signer.getAddress();
+      
+      // Filter events for tokens owned by the current user
+      const userEvents = events.filter(event => (event as TokenListedEvent).args?.owner === userAddress);
+
+      const tokenPromises = userEvents.map(async (event) => {
+        const tokenAddress = (event as TokenListedEvent).args?.token;
+        if (!tokenAddress) return null;
+
+        try {
+          const token = new Contract(tokenAddress, [
+            'function name() view returns (string)',
+            'function symbol() view returns (string)',
+            'function totalSupply() view returns (uint256)',
+            'function owner() view returns (address)',
+            'function dexRouter() view returns (address)',
+            'function dexPair() view returns (address)',
+            'function tradingEnabled() view returns (bool)',
+            'function tradingStartTime() view returns (uint256)',
+            'function maxTxAmount() view returns (uint256)',
+            'function maxWalletAmount() view returns (uint256)',
+            'function marketingFeePercentage() view returns (uint256)',
+            'function developmentFeePercentage() view returns (uint256)',
+            'function autoLiquidityFeePercentage() view returns (uint256)',
+            'function marketingWallet() view returns (address)',
+            'function developmentWallet() view returns (address)'
+          ], signer);
+
+          const [
+            name,
+            symbol,
+            totalSupply,
+            owner,
+            dexRouter,
+            dexPair,
+            tradingEnabled,
+            tradingStartTime,
+            maxTxAmount,
+            maxWalletAmount,
+            marketingFee,
+            developmentFee,
+            autoLiquidityFee,
+            marketingWallet,
+            developmentWallet
+          ] = await Promise.all([
+            token.name(),
+            token.symbol(),
+            token.totalSupply(),
+            token.owner(),
+            token.dexRouter(),
+            token.dexPair(),
+            token.tradingEnabled(),
+            token.tradingStartTime(),
+            token.maxTxAmount(),
+            token.maxWalletAmount(),
+            token.marketingFeePercentage(),
+            token.developmentFeePercentage(),
+            token.autoLiquidityFeePercentage(),
+            token.marketingWallet(),
+            token.developmentWallet()
+          ]);
+
+          const dexName = await factory.tokenDEX(tokenAddress);
+          const dexInfo = await factory.getDEXRouter(dexName);
+
+          return {
+            address: tokenAddress,
+            name,
+            symbol,
+            totalSupply: formatEther(totalSupply),
+            owner,
+            dexInfo: {
+              dexName,
+              router: dexRouter,
+              pair: dexPair,
+              initialLiquidity: (event as TokenListedEvent).args.initialLiquidity ? formatEther((event as TokenListedEvent).args.initialLiquidity) : '0',
+              listingPrice: (event as TokenListedEvent).args.listingPrice ? formatEther((event as TokenListedEvent).args.listingPrice) : '0'
+            },
+            tradingInfo: {
+              enabled: tradingEnabled,
+              startTime: Number(tradingStartTime),
+              maxTxAmount: formatEther(maxTxAmount),
+              maxWalletAmount: formatEther(maxWalletAmount)
+            },
+            feeInfo: {
+              marketingFee: marketingFee.toString(),
+              developmentFee: developmentFee.toString(),
+              autoLiquidityFee: autoLiquidityFee.toString(),
               marketingWallet,
               developmentWallet
-            ] = await Promise.all([
-              tokenContract.name(),
-              tokenContract.symbol(),
-              tokenContract.totalSupply(),
-              tokenContract.owner(),
-              tokenContract.tradingEnabled(),
-              tokenContract.tradingStartTime(),
-              tokenContract.maxTxAmount(),
-              tokenContract.maxWalletAmount(),
-              tokenContract.dexRouter(),
-              tokenContract.dexPair(),
-              tokenContract.marketingFeePercentage(),
-              tokenContract.developmentFeePercentage(),
-              tokenContract.autoLiquidityFeePercentage(),
-              tokenContract.marketingWallet(),
-              tokenContract.developmentWallet()
-            ]);
-
-            // Get DEX info
-            const dexName = await factory.tokenDEX(tokenAddress);
-            const dexInfo = await factory.getDEXRouter(dexName);
-
-            return {
-              address: tokenAddress,
-              name,
-              symbol,
-              totalSupply: formatEther(totalSupply),
-              owner,
-              dexInfo: {
-                dexName,
-                router: dexRouter,
-                pair: dexPair,
-                initialLiquidity: event.args?.initialLiquidity ? formatEther(event.args.initialLiquidity) : '0',
-                listingPrice: event.args?.listingPrice ? formatEther(event.args.listingPrice) : '0'
-              },
-              tradingInfo: {
-                enabled: tradingEnabled,
-                startTime: Number(tradingStartTime),
-                maxTxAmount: formatEther(maxTxAmount),
-                maxWalletAmount: formatEther(maxWalletAmount)
-              },
-              feeInfo: {
-                marketingFee: marketingFee.toString(),
-                developmentFee: developmentFee.toString(),
-                autoLiquidityFee: autoLiquidityFee.toString(),
-                marketingWallet,
-                developmentWallet
-              },
-              createdAt: event.blockTimestamp ? Number(event.blockTimestamp) * 1000 : Date.now()
-            } as TokenInfo;
-          } catch (error) {
-            console.error(`Error loading token ${tokenAddress}:`, error);
-            return null;
-          }
-        });
+            },
+            createdAt: event.blockNumber ? new Date().getTime() : Date.now()
+          } as TokenInfo;
+        } catch (error) {
+          console.error(`Error loading token ${tokenAddress}:`, error);
+          return null;
+        }
+      });
 
       const loadedTokens = (await Promise.all(tokenPromises))
         .filter((token): token is TokenInfo => token !== null)
@@ -209,6 +246,89 @@ const TCAP_v2DirectDEX = forwardRef<TCAP_v2DirectDEXRef, Props>(({ isConnected, 
     } catch (error) {
       console.error('Error loading tokens:', error);
       setError('Failed to load tokens');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleListToken = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isConnected || !factoryAddress) {
+      toast({
+        title: "Error",
+        description: "Please connect your wallet first",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const factoryContractAddress = getNetworkContractAddress(Number(chainId), 'factoryAddressV2DirectDEX');
+    if (!factoryContractAddress) {
+      toast({
+        title: "Error",
+        description: "Factory not deployed on this network",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const provider = new BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      
+      // Create factory contract instance
+      const factory = new Contract(
+        factoryContractAddress,
+        TokenFactoryV2DirectDEXABI,
+        signer
+      );
+
+      // Get listing fee
+      const listingFee = await factory.getListingFee();
+      console.log("Listing Fee:", formatEther(listingFee));
+
+      // Create token contract instance to check total supply and calculate tokens needed for liquidity
+      const tokenContract = new Contract(
+        listingParams.token,
+        ['function totalSupply() view returns (uint256)', 'function approve(address spender, uint256 amount) returns (bool)'],
+        signer
+      );
+
+      // Calculate total value needed (listing fee + initial liquidity)
+      const totalValue = listingFee.add(parseEther(listingParams.initialLiquidityInETH));
+
+      // List token
+      const tx = await factory.listTokenOnDEX(
+        listingParams.token,
+        parseEther(listingParams.initialLiquidityInETH),
+        parseEther(listingParams.listingPriceInETH),
+        listingParams.dexName,
+        {
+          value: totalValue,
+          gasLimit: 5000000
+        }
+      );
+
+      console.log("Transaction hash:", tx.hash);
+      const receipt = await tx.wait();
+
+      toast({
+        title: "Success",
+        description: `Token listed successfully on ${listingParams.dexName}`,
+        variant: "default"
+      });
+
+      // Refresh token list
+      loadTokens();
+    } catch (error) {
+      console.error("Error listing token:", error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to list token. Please try again.";
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive"
+      });
     } finally {
       setIsLoading(false);
     }
@@ -253,92 +373,104 @@ const TCAP_v2DirectDEX = forwardRef<TCAP_v2DirectDEXRef, Props>(({ isConnected, 
     }
   };
 
+  const handleSwitchChange = (checked: boolean, field: keyof ListingParams) => {
+    setListingParams(prev => ({
+      ...prev,
+      [field]: checked
+    }));
+  };
+
   return (
-    <div ref={containerRef} className="space-y-2">
-      <div className="flex justify-between items-center">
-        <h2 className="text-lg font-semibold text-white">Your Tokens</h2>
-        <Button
-          variant="ghost"
-          onClick={() => setShowOnlyRecent(!showOnlyRecent)}
-          className="text-sm text-gray-400 hover:text-white"
-        >
-          {showOnlyRecent ? 'Show All' : 'Show Recent'}
-        </Button>
-      </div>
-
-      {isLoading ? (
-        <div className="flex justify-center items-center py-4">
-          <Spinner className="w-6 h-6 text-blue-500" />
-        </div>
-      ) : error ? (
-        <div className="text-center py-4 text-red-400">
-          {error}
-        </div>
-      ) : displayedTokens.length === 0 ? (
-        <Card className="p-4 text-center bg-gray-800/50 border-gray-700/50">
-          <p className="text-gray-400">No tokens found. Create a new token to get started.</p>
-        </Card>
-      ) : (
-        <div className="space-y-4">
-          {displayedTokens.map((token) => (
-            <Card key={token.address} className="p-4 bg-gray-800/50 border-gray-700/50">
-              <div className="space-y-3">
-                {/* Token Header */}
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="text-lg font-medium text-white">{token.name} ({token.symbol})</h3>
-                    <p className="text-sm text-gray-400">Created: {formatDate(token.createdAt || 0)}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm text-gray-400">Total Supply: {Number(token.totalSupply).toLocaleString()} {token.symbol}</p>
-                    <p className="text-xs text-gray-500">Listed on: {token.dexInfo.dexName}</p>
-                  </div>
+    <div ref={containerRef} className="w-full space-y-4">
+      <h2 className="text-2xl font-bold">Your Listed Tokens</h2>
+      {!isConnected && (
+        <p className="text-muted-foreground">Please connect your wallet to view your tokens.</p>
+      )}
+      {isConnected && isLoading && (
+        <p className="text-muted-foreground">Loading your tokens...</p>
+      )}
+      {isConnected && !isLoading && tokens.length === 0 && (
+        <p className="text-muted-foreground">You haven't listed any tokens yet.</p>
+      )}
+      {isConnected && !isLoading && tokens.length > 0 && (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {tokens.map((token) => (
+            <Card key={token.address} className="p-4">
+              <div className="space-y-2">
+                <h3 className="text-lg font-semibold">{token.name} ({token.symbol})</h3>
+                <p className="text-sm text-muted-foreground">Address: {token.address}</p>
+                <p className="text-sm">Total Supply: {token.totalSupply}</p>
+                <div className="space-y-2">
+                  <h4 className="font-medium">DEX Info</h4>
+                  {token.dexInfo.dexName ? (
+                    <>
+                      <p className="text-sm">DEX: {token.dexInfo.dexName}</p>
+                      <p className="text-sm">Initial Liquidity: {token.dexInfo.initialLiquidity} ETH</p>
+                      <p className="text-sm">Listing Price: {token.dexInfo.listingPrice} ETH</p>
+                    </>
+                  ) : (
+                    <div className="space-y-2">
+                      <Input
+                        type="text"
+                        placeholder="Initial Liquidity (ETH)"
+                        value={listingParams.initialLiquidityInETH}
+                        onChange={(e) => setListingParams(prev => ({ 
+                          ...prev, 
+                          token: token.address, 
+                          initialLiquidityInETH: e.target.value 
+                        }))}
+                      />
+                      <Input
+                        type="text"
+                        placeholder="Listing Price (ETH)"
+                        value={listingParams.listingPriceInETH}
+                        onChange={(e) => setListingParams(prev => ({ 
+                          ...prev, 
+                          listingPriceInETH: e.target.value 
+                        }))}
+                      />
+                      <Select
+                        value={listingParams.dexName}
+                        onValueChange={(value) => setListingParams(prev => ({ 
+                          ...prev, 
+                          dexName: value 
+                        }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select DEX" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="uniswap-test">Uniswap</SelectItem>
+                          <SelectItem value="pancakeswap-test">PancakeSwap</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button 
+                        onClick={handleListToken}
+                        disabled={
+                          !listingParams.initialLiquidityInETH || 
+                          !listingParams.listingPriceInETH || 
+                          !listingParams.dexName ||
+                          listingParams.token !== token.address
+                        }
+                        className="w-full"
+                      >
+                        List on DEX
+                      </Button>
+                    </div>
+                  )}
                 </div>
-
-                {/* Token Details */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                  {/* Trading Info */}
-                  <div className="space-y-1">
-                    <h4 className="font-medium text-gray-300">Trading Settings</h4>
-                    <p className="text-gray-400">Status: {token.tradingInfo.enabled ? 'Enabled' : 'Disabled'}</p>
-                    <p className="text-gray-400">Max TX: {Number(token.tradingInfo.maxTxAmount).toLocaleString()} {token.symbol}</p>
-                    <p className="text-gray-400">Max Wallet: {Number(token.tradingInfo.maxWalletAmount).toLocaleString()} {token.symbol}</p>
-                  </div>
-
-                  {/* Fee Info */}
-                  <div className="space-y-1">
-                    <h4 className="font-medium text-gray-300">Fees</h4>
-                    <p className="text-gray-400">Marketing: {token.feeInfo.marketingFee}%</p>
-                    <p className="text-gray-400">Development: {token.feeInfo.developmentFee}%</p>
-                    <p className="text-gray-400">Auto-Liquidity: {token.feeInfo.autoLiquidityFee}%</p>
-                  </div>
-
-                  {/* DEX Info */}
-                  <div className="space-y-1">
-                    <h4 className="font-medium text-gray-300">Liquidity</h4>
-                    <p className="text-gray-400">Initial: {Number(token.dexInfo.initialLiquidity).toFixed(4)} ETH</p>
-                    <p className="text-gray-400">Listing Price: {Number(token.dexInfo.listingPrice).toFixed(8)} ETH</p>
-                  </div>
+                <div className="space-y-1">
+                  <h4 className="font-medium">Trading Info</h4>
+                  <p className="text-sm">Max Transaction: {token.tradingInfo.maxTxAmount}</p>
+                  <p className="text-sm">Max Wallet: {token.tradingInfo.maxWalletAmount}</p>
+                  <p className="text-sm">Trading Enabled: {token.tradingInfo.enabled ? 'Yes' : 'No'}</p>
+                  <p className="text-sm">Trading Start: {formatDate(token.tradingInfo.startTime)}</p>
                 </div>
-
-                {/* Contract Links */}
-                <div className="flex gap-2 text-xs">
-                  <a
-                    href={`${getExplorerUrl(chainId)}/token/${token.address}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-400 hover:text-blue-300"
-                  >
-                    View Token
-                  </a>
-                  <a
-                    href={`${getExplorerUrl(chainId)}/address/${token.dexInfo.pair}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-400 hover:text-blue-300"
-                  >
-                    View Pair
-                  </a>
+                <div className="space-y-1">
+                  <h4 className="font-medium">Fee Info</h4>
+                  <p className="text-sm">Marketing Fee: {token.feeInfo.marketingFee}%</p>
+                  <p className="text-sm">Development Fee: {token.feeInfo.developmentFee}%</p>
+                  <p className="text-sm">Auto-Liquidity Fee: {token.feeInfo.autoLiquidityFee}%</p>
                 </div>
               </div>
             </Card>

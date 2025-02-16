@@ -22,8 +22,8 @@ const TCAP_v2DirectDEX = dynamic(
   { ssr: false }
 );
 
-const TokenFormSimple = dynamic(
-  () => import('@/components/features/token/TokenFormSimple'),
+const TCAP_v2Make = dynamic(
+  () => import('@/components/features/token/TCAP_v2Make'),
   { ssr: false }
 );
 
@@ -63,12 +63,6 @@ function V2DirectDEXContent() {
                 className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-text-secondary rounded-md px-6"
               >
                 Create Token
-              </TabsTrigger>
-              <TabsTrigger 
-                value="test"
-                className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-text-secondary rounded-md px-6"
-              >
-                Test Simple
               </TabsTrigger>
               <TabsTrigger 
                 value="tokens"
@@ -138,24 +132,26 @@ function V2DirectDEXContent() {
               />
             </TabsContent>
 
-            <TabsContent value="test">
-              <TokenFormSimple
-                onSuccess={() => {
-                  console.log('Simple token deployed successfully');
-                }}
-                onError={(error) => {
-                  console.error('Error deploying simple token:', error);
-                }}
-              />
-            </TabsContent>
-
             <TabsContent value="tokens">
               {isConnected ? (
-                <TCAP_v2DirectDEX
-                  isConnected={isConnected}
-                  address={factoryAddress || undefined}
-                  provider={publicClient}
-                />
+                <div className="space-y-8">
+                  <div>
+                    <h3 className="text-lg font-semibold text-white mb-4">Your Created Tokens</h3>
+                    <TCAP_v2Make
+                      isConnected={isConnected}
+                      address={getNetworkContractAddress(Number(chainId), 'factoryAddressV2DirectDEX_Make') || undefined}
+                      provider={publicClient}
+                    />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-white mb-4">Your Listed Tokens</h3>
+                    <TCAP_v2DirectDEX
+                      isConnected={isConnected}
+                      address={getNetworkContractAddress(Number(chainId), 'factoryAddressV2DirectDEX') || undefined}
+                      provider={publicClient}
+                    />
+                  </div>
+                </div>
               ) : (
                 <div className="text-center py-8">
                   <p className="text-text-secondary">Please connect your wallet to view your tokens.</p>
