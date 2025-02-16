@@ -12,8 +12,8 @@ import { getNetworkContractAddress } from '@/config/contracts';
 import Head from 'next/head';
 
 // Dynamically import components that use client-side features
-const TokenForm_V2DirectDEX = dynamic(
-  () => import('@/components/features/token/TokenForm_V2DirectDEX').then(mod => mod.TokenForm_V2DirectDEX),
+const TokenForm_v2DD_2Step = dynamic(
+  () => import('@/components/features/token/TokenForm_v2DD_2Step'),
   { ssr: false }
 );
 
@@ -115,7 +115,7 @@ function V2DirectDEXContent() {
             </TabsContent>
             
             <TabsContent value="create">
-              <TokenForm_V2DirectDEX
+              <TokenForm_v2DD_2Step
                 onSuccess={() => {
                   // TODO: Handle success
                   console.log('Token deployed successfully');

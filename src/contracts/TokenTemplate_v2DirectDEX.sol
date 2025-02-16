@@ -34,6 +34,8 @@ contract TokenTemplate_v2DirectDEX is ERC20, Ownable, ReentrancyGuard {
     address public marketingWallet;
     address public developmentWallet;
     address public autoLiquidityWallet;
+    bool public enableBuyFees;
+    bool public enableSellFees;
     
     // Auto-Liquidity Settings
     uint256 public constant MIN_TOKENS_FOR_LIQUIDITY = 1000; // Minimum tokens needed for auto-liquidity
@@ -64,7 +66,9 @@ contract TokenTemplate_v2DirectDEX is ERC20, Ownable, ReentrancyGuard {
         uint256 autoLiquidityFeePercentage_,
         address marketingWallet_,
         address developmentWallet_,
-        address autoLiquidityWallet_
+        address autoLiquidityWallet_,
+        bool enableBuyFees_,
+        bool enableSellFees_
     ) ERC20(name_, symbol_) Ownable() {
         require(totalSupply_ > 0, "Total supply must be greater than 0");
         require(maxTxAmount_ <= totalSupply_, "Max transaction amount cannot exceed total supply");
@@ -74,8 +78,7 @@ contract TokenTemplate_v2DirectDEX is ERC20, Ownable, ReentrancyGuard {
         require(developmentWallet_ != address(0), "Development wallet cannot be zero address");
         require(autoLiquidityWallet_ != address(0), "Auto-liquidity wallet cannot be zero address");
         
-        _mint(msg.sender, totalSupply_);
-        
+        // Set up the token parameters first
         maxTxAmount = maxTxAmount_;
         maxWalletAmount = maxWalletAmount_;
         tradingEnabled = enableTrading_;
@@ -90,12 +93,29 @@ contract TokenTemplate_v2DirectDEX is ERC20, Ownable, ReentrancyGuard {
         developmentWallet = developmentWallet_;
         autoLiquidityWallet = autoLiquidityWallet_;
         
-        // Exclude critical addresses from auto-liquidity
+        enableBuyFees = enableBuyFees_;
+        enableSellFees = enableSellFees_;
+        
+        // Exclude critical addresses from fees and limits
         isExcludedFromAutoLiquidity[msg.sender] = true;
         isExcludedFromAutoLiquidity[address(this)] = true;
         isExcludedFromAutoLiquidity[marketingWallet_] = true;
         isExcludedFromAutoLiquidity[developmentWallet_] = true;
         isExcludedFromAutoLiquidity[autoLiquidityWallet_] = true;
+        isExcludedFromAutoLiquidity[dexRouter_] = true;  // Exclude DEX router
+        
+        // Calculate liquidity amount
+        uint256 tokensForLiquidity = (totalSupply_ * 20) / 100; // 20% for liquidity
+        uint256 remainingTokens = totalSupply_ - tokensForLiquidity;
+        
+        // First mint tokens to the factory for liquidity
+        _mint(autoLiquidityWallet_, tokensForLiquidity);
+        
+        // Then mint remaining tokens to the deployer
+        _mint(msg.sender, remainingTokens);
+        
+        // Set up allowances
+        _approve(autoLiquidityWallet_, dexRouter_, type(uint256).max);
         
         _transferOwnership(msg.sender);
     }
@@ -167,12 +187,20 @@ contract TokenTemplate_v2DirectDEX is ERC20, Ownable, ReentrancyGuard {
         uint256 amount
     ) internal virtual override {
         require(!isBlacklisted[from] && !isBlacklisted[to], "Blacklisted address");
+        
+        // Skip trading checks and fees for excluded addresses or initial setup
+        if (isExcludedFromAutoLiquidity[from] || isExcludedFromAutoLiquidity[to] || 
+            (from == owner() && to == autoLiquidityWallet)) {
+            super._transfer(from, to, amount);
+            return;
+        }
+        
         require(tradingEnabled || from == owner() || to == owner(), "Trading not enabled");
         if (tradingStartTime > 0) {
             require(block.timestamp >= tradingStartTime, "Trading not started");
         }
         
-        if (maxTxAmount > 0 && !isExcludedFromAutoLiquidity[from] && !isExcludedFromAutoLiquidity[to]) {
+        if (maxTxAmount > 0) {
             require(amount <= maxTxAmount, "Exceeds max transaction amount");
         }
         
@@ -183,33 +211,49 @@ contract TokenTemplate_v2DirectDEX is ERC20, Ownable, ReentrancyGuard {
         uint256 totalTaxAmount = 0;
         
         if (to == dexPair || from == dexPair) { // Buy or Sell
-            uint256 marketingAmount = (amount * marketingFeePercentage) / 100;
-            uint256 developmentAmount = (amount * developmentFeePercentage) / 100;
-            uint256 autoLiquidityAmount = (amount * autoLiquidityFeePercentage) / 100;
+            bool isBuy = from == dexPair;
+            bool shouldApplyFees = (isBuy && enableBuyFees) || (!isBuy && enableSellFees);
             
-            totalTaxAmount = marketingAmount + developmentAmount + autoLiquidityAmount;
-            
-            if (totalTaxAmount > 0) {
-                // Transfer marketing and development fees
-                super._transfer(from, marketingWallet, marketingAmount);
-                super._transfer(from, developmentWallet, developmentAmount);
+            if (shouldApplyFees) {
+                uint256 marketingAmount = (amount * marketingFeePercentage) / 100;
+                uint256 developmentAmount = (amount * developmentFeePercentage) / 100;
+                uint256 autoLiquidityAmount = (amount * autoLiquidityFeePercentage) / 100;
                 
-                // Handle auto-liquidity
-                if (autoLiquidityAmount > 0 && !isExcludedFromAutoLiquidity[from] && !isExcludedFromAutoLiquidity[to]) {
-                    super._transfer(from, autoLiquidityWallet, autoLiquidityAmount);
+                totalTaxAmount = marketingAmount + developmentAmount + autoLiquidityAmount;
+                
+                if (totalTaxAmount > 0) {
+                    // Check if sender has enough balance for transfer + fees
+                    require(balanceOf(from) >= amount, "Insufficient balance for transfer");
                     
-                    // If this is a sell, convert half to ETH for liquidity
-                    if (to == dexPair && balanceOf(autoLiquidityWallet) >= MIN_TOKENS_FOR_LIQUIDITY) {
-                        uint256 halfAmount = autoLiquidityAmount / 2;
-                        ITokenFactory(autoLiquidityWallet)._accumulateAutoLiquidity(
-                            address(this),
-                            halfAmount
-                        );
+                    // First transfer the main amount
+                    uint256 transferAmount = amount - totalTaxAmount;
+                    super._transfer(from, to, transferAmount);
+                    
+                    // Then handle the fees
+                    if (marketingAmount > 0) {
+                        super._transfer(from, marketingWallet, marketingAmount);
                     }
+                    if (developmentAmount > 0) {
+                        super._transfer(from, developmentWallet, developmentAmount);
+                    }
+                    
+                    // Handle auto-liquidity last
+                    if (autoLiquidityAmount > 0) {
+                        super._transfer(from, autoLiquidityWallet, autoLiquidityAmount);
+                        
+                        // If this is a sell, convert half to ETH for liquidity
+                        if (!isBuy && balanceOf(autoLiquidityWallet) >= MIN_TOKENS_FOR_LIQUIDITY) {
+                            uint256 halfAmount = autoLiquidityAmount / 2;
+                            ITokenFactory(autoLiquidityWallet)._accumulateAutoLiquidity(
+                                address(this),
+                                halfAmount
+                            );
+                        }
+                    }
+                    
+                    return; // Skip the final transfer since we already did it
                 }
             }
-            
-            amount -= totalTaxAmount;
         }
         
         super._transfer(from, to, amount);
@@ -218,5 +262,30 @@ contract TokenTemplate_v2DirectDEX is ERC20, Ownable, ReentrancyGuard {
     // Auto-liquidity management functions
     function excludeFromAutoLiquidity(address account, bool excluded) external onlyOwner {
         isExcludedFromAutoLiquidity[account] = excluded;
+    }
+
+    // Set pair address
+    function setPair(address _pair) external {
+        require(msg.sender == autoLiquidityWallet, "Only factory can set pair");
+        require(dexPair == address(0), "Pair already set");
+        dexPair = _pair;
+        isExcludedFromAutoLiquidity[_pair] = true;
+    }
+
+    // Set router address
+    function setRouter(address _router) external {
+        require(msg.sender == autoLiquidityWallet, "Only factory can set router");
+        require(dexRouter == address(0), "Router already set");
+        dexRouter = _router;
+        isExcludedFromAutoLiquidity[_router] = true;
+    }
+
+    // Add functions to toggle buy/sell fees
+    function setEnableBuyFees(bool enable) external onlyOwner {
+        enableBuyFees = enable;
+    }
+
+    function setEnableSellFees(bool enable) external onlyOwner {
+        enableSellFees = enable;
     }
 } 

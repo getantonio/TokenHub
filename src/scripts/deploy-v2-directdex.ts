@@ -36,7 +36,9 @@ async function main() {
             2,                                             // autoLiquidityFeePercentage (2%)
             deployer.address,                              // marketingWallet
             deployer.address,                              // developmentWallet
-            factoryAddress                                 // autoLiquidityWallet (factory contract)
+            factoryAddress,                                 // autoLiquidityWallet (factory contract)
+            true,                                          // enableBuyFees
+            true                                           // enableSellFees
         );
 
         await tokenTemplate.waitForDeployment();

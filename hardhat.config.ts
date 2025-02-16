@@ -8,17 +8,28 @@ const config = {
     sources: "./src/contracts",
     tests: "./src/test",
     cache: "./cache",
-    artifacts: "./artifacts"
+    artifacts: "./src/contracts/artifacts"
   },
   defaultNetwork: "hardhat",
   networks: {
     hardhat: {
     },
     "sepolia": {
-      url: process.env.SEPOLIA_RPC_URL,
+      url: "https://eth-sepolia.g.alchemy.com/v2/MGnqEI_g1f7R-ozYpSAUpnsivv0lp86t",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : undefined,
       chainId: 11155111,
-      verifyApiKey: process.env.ETHERSCAN_API_KEY
+      verifyApiKey: process.env.ETHERSCAN_API_KEY,
+      gasPrice: 2000000000,  // 2 gwei
+      gas: 2000000,  // 2M gas limit
+      maxPriorityFeePerGas: 100000000,  // 0.1 gwei
+      maxFeePerGas: 2500000000,  // 2.5 gwei
+      timeout: 180000,  // 3 minutes
+      confirmations: 1,
+      networkCheckTimeout: 100000,
+      timeoutBlocks: 200,
+      throwOnTransactionFailures: true,
+      throwOnCallFailures: true,
+      loggingEnabled: true
     },
     "optimism-sepolia": {
       url: process.env.NEXT_PUBLIC_OPSEPOLIA_RPC_URL,
