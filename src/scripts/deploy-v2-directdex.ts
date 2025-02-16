@@ -1,5 +1,6 @@
 import { ethers } from 'hardhat';
 import '@nomicfoundation/hardhat-ethers';
+import { TokenFactory_v2_DirectDEX_TwoStep } from '../../typechain-types';
 
 async function main() {
     try {
@@ -10,10 +11,10 @@ async function main() {
 
         // Deploy TokenFactory_v2_DirectDEX first
         console.log("\nDeploying TokenFactory_v2_DirectDEX...");
-        const TokenFactory = await ethers.getContractFactory("TokenFactory_v2_DirectDEX");
-        const tokenFactory = await TokenFactory.deploy(
+        const TokenFactory = await ethers.getContractFactory("TokenFactory_v2_DirectDEX_TwoStep");
+        const tokenFactory = (await TokenFactory.deploy(
             ethers.parseEther("0.01")  // 0.01 ETH listing fee
-        );
+        )) as TokenFactory_v2_DirectDEX_TwoStep;
 
         await tokenFactory.waitForDeployment();
         const factoryAddress = await tokenFactory.getAddress();

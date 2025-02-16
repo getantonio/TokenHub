@@ -2,183 +2,164 @@
 pragma solidity 0.8.22;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "./TokenTemplate_v2DirectDEX.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
-// Custom errors
-error InvalidTokenName(string name);
-error InvalidTokenSymbol(string symbol);
-error InvalidTokenSupply(uint256 supply);
-error InvalidMaxTxAmount(uint256 maxTx, uint256 totalSupply);
-error InvalidMaxWalletAmount(uint256 maxWallet, uint256 totalSupply);
-error InvalidTradingStartTime(uint256 startTime);
-error InvalidFeeConfiguration(uint256 totalFees);
-error InvalidWalletAddress(address wallet);
+// Simple test token contract with fee distribution
+contract TestToken is ERC20 {
+    uint256 public marketingFeePercent;
+    uint256 public developmentFeePercent;
+    uint256 public autoLiquidityFeePercent;
+    address public marketingWallet;
+    address public developmentWallet;
+    address public owner;
+    bool public enableBuyFees;
+    bool public enableSellFees;
 
-contract TokenFactory_v2_Make is Ownable, ReentrancyGuard {
-    string public constant VERSION = "2.0.0";
-    
-    struct TokenCreationParams {
-        string name;
-        string symbol;
-        uint256 totalSupply;
-        uint256 maxTxAmount;
-        uint256 maxWalletAmount;
-        bool enableTrading;
-        uint256 tradingStartTime;
-        uint256 marketingFeePercentage;
-        address marketingWallet;
-        uint256 developmentFeePercentage;
-        address developmentWallet;
-        uint256 autoLiquidityFeePercentage;
-        bool enableBuyFees;
-        bool enableSellFees;
+    constructor(
+        string memory name,
+        string memory symbol,
+        uint256 totalSupply,
+        uint256 _marketingFeePercent,
+        uint256 _developmentFeePercent,
+        uint256 _autoLiquidityFeePercent,
+        address _marketingWallet,
+        address _developmentWallet,
+        address _owner,
+        bool _enableBuyFees,
+        bool _enableSellFees
+    ) ERC20(name, symbol) {
+        require(_marketingFeePercent + _developmentFeePercent + _autoLiquidityFeePercent <= 25, "Total fees too high");
+        require(_marketingWallet != address(0), "Invalid marketing wallet");
+        require(_developmentWallet != address(0), "Invalid development wallet");
+        
+        _mint(_owner, totalSupply);
+        marketingFeePercent = _marketingFeePercent;
+        developmentFeePercent = _developmentFeePercent;
+        autoLiquidityFeePercent = _autoLiquidityFeePercent;
+        marketingWallet = _marketingWallet;
+        developmentWallet = _developmentWallet;
+        owner = _owner;
+        enableBuyFees = _enableBuyFees;
+        enableSellFees = _enableSellFees;
     }
 
-    // Validation constants
-    uint256 public constant MAX_NAME_LENGTH = 32;
-    uint256 public constant MAX_SYMBOL_LENGTH = 8;
-    uint256 public constant MIN_TOTAL_SUPPLY = 1000 * 10**18; // 1000 tokens minimum
-    uint256 public constant MAX_TOTAL_SUPPLY = 1000000000 * 10**18; // 1B tokens maximum
-    uint256 public constant MAX_TOTAL_FEES = 25; // 25% maximum total fees
+    function _beforeTokenTransfer(
+        address from,
+        address to,
+        uint256 amount
+    ) internal virtual override {
+        super._beforeTokenTransfer(from, to, amount);
+        
+        // Skip fees for special cases
+        if (from == owner || to == owner || from == address(0) || to == address(0)) {
+            return;
+        }
 
-    // Token tracking
-    mapping(address => address) public tokenCreator;
-    address[] public allTokens;
-    uint256 public creationFee;
+        // Calculate and distribute fees
+        if ((from == address(this) && enableBuyFees) || (to == address(this) && enableSellFees)) {
+            uint256 marketingFee = (amount * marketingFeePercent) / 100;
+            uint256 developmentFee = (amount * developmentFeePercent) / 100;
+            uint256 autoLiquidityFee = (amount * autoLiquidityFeePercent) / 100;
+            
+            if (marketingFee > 0) _transfer(from, marketingWallet, marketingFee);
+            if (developmentFee > 0) _transfer(from, developmentWallet, developmentFee);
+            if (autoLiquidityFee > 0) _transfer(from, address(this), autoLiquidityFee);
+        }
+    }
+}
 
-    // Events
+contract TokenFactory_v2_Make is Ownable {
+    uint256 private creationFee;
+    mapping(address => address[]) private userTokens;
+    address[] private allTokens;
+
     event TokenCreated(
         address indexed token,
-        address indexed owner,
         string name,
         string symbol,
         uint256 totalSupply,
-        uint256 creationTime
+        uint256 marketingFeePercent,
+        uint256 developmentFeePercent,
+        uint256 autoLiquidityFeePercent,
+        address marketingWallet,
+        address developmentWallet,
+        bool enableBuyFees,
+        bool enableSellFees
     );
 
     constructor(uint256 _creationFee) {
         creationFee = _creationFee;
+        _transferOwnership(msg.sender);
     }
 
-    function validateTokenParams(TokenCreationParams calldata params) internal view {
-        if (bytes(params.name).length == 0 || bytes(params.name).length > MAX_NAME_LENGTH) {
-            revert InvalidTokenName(params.name);
-        }
-        if (bytes(params.symbol).length == 0 || bytes(params.symbol).length > MAX_SYMBOL_LENGTH) {
-            revert InvalidTokenSymbol(params.symbol);
-        }
-        if (params.totalSupply < MIN_TOTAL_SUPPLY || params.totalSupply > MAX_TOTAL_SUPPLY) {
-            revert InvalidTokenSupply(params.totalSupply);
-        }
-        if (params.maxTxAmount == 0 || params.maxTxAmount > params.totalSupply) {
-            revert InvalidMaxTxAmount(params.maxTxAmount, params.totalSupply);
-        }
-        if (params.maxWalletAmount == 0 || params.maxWalletAmount > params.totalSupply) {
-            revert InvalidMaxWalletAmount(params.maxWalletAmount, params.totalSupply);
-        }
-        if (params.tradingStartTime < block.timestamp) {
-            revert InvalidTradingStartTime(params.tradingStartTime);
-        }
-        
-        uint256 totalFees = params.marketingFeePercentage + params.developmentFeePercentage + params.autoLiquidityFeePercentage;
-        if (totalFees > MAX_TOTAL_FEES) {
-            revert InvalidFeeConfiguration(totalFees);
-        }
-        
-        if (params.marketingWallet == address(0) || params.developmentWallet == address(0)) {
-            revert InvalidWalletAddress(address(0));
-        }
-    }
-
-    function createToken(TokenCreationParams calldata params) external payable nonReentrant returns (address) {
+    function createToken(
+        string memory name,
+        string memory symbol,
+        uint256 totalSupply,
+        uint256 marketingFeePercent,
+        uint256 developmentFeePercent,
+        uint256 autoLiquidityFeePercent,
+        address marketingWallet,
+        address developmentWallet,
+        bool enableBuyFees,
+        bool enableSellFees
+    ) external payable returns (address) {
         require(msg.value >= creationFee, "Insufficient creation fee");
         
-        // Validate parameters
-        validateTokenParams(params);
-        
-        // Create token with null router (will be set during listing)
-        TokenTemplate_v2DirectDEX token = new TokenTemplate_v2DirectDEX(
-            params.name,
-            params.symbol,
-            params.totalSupply,
-            params.maxTxAmount,
-            params.maxWalletAmount,
-            params.enableTrading,
-            params.tradingStartTime,
-            address(0), // dexRouter - will be set later by Bake contract
-            params.marketingFeePercentage,
-            params.developmentFeePercentage,
-            params.autoLiquidityFeePercentage,
-            params.marketingWallet,
-            params.developmentWallet,
-            address(this), // autoLiquidityWallet - set to factory
-            params.enableBuyFees,
-            params.enableSellFees
+        TestToken token = new TestToken(
+            name,
+            symbol,
+            totalSupply,
+            marketingFeePercent,
+            developmentFeePercent,
+            autoLiquidityFeePercent,
+            marketingWallet,
+            developmentWallet,
+            msg.sender,
+            enableBuyFees,
+            enableSellFees
         );
-        
-        // Store token info
-        tokenCreator[address(token)] = msg.sender;
+
+        userTokens[msg.sender].push(address(token));
         allTokens.push(address(token));
-        
-        // Transfer ownership to creator
-        token.transferOwnership(msg.sender);
-        
+
         emit TokenCreated(
             address(token),
-            msg.sender,
-            params.name,
-            params.symbol,
-            params.totalSupply,
-            block.timestamp
+            name,
+            symbol,
+            totalSupply,
+            marketingFeePercent,
+            developmentFeePercent,
+            autoLiquidityFeePercent,
+            marketingWallet,
+            developmentWallet,
+            enableBuyFees,
+            enableSellFees
         );
-        
+
         return address(token);
     }
 
-    // View functions
     function getCreationFee() external view returns (uint256) {
         return creationFee;
     }
 
-    function isTokenCreator(address token, address user) external view returns (bool) {
-        return tokenCreator[token] == user;
+    function setCreationFee(uint256 _creationFee) external onlyOwner {
+        creationFee = _creationFee;
     }
 
-    function getTokenCreator(address token) external view returns (address) {
-        return tokenCreator[token];
+    function getUserTokens(address user) external view returns (address[] memory) {
+        return userTokens[user];
     }
 
     function getAllTokens() external view returns (address[] memory) {
         return allTokens;
     }
 
-    function getUserCreatedTokens(address user) external view returns (address[] memory) {
-        uint256 count = 0;
-        for (uint256 i = 0; i < allTokens.length; i++) {
-            if (tokenCreator[allTokens[i]] == user) {
-                count++;
-            }
-        }
-        
-        address[] memory userTokens = new address[](count);
-        uint256 index = 0;
-        for (uint256 i = 0; i < allTokens.length; i++) {
-            if (tokenCreator[allTokens[i]] == user) {
-                userTokens[index] = allTokens[i];
-                index++;
-            }
-        }
-        
-        return userTokens;
-    }
-
-    // Admin functions
-    function setCreationFee(uint256 _newFee) external onlyOwner {
-        creationFee = _newFee;
-    }
-    
     function withdrawFees() external onlyOwner {
-        payable(owner()).transfer(address(this).balance);
+        uint256 balance = address(this).balance;
+        require(balance > 0, "No fees to withdraw");
+        (bool success, ) = owner().call{value: balance}("");
+        require(success, "Transfer failed");
     }
 } 

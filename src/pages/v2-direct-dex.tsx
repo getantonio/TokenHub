@@ -22,6 +22,11 @@ const TCAP_v2DirectDEX = dynamic(
   { ssr: false }
 );
 
+const TokenFormSimple = dynamic(
+  () => import('@/components/features/token/TokenFormSimple'),
+  { ssr: false }
+);
+
 function V2DirectDEXContent() {
   const { isConnected } = useAccount();
   const publicClient = usePublicClient();
@@ -58,6 +63,12 @@ function V2DirectDEXContent() {
                 className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-text-secondary rounded-md px-6"
               >
                 Create Token
+              </TabsTrigger>
+              <TabsTrigger 
+                value="test"
+                className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-text-secondary rounded-md px-6"
+              >
+                Test Simple
               </TabsTrigger>
               <TabsTrigger 
                 value="tokens"
@@ -123,6 +134,17 @@ function V2DirectDEXContent() {
                 onError={(error) => {
                   // TODO: Handle error
                   console.error('Error deploying token:', error);
+                }}
+              />
+            </TabsContent>
+
+            <TabsContent value="test">
+              <TokenFormSimple
+                onSuccess={() => {
+                  console.log('Simple token deployed successfully');
+                }}
+                onError={(error) => {
+                  console.error('Error deploying simple token:', error);
                 }}
               />
             </TabsContent>
