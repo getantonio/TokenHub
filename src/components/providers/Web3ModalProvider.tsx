@@ -6,20 +6,23 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '@rainbow-me/rainbowkit/styles.css';
 
 const projectId = process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID || '';
-const chains = [bsc, bscTestnet, mainnet, sepolia] as const;
+
+// Configure supported chains
+const chains = [sepolia, bscTestnet, mainnet, bsc] as const;
 
 const { wallets } = getDefaultWallets({
-  appName: 'Token Factory',
+  appName: 'TokenHub.dev',
   projectId
 });
 
+// Create wagmi config
 const config = createConfig({
   chains,
   transports: {
-    [bsc.id]: http(),
+    [sepolia.id]: http(process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL),
     [bscTestnet.id]: http(),
     [mainnet.id]: http(),
-    [sepolia.id]: http()
+    [bsc.id]: http()
   }
 });
 
@@ -34,6 +37,7 @@ export function Web3ModalProvider({ children }: { children: React.ReactNode }) {
             accentColor: '#3b82f6',
             borderRadius: 'medium'
           })}
+          coolMode
         >
           {children}
         </RainbowKitProvider>

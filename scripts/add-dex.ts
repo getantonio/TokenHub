@@ -1,33 +1,36 @@
-const { ethers } = require('hardhat');
-require('@nomicfoundation/hardhat-ethers');
+const hre = require("hardhat");
+const { ethers } = require("hardhat");
 
 async function main() {
     try {
         const [deployer] = await ethers.getSigners();
         console.log("Adding DEX with account:", deployer.address);
 
-        const factoryAddress = '0xE5dB0C6eF854ace899f970794541F5b351d0341F';
-        const factory = await ethers.getContractAt("TokenFactory_v2_DirectDEX", factoryAddress);
+        // Get factory contract
+        const factoryAddress = "0xF0Fa40d9A6Ce543F917E073FA409a27DA5bE36fB"; // Bake factory address
+        const Factory = await ethers.getContractFactory("TokenFactory_v2_Bake");
+        const factory = Factory.attach(factoryAddress);
 
-        // Add PancakeSwap Testnet as supported DEX
-        console.log("\nAdding PancakeSwap Testnet as supported DEX...");
-        const addDexTx = await factory.addDEX(
-            "pancakeswap-test",
-            "0x9Ac64Cc6e4415144C455BD8E4837Fea55603e5c3" // PancakeSwap Testnet Router
-        );
-        await addDexTx.wait();
-        console.log("Added PancakeSwap Testnet as supported DEX");
+        // Uniswap V2 Router address (Sepolia)
+        const UNISWAP_ROUTER = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D";
 
-        // Verify the DEX was added
-        const dexRouter = await factory.getDEXRouter("pancakeswap-test");
+        console.log("\nAdding Uniswap DEX...");
+        const tx = await factory.addDEX("uniswap-test", UNISWAP_ROUTER);
+        console.log("Transaction sent:", tx.hash);
+        
+        const receipt = await tx.wait();
+        console.log("Transaction confirmed in block:", receipt.blockNumber);
+
+        // Verify DEX was added
+        const dexInfo = await factory.getDEXRouter("uniswap-test");
         console.log("\nDEX Configuration:");
-        console.log("Name:", "pancakeswap-test");
-        console.log("Router:", dexRouter.router);
-        console.log("Is Active:", dexRouter.isActive);
+        console.log("Name: uniswap-test");
+        console.log("Router:", dexInfo.router);
+        console.log("Is Active:", dexInfo.isActive);
 
     } catch (error) {
-        console.error("\nFailed to add DEX!");
-        console.error("Error details:", error);
+        console.error("\nError adding DEX:");
+        console.error(error);
         process.exit(1);
     }
 }

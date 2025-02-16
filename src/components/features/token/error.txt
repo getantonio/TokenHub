@@ -1,0 +1,415 @@
+@https://sepolia.etherscan.io/tx/0xb6b5e365ae821e834606776da76ec2f75ff85248e00fab22ad8fb99b170b9013 
+
+
+0.7085
+SepoliaETH
+
++$0 
+
+(+0.00%)
+
+
+Buy & Sell
+
+
+Swap
+
+
+Bridge
+
+
+Send
+
+
+Receive
+
+
+Ready to bridge?
+
+Move across 9 chains, all within your wallet
+
+
+
+MetaMask debit card
+
+Available in selected regions
+
+
+
+Fund your wallet
+
+Get started by adding funds
+
+
+
+Cash out with MetaMask
+
+Sell your crypto for cash
+
+
+Tokens
+NFTs
+Activity
+Feb 16, 2025
+
+S
+Contract interaction
+
+Failed
+-0.101 SepoliaETH
+
+-0.101 SepoliaETH
+
+S
+Approve STANT spending cap
+
+Confirmed
+S
+Contract interaction
+
+Confirmed
+-0.001 SepoliaETH
+
+-0.001 SepoliaETH
+
+S
+Contract interaction
+
+Failed
+-0.101 SepoliaETH
+
+-0.101 SepoliaETH
+
+S
+Approve STANT spending cap
+
+Confirmed
+S
+Contract interaction
+
+Confirmed
+-0.001 SepoliaETH
+
+-0.001 SepoliaETH
+
+S
+Approve STANT spending cap
+
+Confirmed
+S
+Contract interaction
+
+Confirmed
+-0.001 SepoliaETH
+
+-0.001 SepoliaETH
+
+S
+Approve STANT spending cap
+
+Confirmed
+S
+Contract interaction
+
+Confirmed
+-0.001 SepoliaETH
+
+-0.001 SepoliaETH
+
+S
+Approve STANT spending cap
+
+Confirmed
+S
+Contract interaction
+
+Confirmed
+-0.001 SepoliaETH
+
+-0.001 SepoliaETH
+
+S
+Approve STANT spending cap
+
+Confirmed
+S
+Contract interaction
+
+Confirmed
+-0.001 SepoliaETH
+
+-0.001 SepoliaETH
+
+S
+Approve STANT spending cap
+
+Confirmed
+S
+Approve STANT spending cap
+
+Confirmed
+S
+Approve STANT spending cap
+
+Confirmed
+S
+Contract interaction
+
+Confirmed
+-0.001 SepoliaETH
+
+-0.001 SepoliaETH
+
+S
+Approve STANT spending cap
+
+Confirmed
+S
+Contract interaction
+
+Confirmed
+-0.001 SepoliaETH
+
+-0.001 SepoliaETH
+
+S
+Approve STANT spending cap
+
+Confirmed
+S
+Contract interaction
+
+Confirmed
+-0.001 SepoliaETH
+
+-0.001 SepoliaETH
+
+S
+Approve STANT spending cap
+
+Confirmed
+S
+Contract interaction
+
+Confirmed
+-0.001 SepoliaETH
+
+-0.001 SepoliaETH
+
+S
+Contract interaction
+
+Confirmed
+-0.001 SepoliaETH
+
+-0.001 SepoliaETH
+
+S
+Contract interaction
+
+Confirmed
+-0.001 SepoliaETH
+
+-0.001 SepoliaETH
+
+S
+Contract interaction
+
+Failed
+-0.001 SepoliaETH
+
+-0.001 SepoliaETH
+
+S
+Contract interaction
+
+Failed
+-0.001 SepoliaETH
+
+-0.001 SepoliaETH
+
+S
+Contract interaction
+
+Failed
+-0.001 SepoliaETH
+
+-0.001 SepoliaETH
+
+S
+Contract interaction
+
+Confirmed
+-0.001 SepoliaETH
+
+-0.001 SepoliaETH
+
+S
+Contract interaction
+
+Failed
+-0.001 SepoliaETH
+
+-0.001 SepoliaETH
+
+S
+Contract interaction
+
+Failed
+-0.001 SepoliaETH
+
+-0.001 SepoliaETH
+
+S
+Contract interaction
+
+Failed
+-0.001 SepoliaETH
+
+-0.001 SepoliaETH
+
+S
+Create Token
+
+Confirmed
+-0.001 SepoliaETH
+
+-0.001 SepoliaETH
+
+S
+Contract interaction
+
+Failed
+-0.001 SepoliaETH
+
+-0.001 SepoliaETH
+
+S
+Contract interaction
+
+Failed
+-0.001 SepoliaETH
+
+-0.001 SepoliaETH
+
+S
+Contract interaction
+
+Failed
+-0.001 SepoliaETH
+
+-0.001 SepoliaETH
+
+S
+Contract interaction
+
+Failed
+-0.001 SepoliaETH
+
+-0.001 SepoliaETH
+
+S
+Contract interaction
+
+Failed
+-0.001 SepoliaETH
+
+-0.001 SepoliaETH
+
+S
+Contract interaction
+
+Failed
+-0.001 SepoliaETH
+
+-0.001 SepoliaETH
+
+Contract interaction
+
+This transaction would have cost you extra fees, so we stopped it. Your money is still in your wallet.
+
+Status
+Failed
+View on block explorer
+Copy transaction ID
+From
+To
+0xb6083...1e83F
+0xF0Fa4...E36fB
+
+transaction
+Nonce
+714
+Amount
+-0.101 SepoliaETH
+Gas limit (units)
+5000000
+Total gas fee
+0
+SepoliaETH
+Max fee per gas
+0.000000003
+SepoliaETH
+Total
+0.101
+SepoliaETH
+Activity log
+
+TokenForm_v2DD_2Step.tsx:165 Factory Address: 0x704d0B1237373D466bc22635c076456f3afD7C11
+TokenForm_v2DD_2Step.tsx:190 Creation Fee: 0.001
+TokenForm_v2DD_2Step.tsx:213 Transaction hash: 0xab76083a5baa8ff6652ff85cd3201aed7c7c5c361fb332fd89cc7a0162a9f361
+v2-direct-dex.tsx:126 Token deployed successfully
+TokenForm_v2DD_2Step.tsx:303 Listing Fee: 0.001
+TokenForm_v2DD_2Step.tsx:307 DEX Info: Proxy(Result) {0: 'uniswap-test', 1: '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D', 2: true, #names: Array(0)}
+TokenForm_v2DD_2Step.tsx:317 Debug values: {tokenAddress: '0x094a79C3B7950500b98E6000c824E9C796ccC5dB', initialLiquidityWei: '100000000000000000', listingPriceWei: '100000000000000', dexName: 'uniswap-test', totalValue: '101000000000000000'}
+TokenForm_v2DD_2Step.tsx:343 Token details: {totalSupply: '777777777700000000000000000', tokensForLiquidity: '155555555540000000000000000', allowance: '155555555540000000000000000'}
+TokenForm_v2DD_2Step.tsx:358 Listing token...
+TokenForm_v2DD_2Step.tsx:387 Error listing token: Error: transaction execution reverted (action="sendTransaction", data=null, reason=null, invocation=null, revert=null, transaction={ "data": "", "from": "0xb6083258E7E7B04Bdc72640E1a75E1F40541e83F", "to": "0xF0Fa40d9A6Ce543F917E073FA409a27DA5bE36fB" }, receipt={ "_type": "TransactionReceipt", "blobGasPrice": null, "blobGasUsed": null, "blockHash": "0x8b409accbb2daa0c02bda8a794e5ba45c102b182772fb61eee16cb5101599a2d", "blockNumber": 7722565, "contractAddress": null, "cumulativeGasUsed": "882585", "from": "0xb6083258E7E7B04Bdc72640E1a75E1F40541e83F", "gasPrice": "2455980701", "gasUsed": "85452", "hash": "0xb6b5e365ae821e834606776da76ec2f75ff85248e00fab22ad8fb99b170b9013", "index": 18, "logs": [  ], "logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000", "root": null, "status": 0, "to": "0xF0Fa40d9A6Ce543F917E073FA409a27DA5bE36fB" }, code=CALL_EXCEPTION, version=6.13.5)
+    at makeError (errors.js:137:21)
+    at assert (errors.js:156:15)
+    at checkReceipt (provider.js:1133:68)
+    at BrowserProvider.txListener (provider.js:1179:33)
+console.error @ client.js:26
+window.console.error @ setup-hydration-warning.js:18
+listToken @ TokenForm_v2DD_2Step.tsx:387
+await in listToken
+callCallback @ react-dom.development.js:4164
+invokeGuardedCallbackDev @ react-dom.development.js:4213
+invokeGuardedCallback @ react-dom.development.js:4277
+invokeGuardedCallbackAndCatchFirstError @ react-dom.development.js:4291
+executeDispatch @ react-dom.development.js:9041
+processDispatchQueueItemsInOrder @ react-dom.development.js:9073
+processDispatchQueue @ react-dom.development.js:9086
+dispatchEventsForPlugins @ react-dom.development.js:9097
+eval @ react-dom.development.js:9288
+batchedUpdates$1 @ react-dom.development.js:26174
+batchedUpdates @ react-dom.development.js:3991
+dispatchEventForPluginEventSystem @ react-dom.development.js:9287
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay @ react-dom.development.js:6465
+dispatchEvent @ react-dom.development.js:6457
+dispatchDiscreteEvent @ react-dom.development.js:6430
+v2-direct-dex.tsx:130 Error deploying token: Error: transaction execution reverted (action="sendTransaction", data=null, reason=null, invocation=null, revert=null, transaction={ "data": "", "from": "0xb6083258E7E7B04Bdc72640E1a75E1F40541e83F", "to": "0xF0Fa40d9A6Ce543F917E073FA409a27DA5bE36fB" }, receipt={ "_type": "TransactionReceipt", "blobGasPrice": null, "blobGasUsed": null, "blockHash": "0x8b409accbb2daa0c02bda8a794e5ba45c102b182772fb61eee16cb5101599a2d", "blockNumber": 7722565, "contractAddress": null, "cumulativeGasUsed": "882585", "from": "0xb6083258E7E7B04Bdc72640E1a75E1F40541e83F", "gasPrice": "2455980701", "gasUsed": "85452", "hash": "0xb6b5e365ae821e834606776da76ec2f75ff85248e00fab22ad8fb99b170b9013", "index": 18, "logs": [  ], "logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000", "root": null, "status": 0, "to": "0xF0Fa40d9A6Ce543F917E073FA409a27DA5bE36fB" }, code=CALL_EXCEPTION, version=6.13.5)
+    at makeError (errors.js:137:21)
+    at assert (errors.js:156:15)
+    at checkReceipt (provider.js:1133:68)
+    at BrowserProvider.txListener (provider.js:1179:33)
+console.error @ client.js:26
+window.console.error @ setup-hydration-warning.js:18
+onError @ v2-direct-dex.tsx:130
+listToken @ TokenForm_v2DD_2Step.tsx:393
+await in listToken
+callCallback @ react-dom.development.js:4164
+invokeGuardedCallbackDev @ react-dom.development.js:4213
+invokeGuardedCallback @ react-dom.development.js:4277
+invokeGuardedCallbackAndCatchFirstError @ react-dom.development.js:4291
+executeDispatch @ react-dom.development.js:9041
+processDispatchQueueItemsInOrder @ react-dom.development.js:9073
+processDispatchQueue @ react-dom.development.js:9086
+dispatchEventsForPlugins @ react-dom.development.js:9097
+eval @ react-dom.development.js:9288
+batchedUpdates$1 @ react-dom.development.js:26174
+batchedUpdates @ react-dom.development.js:3991
+dispatchEventForPluginEventSystem @ react-dom.development.js:9287
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay @ react-dom.development.js:6465
+dispatchEvent @ react-dom.development.js:6457
+dispatchDiscreteEvent @ react-dom.development.js:6430

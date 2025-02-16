@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, forwardRef, ReactNode } from 'react';
-import { Contract, BrowserProvider, formatEther, Log, EventLog, Result, parseEther } from 'ethers';
+import { useState, useEffect, useRef, forwardRef, ReactNode, useMemo } from 'react';
+import { Contract, BrowserProvider, formatEther, Log, EventLog, Result, parseEther, Interface } from 'ethers';
 import { useNetwork } from '@/contexts/NetworkContext';
 import { useToast } from '@/components/ui/toast/use-toast';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -65,13 +65,14 @@ interface ListingParams {
   initialLiquidityInETH: string;
   listingPriceInETH: string;
   dexName: string;
+  liquidityPercentage: string;
 }
 
 const TCAP_v2DirectDEX = forwardRef<TCAP_v2DirectDEXRef, Props>(({ isConnected, address: factoryAddress, provider: externalProvider }, ref): ReactNode => {
   const [tokens, setTokens] = useState<TokenInfo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showOnlyRecent, setShowOnlyRecent] = useState(true);
+  const [showRecent, setShowRecent] = useState(true);
   const { chainId } = useNetwork();
   const { toast } = useToast();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -79,11 +80,28 @@ const TCAP_v2DirectDEX = forwardRef<TCAP_v2DirectDEXRef, Props>(({ isConnected, 
     token: '',
     initialLiquidityInETH: '',
     listingPriceInETH: '',
-    dexName: ''
+    dexName: '',
+    liquidityPercentage: '0'
   });
   const [listingFee, setListingFee] = useState<string>('0');
+  const [hiddenTokens, setHiddenTokens] = useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('hiddenTokensV2DirectDEX');
+      return saved ? JSON.parse(saved) : [];
+    }
+    return [];
+  });
 
-  const displayedTokens = showOnlyRecent ? tokens.slice(0, 3) : tokens;
+  const visibleTokens = useMemo(() => {
+    const filteredTokens = tokens.filter(token => !hiddenTokens.includes(token.address));
+    const sortedTokens = [...filteredTokens].sort((a, b) => {
+      const timeA = a.createdAt || 0;
+      const timeB = b.createdAt || 0;
+      return timeB - timeA;
+    });
+    
+    return showRecent ? sortedTokens.slice(0, 3) : sortedTokens;
+  }, [tokens, showRecent, hiddenTokens]);
 
   const getTokenContract = (tokenAddress: string, signer: any) => {
     return new Contract(tokenAddress, [
@@ -127,7 +145,7 @@ const TCAP_v2DirectDEX = forwardRef<TCAP_v2DirectDEXRef, Props>(({ isConnected, 
         'function isListed(address token) view returns (bool)',
         'function tokenDEX(address token) view returns (string)',
         'function getDEXRouter(string) view returns (tuple(string name, address router, bool isActive))',
-        'function listTokenOnDEX(address token, uint256 initialLiquidityInETH, uint256 listingPriceInETH, string memory dexName) payable returns (bool)',
+        'function listTokenOnDEX(address token, uint256 initialLiquidityInETH, uint256 listingPriceInETH, string memory dexName, uint256 liquidityPercentage) payable returns (bool)',
         'function getListingFee() view returns (uint256)'
       ], signer);
 
@@ -304,6 +322,7 @@ const TCAP_v2DirectDEX = forwardRef<TCAP_v2DirectDEXRef, Props>(({ isConnected, 
         parseEther(listingParams.initialLiquidityInETH),
         parseEther(listingParams.listingPriceInETH),
         listingParams.dexName,
+        BigInt(listingParams.liquidityPercentage),
         {
           value: totalValue,
           gasLimit: 5000000
@@ -339,6 +358,10 @@ const TCAP_v2DirectDEX = forwardRef<TCAP_v2DirectDEXRef, Props>(({ isConnected, 
       loadTokens();
     }
   }, [isConnected, factoryAddress, externalProvider]);
+
+  useEffect(() => {
+    localStorage.setItem('hiddenTokensV2DirectDEX', JSON.stringify(hiddenTokens));
+  }, [hiddenTokens]);
 
   // Expose loadTokens method
   useEffect(() => {
@@ -382,7 +405,21 @@ const TCAP_v2DirectDEX = forwardRef<TCAP_v2DirectDEXRef, Props>(({ isConnected, 
 
   return (
     <div ref={containerRef} className="w-full space-y-4">
-      <h2 className="text-2xl font-bold">Your Listed Tokens</h2>
+      <div className="flex justify-between items-center bg-background-secondary p-4 rounded-lg">
+        <div className="flex items-center gap-4">
+          <h2 className="text-lg font-semibold text-white">Your Listed Tokens</h2>
+          <span className="text-sm text-text-secondary">
+            {showRecent ? `Showing last ${Math.min(visibleTokens.length, 3)} of ${tokens.length} tokens` : `Showing all ${tokens.length} tokens`}
+          </span>
+        </div>
+        <Button
+          variant="secondary"
+          onClick={() => setShowRecent(!showRecent)}
+          className="text-sm hover:bg-background-accent"
+        >
+          {showRecent ? "Show All" : "Show Recent"}
+        </Button>
+      </div>
       {!isConnected && (
         <p className="text-muted-foreground">Please connect your wallet to view your tokens.</p>
       )}
@@ -392,10 +429,34 @@ const TCAP_v2DirectDEX = forwardRef<TCAP_v2DirectDEXRef, Props>(({ isConnected, 
       {isConnected && !isLoading && tokens.length === 0 && (
         <p className="text-muted-foreground">You haven't listed any tokens yet.</p>
       )}
-      {isConnected && !isLoading && tokens.length > 0 && (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {tokens.map((token) => (
-            <Card key={token.address} className="p-4">
+      {isLoading ? (
+        <Card className="p-4">
+          <div className="flex items-center justify-center">
+            <Spinner className="w-6 h-6 mr-2" />
+            <p className="text-text-secondary">Loading tokens...</p>
+          </div>
+        </Card>
+      ) : error ? (
+        <Card className="p-4">
+          <p className="text-center text-red-500">{error}</p>
+        </Card>
+      ) : visibleTokens.length === 0 ? (
+        <Card className="p-4">
+          <p className="text-center text-text-secondary">No tokens found</p>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {visibleTokens.map((token, index) => (
+            <Card key={token.address} className="p-4 bg-background-secondary border-border relative">
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setHiddenTokens(prev => [...prev, token.address]);
+                }}
+                className="absolute top-2 right-2 text-gray-400 hover:text-white"
+              >
+                Hide
+              </Button>
               <div className="space-y-2">
                 <h3 className="text-lg font-semibold">{token.name} ({token.symbol})</h3>
                 <p className="text-sm text-muted-foreground">Address: {token.address}</p>
@@ -437,19 +498,29 @@ const TCAP_v2DirectDEX = forwardRef<TCAP_v2DirectDEXRef, Props>(({ isConnected, 
                         }))}
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder="Select DEX" />
+                          <SelectValue placeholder="Choose a DEX" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="uniswap-test">Uniswap</SelectItem>
                           <SelectItem value="pancakeswap-test">PancakeSwap</SelectItem>
                         </SelectContent>
                       </Select>
+                      <Input
+                        type="text"
+                        placeholder="Liquidity Percentage"
+                        value={listingParams.liquidityPercentage}
+                        onChange={(e) => setListingParams(prev => ({ 
+                          ...prev, 
+                          liquidityPercentage: e.target.value 
+                        }))}
+                      />
                       <Button 
                         onClick={handleListToken}
                         disabled={
                           !listingParams.initialLiquidityInETH || 
                           !listingParams.listingPriceInETH || 
                           !listingParams.dexName ||
+                          !listingParams.liquidityPercentage ||
                           listingParams.token !== token.address
                         }
                         className="w-full"

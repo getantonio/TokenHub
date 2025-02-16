@@ -43,9 +43,8 @@ interface ListingParameters {
   dexName: string;
   enableTrading: boolean;
   tradingStartTime: number;
-  maxTxAmount: string;
-  maxWalletAmount: string;
   isApproved?: boolean;
+  liquidityPercentage: string;
 }
 
 interface CreatedTokenInfo {
@@ -85,9 +84,8 @@ export default function TokenForm_v2DD_2Step({ onSuccess, onError }: TokenFormV2
     dexName: '',
     enableTrading: false,
     tradingStartTime: Math.floor(Date.now() / 1000) + 300, // 5 minutes from now
-    maxTxAmount: '',
-    maxWalletAmount: '',
-    isApproved: false
+    isApproved: false,
+    liquidityPercentage: '20'
   });
 
   // Update wallet addresses when user connects
@@ -107,23 +105,49 @@ export default function TokenForm_v2DD_2Step({ onSuccess, onError }: TokenFormV2
   }, [address]);
 
   const handleCreationParamChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value, type } = e.target;
-    
-    try {
-      setCreationParams(prev => ({
-        ...prev,
-        [name]: type === 'number' ? 
-          BigInt(value || '0') :
-          name === 'totalSupply' ?
-            // Only parse if value is not empty and is a valid number
-            value.trim() ? parseEther(value) : prev.totalSupply :
-          value
-      }));
-    } catch (error) {
-      console.error('Error parsing input:', error);
-      // Keep the previous value if parsing fails
-      setCreationParams(prev => ({ ...prev }));
-    }
+    const { name, value } = e.target;
+    setCreationParams(prev => {
+      let updatedParams = { ...prev };
+      
+      if (name === 'totalSupply') {
+        try {
+          // Allow empty value
+          if (value === '') {
+            updatedParams.totalSupply = parseEther('0');
+          } else {
+            // Remove any non-numeric characters except decimal point
+            const cleanValue = value.replace(/[^0-9.]/g, '');
+            // Ensure only one decimal point
+            const parts = cleanValue.split('.');
+            const finalValue = parts[0] + (parts.length > 1 ? '.' + parts[1] : '');
+            updatedParams.totalSupply = parseEther(finalValue);
+          }
+        } catch (error) {
+          console.error('Error calculating total supply:', error);
+        }
+      } else {
+        // Type-safe way to update specific fields
+        switch (name) {
+          case 'name':
+          case 'symbol':
+          case 'marketingWallet':
+          case 'developmentWallet':
+            updatedParams[name] = value;
+            break;
+          case 'marketingFeePercent':
+          case 'developmentFeePercent':
+          case 'autoLiquidityFeePercent':
+            updatedParams[name] = BigInt(value || '0');
+            break;
+          case 'enableBuyFees':
+          case 'enableSellFees':
+            updatedParams[name] = value === 'true';
+            break;
+        }
+      }
+      
+      return updatedParams;
+    });
   };
 
   const handleListingParamChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -296,58 +320,122 @@ export default function TokenForm_v2DD_2Step({ onSuccess, onError }: TokenFormV2
       setIsLoading(true);
       const provider = new BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
-      const factory = new Contract(factoryAddress, TokenFactoryV2BakeABI.abi, signer);
-
-      // Create token contract instance with correct ABI
-      const tokenContract = new Contract(listingParams.tokenAddress, TestTokenABI.abi, signer);
       
-      // Get token total supply
-      const totalSupply = await tokenContract.totalSupply();
-      const tokensForLiquidity = (totalSupply * BigInt(20)) / BigInt(100); // 20% of total supply
+      // Create factory contract instance with the full ABI
+      const factory = new Contract(
+        factoryAddress,
+        [
+          'function getListingFee() view returns (uint256)',
+          'function getDEXRouter(string) view returns (tuple(string name, address router, bool isActive))',
+          'function listTokenOnDEX(address token, uint256 initialLiquidityInETH, uint256 listingPriceInETH, string memory dexName, uint256 liquidityPercentage) payable returns (bool)'
+        ],
+        signer
+      );
 
       // Get listing fee
       const listingFee = await factory.getListingFee();
-      const totalValue = parseEther(listingParams.initialLiquidityInETH) + listingFee;
+      console.log("Listing Fee:", formatEther(listingFee));
 
-      // First approve the factory to spend tokens
-      console.log("Approving tokens:", tokensForLiquidity.toString());
-      const approveTx = await tokenContract.approve(factoryAddress, tokensForLiquidity);
-      await approveTx.wait();
-      console.log("Tokens approved");
+      // Get DEX info to validate
+      const dexInfo = await factory.getDEXRouter(listingParams.dexName);
+      console.log("DEX Info:", dexInfo);
 
-      // List token
-      const tx = await factory.listTokenOnDEX(
-        listingParams.tokenAddress,
-        parseEther(listingParams.initialLiquidityInETH),
-        parseEther(listingParams.listingPriceInETH),
-        listingParams.dexName,
-        { value: totalValue }
+      if (!dexInfo || !dexInfo.isActive) {
+        throw new Error(`DEX ${listingParams.dexName} is not available or not active`);
+      }
+
+      // Calculate total value needed (listing fee + initial liquidity)
+      const initialLiquidityWei = parseEther(listingParams.initialLiquidityInETH);
+      const totalValue = initialLiquidityWei + BigInt(listingFee);
+
+      // Get token contract to check allowance
+      const tokenContract = new Contract(listingParams.tokenAddress, TestTokenABI.abi, signer);
+      const totalSupply = await tokenContract.totalSupply();
+      const tokensForLiquidity = (totalSupply * BigInt(Number(listingParams.liquidityPercentage))) / BigInt(100);
+      const allowance = await tokenContract.allowance(await signer.getAddress(), factoryAddress);
+      
+      console.log("Debug values:", {
+        tokenAddress: listingParams.tokenAddress,
+        initialLiquidityWei: initialLiquidityWei.toString(),
+        listingPriceWei: parseEther(listingParams.listingPriceInETH).toString(),
+        dexName: listingParams.dexName,
+        totalValue: totalValue.toString(),
+        totalSupply: totalSupply.toString(),
+        tokensForLiquidity: tokensForLiquidity.toString(),
+        allowance: allowance.toString(),
+        factoryAddress,
+        liquidityPercentage: listingParams.liquidityPercentage
+      });
+
+      // Show confirmation dialog with fee breakdown
+      const confirmed = window.confirm(
+        `Please confirm the transaction details:\n\n` +
+        `Initial Liquidity: ${listingParams.initialLiquidityInETH} ETH\n` +
+        `Listing Fee: ${formatEther(listingFee)} ETH\n` +
+        `Total Cost: ${formatEther(totalValue)} ETH\n` +
+        `Tokens for Liquidity: ${formatEther(tokensForLiquidity)}`
       );
 
-      toast({
-        title: "Transaction Submitted",
-        description: "Please wait for confirmation...",
-        variant: "default"
+      if (!confirmed) {
+        return;
+      }
+
+      // Approve tokens if needed
+      if (allowance < tokensForLiquidity) {
+        console.log("Approving tokens...");
+        const approveTx = await tokenContract.approve(factoryAddress, tokensForLiquidity);
+        const approveReceipt = await approveTx.wait();
+        console.log("Tokens approved, receipt:", approveReceipt);
+      }
+
+      // List token with explicit parameters
+      console.log("Listing token with parameters:", {
+        tokenAddress: listingParams.tokenAddress,
+        initialLiquidityWei: initialLiquidityWei.toString(),
+        listingPriceWei: parseEther(listingParams.listingPriceInETH).toString(),
+        dexName: listingParams.dexName,
+        liquidityPercentage: listingParams.liquidityPercentage
       });
 
-      await tx.wait();
+      const tx = await factory.listTokenOnDEX(
+        listingParams.tokenAddress,
+        initialLiquidityWei,
+        parseEther(listingParams.listingPriceInETH),
+        listingParams.dexName,
+        BigInt(listingParams.liquidityPercentage),
+        {
+          value: totalValue,
+          gasLimit: 5000000
+        }
+      );
 
-      toast({
-        title: "Success",
-        description: "Token listed successfully!",
-        variant: "default"
-      });
+      console.log("Transaction sent:", tx.hash);
+      const receipt = await tx.wait();
+      console.log("Transaction receipt:", receipt);
 
-      onSuccess?.();
-      setStep(1);
-    } catch (error) {
+      if (receipt.status === 1) {
+        toast({
+          title: "Success",
+          description: "Token listed successfully!",
+          variant: "default"
+        });
+        onSuccess?.();
+      } else {
+        throw new Error("Transaction failed");
+      }
+    } catch (error: any) {
       console.error("Error listing token:", error);
+      
+      // Extract more detailed error information
+      const errorMessage = error.reason || error.message || "Failed to list token";
+      const details = error.data?.message || error.error?.message || "";
+      
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to list token",
+        description: `${errorMessage}${details ? `\n${details}` : ""}`,
         variant: "destructive"
       });
-      onError?.(error instanceof Error ? error : new Error("Failed to list token"));
+      onError?.(error instanceof Error ? error : new Error(errorMessage));
     } finally {
       setIsLoading(false);
     }
@@ -357,9 +445,25 @@ export default function TokenForm_v2DD_2Step({ onSuccess, onError }: TokenFormV2
     <div className="space-y-6">
       <Tabs value={String(step)} onValueChange={(value) => setStep(Number(value))} className="w-full">
         <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="1">Create Token</TabsTrigger>
-          <TabsTrigger value="2">Approve Listing</TabsTrigger>
-          <TabsTrigger value="3" disabled={!listingParams.isApproved}>Complete Listing</TabsTrigger>
+          <TabsTrigger 
+            value="1" 
+            className="bg-blue-900 text-white data-[state=active]:bg-blue-800"
+          >
+            Create Token
+          </TabsTrigger>
+          <TabsTrigger 
+            value="2" 
+            className="bg-blue-900 text-white data-[state=active]:bg-blue-800"
+          >
+            Approve Listing
+          </TabsTrigger>
+          <TabsTrigger 
+            value="3" 
+            className="bg-blue-900 text-white data-[state=active]:bg-blue-800" 
+            disabled={!listingParams.isApproved}
+          >
+            Complete Listing
+          </TabsTrigger>
         </TabsList>
 
         {createdTokenInfo && (
@@ -436,7 +540,24 @@ export default function TokenForm_v2DD_2Step({ onSuccess, onError }: TokenFormV2
                       name="totalSupply"
                       type="text"
                       value={formatEther(creationParams.totalSupply)}
-                      onChange={handleCreationParamChange}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        try {
+                          // Allow empty value
+                          if (value === '') {
+                            setCreationParams(prev => ({ ...prev, totalSupply: parseEther('0') }));
+                            return;
+                          }
+                          // Remove any non-numeric characters except decimal point
+                          const cleanValue = value.replace(/[^0-9.]/g, '');
+                          // Ensure only one decimal point
+                          const parts = cleanValue.split('.');
+                          const finalValue = parts[0] + (parts.length > 1 ? '.' + parts[1] : '');
+                          setCreationParams(prev => ({ ...prev, totalSupply: parseEther(finalValue) }));
+                        } catch (error) {
+                          console.error('Error calculating total supply:', error);
+                        }
+                      }}
                       placeholder="1000000"
                       required
                       className="bg-gray-900 text-white border-border"
@@ -536,8 +657,15 @@ export default function TokenForm_v2DD_2Step({ onSuccess, onError }: TokenFormV2
                   </div>
                 </div>
 
-                <Button type="submit" className="w-full mt-4">
-                  Create Token
+                <Button type="submit" className="w-full mt-4" disabled={isLoading}>
+                  {isLoading ? (
+                    <>
+                      <Spinner className="w-4 h-4 mr-2" />
+                      Creating Token...
+                    </>
+                  ) : (
+                    "Create Token"
+                  )}
                 </Button>
               </div>
             </form>
@@ -579,7 +707,7 @@ export default function TokenForm_v2DD_2Step({ onSuccess, onError }: TokenFormV2
                   // Get token contract
                   const tokenContract = new Contract(listingParams.tokenAddress, TestTokenABI.abi, signer);
                   const totalSupply = await tokenContract.totalSupply();
-                  const tokensForLiquidity = (totalSupply * BigInt(20)) / BigInt(100); // 20% of total supply
+                  const tokensForLiquidity = (totalSupply * BigInt(Number(listingParams.liquidityPercentage))) / BigInt(100); // Use user-specified percentage
 
                   // Get factory address
                   const factoryAddress = getNetworkContractAddress(Number(chainId), 'factoryAddressV2DirectDEX_Bake');
@@ -611,6 +739,20 @@ export default function TokenForm_v2DD_2Step({ onSuccess, onError }: TokenFormV2
                   setIsLoading(false);
                 }
               }} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="tokenAddress" className="text-white">Token Address</Label>
+                  <Input
+                    id="tokenAddress"
+                    name="tokenAddress"
+                    value={listingParams.tokenAddress}
+                    onChange={handleListingParamChange}
+                    placeholder="0x..."
+                    type="text"
+                    required
+                    className="bg-gray-900 text-white border-border"
+                  />
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="initialLiquidityInETH" className="text-white">Initial Liquidity (ETH)</Label>
@@ -638,6 +780,20 @@ export default function TokenForm_v2DD_2Step({ onSuccess, onError }: TokenFormV2
                       className="bg-gray-900 text-white border-border"
                     />
                   </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="liquidityPercentage" className="text-white">Liquidity Percentage (%)</Label>
+                  <Input
+                    id="liquidityPercentage"
+                    name="liquidityPercentage"
+                    value={listingParams.liquidityPercentage}
+                    onChange={handleListingParamChange}
+                    placeholder="20"
+                    type="text"
+                    required
+                    className="bg-gray-900 text-white border-border"
+                  />
                 </div>
 
                 <div className="space-y-2">
@@ -672,35 +828,6 @@ export default function TokenForm_v2DD_2Step({ onSuccess, onError }: TokenFormV2
                   </Select>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="maxTxAmount" className="text-white">Max Transaction Amount (%)</Label>
-                    <Input
-                      id="maxTxAmount"
-                      name="maxTxAmount"
-                      value={listingParams.maxTxAmount}
-                      onChange={handleListingParamChange}
-                      placeholder="1"
-                      type="text"
-                      required
-                      className="bg-gray-900 text-white border-border"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="maxWalletAmount" className="text-white">Max Wallet Amount (%)</Label>
-                    <Input
-                      id="maxWalletAmount"
-                      name="maxWalletAmount"
-                      onChange={handleListingParamChange}
-                      value={listingParams.maxWalletAmount}
-                      placeholder="2"
-                      type="text"
-                      required
-                      className="bg-gray-900 text-white border-border"
-                    />
-                  </div>
-                </div>
-
                 <div className="flex items-center space-x-2">
                   <Switch
                     id="enableTrading"
@@ -717,8 +844,6 @@ export default function TokenForm_v2DD_2Step({ onSuccess, onError }: TokenFormV2
                     <p className="text-sm text-gray-300">Initial Liquidity: {listingParams.initialLiquidityInETH} ETH</p>
                     <p className="text-sm text-gray-300">Listing Price: {listingParams.listingPriceInETH} ETH</p>
                     <p className="text-sm text-gray-300">DEX: {listingParams.dexName}</p>
-                    <p className="text-sm text-gray-300">Max Transaction: {listingParams.maxTxAmount}%</p>
-                    <p className="text-sm text-gray-300">Max Wallet: {listingParams.maxWalletAmount}%</p>
                   </div>
                 </div>
 

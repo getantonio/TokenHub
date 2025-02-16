@@ -53,6 +53,7 @@ contract TokenFactory_v2_DirectDEX_TwoStep is Ownable, ReentrancyGuard {
         uint256 initialLiquidityInETH;
         uint256 listingPriceInETH;
         string dexName;
+        uint256 liquidityPercentage;
     }
 
     struct TokenInfo {
@@ -153,7 +154,8 @@ contract TokenFactory_v2_DirectDEX_TwoStep is Ownable, ReentrancyGuard {
         address tokenAddress,
         uint256 initialLiquidityInETH,
         uint256 listingPriceInETH,
-        string calldata dexName
+        string calldata dexName,
+        uint256 liquidityPercentage
     ) external payable nonReentrant {
         // Validate token
         TokenInfo storage info = tokenInfo[tokenAddress];
@@ -166,6 +168,11 @@ contract TokenFactory_v2_DirectDEX_TwoStep is Ownable, ReentrancyGuard {
             revert InsufficientETH(initialLiquidityInETH + listingFee, msg.value);
         }
 
+        // Validate liquidity percentage
+        if (liquidityPercentage < 1 || liquidityPercentage > 100) {
+            revert("Invalid liquidity percentage");
+        }
+
         // Validate DEX
         if (!dexRouters[dexName].isActive) {
             revert DEXNotAvailable(dexName);
@@ -175,8 +182,8 @@ contract TokenFactory_v2_DirectDEX_TwoStep is Ownable, ReentrancyGuard {
         TokenTemplate_v2DirectDEX token = TokenTemplate_v2DirectDEX(tokenAddress);
         IUniswapV2Router02 router = IUniswapV2Router02(dexRouters[dexName].router);
         
-        // Calculate tokens needed for liquidity (20% of total supply)
-        uint256 tokensForLiquidity = (token.totalSupply() * 20) / 100;
+        // Calculate tokens needed for liquidity using the provided percentage
+        uint256 tokensForLiquidity = (token.totalSupply() * liquidityPercentage) / 100;
         
         // Check allowance
         uint256 allowance = token.allowance(msg.sender, address(this));

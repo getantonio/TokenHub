@@ -574,7 +574,7 @@
       "inputs": [
         {
           "internalType": "address",
-          "name": "tokenAddress",
+          "name": "token",
           "type": "address"
         },
         {
@@ -591,10 +591,21 @@
           "internalType": "string",
           "name": "dexName",
           "type": "string"
+        },
+        {
+          "internalType": "uint256",
+          "name": "liquidityPercentage",
+          "type": "uint256"
         }
       ],
       "name": "listTokenOnDEX",
-      "outputs": [],
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
       "stateMutability": "payable",
       "type": "function"
     },
