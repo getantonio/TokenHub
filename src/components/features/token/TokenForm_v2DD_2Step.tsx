@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAccount } from 'wagmi';
 import { useNetwork } from '@/contexts/NetworkContext';
-import { BrowserProvider, Contract, parseEther, formatEther, EventLog, Log, LogDescription } from 'ethers';
+import { BrowserProvider, Contract, parseEther, formatEther, EventLog, Log, LogDescription, Interface } from 'ethers';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,8 @@ import { Spinner } from '@/components/ui/Spinner';
 import TokenFactoryV2MakeABI from '@/contracts/abi/TokenFactory_v2_Make.json';
 import TokenFactoryV2BakeABI from '@/contracts/abi/TokenFactory_v2_Bake.json';
 import TestTokenABI from '@/contracts/abi/TestToken.json';
+import TokenFactoryV2DirectDEXABI from '@/contracts/abi/TokenFactory_v2_DirectDEX.json';
+import TokenFactoryV2DirectDEXTwoStepABI from '@/contracts/abi/TokenFactory_v2_DirectDEX_TwoStep.json';
 import { getNetworkContractAddress } from '@/config/contracts';
 
 interface TokenFormV2DD2StepProps {
@@ -61,6 +63,7 @@ export default function TokenForm_v2DD_2Step({ onSuccess, onError }: TokenFormV2
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [createdTokenInfo, setCreatedTokenInfo] = useState<CreatedTokenInfo | null>(null);
+  const [supportedDEXes, setSupportedDEXes] = useState<Array<{name: string, isActive: boolean, router: string}>>([]);
 
   // Token Creation State
   const [creationParams, setCreationParams] = useState<TokenCreationParams>({
@@ -202,6 +205,13 @@ export default function TokenForm_v2DD_2Step({ onSuccess, onError }: TokenFormV2
       const provider = new BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       
+      // Verify contract exists
+      const code = await provider.getCode(factoryAddress);
+      console.log("Contract code length at address:", code.length);
+      if (code === '0x' || code === '0x0') {
+        throw new Error(`No contract found at address ${factoryAddress}`);
+      }
+
       // Create contract instance
       const factory = new Contract(
         factoryAddress,
@@ -286,31 +296,12 @@ export default function TokenForm_v2DD_2Step({ onSuccess, onError }: TokenFormV2
     }
   };
 
-  const listToken = async (e: React.FormEvent) => {
+  const handleApproveToken = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isConnected) {
+    if (!isConnected || !chainId) {
       toast({
         title: "Error",
         description: "Please connect your wallet first",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    if (!listingParams.tokenAddress) {
-      toast({
-        title: "Error",
-        description: "Please create a token first or enter a valid token address",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    const factoryAddress = getNetworkContractAddress(Number(chainId), 'factoryAddressV2DirectDEX_Bake');
-    if (!factoryAddress) {
-      toast({
-        title: "Error",
-        description: "Factory not deployed on this network",
         variant: "destructive"
       });
       return;
@@ -321,121 +312,324 @@ export default function TokenForm_v2DD_2Step({ onSuccess, onError }: TokenFormV2
       const provider = new BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       
-      // Create factory contract instance with the full ABI
-      const factory = new Contract(
-        factoryAddress,
+      const factoryAddress = getNetworkContractAddress(Number(chainId), 'factoryAddressV2DirectDEX_Bake');
+      console.log("Bake Factory Address:", factoryAddress);
+      
+      if (!factoryAddress) {
+        toast({
+          title: "Error",
+          description: "Factory not deployed on this network",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Create token contract instance
+      const tokenContract = new Contract(
+        listingParams.tokenAddress,
         [
-          'function getListingFee() view returns (uint256)',
-          'function getDEXRouter(string) view returns (tuple(string name, address router, bool isActive))',
-          'function listTokenOnDEX(address token, uint256 initialLiquidityInETH, uint256 listingPriceInETH, string memory dexName, uint256 liquidityPercentage) payable returns (bool)'
+          'function totalSupply() view returns (uint256)',
+          'function approve(address spender, uint256 amount) returns (bool)',
+          'function allowance(address owner, address spender) view returns (uint256)',
+          'function owner() view returns (address)'
         ],
         signer
       );
 
-      // Get listing fee
-      const listingFee = await factory.getListingFee();
-      console.log("Listing Fee:", formatEther(listingFee));
-
-      // Get DEX info to validate
-      const dexInfo = await factory.getDEXRouter(listingParams.dexName);
-      console.log("DEX Info:", dexInfo);
-
-      if (!dexInfo || !dexInfo.isActive) {
-        throw new Error(`DEX ${listingParams.dexName} is not available or not active`);
+      // Verify token ownership
+      const tokenOwner = await tokenContract.owner();
+      if (tokenOwner.toLowerCase() !== (await signer.getAddress()).toLowerCase()) {
+        throw new Error('You are not the token owner');
       }
 
-      // Calculate total value needed (listing fee + initial liquidity)
-      const initialLiquidityWei = parseEther(listingParams.initialLiquidityInETH);
-      const totalValue = initialLiquidityWei + BigInt(listingFee);
-
-      // Get token contract to check allowance
-      const tokenContract = new Contract(listingParams.tokenAddress, TestTokenABI.abi, signer);
+      // Calculate total supply and tokens needed for liquidity
       const totalSupply = await tokenContract.totalSupply();
-      const tokensForLiquidity = (totalSupply * BigInt(Number(listingParams.liquidityPercentage))) / BigInt(100);
-      const allowance = await tokenContract.allowance(await signer.getAddress(), factoryAddress);
+      const tokensForLiquidity = (BigInt(totalSupply) * BigInt(listingParams.liquidityPercentage)) / BigInt(100);
+
+      // Check current allowance
+      const currentAllowance = await tokenContract.allowance(await signer.getAddress(), factoryAddress);
       
-      console.log("Debug values:", {
-        tokenAddress: listingParams.tokenAddress,
-        initialLiquidityWei: initialLiquidityWei.toString(),
-        listingPriceWei: parseEther(listingParams.listingPriceInETH).toString(),
-        dexName: listingParams.dexName,
-        totalValue: totalValue.toString(),
-        totalSupply: totalSupply.toString(),
-        tokensForLiquidity: tokensForLiquidity.toString(),
-        allowance: allowance.toString(),
-        factoryAddress,
-        liquidityPercentage: listingParams.liquidityPercentage
+      // If allowance is insufficient, approve tokens
+      if (BigInt(currentAllowance) < tokensForLiquidity) {
+        console.log("Approving tokens for liquidity...");
+        const approveTx = await tokenContract.approve(factoryAddress, tokensForLiquidity);
+        await approveTx.wait();
+        console.log("Token approval confirmed");
+        
+        // Set approval state and move to next step
+        setListingParams(prev => ({
+          ...prev,
+          isApproved: true
+        }));
+        setStep(3);
+        
+        toast({
+          title: "Success",
+          description: "Token approved for listing. You can now complete the listing process.",
+          variant: "default"
+        });
+      } else {
+        console.log("Token already has sufficient allowance");
+        setListingParams(prev => ({
+          ...prev,
+          isApproved: true
+        }));
+        setStep(3);
+      }
+    } catch (error) {
+      console.error("Error approving token:", error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to approve token. Please try again.";
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive"
       });
+      
+      if (typeof onError === 'function') {
+        onError(error instanceof Error ? error : new Error(errorMessage));
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-      // Show confirmation dialog with fee breakdown
-      const confirmed = window.confirm(
-        `Please confirm the transaction details:\n\n` +
-        `Initial Liquidity: ${listingParams.initialLiquidityInETH} ETH\n` +
-        `Listing Fee: ${formatEther(listingFee)} ETH\n` +
-        `Total Cost: ${formatEther(totalValue)} ETH\n` +
-        `Tokens for Liquidity: ${formatEther(tokensForLiquidity)}`
-      );
-
-      if (!confirmed) {
+  const loadSupportedDEXes = async () => {
+    if (!chainId || !window.ethereum) {
+      console.log('Missing chainId or ethereum object:', { chainId, ethereum: !!window.ethereum });
+      return;
+    }
+    
+    try {
+      const provider = new BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const bakeFactoryAddress = getNetworkContractAddress(Number(chainId), 'factoryAddressV2DirectDEX_Bake');
+      
+      console.log('Loading DEXes with:', {
+        chainId,
+        bakeFactoryAddress,
+        signerAddress: await signer.getAddress()
+      });
+      
+      if (!bakeFactoryAddress) {
+        console.error('Bake factory address not available');
+        toast({
+          title: "Warning",
+          description: "DEX factory not configured for this network. Please contact support.",
+          variant: "destructive"
+        });
         return;
       }
 
-      // Approve tokens if needed
-      if (allowance < tokensForLiquidity) {
-        console.log("Approving tokens...");
-        const approveTx = await tokenContract.approve(factoryAddress, tokensForLiquidity);
-        const approveReceipt = await approveTx.wait();
-        console.log("Tokens approved, receipt:", approveReceipt);
+      const bakeFactory = new Contract(
+        bakeFactoryAddress,
+        TokenFactoryV2BakeABI.abi,
+        signer
+      );
+
+      try {
+        // Get supported DEXes
+        console.log('Calling getSupportedDEXes...');
+        const dexNames = await bakeFactory.getSupportedDEXes();
+        console.log('Supported DEX names:', dexNames);
+
+        if (!dexNames || dexNames.length === 0) {
+          console.log('No DEXes returned from contract, checking if DEXes need to be added...');
+          
+          // Check specific DEX configurations
+          const uniswapInfo = await bakeFactory.getDEXRouter('uniswap-test');
+          const pancakeInfo = await bakeFactory.getDEXRouter('pancakeswap-test');
+          
+          console.log('DEX Configurations:', {
+            'uniswap-test': uniswapInfo,
+            'pancakeswap-test': pancakeInfo
+          });
+
+          toast({
+            title: "Warning",
+            description: "No active DEXes found. Please ensure DEXes are configured in the contract.",
+            variant: "destructive"
+          });
+          return;
+        }
+
+        const dexPromises = dexNames.map(async (name: string) => {
+          try {
+            console.log('Getting info for DEX:', name);
+            const dexInfo = await bakeFactory.getDEXRouter(name);
+            console.log('DEX info:', { name, info: dexInfo });
+            
+            if (!dexInfo.router || dexInfo.router === '0x0000000000000000000000000000000000000000') {
+              console.warn(`Invalid router address for DEX ${name}`);
+              return null;
+            }
+
+            return {
+              name,
+              isActive: dexInfo.isActive,
+              router: dexInfo.router
+            };
+          } catch (error) {
+            console.error(`Error getting DEX info for ${name}:`, error);
+            return null;
+          }
+        });
+
+        const dexes = (await Promise.all(dexPromises)).filter(dex => dex !== null);
+        console.log('Final DEX list:', dexes);
+        
+        if (dexes.length === 0) {
+          toast({
+            title: "Warning",
+            description: "No properly configured DEXes found. Please contact support.",
+            variant: "destructive"
+          });
+        }
+        
+        setSupportedDEXes(dexes);
+      } catch (error) {
+        console.error('Error in getSupportedDEXes:', error);
+        toast({
+          title: "Error",
+          description: "Failed to load DEX information. Please try again.",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('Error loading supported DEXes:', error);
+      toast({
+        title: "Error",
+        description: "Failed to connect to DEX factory. Please check your connection.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  // Add immediate DEX loading when component mounts
+  useEffect(() => {
+    if (isConnected && window.ethereum) {
+      loadSupportedDEXes();
+    }
+  }, [isConnected, window.ethereum, chainId]);
+
+  // Also load DEXes when step changes to 2
+  useEffect(() => {
+    if (step === 2 && isConnected && window.ethereum) {
+      loadSupportedDEXes();
+    }
+  }, [step]);
+
+  const handleListToken = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isConnected || !chainId) {
+      toast({
+        title: "Error",
+        description: "Please connect your wallet first",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const bakeFactoryAddress = getNetworkContractAddress(Number(chainId), 'factoryAddressV2DirectDEX_Bake');
+    if (!bakeFactoryAddress) {
+      toast({
+        title: "Error",
+        description: "Factory not deployed on this network",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Validate DEX selection
+    if (!listingParams.dexName) {
+      toast({
+        title: "Error",
+        description: "Please select a DEX",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const provider = new BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      
+      console.log("Creating factory contract instance...");
+      const factory = new Contract(
+        bakeFactoryAddress,
+        TokenFactoryV2DirectDEXTwoStepABI.abi,
+        signer
+      );
+
+      // Get DEX info and validate before proceeding
+      console.log("Checking DEX configuration...");
+      const dexInfo = await factory.getDEXRouter(listingParams.dexName);
+      console.log("DEX Info:", dexInfo);
+
+      if (!dexInfo.router || dexInfo.router === '0x0000000000000000000000000000000000000000') {
+        throw new Error(`DEX ${listingParams.dexName} is not properly configured (no router address)`);
       }
 
-      // List token with explicit parameters
-      console.log("Listing token with parameters:", {
+      if (!dexInfo.isActive) {
+        throw new Error(`DEX ${listingParams.dexName} is not active`);
+      }
+
+      // Get listing fee
+      console.log("Calling getListingFee...");
+      const listingFee = await factory.getListingFee();
+      console.log("Listing Fee:", formatEther(listingFee));
+
+      // Calculate total value needed (listing fee + initial liquidity)
+      const totalValue = BigInt(listingFee) + parseEther(listingParams.initialLiquidityInETH);
+
+      // Debug values
+      console.log("Listing parameters:", {
         tokenAddress: listingParams.tokenAddress,
-        initialLiquidityWei: initialLiquidityWei.toString(),
+        initialLiquidityWei: parseEther(listingParams.initialLiquidityInETH).toString(),
         listingPriceWei: parseEther(listingParams.listingPriceInETH).toString(),
         dexName: listingParams.dexName,
-        liquidityPercentage: listingParams.liquidityPercentage
+        totalValue: totalValue.toString(),
+        liquidityPercentage: listingParams.liquidityPercentage,
+        dexRouter: dexInfo.router
       });
 
+      // Call listTokenOnDEX with the correct parameters for the Bake contract
       const tx = await factory.listTokenOnDEX(
         listingParams.tokenAddress,
-        initialLiquidityWei,
+        parseEther(listingParams.initialLiquidityInETH),
         parseEther(listingParams.listingPriceInETH),
         listingParams.dexName,
-        BigInt(listingParams.liquidityPercentage),
+        Number(listingParams.liquidityPercentage),
         {
-          value: totalValue,
+          value: totalValue.toString(),
           gasLimit: 5000000
         }
       );
 
       console.log("Transaction sent:", tx.hash);
       const receipt = await tx.wait();
-      console.log("Transaction receipt:", receipt);
 
-      if (receipt.status === 1) {
-        toast({
-          title: "Success",
-          description: "Token listed successfully!",
-          variant: "default"
-        });
-        onSuccess?.();
-      } else {
-        throw new Error("Transaction failed");
+      toast({
+        title: "Success",
+        description: `Token listed successfully on ${listingParams.dexName}`,
+        variant: "default"
+      });
+
+      if (typeof onSuccess === 'function') {
+        onSuccess();
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error listing token:", error);
-      
-      // Extract more detailed error information
-      const errorMessage = error.reason || error.message || "Failed to list token";
-      const details = error.data?.message || error.error?.message || "";
-      
+      const errorMessage = error instanceof Error ? error.message : "Failed to list token. Please try again.";
       toast({
         title: "Error",
-        description: `${errorMessage}${details ? `\n${details}` : ""}`,
+        description: errorMessage,
         variant: "destructive"
       });
-      onError?.(error instanceof Error ? error : new Error(errorMessage));
+      
+      if (typeof onError === 'function') {
+        onError(error instanceof Error ? error : new Error(errorMessage));
+      }
     } finally {
       setIsLoading(false);
     }
@@ -678,67 +872,7 @@ export default function TokenForm_v2DD_2Step({ onSuccess, onError }: TokenFormV2
               <CardTitle className="text-white">Configure Listing Parameters</CardTitle>
             </CardHeader>
             <CardContent className="px-0">
-              <form onSubmit={async (e) => {
-                e.preventDefault();
-                if (!isConnected) {
-                  toast({
-                    title: "Error",
-                    description: "Please connect your wallet first",
-                    variant: "destructive"
-                  });
-                  return;
-                }
-
-                // Validate required fields
-                if (!listingParams.initialLiquidityInETH || !listingParams.listingPriceInETH || !listingParams.dexName) {
-                  toast({
-                    title: "Error",
-                    description: "Please fill in all required fields",
-                    variant: "destructive"
-                  });
-                  return;
-                }
-
-                try {
-                  setIsLoading(true);
-                  const provider = new BrowserProvider(window.ethereum);
-                  const signer = await provider.getSigner();
-                  
-                  // Get token contract
-                  const tokenContract = new Contract(listingParams.tokenAddress, TestTokenABI.abi, signer);
-                  const totalSupply = await tokenContract.totalSupply();
-                  const tokensForLiquidity = (totalSupply * BigInt(Number(listingParams.liquidityPercentage))) / BigInt(100); // Use user-specified percentage
-
-                  // Get factory address
-                  const factoryAddress = getNetworkContractAddress(Number(chainId), 'factoryAddressV2DirectDEX_Bake');
-                  if (!factoryAddress) throw new Error("Factory not deployed on this network");
-
-                  // Approve tokens
-                  const approveTx = await tokenContract.approve(factoryAddress, tokensForLiquidity);
-                  await approveTx.wait();
-
-                  // Update state to show approval
-                  setListingParams(prev => ({ ...prev, isApproved: true }));
-                  
-                  // Move to final step
-                  setStep(3);
-
-                  toast({
-                    title: "Success",
-                    description: "Token approved for listing",
-                    variant: "default"
-                  });
-                } catch (error) {
-                  console.error("Error approving token:", error);
-                  toast({
-                    title: "Error",
-                    description: error instanceof Error ? error.message : "Failed to approve token",
-                    variant: "destructive"
-                  });
-                } finally {
-                  setIsLoading(false);
-                }
-              }} className="space-y-4">
+              <form onSubmit={handleApproveToken} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="tokenAddress" className="text-white">Token Address</Label>
                   <Input
@@ -803,10 +937,25 @@ export default function TokenForm_v2DD_2Step({ onSuccess, onError }: TokenFormV2
                       <SelectValue placeholder="Choose a DEX" />
                     </SelectTrigger>
                     <SelectContent className="bg-gray-900 text-white border-border">
-                      <SelectItem value="uniswap-test">Uniswap</SelectItem>
-                      <SelectItem value="pancakeswap-test">PancakeSwap</SelectItem>
+                      {supportedDEXes.length === 0 ? (
+                        <SelectItem value="loading" disabled>Loading DEXes...</SelectItem>
+                      ) : (
+                        supportedDEXes.map((dex) => (
+                          <SelectItem 
+                            key={dex.name} 
+                            value={dex.name || 'undefined'}
+                            disabled={!dex.isActive}
+                            className={!dex.isActive ? 'opacity-50' : ''}
+                          >
+                            {dex.name || 'Unknown DEX'} {!dex.isActive && '(Not Active)'}
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
+                  {listingParams.dexName && !supportedDEXes.find(dex => dex.name === listingParams.dexName)?.isActive && (
+                    <p className="text-sm text-red-500">Selected DEX is not currently active</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -862,7 +1011,7 @@ export default function TokenForm_v2DD_2Step({ onSuccess, onError }: TokenFormV2
               <CardTitle className="text-white">Complete Token Listing</CardTitle>
             </CardHeader>
             <CardContent className="px-0">
-              <form onSubmit={listToken} className="space-y-4">
+              <form onSubmit={handleListToken} className="space-y-4">
                 <div className="space-y-4 bg-gray-800 p-4 rounded-lg">
                   <h3 className="text-lg font-semibold text-white">Final Listing Confirmation</h3>
                   <div className="grid gap-2">
@@ -877,11 +1026,11 @@ export default function TokenForm_v2DD_2Step({ onSuccess, onError }: TokenFormV2
 
                 <Button
                   type="submit"
-                  disabled={isLoading}
+                  disabled={isLoading || !listingParams.isApproved}
                   className="w-full"
                 >
                   {isLoading ? <Spinner className="w-4 h-4 mr-2" /> : null}
-                  Complete Listing
+                  {listingParams.isApproved ? "Complete Listing" : "Token Not Yet Approved"}
                 </Button>
               </form>
             </CardContent>

@@ -7,6 +7,7 @@ interface ContractAddresses {
   factoryAddressV2DirectDEX: string;
   factoryAddressV2DirectDEX_Make: string;
   factoryAddressV2DirectDEX_Bake: string;
+  factoryAddressV2DirectDEX_TwoStep: string;
   factoryAddressTest: string;
 }
 
@@ -16,8 +17,9 @@ export const contractAddresses: { [key: number]: ContractAddresses } = {
     factoryAddressV2: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V2 || '',
     factoryAddressV3: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V3 || '',
     factoryAddressV2DirectDEX: '0xefFD5ceC6F2F46531afB2454B840e820D58697C6',
-    factoryAddressV2DirectDEX_Make: process.env.NEXT_PUBLIC_SEPOLIA_TOKEN_FACTORY_V2_MAKE_ADDRESS || '',
+    factoryAddressV2DirectDEX_Make: '0x704d0B1237373D466bc22635c076456f3afD7C11',
     factoryAddressV2DirectDEX_Bake: process.env.NEXT_PUBLIC_SEPOLIA_TOKEN_FACTORY_V2_BAKE_ADDRESS || '',
+    factoryAddressV2DirectDEX_TwoStep: '0x704d0B1237373D466bc22635c076456f3afD7C11',
     factoryAddressTest: process.env.NEXT_PUBLIC_SEPOLIA_TEST_FACTORY_ADDRESS || ''
   },
   421614: { // Arbitrum Sepolia
@@ -27,6 +29,7 @@ export const contractAddresses: { [key: number]: ContractAddresses } = {
     factoryAddressV2DirectDEX: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V2_DIRECTDEX || '',
     factoryAddressV2DirectDEX_Make: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V2_DIRECTDEX_MAKE || '',
     factoryAddressV2DirectDEX_Bake: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V2_DIRECTDEX_BAKE || '',
+    factoryAddressV2DirectDEX_TwoStep: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_TOKEN_FACTORY_V2_TWOSTEP_ADDRESS || '',
     factoryAddressTest: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_TEST_FACTORY_ADDRESS || ''
   },
   11155420: { // Optimism Sepolia
@@ -36,6 +39,7 @@ export const contractAddresses: { [key: number]: ContractAddresses } = {
     factoryAddressV2DirectDEX: process.env.NEXT_PUBLIC_OPSEPOLIA_FACTORY_ADDRESS_V2_DIRECTDEX || '',
     factoryAddressV2DirectDEX_Make: process.env.NEXT_PUBLIC_OPSEPOLIA_FACTORY_ADDRESS_V2_DIRECTDEX_MAKE || '',
     factoryAddressV2DirectDEX_Bake: process.env.NEXT_PUBLIC_OPSEPOLIA_FACTORY_ADDRESS_V2_DIRECTDEX_BAKE || '',
+    factoryAddressV2DirectDEX_TwoStep: process.env.NEXT_PUBLIC_OPSEPOLIA_TOKEN_FACTORY_V2_TWOSTEP_ADDRESS || '',
     factoryAddressTest: process.env.NEXT_PUBLIC_OPSEPOLIA_TEST_FACTORY_ADDRESS || ''
   },
   80002: { // Polygon Amoy
@@ -45,6 +49,7 @@ export const contractAddresses: { [key: number]: ContractAddresses } = {
     factoryAddressV2DirectDEX: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V2_DIRECTDEX || '',
     factoryAddressV2DirectDEX_Make: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V2_DIRECTDEX_MAKE || '',
     factoryAddressV2DirectDEX_Bake: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V2_DIRECTDEX_BAKE || '',
+    factoryAddressV2DirectDEX_TwoStep: process.env.NEXT_PUBLIC_POLYGONAMOY_TOKEN_FACTORY_V2_TWOSTEP_ADDRESS || '',
     factoryAddressTest: process.env.NEXT_PUBLIC_POLYGONAMOY_TEST_FACTORY_ADDRESS || ''
   },
   97: { // BSC Testnet
@@ -54,6 +59,7 @@ export const contractAddresses: { [key: number]: ContractAddresses } = {
     factoryAddressV2DirectDEX: '0xE1c68Cb8a037aC4E92eE2a7a30fEFA989c15Bc45',
     factoryAddressV2DirectDEX_Make: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V2_DIRECTDEX_MAKE || '',
     factoryAddressV2DirectDEX_Bake: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V2_DIRECTDEX_BAKE || '',
+    factoryAddressV2DirectDEX_TwoStep: process.env.NEXT_PUBLIC_BSCTESTNET_TOKEN_FACTORY_V2_TWOSTEP_ADDRESS || '',
     factoryAddressTest: process.env.NEXT_PUBLIC_BSCTESTNET_TEST_FACTORY_ADDRESS || ''
   },
   56: { // BSC Mainnet
@@ -63,6 +69,7 @@ export const contractAddresses: { [key: number]: ContractAddresses } = {
     factoryAddressV2DirectDEX: process.env.NEXT_PUBLIC_BSC_FACTORY_ADDRESS_V2_DIRECTDEX || '',
     factoryAddressV2DirectDEX_Make: process.env.NEXT_PUBLIC_BSC_FACTORY_ADDRESS_V2_DIRECTDEX_MAKE || '',
     factoryAddressV2DirectDEX_Bake: process.env.NEXT_PUBLIC_BSC_FACTORY_ADDRESS_V2_DIRECTDEX_BAKE || '',
+    factoryAddressV2DirectDEX_TwoStep: process.env.NEXT_PUBLIC_BSC_TOKEN_FACTORY_V2_TWOSTEP_ADDRESS || '',
     factoryAddressTest: process.env.NEXT_PUBLIC_BSC_TEST_FACTORY_ADDRESS || ''
   }
 };

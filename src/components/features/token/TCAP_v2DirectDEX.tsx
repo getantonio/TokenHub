@@ -73,6 +73,8 @@ const TCAP_v2DirectDEX = forwardRef<TCAP_v2DirectDEXRef, Props>(({ isConnected, 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showRecent, setShowRecent] = useState(true);
+  const [showRecentCreated, setShowRecentCreated] = useState(true);
+  const [createdTokens, setCreatedTokens] = useState<TokenInfo[]>([]);
   const { chainId } = useNetwork();
   const { toast } = useToast();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -92,16 +94,25 @@ const TCAP_v2DirectDEX = forwardRef<TCAP_v2DirectDEXRef, Props>(({ isConnected, 
     return [];
   });
 
+  const visibleCreatedTokens = useMemo(() => {
+    const sortedTokens = [...createdTokens].sort((a, b) => {
+      const timeA = a.createdAt || 0;
+      const timeB = b.createdAt || 0;
+      return timeB - timeA;
+    });
+    
+    return showRecentCreated ? sortedTokens.slice(0, 3) : sortedTokens;
+  }, [createdTokens, showRecentCreated]);
+
   const visibleTokens = useMemo(() => {
-    const filteredTokens = tokens.filter(token => !hiddenTokens.includes(token.address));
-    const sortedTokens = [...filteredTokens].sort((a, b) => {
+    const sortedTokens = [...tokens].sort((a, b) => {
       const timeA = a.createdAt || 0;
       const timeB = b.createdAt || 0;
       return timeB - timeA;
     });
     
     return showRecent ? sortedTokens.slice(0, 3) : sortedTokens;
-  }, [tokens, showRecent, hiddenTokens]);
+  }, [tokens, showRecent]);
 
   const getTokenContract = (tokenAddress: string, signer: any) => {
     return new Contract(tokenAddress, [
@@ -141,46 +152,34 @@ const TCAP_v2DirectDEX = forwardRef<TCAP_v2DirectDEXRef, Props>(({ isConnected, 
       const provider = new BrowserProvider(externalProvider);
       const signer = await provider.getSigner();
 
-      const factory = new Contract(factoryAddress, [
+      // Get factory addresses for both Make and Bake contracts
+      const makeFactoryAddress = getNetworkContractAddress(Number(chainId), 'factoryAddressV2DirectDEX_Make');
+      const bakeFactoryAddress = getNetworkContractAddress(Number(chainId), 'factoryAddressV2DirectDEX_Bake');
+
+      if (!makeFactoryAddress || !bakeFactoryAddress) {
+        throw new Error('Factory addresses not available');
+      }
+
+      // Create contract instances
+      const makeFactory = new Contract(makeFactoryAddress, [
+        'function getUserCreatedTokens(address) view returns (address[])',
+        'function getTokenInfo(address) view returns (tuple(address token, address owner, bool isListed, string dexName, uint256 creationTime, uint256 listingTime))'
+      ], signer);
+
+      const bakeFactory = new Contract(bakeFactoryAddress, [
         'function isListed(address token) view returns (bool)',
         'function tokenDEX(address token) view returns (string)',
         'function getDEXRouter(string) view returns (tuple(string name, address router, bool isActive))',
-        'function listTokenOnDEX(address token, uint256 initialLiquidityInETH, uint256 listingPriceInETH, string memory dexName, uint256 liquidityPercentage) payable returns (bool)',
         'function getListingFee() view returns (uint256)'
       ], signer);
 
-      // Get all token listing events
-      const filter = factory.filters.TokenListed();
-      const events = await factory.queryFilter(filter);
-      
       const userAddress = await signer.getAddress();
-      
-      // Filter events for tokens owned by the current user
-      const userEvents = events.filter(event => (event as TokenListedEvent).args?.owner === userAddress);
 
-      const tokenPromises = userEvents.map(async (event) => {
-        const tokenAddress = (event as TokenListedEvent).args?.token;
-        if (!tokenAddress) return null;
-
+      // Load created tokens
+      const createdTokenAddresses = await makeFactory.getUserCreatedTokens(userAddress);
+      const createdTokenPromises = createdTokenAddresses.map(async (tokenAddress: string) => {
         try {
-          const token = new Contract(tokenAddress, [
-            'function name() view returns (string)',
-            'function symbol() view returns (string)',
-            'function totalSupply() view returns (uint256)',
-            'function owner() view returns (address)',
-            'function dexRouter() view returns (address)',
-            'function dexPair() view returns (address)',
-            'function tradingEnabled() view returns (bool)',
-            'function tradingStartTime() view returns (uint256)',
-            'function maxTxAmount() view returns (uint256)',
-            'function maxWalletAmount() view returns (uint256)',
-            'function marketingFeePercentage() view returns (uint256)',
-            'function developmentFeePercentage() view returns (uint256)',
-            'function autoLiquidityFeePercentage() view returns (uint256)',
-            'function marketingWallet() view returns (address)',
-            'function developmentWallet() view returns (address)'
-          ], signer);
-
+          const tokenContract = getTokenContract(tokenAddress, signer);
           const [
             name,
             symbol,
@@ -198,25 +197,106 @@ const TCAP_v2DirectDEX = forwardRef<TCAP_v2DirectDEXRef, Props>(({ isConnected, 
             marketingWallet,
             developmentWallet
           ] = await Promise.all([
-            token.name(),
-            token.symbol(),
-            token.totalSupply(),
-            token.owner(),
-            token.dexRouter(),
-            token.dexPair(),
-            token.tradingEnabled(),
-            token.tradingStartTime(),
-            token.maxTxAmount(),
-            token.maxWalletAmount(),
-            token.marketingFeePercentage(),
-            token.developmentFeePercentage(),
-            token.autoLiquidityFeePercentage(),
-            token.marketingWallet(),
-            token.developmentWallet()
+            tokenContract.name(),
+            tokenContract.symbol(),
+            tokenContract.totalSupply(),
+            tokenContract.owner(),
+            tokenContract.dexRouter(),
+            tokenContract.dexPair(),
+            tokenContract.tradingEnabled(),
+            tokenContract.tradingStartTime(),
+            tokenContract.maxTxAmount(),
+            tokenContract.maxWalletAmount(),
+            tokenContract.marketingFeePercentage(),
+            tokenContract.developmentFeePercentage(),
+            tokenContract.autoLiquidityFeePercentage(),
+            tokenContract.marketingWallet(),
+            tokenContract.developmentWallet()
           ]);
 
-          const dexName = await factory.tokenDEX(tokenAddress);
-          const dexInfo = await factory.getDEXRouter(dexName);
+          const tokenInfo = await makeFactory.getTokenInfo(tokenAddress);
+
+          return {
+            address: tokenAddress,
+            name,
+            symbol,
+            totalSupply: formatEther(totalSupply),
+            owner,
+            dexInfo: {
+              dexName: tokenInfo.dexName || '',
+              router: dexRouter,
+              pair: dexPair,
+              initialLiquidity: '0',
+              listingPrice: '0'
+            },
+            tradingInfo: {
+              enabled: tradingEnabled,
+              startTime: Number(tradingStartTime),
+              maxTxAmount: formatEther(maxTxAmount),
+              maxWalletAmount: formatEther(maxWalletAmount)
+            },
+            feeInfo: {
+              marketingFee: marketingFee.toString(),
+              developmentFee: developmentFee.toString(),
+              autoLiquidityFee: autoLiquidityFee.toString(),
+              marketingWallet,
+              developmentWallet
+            },
+            createdAt: Number(tokenInfo.creationTime) * 1000
+          } as TokenInfo;
+        } catch (error) {
+          console.error(`Error loading created token ${tokenAddress}:`, error);
+          return null;
+        }
+      });
+
+      // Get all token listing events for listed tokens
+      const filter = bakeFactory.filters.TokenListed();
+      const events = await bakeFactory.queryFilter(filter);
+      const userEvents = events.filter(event => (event as TokenListedEvent).args?.owner === userAddress);
+
+      const listedTokenPromises = userEvents.map(async (event) => {
+        const tokenAddress = (event as TokenListedEvent).args?.token;
+        if (!tokenAddress) return null;
+
+        try {
+          const tokenContract = getTokenContract(tokenAddress, signer);
+          const [
+            name,
+            symbol,
+            totalSupply,
+            owner,
+            dexRouter,
+            dexPair,
+            tradingEnabled,
+            tradingStartTime,
+            maxTxAmount,
+            maxWalletAmount,
+            marketingFee,
+            developmentFee,
+            autoLiquidityFee,
+            marketingWallet,
+            developmentWallet
+          ] = await Promise.all([
+            tokenContract.name(),
+            tokenContract.symbol(),
+            tokenContract.totalSupply(),
+            tokenContract.owner(),
+            tokenContract.dexRouter(),
+            tokenContract.dexPair(),
+            tokenContract.tradingEnabled(),
+            tokenContract.tradingStartTime(),
+            tokenContract.maxTxAmount(),
+            tokenContract.maxWalletAmount(),
+            tokenContract.marketingFeePercentage(),
+            tokenContract.developmentFeePercentage(),
+            tokenContract.autoLiquidityFeePercentage(),
+            tokenContract.marketingWallet(),
+            tokenContract.developmentWallet()
+          ]);
+
+          const dexName = await bakeFactory.tokenDEX(tokenAddress);
+          const dexInfo = await bakeFactory.getDEXRouter(dexName);
 
           return {
             address: tokenAddress,
@@ -247,20 +327,18 @@ const TCAP_v2DirectDEX = forwardRef<TCAP_v2DirectDEXRef, Props>(({ isConnected, 
             createdAt: event.blockNumber ? new Date().getTime() : Date.now()
           } as TokenInfo;
         } catch (error) {
-          console.error(`Error loading token ${tokenAddress}:`, error);
+          console.error(`Error loading listed token ${tokenAddress}:`, error);
           return null;
         }
       });
 
-      const loadedTokens = (await Promise.all(tokenPromises))
-        .filter((token): token is TokenInfo => token !== null)
-        .sort((a, b) => {
-          const timeA = a.createdAt || 0;
-          const timeB = b.createdAt || 0;
-          return timeB - timeA;
-        });
+      const [loadedCreatedTokens, loadedListedTokens] = await Promise.all([
+        Promise.all(createdTokenPromises),
+        Promise.all(listedTokenPromises)
+      ]);
 
-      setTokens(loadedTokens);
+      setCreatedTokens(loadedCreatedTokens.filter((token): token is TokenInfo => token !== null));
+      setTokens(loadedListedTokens.filter((token): token is TokenInfo => token !== null));
     } catch (error) {
       console.error('Error loading tokens:', error);
       setError('Failed to load tokens');
@@ -405,149 +483,226 @@ const TCAP_v2DirectDEX = forwardRef<TCAP_v2DirectDEXRef, Props>(({ isConnected, 
 
   return (
     <div ref={containerRef} className="w-full space-y-4">
-      <div className="flex justify-between items-center bg-background-secondary p-4 rounded-lg">
-        <div className="flex items-center gap-4">
-          <h2 className="text-lg font-semibold text-white">Your Listed Tokens</h2>
-          <span className="text-sm text-text-secondary">
-            {showRecent ? `Showing last ${Math.min(visibleTokens.length, 3)} of ${tokens.length} tokens` : `Showing all ${tokens.length} tokens`}
-          </span>
+      {/* Token Statistics Header */}
+      <div className="bg-background-secondary p-4 rounded-lg">
+        <div className="flex flex-col space-y-2">
+          <div className="flex justify-between items-center">
+            <h2 className="text-lg font-semibold text-white">Token Statistics</h2>
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-text-secondary">
+                {createdTokens.length} Total Created Tokens ({visibleCreatedTokens.length} Visible)
+              </span>
+              <Button
+                variant="secondary"
+                onClick={() => setShowRecentCreated(!showRecentCreated)}
+                className="text-sm"
+              >
+                {showRecentCreated ? "Show All" : "Hide All"}
+              </Button>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 text-sm text-text-secondary">
+            <span>Sort By: Date</span>
+            <span>↓ Descending</span>
+          </div>
         </div>
-        <Button
-          variant="secondary"
-          onClick={() => setShowRecent(!showRecent)}
-          className="text-sm hover:bg-background-accent"
-        >
-          {showRecent ? "Show All" : "Show Recent"}
-        </Button>
       </div>
+
       {!isConnected && (
         <p className="text-muted-foreground">Please connect your wallet to view your tokens.</p>
       )}
+
       {isConnected && isLoading && (
-        <p className="text-muted-foreground">Loading your tokens...</p>
-      )}
-      {isConnected && !isLoading && tokens.length === 0 && (
-        <p className="text-muted-foreground">You haven't listed any tokens yet.</p>
-      )}
-      {isLoading ? (
         <Card className="p-4">
           <div className="flex items-center justify-center">
             <Spinner className="w-6 h-6 mr-2" />
             <p className="text-text-secondary">Loading tokens...</p>
           </div>
         </Card>
-      ) : error ? (
+      )}
+
+      {error && (
         <Card className="p-4">
           <p className="text-center text-red-500">{error}</p>
         </Card>
-      ) : visibleTokens.length === 0 ? (
-        <Card className="p-4">
-          <p className="text-center text-text-secondary">No tokens found</p>
-        </Card>
-      ) : (
-        <div className="space-y-4">
-          {visibleTokens.map((token, index) => (
-            <Card key={token.address} className="p-4 bg-background-secondary border-border relative">
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setHiddenTokens(prev => [...prev, token.address]);
-                }}
-                className="absolute top-2 right-2 text-gray-400 hover:text-white"
-              >
-                Hide
-              </Button>
-              <div className="space-y-2">
-                <h3 className="text-lg font-semibold">{token.name} ({token.symbol})</h3>
-                <p className="text-sm text-muted-foreground">Address: {token.address}</p>
-                <p className="text-sm">Total Supply: {token.totalSupply}</p>
-                <div className="space-y-2">
-                  <h4 className="font-medium">DEX Info</h4>
-                  {token.dexInfo.dexName ? (
-                    <>
-                      <p className="text-sm">DEX: {token.dexInfo.dexName}</p>
-                      <p className="text-sm">Initial Liquidity: {token.dexInfo.initialLiquidity} ETH</p>
-                      <p className="text-sm">Listing Price: {token.dexInfo.listingPrice} ETH</p>
-                    </>
-                  ) : (
-                    <div className="space-y-2">
-                      <Input
-                        type="text"
-                        placeholder="Initial Liquidity (ETH)"
-                        value={listingParams.initialLiquidityInETH}
-                        onChange={(e) => setListingParams(prev => ({ 
-                          ...prev, 
-                          token: token.address, 
-                          initialLiquidityInETH: e.target.value 
-                        }))}
-                      />
-                      <Input
-                        type="text"
-                        placeholder="Listing Price (ETH)"
-                        value={listingParams.listingPriceInETH}
-                        onChange={(e) => setListingParams(prev => ({ 
-                          ...prev, 
-                          listingPriceInETH: e.target.value 
-                        }))}
-                      />
-                      <Select
-                        value={listingParams.dexName}
-                        onValueChange={(value) => setListingParams(prev => ({ 
-                          ...prev, 
-                          dexName: value 
-                        }))}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Choose a DEX" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="uniswap-test">Uniswap</SelectItem>
-                          <SelectItem value="pancakeswap-test">PancakeSwap</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        type="text"
-                        placeholder="Liquidity Percentage"
-                        value={listingParams.liquidityPercentage}
-                        onChange={(e) => setListingParams(prev => ({ 
-                          ...prev, 
-                          liquidityPercentage: e.target.value 
-                        }))}
-                      />
-                      <Button 
-                        onClick={handleListToken}
-                        disabled={
-                          !listingParams.initialLiquidityInETH || 
-                          !listingParams.listingPriceInETH || 
-                          !listingParams.dexName ||
-                          !listingParams.liquidityPercentage ||
-                          listingParams.token !== token.address
-                        }
-                        className="w-full"
-                      >
-                        List on DEX
-                      </Button>
-                    </div>
-                  )}
-                </div>
-                <div className="space-y-1">
-                  <h4 className="font-medium">Trading Info</h4>
-                  <p className="text-sm">Max Transaction: {token.tradingInfo.maxTxAmount}</p>
-                  <p className="text-sm">Max Wallet: {token.tradingInfo.maxWalletAmount}</p>
-                  <p className="text-sm">Trading Enabled: {token.tradingInfo.enabled ? 'Yes' : 'No'}</p>
-                  <p className="text-sm">Trading Start: {formatDate(token.tradingInfo.startTime)}</p>
-                </div>
-                <div className="space-y-1">
-                  <h4 className="font-medium">Fee Info</h4>
-                  <p className="text-sm">Marketing Fee: {token.feeInfo.marketingFee}%</p>
-                  <p className="text-sm">Development Fee: {token.feeInfo.developmentFee}%</p>
-                  <p className="text-sm">Auto-Liquidity Fee: {token.feeInfo.autoLiquidityFee}%</p>
-                </div>
-              </div>
-            </Card>
-          ))}
-        </div>
       )}
+
+      {/* Created Tokens Section */}
+      <div className="space-y-4">
+        <div className="flex justify-between items-center bg-background-secondary p-4 rounded-lg">
+          <div className="flex items-center gap-4">
+            <h2 className="text-lg font-semibold text-white">Your Created Tokens</h2>
+            <span className="text-sm text-text-secondary">
+              {showRecentCreated ? `Showing last ${Math.min(visibleCreatedTokens.length, 3)} of ${createdTokens.length} tokens` : `Showing all ${createdTokens.length} tokens`}
+            </span>
+          </div>
+          <Button
+            variant="secondary"
+            onClick={() => setShowRecentCreated(!showRecentCreated)}
+            className="text-sm hover:bg-background-accent"
+          >
+            {showRecentCreated ? "Show All" : "Show Recent"}
+          </Button>
+        </div>
+
+        {/* Created Tokens Cards */}
+        {visibleCreatedTokens.length === 0 ? (
+          <Card className="p-4">
+            <p className="text-center text-text-secondary">No created tokens found</p>
+          </Card>
+        ) : (
+          <div className="space-y-4">
+            {visibleCreatedTokens.map((token) => (
+              <Card key={token.address} className="p-4 bg-background-secondary border-border relative">
+                <div className="space-y-2">
+                  <h3 className="text-lg font-semibold">{token.name} ({token.symbol})</h3>
+                  <p className="text-sm text-muted-foreground">Address: {token.address}</p>
+                  <p className="text-sm">Total Supply: {token.totalSupply}</p>
+                  <div className="space-y-2">
+                    <h4 className="font-medium">DEX Info</h4>
+                    {token.dexInfo.dexName ? (
+                      <>
+                        <p className="text-sm">DEX: {token.dexInfo.dexName}</p>
+                        <p className="text-sm">Initial Liquidity: {token.dexInfo.initialLiquidity} ETH</p>
+                        <p className="text-sm">Listing Price: {token.dexInfo.listingPrice} ETH</p>
+                      </>
+                    ) : (
+                      <div className="space-y-2">
+                        <Input
+                          type="text"
+                          placeholder="Initial Liquidity (ETH)"
+                          value={listingParams.initialLiquidityInETH}
+                          onChange={(e) => setListingParams(prev => ({ 
+                            ...prev, 
+                            token: token.address, 
+                            initialLiquidityInETH: e.target.value 
+                          }))}
+                        />
+                        <Input
+                          type="text"
+                          placeholder="Listing Price (ETH)"
+                          value={listingParams.listingPriceInETH}
+                          onChange={(e) => setListingParams(prev => ({ 
+                            ...prev, 
+                            listingPriceInETH: e.target.value 
+                          }))}
+                        />
+                        <Select
+                          value={listingParams.dexName}
+                          onValueChange={(value) => setListingParams(prev => ({ 
+                            ...prev, 
+                            dexName: value 
+                          }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Choose a DEX" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="uniswap-test">Uniswap</SelectItem>
+                            <SelectItem value="pancakeswap-test">PancakeSwap</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          type="text"
+                          placeholder="Liquidity Percentage"
+                          value={listingParams.liquidityPercentage}
+                          onChange={(e) => setListingParams(prev => ({ 
+                            ...prev, 
+                            liquidityPercentage: e.target.value 
+                          }))}
+                        />
+                        <Button 
+                          onClick={handleListToken}
+                          disabled={
+                            !listingParams.initialLiquidityInETH || 
+                            !listingParams.listingPriceInETH || 
+                            !listingParams.dexName ||
+                            !listingParams.liquidityPercentage ||
+                            listingParams.token !== token.address
+                          }
+                          className="w-full"
+                        >
+                          List on DEX
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="font-medium">Trading Info</h4>
+                    <p className="text-sm">Max Transaction: {token.tradingInfo.maxTxAmount}</p>
+                    <p className="text-sm">Max Wallet: {token.tradingInfo.maxWalletAmount}</p>
+                    <p className="text-sm">Trading Enabled: {token.tradingInfo.enabled ? 'Yes' : 'No'}</p>
+                    <p className="text-sm">Trading Start: {formatDate(token.tradingInfo.startTime)}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="font-medium">Fee Info</h4>
+                    <p className="text-sm">Marketing Fee: {token.feeInfo.marketingFee}%</p>
+                    <p className="text-sm">Development Fee: {token.feeInfo.developmentFee}%</p>
+                    <p className="text-sm">Auto-Liquidity Fee: {token.feeInfo.autoLiquidityFee}%</p>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Listed Tokens Section */}
+      <div className="space-y-4">
+        <div className="flex justify-between items-center bg-background-secondary p-4 rounded-lg">
+          <div className="flex items-center gap-4">
+            <h2 className="text-lg font-semibold text-white">Your Listed Tokens</h2>
+            <span className="text-sm text-text-secondary">
+              {showRecent ? `Showing last ${Math.min(visibleTokens.length, 3)} of ${tokens.length} tokens` : `Showing all ${tokens.length} tokens`}
+            </span>
+          </div>
+          <Button
+            variant="secondary"
+            onClick={() => setShowRecent(!showRecent)}
+            className="text-sm hover:bg-background-accent"
+          >
+            {showRecent ? "Show All" : "Show Recent"}
+          </Button>
+        </div>
+
+        {/* Listed Tokens Cards */}
+        {visibleTokens.length === 0 ? (
+          <Card className="p-4">
+            <p className="text-center text-text-secondary">No listed tokens found</p>
+          </Card>
+        ) : (
+          <div className="space-y-4">
+            {visibleTokens.map((token) => (
+              <Card key={token.address} className="p-4 bg-background-secondary border-border relative">
+                <div className="space-y-2">
+                  <h3 className="text-lg font-semibold">{token.name} ({token.symbol})</h3>
+                  <p className="text-sm text-muted-foreground">Address: {token.address}</p>
+                  <p className="text-sm">Total Supply: {token.totalSupply}</p>
+                  <div className="space-y-2">
+                    <h4 className="font-medium">DEX Info</h4>
+                    <p className="text-sm">DEX: {token.dexInfo.dexName}</p>
+                    <p className="text-sm">Initial Liquidity: {token.dexInfo.initialLiquidity} ETH</p>
+                    <p className="text-sm">Listing Price: {token.dexInfo.listingPrice} ETH</p>
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="font-medium">Trading Info</h4>
+                    <p className="text-sm">Max Transaction: {token.tradingInfo.maxTxAmount}</p>
+                    <p className="text-sm">Max Wallet: {token.tradingInfo.maxWalletAmount}</p>
+                    <p className="text-sm">Trading Enabled: {token.tradingInfo.enabled ? 'Yes' : 'No'}</p>
+                    <p className="text-sm">Trading Start: {formatDate(token.tradingInfo.startTime)}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="font-medium">Fee Info</h4>
+                    <p className="text-sm">Marketing Fee: {token.feeInfo.marketingFee}%</p>
+                    <p className="text-sm">Development Fee: {token.feeInfo.developmentFee}%</p>
+                    <p className="text-sm">Auto-Liquidity Fee: {token.feeInfo.autoLiquidityFee}%</p>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 });
