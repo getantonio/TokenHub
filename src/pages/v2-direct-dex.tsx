@@ -27,6 +27,11 @@ const TCAP_v2Make = dynamic(
   { ssr: false }
 );
 
+const TokenListingProcess = dynamic(
+  () => import('@/components/features/token/TokenListingProcess'),
+  { ssr: false }
+);
+
 function V2DirectDEXContent() {
   const { isConnected } = useAccount();
   const publicClient = usePublicClient();
@@ -50,23 +55,29 @@ function V2DirectDEXContent() {
             <p className="text-text-secondary">Create and instantly list your token on DEX with advanced trading controls.</p>
           </div>
           
-          <Tabs defaultValue="features" className="space-y-4">
-            <TabsList className="bg-background-secondary border border-border p-1 rounded-lg">
+          <Tabs defaultValue="list" className="space-y-4">
+            <TabsList className="bg-background-secondary border border-border p-1 rounded-lg flex">
               <TabsTrigger 
                 value="features"
-                className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-text-secondary rounded-md px-6"
+                className="flex-1 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-text-secondary rounded-md px-6"
               >
                 Features
               </TabsTrigger>
               <TabsTrigger 
                 value="create"
-                className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-text-secondary rounded-md px-6"
+                className="flex-1 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-text-secondary rounded-md px-6"
               >
                 Create Token
               </TabsTrigger>
               <TabsTrigger 
+                value="list"
+                className="flex-1 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-text-secondary rounded-md px-6"
+              >
+                List Token
+              </TabsTrigger>
+              <TabsTrigger 
                 value="tokens"
-                className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-text-secondary rounded-md px-6"
+                className="flex-1 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-text-secondary rounded-md px-6"
               >
                 Your Tokens
               </TabsTrigger>
@@ -130,6 +141,16 @@ function V2DirectDEXContent() {
                   console.error('Error deploying token:', error);
                 }}
               />
+            </TabsContent>
+
+            <TabsContent value="list">
+              {isConnected ? (
+                <TokenListingProcess />
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-text-secondary">Please connect your wallet to list your token.</p>
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="tokens">
