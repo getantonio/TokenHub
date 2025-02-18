@@ -269,7 +269,7 @@ export default function TokenForm_v1({ isConnected }: Props) {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 gap-2">
         {/* Form Section */}
         <div className="form-card">
           <h2 className="form-card-header">Create Token</h2>

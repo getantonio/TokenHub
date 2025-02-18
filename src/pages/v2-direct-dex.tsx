@@ -10,26 +10,40 @@ import { ToastProvider } from '@/components/ui/toast/use-toast';
 import { useNetwork } from '@/contexts/NetworkContext';
 import { getNetworkContractAddress } from '@/config/contracts';
 import Head from 'next/head';
+import { Suspense, useState } from 'react';
+import { Spinner } from '@/components/ui/Spinner';
 
-// Dynamically import components that use client-side features
+// Dynamically import components with loading fallback
 const TokenForm_v2DD_2Step = dynamic(
   () => import('@/components/features/token/TokenForm_v2DD_2Step'),
-  { ssr: false }
+  { 
+    ssr: false,
+    loading: () => <div className="flex justify-center py-8"><Spinner /></div>
+  }
 );
 
 const TCAP_v2DirectDEX = dynamic(
   () => import('@/components/features/token/TCAP_v2DirectDEX'),
-  { ssr: false }
+  { 
+    ssr: false,
+    loading: () => <div className="flex justify-center py-8"><Spinner /></div>
+  }
 );
 
 const TCAP_v2Make = dynamic(
   () => import('@/components/features/token/TCAP_v2Make'),
-  { ssr: false }
+  { 
+    ssr: false,
+    loading: () => <div className="flex justify-center py-8"><Spinner /></div>
+  }
 );
 
 const TokenListingProcess = dynamic(
   () => import('@/components/features/token/TokenListingProcess'),
-  { ssr: false }
+  { 
+    ssr: false,
+    loading: () => <div className="flex justify-center py-8"><Spinner /></div>
+  }
 );
 
 function V2DirectDEXContent() {
@@ -37,6 +51,7 @@ function V2DirectDEXContent() {
   const publicClient = usePublicClient();
   const { chainId } = useNetwork();
   const router = useRouter();
+  const [activeTab, setActiveTab] = useState('list');
   
   const factoryAddress = chainId ? getNetworkContractAddress(chainId, 'factoryAddressV2DirectDEX') : null;
   
@@ -55,7 +70,7 @@ function V2DirectDEXContent() {
             <p className="text-text-secondary">Create and instantly list your token on DEX with advanced trading controls.</p>
           </div>
           
-          <Tabs defaultValue="list" className="space-y-4">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
             <TabsList className="bg-background-secondary border border-border p-1 rounded-lg flex">
               <TabsTrigger 
                 value="features"
@@ -131,53 +146,57 @@ function V2DirectDEXContent() {
             </TabsContent>
             
             <TabsContent value="create">
-              <TokenForm_v2DD_2Step
-                onSuccess={() => {
-                  // TODO: Handle success
-                  console.log('Token deployed successfully');
-                }}
-                onError={(error) => {
-                  // TODO: Handle error
-                  console.error('Error deploying token:', error);
-                }}
-              />
+              <Suspense fallback={<div className="flex justify-center py-8"><Spinner /></div>}>
+                <TokenForm_v2DD_2Step
+                  onSuccess={() => {
+                    console.log('Token deployed successfully');
+                  }}
+                  onError={(error) => {
+                    console.error('Error deploying token:', error);
+                  }}
+                />
+              </Suspense>
             </TabsContent>
 
             <TabsContent value="list">
-              {isConnected ? (
-                <TokenListingProcess />
-              ) : (
-                <div className="text-center py-8">
-                  <p className="text-text-secondary">Please connect your wallet to list your token.</p>
-                </div>
-              )}
+              <Suspense fallback={<div className="flex justify-center py-8"><Spinner /></div>}>
+                {isConnected ? (
+                  <TokenListingProcess />
+                ) : (
+                  <div className="text-center py-8 bg-background-secondary rounded-lg border border-border">
+                    <p className="text-text-secondary">Please connect your wallet to list your token.</p>
+                  </div>
+                )}
+              </Suspense>
             </TabsContent>
 
             <TabsContent value="tokens">
-              {isConnected ? (
-                <div className="space-y-8">
-                  <div>
-                    <h3 className="text-lg font-semibold text-white mb-4">Your Created Tokens</h3>
-                    <TCAP_v2Make
-                      isConnected={isConnected}
-                      address={getNetworkContractAddress(Number(chainId), 'factoryAddressV2DirectDEX_Make') || undefined}
-                      provider={publicClient}
-                    />
+              <Suspense fallback={<div className="flex justify-center py-8"><Spinner /></div>}>
+                {isConnected ? (
+                  <div className="space-y-8">
+                    <div>
+                      <h3 className="text-lg font-semibold text-white mb-4">Your Created Tokens</h3>
+                      <TCAP_v2Make
+                        isConnected={isConnected}
+                        address={getNetworkContractAddress(Number(chainId), 'factoryAddressV2DirectDEX_Make') || undefined}
+                        provider={publicClient}
+                      />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-white mb-4">Your Listed Tokens</h3>
+                      <TCAP_v2DirectDEX
+                        isConnected={isConnected}
+                        address={getNetworkContractAddress(Number(chainId), 'factoryAddressV2DirectDEX') || undefined}
+                        provider={publicClient}
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-white mb-4">Your Listed Tokens</h3>
-                    <TCAP_v2DirectDEX
-                      isConnected={isConnected}
-                      address={getNetworkContractAddress(Number(chainId), 'factoryAddressV2DirectDEX') || undefined}
-                      provider={publicClient}
-                    />
+                ) : (
+                  <div className="text-center py-8 bg-background-secondary rounded-lg border border-border">
+                    <p className="text-text-secondary">Please connect your wallet to view your tokens.</p>
                   </div>
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <p className="text-text-secondary">Please connect your wallet to view your tokens.</p>
-                </div>
-              )}
+                )}
+              </Suspense>
             </TabsContent>
           </Tabs>
         </div>
@@ -189,10 +208,10 @@ function V2DirectDEXContent() {
 
 export default function V2DirectDEXPage() {
   return (
-    <ToastProvider>
-      <Web3ModalProvider>
+    <Web3ModalProvider>
+      <ToastProvider>
         <V2DirectDEXContent />
-      </Web3ModalProvider>
-    </ToastProvider>
+      </ToastProvider>
+    </Web3ModalProvider>
   );
 } 

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAccount } from 'wagmi';
 import { useNetwork } from '@/contexts/NetworkContext';
-import { BrowserProvider, Contract, parseEther, formatEther, Interface } from 'ethers';
+import { BrowserProvider, Contract, parseEther, formatEther, EventLog, Result } from 'ethers';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -10,10 +10,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/toast/use-toast';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/Spinner';
-import TokenFactoryV1ABI from '@/contracts/abi/TokenFactory_v1.json';
-import TokenFactoryV2ABI from '@/contracts/abi/TokenFactory_v2.json';
-import TokenFactoryV2DirectDEXABI from '@/contracts/abi/TokenFactory_v2_DirectDEX.json';
-import TestTokenABI from '@/contracts/abi/TestToken.json';
 import { getNetworkContractAddress } from '@/config/contracts';
 
 interface TokenDetails {
@@ -38,6 +34,10 @@ interface DEXDeploymentDetails {
   tradingStartTime: number;
 }
 
+interface TokenCreatedEvent extends EventLog {
+  args: Result & [token: string, owner: string];
+}
+
 // Add standard ERC20 ABI
 const ERC20_ABI = [
   "function name() view returns (string)",
@@ -57,6 +57,9 @@ const RPC_URLS: { [key: number]: string } = {
 const NETWORK_NAMES: { [key: number]: string } = {
   11155111: 'Sepolia',
   97: 'BSC Testnet',
+  421614: 'Arbitrum Sepolia',
+  11155420: 'Optimism Sepolia',
+  80002: 'Polygon Amoy',
 };
 
 // Add interface for ABI JSON files
@@ -67,57 +70,69 @@ interface ContractArtifact {
   abi: any[];
 }
 
-// Add factory ABIs
+// Add factory ABIs with the correct event signature
 const FACTORY_V1_ABI = [
-  "event TokenCreated(address indexed tokenAddress, address indexed owner)",
+  "event TokenCreated(address indexed token, address indexed owner)",
   "function createToken(string name, string symbol, uint256 totalSupply, uint256 marketingFeePercent, uint256 developmentFeePercent, uint256 autoLiquidityFeePercent, address marketingWallet, address developmentWallet) external payable returns (address)"
 ];
 
 const FACTORY_V2_ABI = [
-  "event TokenCreated(address indexed tokenAddress, address indexed owner)",
+  "event TokenCreated(address indexed token, address indexed owner)",
   "function createToken(string name, string symbol, uint256 totalSupply, uint256 marketingFeePercent, uint256 developmentFeePercent, uint256 autoLiquidityFeePercent, address marketingWallet, address developmentWallet) external payable returns (address)"
 ];
 
-const FACTORY_V2_DIRECTDEX_ABI = [
-  "event TokenCreated(address indexed tokenAddress, address indexed owner)",
+const FACTORY_V3_ABI = [
+  "event TokenCreated(address indexed token, address indexed owner)",
   "function createToken(string name, string symbol, uint256 totalSupply, uint256 marketingFeePercent, uint256 developmentFeePercent, uint256 autoLiquidityFeePercent, address marketingWallet, address developmentWallet) external payable returns (address)"
 ];
 
-// Add factory addresses for different versions
+// Update factory addresses to use environment variables
 const FACTORY_ADDRESSES: {
   [key: string]: {
     [chainId: number]: string;
   };
 } = {
   v1: {
-    11155111: '0x1a28d5eef66AB135208ee7b33864236eEB804586', // Sepolia
-    97: '0x14cA8710278F31803fDA2D6363d7Df8c2710b6aa', // BSC Testnet
+    11155111: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V1 || '',
+    97: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V1 || '',
+    421614: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V1 || '',
+    11155420: process.env.NEXT_PUBLIC_OPSEPOLIA_FACTORY_ADDRESS_V1 || '',
+    80002: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V1 || '',
   },
   v2: {
-    11155111: '0xF619Ae83260bFa49ce8ae7dB13D9CebD104710C8', // Sepolia
-    97: '0xd02013450B2fc3CBa06f723EB59D500104f2ECD9', // BSC Testnet
+    11155111: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V2 || '',
+    97: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V2 || '',
+    421614: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V2 || '',
+    11155420: process.env.NEXT_PUBLIC_OPSEPOLIA_FACTORY_ADDRESS_V2 || '',
+    80002: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V2 || '',
   },
-  v2DirectDEX: {
-    11155111: '0x0000000000000000000000000000000000000000', // Sepolia
-    97: '0x1b4EEF44c30b5C957aF4559aeEB8A5bF3287Cd28', // BSC Testnet
+  v3: {
+    11155111: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V3 || '',
+    97: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V3 || '',
+    421614: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V3 || '',
+    11155420: process.env.NEXT_PUBLIC_OPSEPOLIA_FACTORY_ADDRESS_V3 || '',
+    80002: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V3 || '',
   }
 };
 
-// Create Interface instances for the ABIs
-const factoryV1Interface = new Interface(TokenFactoryV1ABI.abi);
-const factoryV2Interface = new Interface(TokenFactoryV2ABI.abi);
-const factoryV2DirectDEXInterface = new Interface(TokenFactoryV2DirectDEXABI.abi);
+interface TokenInfo {
+  address: string;
+  name: string;
+  symbol: string;
+  totalSupply: string;
+  factoryVersion: "v1" | "v2" | "v3";
+}
 
 export default function TokenListingProcess() {
   const { address: userAddress, isConnected } = useAccount();
   const { chainId } = useNetwork();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState('register');
+  const [activeTab, setActiveTab] = useState('select');
   const [isLoading, setIsLoading] = useState(false);
-  const [tokenAddress, setTokenAddress] = useState('');
+  const [userTokens, setUserTokens] = useState<TokenInfo[]>([]);
+  const [selectedToken, setSelectedToken] = useState<TokenInfo | null>(null);
   
   // State for each stage
-  const [tokenDetails, setTokenDetails] = useState<TokenDetails | null>(null);
   const [approvalDetails, setApprovalDetails] = useState<ApprovalDetails>({
     liquidityAmount: '',
     approved: false
@@ -148,127 +163,142 @@ export default function TokenListingProcess() {
     return new BrowserProvider(window.ethereum);
   };
 
-  // Function to detect which factory created the token
-  const detectFactoryVersion = async (provider: BrowserProvider, tokenAddress: string): Promise<string> => {
-    if (!chainId) return "unknown";
-
-    try {
-      // Create contract instances for each factory version
-      const factoryV1 = new Contract(
-        FACTORY_ADDRESSES.v1[chainId],
-        FACTORY_V1_ABI,
-        provider
-      );
-
-      const factoryV2 = new Contract(
-        FACTORY_ADDRESSES.v2[chainId],
-        FACTORY_V2_ABI,
-        provider
-      );
-
-      const factoryV2DirectDEX = new Contract(
-        FACTORY_ADDRESSES.v2DirectDEX[chainId],
-        FACTORY_V2_DIRECTDEX_ABI,
-        provider
-      );
-
-      // Get the block number when the token was created
-      const code = await provider.getCode(tokenAddress);
-      if (code === '0x') {
-        throw new Error('Invalid token address');
-      }
-
-      // Check for token creation events from each factory
-      const filterV1 = factoryV1.filters.TokenCreated(tokenAddress);
-      const filterV2 = factoryV2.filters.TokenCreated(tokenAddress);
-      const filterV2DirectDEX = factoryV2DirectDEX.filters.TokenCreated(tokenAddress);
-
-      const [eventsV1, eventsV2, eventsV2DirectDEX] = await Promise.all([
-        factoryV1.queryFilter(filterV1),
-        factoryV2.queryFilter(filterV2),
-        factoryV2DirectDEX.queryFilter(filterV2DirectDEX)
-      ]);
-
-      if (eventsV1.length > 0) return "v1";
-      if (eventsV2.length > 0) return "v2";
-      if (eventsV2DirectDEX.length > 0) return "v2DirectDEX";
-
-      return "unknown";
-    } catch (error) {
-      console.error('Error detecting factory version:', error);
-      return "unknown";
-    }
-  };
-
-  // Function to detect factory version and get token details
-  const scanToken = async () => {
-    if (!tokenAddress) {
-      toast({
-        title: "Error",
-        description: "Please enter a token address",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (!chainId) {
-      toast({
-        title: "Error",
-        description: "Please connect to a supported network (Sepolia or BSC Testnet)",
-        variant: "destructive",
-      });
-      return;
-    }
+  // Function to load all tokens created by the user
+  const loadUserTokens = async () => {
+    if (!chainId || !isConnected) return;
 
     try {
       setIsLoading(true);
       const provider = getProvider();
-      
-      // Use standard ERC20 ABI to read token details
-      const tokenContract = new Contract(
-        tokenAddress, 
-        ERC20_ABI, 
-        provider
-      );
-      
-      // Get basic token details
-      const [name, symbol, totalSupply, decimals] = await Promise.all([
-        tokenContract.name(),
-        tokenContract.symbol(),
-        tokenContract.totalSupply(),
-        tokenContract.decimals()
-      ]);
+      const signer = await provider.getSigner();
+      const userAddress = await signer.getAddress();
 
-      // Detect which factory created this token
-      const factoryVersion = await detectFactoryVersion(provider, tokenAddress);
-      const isVerified = factoryVersion !== "unknown";
+      // Get factory addresses
+      const v1Address = FACTORY_ADDRESSES.v1[chainId];
+      const v2Address = FACTORY_ADDRESSES.v2[chainId];
+      const v3Address = FACTORY_ADDRESSES.v3[chainId];
 
-      setTokenDetails({
-        address: tokenAddress,
-        name,
-        symbol,
-        totalSupply: formatEther(totalSupply),
-        factoryVersion,
-        isVerified
+      console.log('Current chain ID:', chainId);
+      console.log('User address:', userAddress);
+      console.log('Loading tokens for factories:', {
+        v1: v1Address,
+        v2: v2Address,
+        v3: v3Address
       });
 
-      if (isVerified) {
+      // Validate factory addresses
+      if (!v1Address || !v2Address || !v3Address) {
+        console.error('Missing factory addresses for chain:', chainId);
         toast({
-          title: "Token Scanned Successfully",
-          description: `Found ${name} (${symbol}) token on ${NETWORK_NAMES[chainId]}. Created by Factory ${factoryVersion}.`,
-        });
-      } else {
-        toast({
-          title: "Token Scanned",
-          description: `Found ${name} (${symbol}) token, but it wasn't created by our factory. You can only list tokens created by our factory.`,
+          title: "Configuration Error",
+          description: "Factory addresses not configured for this network.",
           variant: "destructive",
         });
+        return;
       }
+
+      // Create factory contracts with correct ABIs
+      const factoryV1 = new Contract(v1Address, [
+        'function getTokensByUser(address) view returns (address[])',
+        'function getUserCreatedTokens(address) view returns (address[])',
+        'function getDeployedTokens() view returns (address[])'
+      ], provider);
+      
+      const factoryV2 = new Contract(v2Address, [
+        'function getTokensByUser(address) view returns (address[])',
+        'function getUserCreatedTokens(address) view returns (address[])',
+        'function getDeployedTokens() view returns (address[])'
+      ], provider);
+      
+      const factoryV3 = new Contract(v3Address, [
+        'function getTokensByUser(address) view returns (address[])',
+        'function getUserCreatedTokens(address) view returns (address[])',
+        'function getDeployedTokens() view returns (address[])'
+      ], provider);
+
+      // Try different methods to get tokens
+      const getTokensWithFallback = async (factory: Contract, userAddr: string, version: string) => {
+        try {
+          // Try getUserCreatedTokens first
+          try {
+            const tokens = await factory.getUserCreatedTokens(userAddr);
+            console.log(`${version} getUserCreatedTokens:`, tokens);
+            return tokens;
+          } catch (error) {
+            console.log(`${version} getUserCreatedTokens failed, trying getTokensByUser...`);
+          }
+
+          // Try getTokensByUser as fallback
+          try {
+            const tokens = await factory.getTokensByUser(userAddr);
+            console.log(`${version} getTokensByUser:`, tokens);
+            return tokens;
+          } catch (error) {
+            console.log(`${version} getTokensByUser failed, trying getDeployedTokens...`);
+          }
+
+          // Try getDeployedTokens as last resort
+          const tokens = await factory.getDeployedTokens();
+          console.log(`${version} getDeployedTokens:`, tokens);
+          return tokens;
+        } catch (error) {
+          console.error(`Error getting tokens for ${version}:`, error);
+          return [];
+        }
+      };
+
+      // Get tokens from each factory
+      const [v1Tokens, v2Tokens, v3Tokens] = await Promise.all([
+        getTokensWithFallback(factoryV1, userAddress, 'V1'),
+        getTokensWithFallback(factoryV2, userAddress, 'V2'),
+        getTokensWithFallback(factoryV3, userAddress, 'V3')
+      ]);
+
+      console.log('Found tokens:', {
+        v1: v1Tokens,
+        v2: v2Tokens,
+        v3: v3Tokens
+      });
+
+      // Function to get token details
+      const getTokenDetails = async (address: string, version: "v1" | "v2" | "v3") => {
+        try {
+          const tokenContract = new Contract(address, ERC20_ABI, provider);
+          const [name, symbol, totalSupply] = await Promise.all([
+            tokenContract.name(),
+            tokenContract.symbol(),
+            tokenContract.totalSupply()
+          ]);
+
+          return {
+            address,
+            name,
+            symbol,
+            totalSupply: formatEther(totalSupply),
+            factoryVersion: version
+          };
+        } catch (error) {
+          console.error(`Error getting details for token ${address}:`, error);
+          return null;
+        }
+      };
+
+      // Get details for all tokens
+      const tokenDetailsPromises = [
+        ...v1Tokens.map((addr: string) => getTokenDetails(addr, "v1")),
+        ...v2Tokens.map((addr: string) => getTokenDetails(addr, "v2")),
+        ...v3Tokens.map((addr: string) => getTokenDetails(addr, "v3"))
+      ];
+
+      const tokens = (await Promise.all(tokenDetailsPromises)).filter(token => token !== null);
+      console.log('Final token list:', tokens);
+      setUserTokens(tokens);
+
     } catch (error) {
-      console.error('Error scanning token:', error);
+      console.error('Error loading user tokens:', error);
       toast({
-        title: "Error Scanning Token",
-        description: `Failed to scan token on ${NETWORK_NAMES[chainId]}. Please check the address and try again.`,
+        title: "Error",
+        description: "Failed to load your tokens. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -276,9 +306,22 @@ export default function TokenListingProcess() {
     }
   };
 
+  // Load tokens when component mounts
+  useEffect(() => {
+    if (isConnected && chainId) {
+      loadUserTokens();
+    }
+  }, [isConnected, chainId]);
+
+  // Function to handle token selection
+  const handleTokenSelect = (token: TokenInfo) => {
+    setSelectedToken(token);
+    setActiveTab('approve');
+  };
+
   // Function to handle token approval
   const approveToken = async () => {
-    if (!tokenDetails) return;
+    if (!selectedToken) return;
     try {
       setIsLoading(true);
       // Add approval logic here
@@ -298,7 +341,7 @@ export default function TokenListingProcess() {
 
   // Function to deploy to DEX
   const deployToDEX = async () => {
-    if (!tokenDetails || !approvalDetails.approved) return;
+    if (!selectedToken || !approvalDetails.approved) return;
     try {
       setIsLoading(true);
       // Add DEX deployment logic here
@@ -338,15 +381,15 @@ export default function TokenListingProcess() {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-3 mb-8">
             <TabsTrigger 
-              value="register"
+              value="select"
               className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-text-secondary"
             >
-              1. Register Token
+              1. Select Token
             </TabsTrigger>
             <TabsTrigger 
               value="approve"
               className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-text-secondary"
-              disabled={!tokenDetails}
+              disabled={!selectedToken}
             >
               2. Submit for Approval
             </TabsTrigger>
@@ -359,52 +402,47 @@ export default function TokenListingProcess() {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="register">
-            <div className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="tokenAddress" className="text-text-primary">Token Address</Label>
-                <div className="flex space-x-2">
-                  <Input
-                    id="tokenAddress"
-                    placeholder="Enter token address"
-                    value={tokenAddress}
-                    onChange={(e) => setTokenAddress(e.target.value)}
-                    className="bg-gray-900 text-text-primary border-border"
-                  />
-                  <Button 
-                    onClick={scanToken}
-                    className="bg-blue-600 hover:bg-blue-700 text-white"
-                    disabled={isLoading}
-                  >
-                    {isLoading ? <Spinner /> : 'Scan Token'}
-                  </Button>
-                </div>
+          <TabsContent value="select">
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-semibold text-text-primary">Your Tokens</h3>
+                <Button
+                  onClick={loadUserTokens}
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                  disabled={isLoading}
+                >
+                  {isLoading ? <Spinner /> : 'Refresh'}
+                </Button>
               </div>
 
-              {tokenDetails && (
-                <div className="space-y-4 mt-6 p-4 bg-gray-900 rounded-lg border border-border">
-                  <h3 className="text-lg font-semibold text-text-primary">Token Details</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="text-text-secondary">
-                      <span className="font-medium text-text-primary">Name:</span> {tokenDetails.name}
+              {isLoading ? (
+                <div className="flex justify-center py-8">
+                  <Spinner />
+                </div>
+              ) : userTokens.length === 0 ? (
+                <div className="text-center py-8 bg-gray-800 rounded-lg">
+                  <p className="text-text-secondary">No tokens found. Create a token first.</p>
+                </div>
+              ) : (
+                <div className="grid gap-4">
+                  {userTokens.map((token) => (
+                    <div 
+                      key={token.address}
+                      className="p-4 bg-gray-800 rounded-lg border border-border hover:border-blue-500 cursor-pointer transition-colors"
+                      onClick={() => handleTokenSelect(token)}
+                    >
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h4 className="font-medium text-text-primary">{token.name} ({token.symbol})</h4>
+                          <p className="text-sm text-text-secondary mt-1">Address: {token.address}</p>
+                          <p className="text-sm text-text-secondary">Supply: {Number(token.totalSupply).toLocaleString()} {token.symbol}</p>
+                        </div>
+                        <span className="px-2 py-1 bg-blue-600/10 text-blue-400 rounded text-sm">
+                          {token.factoryVersion}
+                        </span>
+                      </div>
                     </div>
-                    <div className="text-text-secondary">
-                      <span className="font-medium text-text-primary">Symbol:</span> {tokenDetails.symbol}
-                    </div>
-                    <div className="text-text-secondary">
-                      <span className="font-medium text-text-primary">Total Supply:</span> {tokenDetails.totalSupply}
-                    </div>
-                    <div className="text-text-secondary">
-                      <span className="font-medium text-text-primary">Factory Version:</span> {tokenDetails.factoryVersion}
-                    </div>
-                  </div>
-                  <Button
-                    className="w-full mt-4 bg-blue-600 hover:bg-blue-700 text-white"
-                    onClick={() => setActiveTab('approve')}
-                    disabled={!tokenDetails.isVerified}
-                  >
-                    Continue to Approval
-                  </Button>
+                  ))}
                 </div>
               )}
             </div>
@@ -412,6 +450,13 @@ export default function TokenListingProcess() {
 
           <TabsContent value="approve">
             <div className="space-y-6">
+              {selectedToken && (
+                <div className="mb-4 p-4 bg-gray-800 rounded-lg">
+                  <h4 className="font-medium text-text-primary">Selected Token</h4>
+                  <p className="text-sm text-text-secondary mt-1">{selectedToken.name} ({selectedToken.symbol})</p>
+                  <p className="text-sm text-text-secondary">Factory Version: {selectedToken.factoryVersion}</p>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="liquidityAmount" className="text-text-primary">Liquidity Amount (ETH)</Label>
                 <Input
