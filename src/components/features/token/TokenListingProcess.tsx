@@ -1126,23 +1126,6 @@ function TokenListingProcess() {
   return (
     <div className="w-full max-w-4xl mx-auto bg-background-secondary rounded-lg border border-border">
       <div className="p-6">
-        <h1 className="text-4xl font-black mb-6 bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent" style={{ fontFamily: "'Roboto', monospace" }}>
-          TokenHub<span className="text-gray-400">.dev</span>
-        </h1>
-        {chainId && (
-          <div className="mb-4 text-text-primary">
-            <span className="font-medium">Current Network:</span> {NETWORK_NAMES[chainId] || 'Unsupported Network'}
-          </div>
-        )}
-        
-        {(!chainId || !NETWORK_NAMES[chainId]) && (
-          <div className="mb-4 p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
-            <p className="text-red-500">
-              Please connect to a supported network (Sepolia or BSC Testnet)
-            </p>
-          </div>
-        )}
-
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-3 mb-8">
             <TabsTrigger 
@@ -1197,7 +1180,12 @@ function TokenListingProcess() {
                   {userTokens.map((token) => (
                     <div 
                       key={token.address}
-                      className="p-4 bg-gray-800 rounded-lg border border-border hover:border-blue-500 transition-colors"
+                      onClick={() => handleTokenSelect(token)}
+                      className={`p-4 bg-gray-800 rounded-lg border ${
+                        selectedToken?.address === token.address 
+                          ? 'border-blue-500' 
+                          : 'border-border hover:border-blue-500'
+                      } transition-colors cursor-pointer`}
                     >
                       <div className="space-y-3">
                         <div className="flex justify-between items-start">

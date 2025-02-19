@@ -13,6 +13,7 @@ import Head from 'next/head';
 import { Suspense, useState } from 'react';
 import { Spinner } from '@/components/ui/Spinner';
 import TCAP_U_DEXLIST from '@/components/features/token/TCAP_U_DEXLIST';
+import TokenAdminControls from '@/components/features/token/TokenAdminControls';
 
 // Dynamically import components with loading fallback
 const TokenForm_v2DD_2Step = dynamic(
@@ -66,13 +67,18 @@ function V2DirectDEXContent() {
 
       <div className="container mx-auto px-4 py-4">
         <div className="max-w-6xl mx-auto">
-          <div className="mb-6">
-            <h1 className="text-2xl font-bold text-text-primary mb-2">Token Factory v2 DirectDEX</h1>
-            <p className="text-text-secondary">Create and instantly list your token on DEX with advanced trading controls.</p>
-          </div>
+          <h1 className="text-4xl font-black mb-6 bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent" style={{ fontFamily: "'Roboto', monospace" }}>
+            TokenHub<span className="text-gray-400">.dev</span>
+          </h1>
+          
+          {chainId && (
+            <div className="mb-4 text-text-primary">
+              <p className="text-text-secondary">Create and instantly list your token on DEX with advanced trading controls.</p>
+            </div>
+          )}
           
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-            <TabsList className="bg-background-secondary border border-border p-1 rounded-lg flex">
+            <TabsList className="grid w-full grid-cols-3 mb-8">
               <TabsTrigger 
                 value="features"
                 className="flex-1 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-text-secondary rounded-md px-6"
@@ -81,7 +87,9 @@ function V2DirectDEXContent() {
               </TabsTrigger>
               <TabsTrigger 
                 value="create"
-                className="flex-1 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-text-secondary rounded-md px-6"
+                className="flex-1 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-text-secondary rounded-md px-6 opacity-50 cursor-not-allowed"
+                disabled
+                title="Token creation temporarily disabled for maintenance"
               >
                 Create Token
               </TabsTrigger>
@@ -96,6 +104,12 @@ function V2DirectDEXContent() {
                 className="flex-1 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-text-secondary rounded-md px-6"
               >
                 Listed Tokens
+              </TabsTrigger>
+              <TabsTrigger 
+                value="admin"
+                className="flex-1 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-text-secondary rounded-md px-6"
+              >
+                Admin
               </TabsTrigger>
             </TabsList>
             
@@ -182,6 +196,22 @@ function V2DirectDEXContent() {
                 ) : (
                   <div className="text-center py-8 bg-background-secondary rounded-lg border border-border">
                     <p className="text-text-secondary">Please connect your wallet to view your listed tokens.</p>
+                  </div>
+                )}
+              </Suspense>
+            </TabsContent>
+
+            <TabsContent value="admin">
+              <Suspense fallback={<div className="flex justify-center py-8"><Spinner /></div>}>
+                {isConnected ? (
+                  <div className="space-y-4">
+                    <div className="bg-background-secondary p-6 rounded-lg border border-border">
+                      <TokenAdminControls />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 bg-background-secondary rounded-lg border border-border">
+                    <p className="text-text-secondary">Please connect your wallet to access admin controls.</p>
                   </div>
                 )}
               </Suspense>
