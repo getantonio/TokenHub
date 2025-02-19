@@ -94,7 +94,7 @@ function V2DirectDEXContent() {
                 value="tokens"
                 className="flex-1 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-text-secondary rounded-md px-6"
               >
-                Your Tokens
+                Listed Tokens
               </TabsTrigger>
             </TabsList>
             
@@ -173,27 +173,21 @@ function V2DirectDEXContent() {
             <TabsContent value="tokens">
               <Suspense fallback={<div className="flex justify-center py-8"><Spinner /></div>}>
                 {isConnected ? (
-                  <div className="space-y-8">
-                    <div>
-                      <h3 className="text-lg font-semibold text-white mb-4">Your Created Tokens</h3>
-                      <TCAP_v2Make
-                        isConnected={isConnected}
-                        address={getNetworkContractAddress(Number(chainId), 'factoryAddressV2DirectDEX_Make') || undefined}
-                        provider={publicClient}
-                      />
-                    </div>
-                    <div>
+                  <div className="space-y-4">
+                    <div className="bg-background-secondary p-6 rounded-lg border border-border">
                       <h3 className="text-lg font-semibold text-white mb-4">Your Listed Tokens</h3>
-                      <TCAP_v2DirectDEX
-                        isConnected={isConnected}
-                        address={getNetworkContractAddress(Number(chainId), 'factoryAddressV2DirectDEX') || undefined}
-                        provider={publicClient}
-                      />
+                      <div className="space-y-4">
+                        <TCAP_v2DirectDEX
+                          isConnected={isConnected}
+                          address={getNetworkContractAddress(Number(chainId), 'factoryAddressV2DirectDEX') || undefined}
+                          provider={publicClient}
+                        />
+                      </div>
                     </div>
                   </div>
                 ) : (
                   <div className="text-center py-8 bg-background-secondary rounded-lg border border-border">
-                    <p className="text-text-secondary">Please connect your wallet to view your tokens.</p>
+                    <p className="text-text-secondary">Please connect your wallet to view your listed tokens.</p>
                   </div>
                 )}
               </Suspense>
