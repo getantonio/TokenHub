@@ -12,6 +12,7 @@ import { getNetworkContractAddress } from '@/config/contracts';
 import Head from 'next/head';
 import { Suspense, useState } from 'react';
 import { Spinner } from '@/components/ui/Spinner';
+import TCAP_U_DEXLIST from '@/components/features/token/TCAP_U_DEXLIST';
 
 // Dynamically import components with loading fallback
 const TokenForm_v2DD_2Step = dynamic(
@@ -175,14 +176,7 @@ function V2DirectDEXContent() {
                 {isConnected ? (
                   <div className="space-y-4">
                     <div className="bg-background-secondary p-6 rounded-lg border border-border">
-                      <h3 className="text-lg font-semibold text-white mb-4">Your Listed Tokens</h3>
-                      <div className="space-y-4">
-                        <TCAP_v2DirectDEX
-                          isConnected={isConnected}
-                          address={getNetworkContractAddress(Number(chainId), 'factoryAddressV2DirectDEX') || undefined}
-                          provider={publicClient}
-                        />
-                      </div>
+                      <TCAP_U_DEXLIST />
                     </div>
                   </div>
                 ) : (

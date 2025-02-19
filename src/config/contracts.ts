@@ -59,7 +59,7 @@ export const contractAddresses: { [key: number]: ContractAddresses } = {
     factoryAddressV2DirectDEX: '0xE1c68Cb8a037aC4E92eE2a7a30fEFA989c15Bc45',
     factoryAddressV2DirectDEX_Make: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V2_DIRECTDEX_MAKE || '',
     factoryAddressV2DirectDEX_Bake: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V2_DIRECTDEX_BAKE || '',
-    factoryAddressV2DirectDEX_TwoStep: process.env.NEXT_PUBLIC_BSCTESTNET_TOKEN_FACTORY_V2_TWOSTEP_ADDRESS || '',
+    factoryAddressV2DirectDEX_TwoStep: '0xE1c68Cb8a037aC4E92eE2a7a30fEFA989c15Bc45',
     factoryAddressTest: process.env.NEXT_PUBLIC_BSCTESTNET_TEST_FACTORY_ADDRESS || ''
   },
   56: { // BSC Mainnet
