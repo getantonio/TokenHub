@@ -12,6 +12,8 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { Spinner } from '@/components/ui/Spinner';
 import { getNetworkContractAddress } from '@/config/contracts';
 import { InfoIcon } from "lucide-react";
+import { CopyIcon } from "lucide-react";
+import { Switch } from '@/components/ui/switch';
 
 interface TokenDetails {
   address: string;
@@ -61,14 +63,16 @@ interface TokenCreatedEvent extends EventLog {
   args: Result & [token: string, owner: string];
 }
 
-// Add standard ERC20 ABI
+// Update the ERC20_ABI to include approve and allowance functions
 const ERC20_ABI = [
   "function name() view returns (string)",
   "function symbol() view returns (string)",
   "function decimals() view returns (uint8)",
   "function totalSupply() view returns (uint256)",
   "function balanceOf(address) view returns (uint256)",
-  "function owner() view returns (address)"
+  "function owner() view returns (address)",
+  "function approve(address spender, uint256 amount) external returns (bool)",
+  "function allowance(address owner, address spender) view returns (uint256)"
 ];
 
 // Add RPC URLs for different networks
@@ -271,22 +275,55 @@ const checkTokenDistribution = async (tokenContract: Contract): Promise<TokenDis
   }
 };
 
-// Update TOKEN_V3_ABI to include the correct functions for distributions
+// Update the TOKEN_V3_ABI to include the correct presale info structure
 const TOKEN_V3_ABI = [
-  ...ERC20_ABI,
-  ...TOKEN_APPROVAL_ABI,
+  // Basic ERC20
+  "function name() view returns (string)",
+  "function symbol() view returns (string)",
+  "function decimals() view returns (uint8)",
+  "function totalSupply() view returns (uint256)",
   "function owner() view returns (address)",
-  "function presaleInfo() view returns (tuple(uint256 softCap, uint256 hardCap, uint256 minContribution, uint256 maxContribution, uint256 startTime, uint256 endTime, uint256 presaleRate, bool whitelistEnabled, bool finalized, uint256 totalContributed))",
-  "function liquidityInfo() view returns (tuple(uint256 percentage, uint256 lockDuration, uint256 unlockTime, bool locked))",
-  "function platformFee() view returns (tuple(address recipient, uint256 totalTokens, bool vestingEnabled, uint256 vestingDuration, uint256 cliffDuration, uint256 vestingStart, uint256 tokensClaimed))",
-  "function getVestingSchedule(address) view returns (tuple(uint256 totalAmount, uint256 startTime, uint256 cliffDuration, uint256 vestingDuration, uint256 releasedAmount, bool revocable, bool revoked, uint256 releasableAmount))",
-  "function hasVestingSchedule(address) view returns (bool)",
-  "function finalize() external",
+  "function burn(uint256 amount) external",
+  // V3 Specific functions
+  "function liquidityAllocation() view returns (uint256)",
+  "function marketingAllocation() view returns (uint256)",
+  "function developmentAllocation() view returns (uint256)",
+  "function getBeneficiaryAllocations() view returns (tuple(address beneficiary, uint256 amount, uint256 startTime, uint256 duration, bool revocable, bool revoked)[])",
+  "function getTokenDistribution() view returns (tuple(uint256 liquidityAmount, uint256 marketingAmount, uint256 developmentAmount))",
+  "function getVestingInfo(address) view returns (tuple(uint256 released))",
+  "function getLiquidityInfo() view returns (tuple(uint256 amount, uint256 lockDuration))",
   "function finalizePresale() external",
-  "function presalePercentage() view returns (uint256)",
-  "function liquidityPercentage() view returns (uint256)",
-  "function getTokenDistribution() view returns (tuple(uint256 presaleTokens, uint256 liquidityTokens, uint256 platformTokens))"
+  "function cancelPresale() external",
+  "function withdrawTokens() external",
+  "function presaleInfo() view returns (tuple(uint256 softCap, uint256 hardCap, uint256 minContribution, uint256 maxContribution, uint256 startTime, uint256 endTime, uint256 presaleRate, bool whitelistEnabled, bool finalized, uint256 totalContributed))",
+  "function totalPresaleTokensDistributed() view returns (uint256)",
+  "function vestingSchedules(address) view returns (tuple(uint256 totalAmount, uint256 startTime, uint256 cliffDuration, uint256 vestingDuration, uint256 releasedAmount, bool revocable, bool revoked))"
 ];
+
+// Add this interface for V3 token distribution
+interface V3TokenDistribution {
+  liquidityAllocation: string;
+  marketingAllocation: string;
+  developmentAllocation: string;
+  beneficiaryAllocations: Array<{
+    beneficiary: string;
+    amount: string;
+    vestingStartTime: number;
+    vestingDuration: number;
+    isRevocable: boolean;
+    isRevoked: boolean;
+    released: string;
+  }>;
+  ownerVesting?: {
+    totalAmount: string;
+    startTime: number;
+    cliffDuration: number;
+    vestingDuration: number;
+    releasedAmount: string;
+    revocable: boolean;
+    revoked: boolean;
+  };
+}
 
 // Update TokenPreview interface
 interface TokenPreview {
@@ -294,18 +331,13 @@ interface TokenPreview {
   symbol: string;
   decimals: number;
   totalSupply: string;
+  maxSupply: string;
   owner: string;
   factoryVersion: string;
   isListed?: boolean;
-  pairAddress?: string;
   address?: string;
-  tokenDistribution?: {
-    presaleTokens: string;
-    liquidityTokens: string;
-    platformTokens: string;
-    presalePercentage: number;
-    liquidityPercentage: number;
-  };
+  pairAddress?: string;
+  paused?: boolean;
   presaleInfo?: {
     softCap: string;
     hardCap: string;
@@ -317,31 +349,18 @@ interface TokenPreview {
     whitelistEnabled: boolean;
     finalized: boolean;
     totalContributed: string;
+    totalPresaleTokens: string;
+    contributorCount: string;
+    contributors: Array<{
+      address: string;
+      contribution: string;
+      tokens: string;
+    }>;
   };
+  v3Distribution?: V3TokenDistribution;
   liquidityInfo?: {
-    percentage: string;
-    lockDuration: string;
-    unlockTime: number;
-    locked: boolean;
-  };
-  platformFee?: {
-    recipient: string;
-    totalTokens: string;
-    vestingEnabled: boolean;
-    vestingDuration: number;
-    cliffDuration: number;
-    vestingStart: number;
-    tokensClaimed: string;
-  };
-  vestingSchedule?: {
-    totalAmount: string;
-    startTime: number;
-    cliffDuration: number;
-    vestingDuration: number;
-    releasedAmount: string;
-    revocable: boolean;
-    revoked: boolean;
-    releasableAmount: string;
+    amount: string;
+    lockDuration: number;
   };
 }
 
@@ -364,6 +383,26 @@ const routerABI = [
   "function factory() external pure returns (address)"
 ];
 
+// Add this helper function near the top with other utility functions
+const handleContractError = (error: any): string => {
+  if (!error) return "Unknown error occurred";
+  
+  // Handle ethers contract errors
+  if (error.code === 'CALL_EXCEPTION') {
+    const revertReason = error.revert?.args?.[0] || error.reason || error.message;
+    return revertReason;
+  }
+  
+  // Handle MetaMask errors
+  if (error.code === -32000) {
+    return error.message.includes("execution reverted:") 
+      ? error.message.split("execution reverted:")[1].trim()
+      : error.message;
+  }
+  
+  return error.message || "Unknown error occurred";
+};
+
 function TokenListingProcess() {
   const { address: userAddress, isConnected } = useAccount();
   const { chainId } = useNetwork();
@@ -372,6 +411,7 @@ function TokenListingProcess() {
   const [isLoading, setIsLoading] = useState(false);
   const [userTokens, setUserTokens] = useState<TokenInfo[]>([]);
   const [selectedToken, setSelectedToken] = useState<TokenInfo | null>(null);
+  const [manualTokenAddress, setManualTokenAddress] = useState('');
   
   // State for each stage
   const [approvalDetails, setApprovalDetails] = useState<ApprovalDetails>({
@@ -444,17 +484,7 @@ function TokenListingProcess() {
       const v2Address = FACTORY_ADDRESSES.v2[chainId];
       const v3Address = FACTORY_ADDRESSES.v3[chainId];
 
-      console.log('Current chain ID:', chainId);
-      console.log('User address:', userAddress);
-      console.log('Loading tokens for factories:', {
-        v1: v1Address,
-        v2: v2Address,
-        v3: v3Address
-      });
-
-      // Validate factory addresses
       if (!v1Address || !v2Address || !v3Address) {
-        console.error('Missing factory addresses for chain:', chainId);
         toast({
           title: "Configuration Error",
           description: "Factory addresses not configured for this network.",
@@ -463,77 +493,61 @@ function TokenListingProcess() {
         return;
       }
 
-      // Create factory contracts with correct ABIs
-      const factoryV1 = new Contract(v1Address, [
-        'function getTokensByUser(address) view returns (address[])',
-        'function getUserCreatedTokens(address) view returns (address[])',
-        'function getDeployedTokens() view returns (address[])'
-      ], provider);
-      
-      const factoryV2 = new Contract(v2Address, [
-        'function getTokensByUser(address) view returns (address[])',
-        'function getUserCreatedTokens(address) view returns (address[])',
-        'function getDeployedTokens() view returns (address[])'
-      ], provider);
-      
-      const factoryV3 = new Contract(v3Address, [
-        'function getTokensByUser(address) view returns (address[])',
-        'function getUserCreatedTokens(address) view returns (address[])',
-        'function getDeployedTokens() view returns (address[])'
-      ], provider);
-
-      // Try different methods to get tokens
-      const getTokensWithFallback = async (factory: Contract, userAddr: string, version: string) => {
+      // Create factory contracts with error handling
+      const getTokensWithErrorHandling = async (factory: Contract, userAddr: string, version: string) => {
         try {
           // Try getUserCreatedTokens first
           try {
             const tokens = await factory.getUserCreatedTokens(userAddr);
-            console.log(`${version} getUserCreatedTokens:`, tokens);
             return tokens;
           } catch (error) {
-            console.log(`${version} getUserCreatedTokens failed, trying getTokensByUser...`);
+            console.log(`${version} getUserCreatedTokens failed:`, handleContractError(error));
           }
 
           // Try getTokensByUser as fallback
           try {
             const tokens = await factory.getTokensByUser(userAddr);
-            console.log(`${version} getTokensByUser:`, tokens);
             return tokens;
           } catch (error) {
-            console.log(`${version} getTokensByUser failed, trying getDeployedTokens...`);
+            console.log(`${version} getTokensByUser failed:`, handleContractError(error));
           }
 
           // Try getDeployedTokens as last resort
           const tokens = await factory.getDeployedTokens();
-          console.log(`${version} getDeployedTokens:`, tokens);
           return tokens;
         } catch (error) {
-          console.error(`Error getting tokens for ${version}:`, error);
+          console.error(`Error getting tokens for ${version}:`, handleContractError(error));
           return [];
         }
       };
 
-      // Get tokens from each factory
+      // Get tokens from each factory with improved error handling
       const [v1Tokens, v2Tokens, v3Tokens] = await Promise.all([
-        getTokensWithFallback(factoryV1, userAddress, 'V1'),
-        getTokensWithFallback(factoryV2, userAddress, 'V2'),
-        getTokensWithFallback(factoryV3, userAddress, 'V3')
+        getTokensWithErrorHandling(new Contract(v1Address, [
+          'function getTokensByUser(address) view returns (address[])',
+          'function getUserCreatedTokens(address) view returns (address[])',
+          'function getDeployedTokens() view returns (address[])'
+        ], provider), userAddress, 'V1'),
+        getTokensWithErrorHandling(new Contract(v2Address, [
+          'function getTokensByUser(address) view returns (address[])',
+          'function getUserCreatedTokens(address) view returns (address[])',
+          'function getDeployedTokens() view returns (address[])'
+        ], provider), userAddress, 'V2'),
+        getTokensWithErrorHandling(new Contract(v3Address, [
+          'function getTokensByUser(address) view returns (address[])',
+          'function getUserCreatedTokens(address) view returns (address[])',
+          'function getDeployedTokens() view returns (address[])'
+        ], provider), userAddress, 'V3')
       ]);
 
-      console.log('Found tokens:', {
-        v1: v1Tokens,
-        v2: v2Tokens,
-        v3: v3Tokens
-      });
-
-      // Function to get token details
+      // Function to get token details with error handling
       const getTokenDetails = async (address: string, version: "v1" | "v2" | "v3") => {
         try {
           const tokenContract = new Contract(address, ERC20_ABI, provider);
           const [name, symbol, totalSupply] = await Promise.all([
-            tokenContract.name(),
-            tokenContract.symbol(),
-            tokenContract.totalSupply()
+            tokenContract.name().catch(() => 'Unknown'),
+            tokenContract.symbol().catch(() => 'Unknown'),
+            tokenContract.totalSupply().catch(() => BigInt(0))
           ]);
 
           return {
@@ -544,12 +558,11 @@ function TokenListingProcess() {
             factoryVersion: version
           };
         } catch (error) {
-          console.error(`Error getting details for token ${address}:`, error);
+          console.error(`Error getting details for token ${address}:`, handleContractError(error));
           return null;
         }
       };
 
-      // Get details for all tokens
       const tokenDetailsPromises = [
         ...v1Tokens.map((addr: string) => getTokenDetails(addr, "v1")),
         ...v2Tokens.map((addr: string) => getTokenDetails(addr, "v2")),
@@ -557,11 +570,10 @@ function TokenListingProcess() {
       ];
 
       const tokens = (await Promise.all(tokenDetailsPromises)).filter(token => token !== null);
-      console.log('Final token list:', tokens);
       setUserTokens(tokens);
 
     } catch (error) {
-      console.error('Error loading user tokens:', error);
+      console.error('Error loading user tokens:', handleContractError(error));
       toast({
         title: "Error",
         description: "Failed to load your tokens. Please try again.",
@@ -583,23 +595,20 @@ function TokenListingProcess() {
         const tokenContract = new Contract(token.address, TOKEN_V3_ABI, provider);
         
         // Get token distribution
-        const [
-          liquidityAllocation,
-          marketingAllocation,
-          developmentAllocation,
-          beneficiaryAllocations
-        ] = await Promise.all([
-          tokenContract.liquidityAllocation().then(formatEther).catch(() => '0'),
-          tokenContract.marketingAllocation().then(formatEther).catch(() => '0'),
-          tokenContract.developmentAllocation().then(formatEther).catch(() => '0'),
+        const [distribution, beneficiaryAllocs] = await Promise.all([
+          tokenContract.getTokenDistribution().catch(() => ({ 
+            liquidityAmount: BigInt(0), 
+            marketingAmount: BigInt(0), 
+            developmentAmount: BigInt(0) 
+          })),
           tokenContract.getBeneficiaryAllocations().catch(() => [])
         ]);
 
-        const distribution: TokenDistribution = {
-          liquidityAllocation,
-          marketingAllocation,
-          developmentAllocation,
-          beneficiaryAllocations: beneficiaryAllocations.map((b: any) => ({
+        const tokenDist: TokenDistribution = {
+          liquidityAllocation: formatEther(distribution.liquidityAmount),
+          marketingAllocation: formatEther(distribution.marketingAmount),
+          developmentAllocation: formatEther(distribution.developmentAmount),
+          beneficiaryAllocations: beneficiaryAllocs.map((b: any) => ({
             beneficiary: b.beneficiary,
             amount: formatEther(b.amount),
             vestingStartTime: Number(b.startTime),
@@ -610,17 +619,17 @@ function TokenListingProcess() {
         };
 
         // Update UI to show allocations
-        setTokenDistribution(distribution);
+        setTokenDistribution(tokenDist);
         
         // If there's a predefined liquidity allocation, use it
-        if (distribution.liquidityAllocation !== '0') {
+        if (tokenDist.liquidityAllocation !== '0') {
           setApprovalDetails(prev => ({
             ...prev,
-            liquidityAmount: distribution.liquidityAllocation
+            liquidityAmount: tokenDist.liquidityAllocation
           }));
         }
 
-        console.log('Token distribution loaded:', distribution);
+        console.log('Token distribution loaded:', tokenDist);
       } catch (error) {
         console.error('Error getting token distribution:', error);
         toast({
@@ -659,10 +668,10 @@ function TokenListingProcess() {
       const signer = await provider.getSigner();
       const dexRouter = getDexRouterAddress(chainId);
       
-      // Create token contract instance with appropriate ABI
+      // Create token contract instance with the full ABI
       const tokenContract = new Contract(
         selectedToken.address,
-        selectedToken.factoryVersion === 'v3' ? TOKEN_V3_ABI : [...ERC20_ABI, ...TOKEN_APPROVAL_ABI],
+        ERC20_ABI,
         signer
       );
       
@@ -754,73 +763,248 @@ function TokenListingProcess() {
     return address;
   };
 
-  // Add loadTokenPreview function before the deployToDEX function
+  // Update loadTokenPreview function
   const loadTokenPreview = async () => {
-    if (!selectedToken || !chainId) return;
-    
+    if (!selectedToken?.address) {
+      toast({
+        title: "Error",
+        description: "No token address provided",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       setIsLoadingPreview(true);
-      const provider = getProvider();
-      const signer = await provider.getSigner();
-      
-      // Get DEX router and factory addresses
-      const dexRouter = getDexRouterAddress(chainId);
-      const routerContract = new Contract(dexRouter, routerABI, provider);
-      const factoryAddress = await routerContract.factory();
-      const factoryContract = new Contract(factoryAddress, [
-        "function getPair(address tokenA, address tokenB) view returns (address)"
-      ], provider);
-      
-      // Check if pair exists with WETH
-      const wethAddress = await routerContract.WETH();
-      const pairAddress = await factoryContract.getPair(selectedToken.address, wethAddress);
-      const isListed = pairAddress !== "0x0000000000000000000000000000000000000000";
-      
-      // Create contract with appropriate ABI based on version
-      const tokenContract = new Contract(
-        selectedToken.address,
-        selectedToken.factoryVersion === 'v3' ? TOKEN_V3_ABI : ERC20_ABI,
-        provider
-      );
-      
-      // Get basic token info with proper error handling
-      const [name, symbol, decimals, totalSupply, owner] = await Promise.all([
-        tokenContract.name().catch(() => 'Unknown'),
-        tokenContract.symbol().catch(() => 'Unknown'),
-        tokenContract.decimals().catch(() => 18),
-        tokenContract.totalSupply().catch(() => BigInt(0)),
-        tokenContract.owner().catch(() => 'Not available')
-      ]);
+      const provider = new BrowserProvider(window.ethereum);
 
-      const preview: TokenPreview = {
-        name,
-        symbol,
-        decimals,
-        totalSupply: formatEther(totalSupply),
-        owner,
-        factoryVersion: selectedToken.factoryVersion,
-        isListed,
-        pairAddress: isListed ? pairAddress : undefined,
-        address: selectedToken.address
-      };
-      
-      setTokenPreview(preview);
+      // Enhanced V3 ABI with additional functions from check-distribution.ts
+      const TOKEN_V3_ABI = [
+        // Basic ERC20 functions
+        "function name() view returns (string)",
+        "function symbol() view returns (string)",
+        "function decimals() view returns (uint8)",
+        "function totalSupply() view returns (uint256)",
+        "function owner() view returns (address)",
+        // V3 specific functions
+        "function presaleInfo() view returns (tuple(uint256 softCap, uint256 hardCap, uint256 minContribution, uint256 maxContribution, uint256 startTime, uint256 endTime, uint256 presaleRate, bool whitelistEnabled, bool finalized, uint256 totalContributed))",
+        "function getContributors() view returns (address[])",
+        "function getContributorCount() view returns (uint256)",
+        "function presaleContributorTokens(address) view returns (uint256)",
+        "function contributions(address) view returns (uint256)",
+        "function vestingSchedules(address) view returns (tuple(uint256 totalAmount, uint256 startTime, uint256 cliffDuration, uint256 vestingDuration, uint256 releasedAmount, bool revocable, bool revoked))",
+        "function hasVestingSchedule(address) view returns (bool)",
+        "function maxSupply() view returns (uint256)",
+        "function totalPresaleTokensDistributed() view returns (uint256)",
+        "function paused() view returns (bool)",
+        "function isListed() view returns (bool)",
+        "function getTokenDistribution() view returns (tuple(uint256 liquidityAmount, uint256 marketingAmount, uint256 developmentAmount))",
+        "function getBeneficiaryAllocations() view returns (tuple(address beneficiary, uint256 amount, uint256 startTime, uint256 duration, bool revocable, bool revoked)[])",
+        "function getVestingInfo(address) view returns (tuple(uint256 released))",
+        "function getLiquidityInfo() view returns (tuple(uint256 amount, uint256 lockDuration))",
+        "function finalizePresale() external"
+      ];
 
-      if (isListed) {
-        toast({
-          title: "Token Already Listed",
-          description: "This token is already listed on DEX. You cannot list it again.",
-          variant: "destructive",
-        });
-        setApprovalDetails(prev => ({ ...prev, approved: false }));
+      if (selectedToken.factoryVersion === 'v3') {
+        // Use V3 specific contract
+        const tokenContract = new Contract(selectedToken.address, TOKEN_V3_ABI, provider);
+        
+        // Get all token information in parallel
+        const [
+          name,
+          symbol,
+          decimals,
+          totalSupply,
+          owner,
+          maxSupply,
+          paused,
+          presaleInfo,
+          contributors,
+          contributorCount,
+          totalPresaleTokens,
+          distribution,
+          beneficiaryAllocs,
+          isListed
+        ] = await Promise.all([
+          tokenContract.name(),
+          tokenContract.symbol(),
+          tokenContract.decimals(),
+          tokenContract.totalSupply(),
+          tokenContract.owner(),
+          tokenContract.maxSupply(),
+          tokenContract.paused(),
+          tokenContract.presaleInfo().catch(() => null),
+          tokenContract.getContributors().catch(() => []),
+          tokenContract.getContributorCount().catch(() => 0),
+          tokenContract.totalPresaleTokensDistributed().catch(() => 0),
+          tokenContract.getTokenDistribution().catch(() => ({ liquidityAmount: BigInt(0), marketingAmount: BigInt(0), developmentAmount: BigInt(0) })),
+          tokenContract.getBeneficiaryAllocations().catch(() => []),
+          tokenContract.isListed().catch(() => false)
+        ]);
+
+        // Get vesting info for owner
+        let ownerVestingInfo = null;
+        try {
+          const hasVesting = await tokenContract.hasVestingSchedule(owner);
+          if (hasVesting) {
+            ownerVestingInfo = await tokenContract.vestingSchedules(owner);
+          }
+        } catch (error) {
+          console.log('No owner vesting info available');
+        }
+
+        // Format beneficiary allocations with vesting info
+        const beneficiaryDetails = await Promise.all(
+          beneficiaryAllocs.map(async (b: any) => {
+            const vestingInfo = await tokenContract.getVestingInfo(b.beneficiary).catch(() => null);
+            return {
+              beneficiary: b.beneficiary,
+              amount: formatEther(b.amount),
+              vestingStartTime: Number(b.startTime),
+              vestingDuration: Number(b.duration),
+              isRevocable: b.revocable,
+              isRevoked: b.revoked,
+              released: vestingInfo ? formatEther(vestingInfo.released) : '0'
+            };
+          })
+        );
+
+        // Get contributor details
+        const contributorDetails = await Promise.all(
+          contributors.map(async (contributor: string) => {
+            const [contribution, tokens] = await Promise.all([
+              tokenContract.contributions(contributor),
+              tokenContract.presaleContributorTokens(contributor)
+            ]);
+            return {
+              address: contributor,
+              contribution: formatEther(contribution),
+              tokens: formatEther(tokens)
+            };
+          })
+        );
+
+        const tokenInfo: TokenPreview = {
+          name,
+          symbol,
+          decimals,
+          totalSupply: formatEther(totalSupply),
+          maxSupply: formatEther(maxSupply),
+          owner,
+          factoryVersion: 'v3',
+          address: selectedToken.address,
+          isListed,
+          paused,
+          presaleInfo: presaleInfo ? {
+            softCap: formatEther(presaleInfo.softCap),
+            hardCap: formatEther(presaleInfo.hardCap),
+            minContribution: formatEther(presaleInfo.minContribution),
+            maxContribution: formatEther(presaleInfo.maxContribution),
+            presaleRate: presaleInfo.presaleRate.toString(),
+            startTime: Number(presaleInfo.startTime),
+            endTime: Number(presaleInfo.endTime),
+            whitelistEnabled: presaleInfo.whitelistEnabled,
+            finalized: presaleInfo.finalized,
+            totalContributed: formatEther(presaleInfo.totalContributed),
+            totalPresaleTokens: formatEther(totalPresaleTokens),
+            contributorCount: contributorCount.toString(),
+            contributors: contributorDetails
+          } : undefined,
+          v3Distribution: {
+            liquidityAllocation: formatEther(distribution.liquidityAmount),
+            marketingAllocation: formatEther(distribution.marketingAmount),
+            developmentAllocation: formatEther(distribution.developmentAmount),
+            beneficiaryAllocations: beneficiaryDetails,
+            ownerVesting: ownerVestingInfo ? {
+              totalAmount: formatEther(ownerVestingInfo.totalAmount),
+              startTime: Number(ownerVestingInfo.startTime),
+              cliffDuration: Number(ownerVestingInfo.cliffDuration),
+              vestingDuration: Number(ownerVestingInfo.vestingDuration),
+              releasedAmount: formatEther(ownerVestingInfo.releasedAmount),
+              revocable: ownerVestingInfo.revocable,
+              revoked: ownerVestingInfo.revoked
+            } : undefined
+          }
+        };
+
+        // Get liquidity info if available
+        try {
+          const liquidityInfo = await tokenContract.getLiquidityInfo();
+          tokenInfo.liquidityInfo = {
+            amount: formatEther(liquidityInfo.amount),
+            lockDuration: Number(liquidityInfo.lockDuration)
+          };
+        } catch (error) {
+          console.log('No liquidity info available');
+        }
+
+        setTokenPreview(tokenInfo);
       } else {
-        toast({
-          title: "Success",
-          description: "Token details loaded successfully",
-        });
+        // Use standard contract for v1/v2
+        const tokenContract = new Contract(
+          selectedToken.address,
+          [
+            "function name() view returns (string)",
+            "function symbol() view returns (string)",
+            "function decimals() view returns (uint8)",
+            "function totalSupply() view returns (uint256)",
+            "function owner() view returns (address)",
+            "function maxSupply() view returns (uint256)",
+            "function getTokenInfo() view returns (tuple(string name, string symbol, uint256 totalSupply, uint8 decimals, address owner, bool isListed))",
+            "function getListingInfo() view returns (tuple(address router, address pair, uint256 listingTime, bool isListed))"
+          ],
+          provider
+        );
+
+        // Get basic token info
+        const [name, symbol, decimals, totalSupply, owner] = await Promise.all([
+          tokenContract.name(),
+          tokenContract.symbol(),
+          tokenContract.decimals(),
+          tokenContract.totalSupply(),
+          tokenContract.owner()
+        ]);
+
+        // Get maxSupply separately with fallback
+        let maxSupply = totalSupply;
+        try {
+          maxSupply = await tokenContract.maxSupply();
+        } catch {
+          // No maxSupply function available, using totalSupply as fallback
+        }
+
+        const tokenInfo: TokenPreview = {
+          name,
+          symbol,
+          decimals,
+          totalSupply: formatEther(totalSupply),
+          maxSupply: formatEther(maxSupply),
+          owner,
+          factoryVersion: selectedToken.factoryVersion,
+          address: selectedToken.address,
+          isListed: false
+        };
+
+        try {
+          // Try to get additional listing info
+          const listingInfo = await tokenContract.getListingInfo();
+          if (listingInfo) {
+            tokenInfo.isListed = listingInfo.isListed;
+            tokenInfo.pairAddress = listingInfo.pair;
+          }
+        } catch (error) {
+          console.log("No listing info available");
+        }
+
+        setTokenPreview(tokenInfo);
       }
+
+      toast({
+        title: "Success",
+        description: "Token details refreshed successfully"
+      });
     } catch (error) {
-      console.error('Error loading token preview:', error);
+      console.error("Error loading token preview:", error);
       toast({
         title: "Error",
         description: "Failed to load token details. Please try again.",
@@ -831,7 +1015,7 @@ function TokenListingProcess() {
     }
   };
 
-  // Function to deploy to DEX
+  // Update deployToDEX function to handle V3 tokens differently
   const deployToDEX = async () => {
     if (!selectedToken || !chainId) return;
     
@@ -840,8 +1024,9 @@ function TokenListingProcess() {
       const provider = getProvider();
       const signer = await provider.getSigner();
       
-      // Validate initial liquidity amount with network-specific currency
-      if (!dexDetails.initialLiquidityInETH || Number(dexDetails.initialLiquidityInETH) < 0.1) {
+      // Validate initial liquidity amount with strict parsing
+      const liquidityAmount = parseFloat(dexDetails.initialLiquidityInETH);
+      if (isNaN(liquidityAmount) || liquidityAmount < 0.1) {
         toast({
           title: "Error",
           description: `Minimum liquidity required is 0.1 ${getNetworkCurrency(chainId)}`,
@@ -850,35 +1035,46 @@ function TokenListingProcess() {
         return;
       }
 
-      // Validate token price
-      if (!dexDetails.listingPriceInETH || Number(dexDetails.listingPriceInETH) <= 0) {
-        toast({
-          title: "Error",
-          description: "Please enter a valid token price",
-          variant: "destructive",
-        });
-        return;
-      }
+      // Convert to exact Wei value and store in ethAmount
+      const ethAmount = parseEther(liquidityAmount.toString());
+      console.log('Liquidity amount in ETH:', formatEther(ethAmount));
       
       // Get the DEX router address
       const dexRouter = getDexRouterAddress(chainId);
       console.log('Using DEX router:', dexRouter);
       
-      // Create token contract instance
-      const tokenContract = new Contract(
-        selectedToken.address,
-        [...ERC20_ABI, ...TOKEN_APPROVAL_ABI],
-        signer
-      );
+      let tokenContract;
+      let tokenAmount;
+
+      if (selectedToken.factoryVersion === 'v3') {
+        // Use V3 specific contract
+        tokenContract = new Contract(
+          selectedToken.address,
+          TOKEN_V3_ABI,
+          signer
+        );
+
+        // Get liquidity info for V3 tokens
+        const distribution = await tokenContract.getTokenDistribution();
+        tokenAmount = distribution.liquidityAmount;
+        console.log('V3 Token liquidity allocation:', formatEther(tokenAmount));
+      } else {
+        // Use standard contract for v1/v2
+        tokenContract = new Contract(
+          selectedToken.address,
+          [...ERC20_ABI, ...TOKEN_APPROVAL_ABI],
+          signer
+        );
+
+        // Get total supply and calculate token amount (40% for v1/v2)
+        const totalSupply = await tokenContract.totalSupply();
+        tokenAmount = (totalSupply * BigInt(40)) / BigInt(100);
+      }
 
       // Check token balance
       const userAddress = await signer.getAddress();
       const balance = await tokenContract.balanceOf(userAddress);
       console.log('User token balance:', formatEther(balance));
-
-      // Get total supply and calculate token amount (40% for all versions)
-      const totalSupply = await tokenContract.totalSupply();
-      const tokenAmount = (totalSupply * BigInt(40)) / BigInt(100);
       console.log('Token amount for liquidity:', formatEther(tokenAmount));
       
       if (balance < tokenAmount) {
@@ -889,9 +1085,8 @@ function TokenListingProcess() {
         });
         return;
       }
-      
-      // Calculate ETH/BNB amount from listing price
-      const ethAmount = parseEther(dexDetails.listingPriceInETH);
+
+      // Use ethAmount from earlier validation
       console.log('ETH/BNB amount for liquidity:', formatEther(ethAmount));
       
       // Check BNB balance
@@ -1050,6 +1245,32 @@ function TokenListingProcess() {
       
       const tokenContract = new Contract(tokenAddress, TOKEN_V3_ABI, signer);
       
+      // Check presale conditions before attempting to finalize
+      const presaleInfo = await tokenContract.presaleInfo().catch(() => null);
+      if (presaleInfo) {
+        const currentTime = Math.floor(Date.now() / 1000);
+        const totalContributed = formatEther(presaleInfo.totalContributed);
+        const softCap = formatEther(presaleInfo.softCap);
+        
+        if (Number(totalContributed) < Number(softCap)) {
+          toast({
+            title: "Cannot Finalize Presale",
+            description: `Soft cap not reached. Current: ${Number(totalContributed).toFixed(2)} ETH, Required: ${Number(softCap).toFixed(2)} ETH`,
+            variant: "destructive",
+          });
+          return;
+        }
+        
+        if (currentTime < Number(presaleInfo.endTime)) {
+          toast({
+            title: "Cannot Finalize Presale",
+            description: `Presale is still active. Ends at ${new Date(Number(presaleInfo.endTime) * 1000).toLocaleString()}`,
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+      
       const tx = await tokenContract.finalizePresale();
       
       toast({
@@ -1068,9 +1289,21 @@ function TokenListingProcess() {
       await loadTokenPreview();
     } catch (error) {
       console.error('Error finalizing presale:', error);
+      let errorMessage = "Failed to finalize presale";
+      
+      if (error instanceof Error) {
+        if (error.message.includes("Soft cap not reached")) {
+          errorMessage = "Cannot finalize: Soft cap not reached";
+        } else if (error.message.includes("Presale not ended")) {
+          errorMessage = "Cannot finalize: Presale is still active";
+        } else if (error.message.includes("Already finalized")) {
+          errorMessage = "Presale has already been finalized";
+        }
+      }
+      
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to finalize presale",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -1116,6 +1349,313 @@ function TokenListingProcess() {
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to reset approval",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Add this component for displaying token distribution
+  const TokenDistributionInfo = ({ distribution }: { distribution: any }) => {
+    if (!distribution) return null;
+
+    const formatPercentage = (amount: string, totalSupply: string) => {
+      const percentage = (Number(amount) / Number(totalSupply)) * 100;
+      return percentage.toFixed(2) + '%';
+    };
+
+    return (
+      <div className="mt-4 space-y-2">
+        <h4 className="font-medium text-sm text-gray-300">Token Distribution</h4>
+        <div className="bg-gray-800 rounded-md p-3 space-y-3">
+          <div>
+            <p className="text-sm text-gray-400">Liquidity Allocation:</p>
+            <p className="text-sm">
+              {Number(distribution.liquidityAllocation).toLocaleString()} tokens 
+              ({formatPercentage(distribution.liquidityAllocation, tokenPreview?.totalSupply || '0')})
+            </p>
+          </div>
+
+          {Number(distribution.marketingAllocation) > 0 && (
+            <div>
+              <p className="text-sm text-gray-400">Marketing Allocation:</p>
+              <p className="text-sm">
+                {Number(distribution.marketingAllocation).toLocaleString()} tokens
+                ({formatPercentage(distribution.marketingAllocation, tokenPreview?.totalSupply || '0')})
+              </p>
+            </div>
+          )}
+
+          {Number(distribution.developmentAllocation) > 0 && (
+            <div>
+              <p className="text-sm text-gray-400">Development Allocation:</p>
+              <p className="text-sm">
+                {Number(distribution.developmentAllocation).toLocaleString()} tokens
+                ({formatPercentage(distribution.developmentAllocation, tokenPreview?.totalSupply || '0')})
+              </p>
+            </div>
+          )}
+          
+          {distribution.beneficiaryAllocations?.length > 0 && (
+            <div>
+              <p className="text-sm text-gray-400 mb-2">Beneficiary Allocations:</p>
+              <div className="space-y-2">
+                {distribution.beneficiaryAllocations.map((allocation: any, index: number) => (
+                  <div key={index} className="text-sm bg-gray-700/50 p-2 rounded">
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Address:</span>
+                      <span className="text-xs">{allocation.beneficiary}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Amount:</span>
+                      <span>
+                        {Number(allocation.amount).toLocaleString()} tokens
+                        ({formatPercentage(allocation.amount, tokenPreview?.totalSupply || '0')})
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Vesting Duration:</span>
+                      <span className="text-xs">{secondsToDays(allocation.vestingDuration)} days</span>
+                    </div>
+                    {allocation.released && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Released:</span>
+                        <span>{Number(allocation.released).toLocaleString()} tokens</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // Add helper function for converting seconds to days
+  const secondsToDays = (seconds: number): number => {
+    return Math.floor(seconds / (60 * 60 * 24));
+  };
+
+  // Add this helper function near the top with other utility functions
+  const formatTimeDisplay = (seconds: number): string => {
+    const days = Math.floor(seconds / (24 * 60 * 60));
+    return `${days} days`;
+  };
+
+  // Update the handleBurnUnsoldTokens function
+  const handleBurnUnsoldTokens = async (tokenAddress: string) => {
+    if (!tokenAddress || !chainId) return;
+    
+    try {
+      setIsLoading(true);
+      const provider = getProvider();
+      const signer = await provider.getSigner();
+      
+      // Verify contract exists
+      const code = await provider.getCode(tokenAddress);
+      if (code === '0x') {
+        throw new Error('Invalid contract address');
+      }
+      
+      const tokenContract = new Contract(tokenAddress, TOKEN_V3_ABI, signer);
+      
+      // Get presale info and check conditions
+      const presaleInfo = await tokenContract.presaleInfo();
+      const currentTime = Math.floor(Date.now() / 1000);
+      
+      if (currentTime <= Number(presaleInfo.endTime)) {
+        toast({
+          title: "Cannot Burn Tokens",
+          description: "Presale has not ended yet",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      if (Number(formatEther(presaleInfo.totalContributed)) >= Number(formatEther(presaleInfo.softCap))) {
+        toast({
+          title: "Cannot Burn Tokens",
+          description: "Soft cap was reached, tokens cannot be burned",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // Get token balance of contract first
+      const contractBalance = await tokenContract.balanceOf(tokenAddress);
+      console.log('Contract balance:', formatEther(contractBalance));
+      
+      // Calculate unsold tokens more accurately
+      const totalPresaleTokens = await tokenContract.totalPresaleTokensDistributed();
+      const unsoldTokens = contractBalance;
+      
+      if (unsoldTokens <= BigInt(0)) {
+        toast({
+          title: "No Tokens to Burn",
+          description: "There are no unsold tokens to burn",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      console.log('Attempting to burn:', formatEther(unsoldTokens), 'tokens');
+      
+      // Estimate gas with higher limit
+      const gasEstimate = await tokenContract.burn.estimateGas(unsoldTokens, {
+        gasLimit: 500000 // Higher initial estimate
+      }).catch((error: any) => {
+        console.error('Gas estimation failed:', error);
+        return BigInt(500000); // Fallback gas limit
+      });
+      
+      // Add 20% buffer to gas estimate
+      const gasLimit = (gasEstimate * BigInt(120)) / BigInt(100);
+      
+      console.log('Estimated gas:', gasEstimate.toString(), 'Using gas limit:', gasLimit.toString());
+      
+      // Burn the unsold tokens
+      const tx = await tokenContract.burn(unsoldTokens, {
+        gasLimit
+      });
+      
+      toast({
+        title: "Burning Unsold Tokens",
+        description: "Please wait for the transaction to be confirmed",
+      });
+      
+      await tx.wait();
+      
+      toast({
+        title: "Success",
+        description: `Successfully burned ${formatEther(unsoldTokens)} unsold tokens`,
+      });
+      
+      // Refresh token preview
+      await loadTokenPreview();
+    } catch (error) {
+      console.error('Error burning unsold tokens:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to burn unsold tokens",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Update the handleCancelPresale function
+  const handleCancelPresale = async (tokenAddress: string) => {
+    if (!tokenAddress || !chainId) return;
+    
+    try {
+      setIsLoading(true);
+      const provider = getProvider();
+      const signer = await provider.getSigner();
+      
+      // Verify contract exists
+      const code = await provider.getCode(tokenAddress);
+      if (code === '0x') {
+        throw new Error('Invalid contract address');
+      }
+      
+      const tokenContract = new Contract(tokenAddress, [
+        ...TOKEN_V3_ABI,
+        "function balanceOf(address) view returns (uint256)"
+      ], signer);
+      
+      // Check if presale exists and can be cancelled
+      const [presaleInfo, owner] = await Promise.all([
+        tokenContract.presaleInfo(),
+        tokenContract.owner()
+      ]);
+
+      // Verify caller is owner
+      const signerAddress = await signer.getAddress();
+      if (signerAddress.toLowerCase() !== owner.toLowerCase()) {
+        throw new Error('Only owner can cancel presale');
+      }
+
+      const currentTime = Math.floor(Date.now() / 1000);
+      
+      // Check presale conditions
+      if (presaleInfo.finalized) {
+        throw new Error('Presale is already finalized');
+      }
+
+      if (Number(formatEther(presaleInfo.totalContributed)) >= Number(formatEther(presaleInfo.softCap))) {
+        throw new Error('Soft cap was reached, presale cannot be cancelled');
+      }
+
+      // Get contract balance first
+      const contractBalance = await tokenContract.balanceOf(tokenAddress);
+      if (contractBalance <= BigInt(0)) {
+        throw new Error('No tokens available to cancel');
+      }
+
+      // Prepare transaction with manual gas limit
+      const tx = await tokenContract.cancelPresale({
+        gasLimit: BigInt(500000) // Set fixed gas limit since estimation is failing
+      });
+      
+      toast({
+        title: "Cancelling Presale",
+        description: "Please wait for the transaction to be confirmed",
+      });
+      
+      const receipt = await tx.wait();
+      
+      if (!receipt || receipt.status === 0) {
+        throw new Error('Transaction failed. Please check your wallet for details.');
+      }
+
+      // Try to withdraw tokens in a separate transaction
+      try {
+        const withdrawTx = await tokenContract.withdrawTokens({
+          gasLimit: BigInt(300000)
+        });
+        
+        await withdrawTx.wait();
+        
+        toast({
+          title: "Success",
+          description: "Presale cancelled and tokens withdrawn successfully",
+        });
+      } catch (withdrawError) {
+        console.error('Failed to withdraw tokens:', withdrawError);
+        toast({
+          title: "Partial Success",
+          description: "Presale cancelled but failed to withdraw tokens. Please try withdrawing tokens separately.",
+          variant: "destructive",
+        });
+      }
+      
+      // Refresh token preview
+      await loadTokenPreview();
+    } catch (error) {
+      console.error('Error cancelling presale:', error);
+      
+      let errorMessage = "Failed to cancel presale";
+      if (error instanceof Error) {
+        if (error.message.includes("Only owner")) {
+          errorMessage = "Only the owner can cancel the presale";
+        } else if (error.message.includes("already finalized")) {
+          errorMessage = "Presale has already been finalized";
+        } else if (error.message.includes("Soft cap")) {
+          errorMessage = "Cannot cancel: Soft cap was reached";
+        } else if (error.message.includes("No tokens")) {
+          errorMessage = "No tokens available to cancel";
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      toast({
+        title: "Error",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -1253,9 +1793,9 @@ function TokenListingProcess() {
           </TabsContent>
 
           <TabsContent value="approve">
-            <div className="space-y-3">
+            <div className="space-y-6">
               {selectedToken && (
-                <div className="p-2 bg-gray-900 rounded-lg">
+                <div className="p-4 bg-gray-900 rounded-lg">
                   <div className="flex justify-between items-center">
                     <div>
                       <h4 className="font-medium text-white">{selectedToken.name} ({selectedToken.symbol})</h4>
@@ -1268,571 +1808,316 @@ function TokenListingProcess() {
                 </div>
               )}
 
-              {selectedToken && (
-                <div className="p-4 bg-gray-900 rounded-lg space-y-4">
-                  <div className="flex justify-between items-center">
-                    <h4 className="text-sm font-medium text-white">Token Preview</h4>
-                    <Button
-                      onClick={loadTokenPreview}
-                      className="bg-blue-600 hover:bg-blue-700 text-white h-7 text-xs px-3"
-                      disabled={isLoadingPreview}
-                    >
-                      {isLoadingPreview ? <Spinner className="h-3 w-3" /> : 'Refresh Token Details'}
-                    </Button>
-                  </div>
-                  
-                  {tokenPreview ? (
-                    <div className="space-y-3 text-sm">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <p className="text-gray-400">Name:</p>
-                          <p className="text-white font-medium">{tokenPreview.name}</p>
-                        </div>
-                        <div>
-                          <p className="text-gray-400">Symbol:</p>
-                          <p className="text-white font-medium">{tokenPreview.symbol}</p>
-                        </div>
-                        <div>
-                          <p className="text-gray-400">Total Supply:</p>
-                          <p className="text-white font-medium">{Number(tokenPreview.totalSupply).toLocaleString()} {tokenPreview.symbol}</p>
-                        </div>
-                        <div>
-                          <p className="text-gray-400">Decimals:</p>
-                          <p className="text-white font-medium">{tokenPreview.decimals}</p>
-                        </div>
-                        <div className="col-span-2">
-                          <p className="text-gray-400">Owner:</p>
-                          <p className="text-white font-medium break-all">{tokenPreview.owner}</p>
-                        </div>
+              {/* Token Preview Section */}
+              <div className="p-4 bg-gray-900 rounded-lg space-y-4">
+                <div className="flex justify-between items-center">
+                  <h4 className="text-sm font-medium text-white">Token Preview</h4>
+                  <Button
+                    onClick={loadTokenPreview}
+                    className="bg-blue-600 hover:bg-blue-700 text-white h-7 text-xs px-3"
+                    disabled={isLoadingPreview}
+                  >
+                    {isLoadingPreview ? <Spinner className="h-3 w-3" /> : 'Refresh Token Details'}
+                  </Button>
+                </div>
+                
+                {tokenPreview && selectedToken ? (
+                  <div className="space-y-4">
+                    {/* Basic Token Info - Compact Grid */}
+                    <div className="grid grid-cols-3 gap-3 bg-gray-800 p-3 rounded-lg">
+                      <div>
+                        <p className="text-xs text-gray-400">Name/Symbol</p>
+                        <p className="text-sm text-white">{tokenPreview.name} ({tokenPreview.symbol})</p>
                       </div>
-                      
-                      {tokenPreview.factoryVersion === 'v3' && (
-                        <div className="border-t border-gray-800 pt-3">
-                          <h5 className="text-sm font-medium text-white mb-2">Token Distribution</h5>
-                          <div className="grid grid-cols-2 gap-4">
-                            {tokenPreview.presaleInfo && (
-                              <div className="col-span-2">
-                                <p className="text-gray-400 mb-2">Presale Info:</p>
-                                <div className="grid grid-cols-2 gap-4 bg-gray-800 p-3 rounded-lg">
-                                  <div>
-                                    <p className="text-gray-400">Soft Cap:</p>
-                                    <p className="text-white font-medium">
-                                      {Number(tokenPreview.presaleInfo.softCap).toLocaleString()} ETH
-                                    </p>
-                                  </div>
-                                  <div>
-                                    <p className="text-gray-400">Hard Cap:</p>
-                                    <p className="text-white font-medium">
-                                      {Number(tokenPreview.presaleInfo.hardCap).toLocaleString()} ETH
-                                    </p>
-                                  </div>
-                                  <div>
-                                    <p className="text-gray-400">Rate:</p>
-                                    <p className="text-white font-medium">
-                                      {Number(tokenPreview.presaleInfo.presaleRate).toLocaleString()} tokens/ETH
-                                    </p>
-                                  </div>
-                                  <div>
-                                    <p className="text-gray-400">Status:</p>
-                                    <p className="text-white font-medium">
-                                      {tokenPreview.presaleInfo.finalized ? 'Finalized' : 'Active'}
-                                    </p>
-                                  </div>
-                                  <div>
-                                    <p className="text-gray-400">Total Contributed:</p>
-                                    <p className="text-white font-medium">
-                                      {Number(tokenPreview.presaleInfo.totalContributed).toLocaleString()} ETH
-                                    </p>
-                                  </div>
-                                  <div>
-                                    <p className="text-gray-400">Whitelist:</p>
-                                    <p className="text-white font-medium">
-                                      {tokenPreview.presaleInfo.whitelistEnabled ? 'Enabled' : 'Disabled'}
-                                    </p>
-                                  </div>
-                                  <div className="col-span-2 mt-2 flex gap-2">
-                                    <Button
-                                      onClick={() => handleFinalizePresale(selectedToken.address)}
-                                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white h-7 text-xs"
-                                      disabled={
-                                        tokenPreview.presaleInfo.finalized || 
-                                        Number(tokenPreview.presaleInfo.totalContributed) < Number(tokenPreview.presaleInfo.softCap)
-                                      }
-                                    >
-                                      Finalize Presale
-                                    </Button>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-                            {tokenPreview.liquidityInfo && (
-                              <div className="col-span-2 mt-4">
-                                <p className="text-gray-400 mb-2">Distribution Info:</p>
-                                <div className="grid grid-cols-2 gap-4 bg-gray-800 p-3 rounded-lg">
-                                  <div>
-                                    <p className="text-gray-400">Liquidity Amount:</p>
-                                    <p className="text-white font-medium">
-                                      {Number(tokenPreview.liquidityInfo.percentage).toLocaleString()} {tokenPreview.symbol}
-                                    </p>
-                                  </div>
-                                  <div>
-                                    <p className="text-gray-400">Lock Duration:</p>
-                                    <p className="text-white font-medium">
-                                      {Number(tokenPreview.liquidityInfo.lockDuration) / 86400} days
-                                    </p>
-                                  </div>
-                                  <div>
-                                    <p className="text-gray-400">Presale Amount:</p>
-                                    <p className="text-white font-medium">
-                                      {tokenPreview.presaleInfo ? (Number(tokenPreview.presaleInfo.hardCap) * Number(tokenPreview.presaleInfo.presaleRate)).toLocaleString() : '0'} {tokenPreview.symbol}
-                                    </p>
-                                  </div>
-                                  <div>
-                                    <p className="text-gray-400">Developer Amount:</p>
-                                    <p className="text-white font-medium">
-                                      {Number(tokenPreview.platformFee?.totalTokens || 0).toLocaleString()} {tokenPreview.symbol}
-                                    </p>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-                          </div>
+                      <div>
+                        <p className="text-xs text-gray-400">Supply</p>
+                        <p className="text-sm text-white">{Number(tokenPreview.totalSupply).toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-400">Status</p>
+                        <p className="text-sm text-white">{tokenPreview.paused ? 'Paused' : 'Active'}</p>
+                      </div>
+                    </div>
 
-                          {tokenPreview.vestingSchedule && (
-                            <div className="mt-4">
-                              <h5 className="text-sm font-medium text-white mb-2">Your Vesting Schedule</h5>
-                              <div className="space-y-2">
-                                <div className="grid grid-cols-2 gap-4">
-                                  <div>
-                                    <p className="text-gray-400">Total Amount:</p>
-                                    <p className="text-white font-medium">
-                                      {Number(tokenPreview.vestingSchedule.totalAmount).toLocaleString()} {tokenPreview.symbol}
-                                    </p>
-                                  </div>
-                                  <div>
-                                    <p className="text-gray-400">Released Amount:</p>
-                                    <p className="text-white font-medium">
-                                      {Number(tokenPreview.vestingSchedule.releasedAmount).toLocaleString()} {tokenPreview.symbol}
-                                    </p>
-                                  </div>
-                                  <div>
-                                    <p className="text-gray-400">Releasable Amount:</p>
-                                    <p className="text-white font-medium">
-                                      {Number(tokenPreview.vestingSchedule.releasableAmount).toLocaleString()} {tokenPreview.symbol}
-                                    </p>
-                                  </div>
-                                  <div>
-                                    <p className="text-gray-400">Start Time:</p>
-                                    <p className="text-white font-medium">
-                                      {new Date(tokenPreview.vestingSchedule.startTime * 1000).toLocaleString()}
-                                    </p>
-                                  </div>
-                                  <div>
-                                    <p className="text-gray-400">Cliff Duration:</p>
-                                    <p className="text-white font-medium">
-                                      {Math.floor(Number(tokenPreview.vestingSchedule.cliffDuration) / 86400)} days
-                                    </p>
-                                  </div>
-                                  <div>
-                                    <p className="text-gray-400">Vesting Duration:</p>
-                                    <p className="text-white font-medium">
-                                      {Math.floor(Number(tokenPreview.vestingSchedule.vestingDuration) / 86400)} days
-                                    </p>
-                                  </div>
-
-                                  <div className="col-span-2">
-                                    <p className="text-gray-400">Status:</p>
-                                    <p className="text-white font-medium">
-                                      {tokenPreview.vestingSchedule.revoked ? 'Revoked' : 'Active'}
-                                      {tokenPreview.vestingSchedule.revocable && !tokenPreview.vestingSchedule.revoked && ' (Revocable)'}
-                                    </p>
-                                  </div>
-                                </div>
-                              </div>
+                    {/* Presale Info - Compact Display */}
+                    {tokenPreview.presaleInfo && (
+                      <div className="bg-gray-800 p-3 rounded-lg">
+                        <div className="flex justify-between items-center mb-2">
+                          <h4 className="text-sm font-medium text-white">Presale Status</h4>
+                          {tokenPreview?.presaleInfo && !tokenPreview.presaleInfo.finalized && (
+                            <div className="flex gap-2">
+                              <Button
+                                onClick={() => handleFinalizePresale(tokenPreview.address!)}
+                                className="bg-green-600 hover:bg-green-700 text-white h-7 text-xs px-3"
+                                disabled={isLoading || (
+                                  Number(tokenPreview.presaleInfo.totalContributed) < Number(tokenPreview.presaleInfo.softCap) && 
+                                  Date.now() < tokenPreview.presaleInfo.endTime * 1000
+                                )}
+                                title={
+                                  Number(tokenPreview.presaleInfo.totalContributed) < Number(tokenPreview.presaleInfo.softCap) && 
+                                  Date.now() < tokenPreview.presaleInfo.endTime * 1000 
+                                    ? "Cannot finalize - Soft cap not reached and presale still active" 
+                                    : ""
+                                }
+                              >
+                                {isLoading ? <Spinner className="h-3 w-3" /> : 'Finalize Presale'}
+                              </Button>
+                              {Date.now() > tokenPreview.presaleInfo.endTime * 1000 && 
+                               Number(tokenPreview.presaleInfo.totalContributed) < Number(tokenPreview.presaleInfo.softCap) && (
+                                <>
+                                  <Button
+                                    onClick={() => handleBurnUnsoldTokens(tokenPreview.address!)}
+                                    className="bg-red-600 hover:bg-red-700 text-white h-7 text-xs px-3"
+                                    disabled={isLoading}
+                                  >
+                                    {isLoading ? <Spinner className="h-3 w-3" /> : 'Burn Unsold Tokens'}
+                                  </Button>
+                                  <Button
+                                    onClick={() => handleCancelPresale(tokenPreview.address!)}
+                                    className="bg-yellow-600 hover:bg-yellow-700 text-white h-7 text-xs px-3"
+                                    disabled={isLoading}
+                                  >
+                                    {isLoading ? <Spinner className="h-3 w-3" /> : 'Cancel & List Directly'}
+                                  </Button>
+                                </>
+                              )}
                             </div>
                           )}
                         </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="text-center py-4 text-gray-400">
-                      Click 'Refresh Token Details' to load token information
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {selectedToken && TOKEN_VERSION_FEATURES[selectedToken.factoryVersion].hasFees && (
-                <div className="p-2 bg-gray-900 rounded-lg">
-                  <div className="flex items-center gap-2 mb-2">
-                    <h4 className="text-sm font-medium text-white">Fees</h4>
-                    <InfoTooltip content={TOOLTIP_CONTENT.marketingFee} />
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-32">
-                        <div className="flex items-center gap-1 mb-1">
-                          <Label htmlFor="marketingFee" className="text-xs text-gray-400">Marketing (%)</Label>
-                          <InfoTooltip content={TOOLTIP_CONTENT.marketingFee} />
+                        <div className="grid grid-cols-2 gap-3 text-sm">
+                          <div>
+                            <p className="text-xs text-gray-400">Progress</p>
+                            <p className="text-white">{tokenPreview.presaleInfo.totalContributed}/{tokenPreview.presaleInfo.hardCap} ETH</p>
+                            <p className="text-xs text-gray-400 mt-1">Soft Cap: {tokenPreview.presaleInfo.softCap} ETH</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-400">Rate</p>
+                            <p className="text-white">{tokenPreview.presaleInfo.presaleRate}/ETH</p>
+                          </div>
                         </div>
-                        <Input
-                          id="marketingFee"
-                          type="number"
-                          min="0"
-                          max="10"
-                          value={approvalDetails.marketingFee}
-                          onChange={(e) => setApprovalDetails(prev => ({
-                            ...prev,
-                            marketingFee: e.target.value
-                          }))}
-                          className="h-7 text-sm bg-gray-800 border-gray-700 text-white"
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <Label htmlFor="marketingWallet" className="text-xs text-gray-400">Wallet Address</Label>
-                        <Input
-                          id="marketingWallet"
-                          type="text"
-                          placeholder="0x000...000"
-                          value={approvalDetails.marketingWallet || ''}
-                          onChange={(e) => setApprovalDetails(prev => ({
-                            ...prev,
-                            marketingWallet: e.target.value
-                          }))}
-                          className="h-7 text-sm bg-gray-800 border-gray-700 text-white"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <div className="w-32">
-                        <div className="flex items-center gap-1 mb-1">
-                          <Label htmlFor="developmentFee" className="text-xs text-gray-400">Dev (%)</Label>
-                          <InfoTooltip content={TOOLTIP_CONTENT.developmentFee} />
+                        <div className="grid grid-cols-2 gap-3 text-sm mt-3">
+                          <div>
+                            <p className="text-xs text-gray-400">Start Date</p>
+                            <p className="text-white">{new Date(tokenPreview.presaleInfo.startTime * 1000).toLocaleString()}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-400">End Date</p>
+                            <p className="text-white">{new Date(tokenPreview.presaleInfo.endTime * 1000).toLocaleString()}</p>
+                          </div>
                         </div>
-                        <Input
-                          id="developmentFee"
-                          type="number"
-                          min="0"
-                          max="10"
-                          value={approvalDetails.developmentFee}
-                          onChange={(e) => setApprovalDetails(prev => ({
-                            ...prev,
-                            developmentFee: e.target.value
-                          }))}
-                          className="h-7 text-sm bg-gray-800 border-gray-700 text-white"
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <Label htmlFor="developmentWallet" className="text-xs text-gray-400">Wallet Address</Label>
-                        <Input
-                          id="developmentWallet"
-                          type="text"
-                          placeholder="0x000...000"
-                          value={approvalDetails.developmentWallet || ''}
-                          onChange={(e) => setApprovalDetails(prev => ({
-                            ...prev,
-                            developmentWallet: e.target.value
-                          }))}
-                          className="h-7 text-sm bg-gray-800 border-gray-700 text-white"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <div className="w-full">
-                        <div className="flex items-center gap-1 mb-1">
-                          <Label htmlFor="liquidityFee" className="text-xs text-gray-400">Liquidity (%)</Label>
-                          <InfoTooltip content={TOOLTIP_CONTENT.liquidityFee} />
+                        <div className="mt-2">
+                          <p className="text-xs text-gray-400">Status</p>
+                          <p className="text-white">
+                            {tokenPreview.presaleInfo.finalized ? 'Finalized' : 
+                             Date.now() > tokenPreview.presaleInfo.endTime * 1000 ? 'Ended (Not Finalized)' : 'Active'}
+                          </p>
                         </div>
-                        <Input
-                          id="liquidityFee"
-                          type="number"
-                          min="0"
-                          max="10"
-                          value={approvalDetails.liquidityFee}
-                          onChange={(e) => setApprovalDetails(prev => ({
-                            ...prev,
-                            liquidityFee: e.target.value
-                          }))}
-                          className="h-7 text-sm bg-gray-800 border-gray-700 text-white"
-                        />
                       </div>
-                    </div>
-                  </div>
-                </div>
-              )}
+                    )}
 
-              <div className="p-2 bg-gray-900 rounded-lg">
-                <div className="flex items-center gap-2 mb-2">
-                  <h4 className="text-sm font-medium text-white">Token Approval</h4>
-                  <InfoTooltip content="Approve tokens for DEX listing (40% of total supply)" />
-                </div>
-                <div className="space-y-2">
-                  <div>
-                    <Label className="text-xs text-gray-400">Tokens for Liquidity</Label>
-                    <div className="p-2 bg-gray-800 rounded border border-gray-700">
-                      <div className="text-sm text-white">
-                        {selectedToken ? `${Number(selectedToken.totalSupply) * 0.4} ${selectedToken.symbol}` : '0'}
+                    {/* Distribution Info - Compact Display */}
+                    {tokenPreview.v3Distribution && (
+                      <div className="bg-gray-800 p-3 rounded-lg">
+                        <h4 className="text-sm font-medium text-white mb-2">Token Distribution</h4>
+                        <div className="grid grid-cols-2 gap-3 text-sm">
+                          <div>
+                            <p className="text-xs text-gray-400">Liquidity</p>
+                            <p className="text-white">{Number(tokenPreview.v3Distribution.liquidityAllocation).toLocaleString()}</p>
+                          </div>
+                          {Number(tokenPreview.v3Distribution.marketingAllocation) > 0 && (
+                            <div>
+                              <p className="text-xs text-gray-400">Marketing</p>
+                              <p className="text-white">{Number(tokenPreview.v3Distribution.marketingAllocation).toLocaleString()}</p>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <div className="text-xs text-gray-400">40% of total supply</div>
-                    </div>
+                    )}
+
+                    {/* Vesting Info - Compact Display */}
+                    {tokenPreview.v3Distribution?.ownerVesting && (
+                      <div className="bg-gray-800 p-3 rounded-lg">
+                        <h4 className="text-sm font-medium text-white mb-2">Vesting Schedule</h4>
+                        <div className="grid grid-cols-2 gap-3 text-sm">
+                          <div>
+                            <p className="text-xs text-gray-400">Amount</p>
+                            <p className="text-white">{Number(tokenPreview.v3Distribution.ownerVesting.totalAmount).toLocaleString()}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-400">Duration</p>
+                            <p className="text-white">{secondsToDays(Number(tokenPreview.v3Distribution.ownerVesting.vestingDuration))} days</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-400">Cliff Duration</p>
+                            <p className="text-white">{secondsToDays(Number(tokenPreview.v3Distribution.ownerVesting.cliffDuration))} days</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-400">Start Date</p>
+                            <p className="text-white">{new Date(Number(tokenPreview.v3Distribution.ownerVesting.startTime) * 1000).toLocaleString()}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
+                ) : (
+                  <div className="text-center py-4 text-gray-400">
+                    Select a token to view details
+                  </div>
+                )}
               </div>
 
-              <div className="p-2 bg-gray-900 rounded-lg">
-                <div className="flex items-center gap-2 mb-2">
-                  <h4 className="text-sm font-medium text-white">Liquidity</h4>
-                  <InfoTooltip content="Configure initial liquidity and trading settings" />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <div className="flex items-center gap-1 mb-1">
-                      <Label htmlFor="liquidityAmount" className="text-xs text-gray-400">
-                        Initial ({chainId ? getNetworkCurrency(chainId) : 'ETH'})
+              {/* Approval Form */}
+              <div className="space-y-6 p-4 bg-gray-900 rounded-lg">
+                <h4 className="text-sm font-medium text-white">Listing Configuration</h4>
+
+                {/* Fee Settings */}
+                <div className="space-y-4">
+                  <h5 className="text-sm text-gray-400">Fee Settings</h5>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-text-primary flex items-center gap-2">
+                        Marketing Fee (%)
+                        <InfoTooltip content={TOOLTIP_CONTENT.marketingFee} />
                       </Label>
-                      <InfoTooltip content={TOOLTIP_CONTENT.liquidityAmount} />
-                    </div>
-                    <Input
-                      id="liquidityAmount"
-                      type="number"
-                      min="0.01"
-                      step="0.01"
-                      placeholder={`Enter amount in ${chainId ? getNetworkCurrency(chainId) : 'ETH'}`}
-                      value={approvalDetails.liquidityAmount}
-                      onChange={(e) => setApprovalDetails(prev => ({
-                        ...prev,
-                        liquidityAmount: e.target.value
-                      }))}
-                      className="h-7 text-sm bg-gray-800 border-gray-700 text-white"
-                    />
-                  </div>
-                  {TOKEN_VERSION_FEATURES[selectedToken?.factoryVersion || 'v1'].hasTradingControl && (
-                    <div>
-                      <div className="flex items-center gap-1 mb-1">
-                        <Label htmlFor="tradingStartTime" className="text-xs text-gray-400">Start Time</Label>
-                        <InfoTooltip content={TOOLTIP_CONTENT.tradingStart} />
-                      </div>
                       <Input
-                        id="tradingStartTime"
-                        type="datetime-local"
-                        value={new Date(approvalDetails.tradingStartTime).toISOString().slice(0, 16)}
-                        onChange={(e) => setApprovalDetails(prev => ({
-                          ...prev,
-                          tradingStartTime: new Date(e.target.value).getTime()
-                        }))}
-                        className="h-7 text-sm bg-gray-800 border-gray-700 text-white"
-                        min={new Date().toISOString().slice(0, 16)}
+                        type="number"
+                        min="0"
+                        max="10"
+                        value={approvalDetails.marketingFee}
+                        onChange={(e) => setApprovalDetails(prev => ({ ...prev, marketingFee: e.target.value }))}
+                        className="bg-gray-800 text-text-primary border-gray-700"
                       />
                     </div>
-                  )}
-                </div>
-              </div>
-
-              {selectedToken && (TOKEN_VERSION_FEATURES[selectedToken.factoryVersion].hasMaxTransaction || 
-                                TOKEN_VERSION_FEATURES[selectedToken.factoryVersion].hasMaxWallet) && (
-                <div className="p-2 bg-gray-900 rounded-lg">
-                  <div className="flex items-center gap-2 mb-2">
-                    <h4 className="text-sm font-medium text-white">Limits</h4>
-                    <InfoTooltip content="Set maximum transaction and wallet limits" />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    {TOKEN_VERSION_FEATURES[selectedToken.factoryVersion].hasMaxTransaction && (
-                      <div>
-                        <div className="flex items-center gap-1 mb-1">
-                          <Label htmlFor="maxTransactionAmount" className="text-xs text-gray-400">Max Tx (%)</Label>
-                          <InfoTooltip content={TOOLTIP_CONTENT.maxTransaction} />
-                        </div>
-                        <Input
-                          id="maxTransactionAmount"
-                          type="number"
-                          min="0.1"
-                          max="100"
-                          value={approvalDetails.maxTransactionAmount}
-                          onChange={(e) => setApprovalDetails(prev => ({
-                            ...prev,
-                            maxTransactionAmount: e.target.value
-                          }))}
-                          className="h-7 text-sm bg-gray-800 border-gray-700 text-white"
-                        />
-                      </div>
-                    )}
-                    {TOKEN_VERSION_FEATURES[selectedToken.factoryVersion].hasMaxWallet && (
-                      <div>
-                        <div className="flex items-center gap-1 mb-1">
-                          <Label htmlFor="maxWalletAmount" className="text-xs text-gray-400">Max Wallet (%)</Label>
-                          <InfoTooltip content={TOOLTIP_CONTENT.maxWallet} />
-                        </div>
-                        <Input
-                          id="maxWalletAmount"
-                          type="number"
-                          min="0.1"
-                          max="100"
-                          value={approvalDetails.maxWalletAmount}
-                          onChange={(e) => setApprovalDetails(prev => ({
-                            ...prev,
-                            maxWalletAmount: e.target.value
-                          }))}
-                          className="h-7 text-sm bg-gray-800 border-gray-700 text-white"
-                        />
-                      </div>
-                    )}
+                    <div className="space-y-2">
+                      <Label className="text-text-primary flex items-center gap-2">
+                        Development Fee (%)
+                        <InfoTooltip content={TOOLTIP_CONTENT.developmentFee} />
+                      </Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        max="10"
+                        value={approvalDetails.developmentFee}
+                        onChange={(e) => setApprovalDetails(prev => ({ ...prev, developmentFee: e.target.value }))}
+                        className="bg-gray-800 text-text-primary border-gray-700"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-text-primary flex items-center gap-2">
+                        Liquidity Fee (%)
+                        <InfoTooltip content={TOOLTIP_CONTENT.liquidityFee} />
+                      </Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        max="10"
+                        value={approvalDetails.liquidityFee}
+                        onChange={(e) => setApprovalDetails(prev => ({ ...prev, liquidityFee: e.target.value }))}
+                        className="bg-gray-800 text-text-primary border-gray-700"
+                      />
+                    </div>
                   </div>
                 </div>
-              )}
 
-              {selectedToken && (TOKEN_VERSION_FEATURES[selectedToken.factoryVersion].hasAntiBot || 
-                                TOKEN_VERSION_FEATURES[selectedToken.factoryVersion].hasBlacklist) && (
-                <div className="p-2 bg-gray-900 rounded-lg">
-                  <div className="flex items-center gap-2 mb-2">
-                    <h4 className="text-sm font-medium text-white">Protection</h4>
-                    <InfoTooltip content="Enable protection features for your token" />
+                {/* Trading Controls */}
+                <div className="space-y-4">
+                  <h5 className="text-sm text-gray-400">Trading Controls</h5>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-text-primary flex items-center gap-2">
+                        Max Transaction (%)
+                        <InfoTooltip content={TOOLTIP_CONTENT.maxTransaction} />
+                      </Label>
+                      <Input
+                        type="number"
+                        min="0.1"
+                        max="100"
+                        value={approvalDetails.maxTransactionAmount}
+                        onChange={(e) => setApprovalDetails(prev => ({ ...prev, maxTransactionAmount: e.target.value }))}
+                        className="bg-gray-800 text-text-primary border-gray-700"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-text-primary flex items-center gap-2">
+                        Max Wallet (%)
+                        <InfoTooltip content={TOOLTIP_CONTENT.maxWallet} />
+                      </Label>
+                      <Input
+                        type="number"
+                        min="0.1"
+                        max="100"
+                        value={approvalDetails.maxWalletAmount}
+                        onChange={(e) => setApprovalDetails(prev => ({ ...prev, maxWalletAmount: e.target.value }))}
+                        className="bg-gray-800 text-text-primary border-gray-700"
+                      />
+                    </div>
                   </div>
-                  <div className="flex gap-4">
-                    {TOKEN_VERSION_FEATURES[selectedToken.factoryVersion].hasAntiBot && (
+                </div>
+
+                {/* Wallet Settings */}
+                <div className="space-y-4">
+                  <h5 className="text-sm text-gray-400">Wallet Settings</h5>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-text-primary">Marketing Wallet</Label>
+                      <Input
+                        value={approvalDetails.marketingWallet}
+                        onChange={(e) => setApprovalDetails(prev => ({ ...prev, marketingWallet: e.target.value }))}
+                        className="bg-gray-800 text-text-primary border-gray-700"
+                        placeholder="0x..."
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-text-primary">Development Wallet</Label>
+                      <Input
+                        value={approvalDetails.developmentWallet}
+                        onChange={(e) => setApprovalDetails(prev => ({ ...prev, developmentWallet: e.target.value }))}
+                        className="bg-gray-800 text-text-primary border-gray-700"
+                        placeholder="0x..."
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Additional Controls */}
+                <div className="space-y-4">
+                  <h5 className="text-sm text-gray-400">Additional Controls</h5>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
                       <div className="flex items-center gap-2">
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={approvalDetails.antiBot}
-                            onChange={(e) => setApprovalDetails(prev => ({
-                              ...prev,
-                              antiBot: e.target.checked
-                            }))}
-                            className="w-3.5 h-3.5 rounded border-gray-700 bg-gray-800"
-                          />
-                          <span className="text-xs text-white">Anti-Bot</span>
-                        </label>
+                        <Label className="text-text-primary">Anti-Bot Protection</Label>
                         <InfoTooltip content={TOOLTIP_CONTENT.antiBot} />
                       </div>
-                    )}
-                    {TOKEN_VERSION_FEATURES[selectedToken.factoryVersion].hasBlacklist && (
+                      <Switch
+                        checked={approvalDetails.antiBot}
+                        onCheckedChange={(checked) => setApprovalDetails(prev => ({ ...prev, antiBot: checked }))}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
                       <div className="flex items-center gap-2">
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={approvalDetails.blacklist}
-                            onChange={(e) => setApprovalDetails(prev => ({
-                              ...prev,
-                              blacklist: e.target.checked
-                            }))}
-                            className="w-3.5 h-3.5 rounded border-gray-700 bg-gray-800"
-                          />
-                          <span className="text-xs text-white">Blacklist</span>
-                        </label>
+                        <Label className="text-text-primary">Blacklist</Label>
                         <InfoTooltip content={TOOLTIP_CONTENT.blacklist} />
                       </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {selectedToken && selectedToken.factoryVersion === 'v3' && tokenDistribution && (
-                <div className="p-2 bg-gray-900 rounded-lg">
-                  <div className="flex items-center gap-2 mb-2">
-                    <h4 className="text-sm font-medium text-white">Token Distribution</h4>
-                    <InfoTooltip content="Predefined token allocations and vesting schedules" />
-                  </div>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Liquidity Allocation:</span>
-                      <span className="text-white">{Number(tokenDistribution.liquidityAllocation).toLocaleString()} {selectedToken.symbol}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Marketing Allocation:</span>
-                      <span className="text-white">{Number(tokenDistribution.marketingAllocation).toLocaleString()} {selectedToken.symbol}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Development Allocation:</span>
-                      <span className="text-white">{Number(tokenDistribution.developmentAllocation).toLocaleString()} {selectedToken.symbol}</span>
-                    </div>
-                    {tokenDistribution.beneficiaryAllocations.length > 0 && (
-                      <div className="mt-4 border-t border-gray-800 pt-3">
-                        <h5 className="text-sm font-medium text-white mb-2">Beneficiary Allocations</h5>
-                        <div className="space-y-3">
-                          {tokenDistribution.beneficiaryAllocations.map((allocation, index) => (
-                            <div key={index} className="bg-gray-800 p-2 rounded">
-                              <div className="grid gap-1">
-                                <div className="flex justify-between">
-                                  <span className="text-gray-400">Address:</span>
-                                  <span className="text-white font-mono text-xs">{allocation.beneficiary}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-gray-400">Amount:</span>
-                                  <span className="text-white">{Number(allocation.amount).toLocaleString()} {selectedToken.symbol}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-gray-400">Vesting Start:</span>
-                                  <span className="text-white">{new Date(allocation.vestingStartTime * 1000).toLocaleString()}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-gray-400">Duration:</span>
-                                  <span className="text-white">{Math.floor(allocation.vestingDuration / 86400)} days</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-gray-400">Status:</span>
-                                  <span className="text-white">
-                                    {allocation.isRevoked ? 'Revoked' : 'Active'}
-                                    {allocation.isRevocable && !allocation.isRevoked && ' (Revocable)'}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {tokenPreview && selectedToken && tokenPreview.tokenDistribution && (
-                <div className="col-span-2">
-                  <p className="text-gray-400 mb-2">Token Distribution:</p>
-                  <div className="grid grid-cols-2 gap-4 bg-gray-800 p-3 rounded-lg">
-                    <div>
-                      <p className="text-gray-400">Presale Allocation:</p>
-                      <p className="text-white font-medium">
-                        {Number(tokenPreview.tokenDistribution.presaleTokens).toLocaleString()} {selectedToken.symbol} ({tokenPreview.tokenDistribution.presalePercentage}%)
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-gray-400">Liquidity Allocation:</p>
-                      <p className="text-white font-medium">
-                        {Number(tokenPreview.tokenDistribution.liquidityTokens).toLocaleString()} {selectedToken.symbol} ({tokenPreview.tokenDistribution.liquidityPercentage}%)
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-gray-400">Platform Allocation:</p>
-                      <p className="text-white font-medium">
-                        {Number(tokenPreview.tokenDistribution.platformTokens).toLocaleString()} {selectedToken.symbol}
-                      </p>
+                      <Switch
+                        checked={approvalDetails.blacklist}
+                        onCheckedChange={(checked) => setApprovalDetails(prev => ({ ...prev, blacklist: checked }))}
+                      />
                     </div>
                   </div>
                 </div>
-              )}
-
-              {tokenPreview && selectedToken && tokenPreview.presaleInfo && !tokenPreview.presaleInfo.finalized && (
-                <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg mb-4">
-                  <p className="text-yellow-500 text-sm">
-                    This token is currently in presale stage. You must wait for the presale to be finalized before listing on DEX.
-                    The liquidity allocation is {tokenPreview.tokenDistribution?.liquidityPercentage}% of total supply.
-                  </p>
-                </div>
-              )}
+              </div>
 
               {approvalDetails.approved ? (
                 <div className="space-y-2">
                   <Button
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white h-8 text-xs font-medium"
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white"
                     onClick={() => setActiveTab('deploy')}
                     disabled={isLoading}
                   >
                     Continue to Deployment
                   </Button>
                   <Button
-                    className="w-full bg-red-600 hover:bg-red-700 text-white h-8 text-xs font-medium"
+                    className="w-full bg-red-600 hover:bg-red-700 text-white"
                     onClick={resetApproval}
                     disabled={isLoading}
                   >
@@ -1841,11 +2126,11 @@ function TokenListingProcess() {
                 </div>
               ) : (
                 <Button
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white h-8 text-xs font-medium"
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white"
                   onClick={approveToken}
-                  disabled={!approvalDetails.liquidityAmount || isLoading || (tokenPreview?.presaleInfo && !tokenPreview.presaleInfo.finalized)}
+                  disabled={isLoading || (tokenPreview?.presaleInfo && !tokenPreview.presaleInfo.finalized)}
                 >
-                  {isLoading ? <Spinner className="h-3 w-3" /> : 
+                  {isLoading ? <Spinner /> : 
                    tokenPreview?.presaleInfo && !tokenPreview.presaleInfo.finalized ? 
                    'Cannot List - Presale Active' : 
                    'Approve Token for Listing'}
@@ -2013,4 +2298,9 @@ const getDexUrl = (chainId: number): string => {
     default:
       return '';
   }
+};
+
+// Add seconds to days conversion utility
+const secondsToDays = (seconds: number): number => {
+  return Number((seconds / 86400).toFixed(2)); // Round to 2 decimal places
 };

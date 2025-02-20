@@ -13,6 +13,7 @@ import { getExplorerUrl } from '@/config/networks';
 import { InfoIcon } from '@/components/ui/InfoIcon';
 import { shortenAddress } from '@/utils/address';
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { getNetworkContractAddress, FACTORY_ADDRESSES } from '@config/contracts';
 
 interface Props {
   isConnected: boolean;
@@ -235,24 +236,61 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
   };
 
   const loadTokens = async () => {
-    if (!externalProvider || !factoryAddress) {
-      console.log('TCAP_v3 loadTokens: Missing provider or factory address', {
-        hasProvider: !!externalProvider,
-        factoryAddress
-      });
+    if (!externalProvider) {
+      console.log('TCAP_v3 loadTokens: Missing provider');
       return;
     }
 
     try {
       console.log('TCAP_v3 loadTokens: Starting token load');
       setIsLoading(true);
-    setError(null);
+      setError(null);
+
+      // Get chainId
+      const network = await externalProvider.getNetwork();
+      const chainId = Number(network.chainId);
+
+      // Try multiple ways to get the factory address
+      let factoryV3Address = null;
+      
+      // First try FACTORY_ADDRESSES
+      if (FACTORY_ADDRESSES.v3[chainId]) {
+        factoryV3Address = FACTORY_ADDRESSES.v3[chainId];
+        console.log("Got factory address from FACTORY_ADDRESSES:", factoryV3Address);
+      }
+      
+      // If not found, try getNetworkContractAddress with different keys
+      if (!factoryV3Address) {
+        const keys = ['FACTORY_ADDRESS_V3', 'factoryV3', 'factoryAddressV3'];
+        for (const key of keys) {
+          factoryV3Address = getNetworkContractAddress(chainId, key);
+          if (factoryV3Address) {
+            console.log(`Got factory address using key ${key}:`, factoryV3Address);
+            break;
+          }
+        }
+      }
+
+      if (!factoryV3Address) {
+        console.error("No factory address found for chain:", chainId);
+        setError('No V3 factory deployed on this network');
+        return;
+      }
+
+      // Verify the factory contract exists
+      const code = await externalProvider.getCode(factoryV3Address);
+      if (code === '0x' || code === '') {
+        console.error("Factory contract not deployed at:", factoryV3Address);
+        setError('Factory contract not found on this network');
+        return;
+      }
 
       const signer = await externalProvider.getSigner();
       console.log('TCAP_v3: Got signer');
       
-      const factory = new Contract(factoryAddress, [
+      const factory = new Contract(factoryV3Address, [
         'function getUserCreatedTokens(address user) view returns (address[])',
+        'function getDeployedTokens() view returns (address[])',
         'function getTokenCreator(address token) view returns (address)',
         'function isTokenCreator(address user, address token) view returns (bool)',
         'function getUserTokenCount(address user) view returns (uint256)'
@@ -263,161 +301,178 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
       const userAddress = await signer.getAddress();
       console.log('TCAP_v3: Got user address:', userAddress);
       
-      // Get tokens deployed by the connected user
-      console.log('TCAP_v3: Calling getUserCreatedTokens');
+      // Try both methods to get user's tokens
+      let deployedTokens = [];
       try {
-        const deployedTokens = await factory.getUserCreatedTokens(userAddress);
-        console.log('TCAP_v3: Deployed tokens:', deployedTokens);
-
-        if (!Array.isArray(deployedTokens)) {
-          throw new Error('Unexpected response format from getUserCreatedTokens');
-        }
-
-        const blockedTokens = getBlockedTokens();
-        
-        const tokenPromises = deployedTokens
-          .filter(token => !blockedTokens.includes(token)) // Filter out blocked tokens
-          .map(async (tokenAddress: string) => {
+        console.log('TCAP_v3: Trying getUserCreatedTokens');
+        deployedTokens = await factory.getUserCreatedTokens(userAddress);
+      } catch (error) {
+        console.log('TCAP_v3: getUserCreatedTokens failed, trying getDeployedTokens');
+        try {
+          const allTokens = await factory.getDeployedTokens();
+          // Filter tokens created by user
+          const tokenPromises = allTokens.map(async (token: string) => {
             try {
-              const tokenContract = getTokenContract(tokenAddress, signer);
-
-              // Basic token info
-              const [name, symbol, totalSupply, owner] = await Promise.all([
-                tokenContract.name(),
-                tokenContract.symbol(),
-                tokenContract.totalSupply(),
-                tokenContract.owner()
-              ]);
-
-              // Get presale info with additional details
-              let presaleInfo;
-              let contributorInfo;
-              try {
-                const [info, contributorCount, contributors] = await Promise.all([
-                  tokenContract.presaleInfo(),
-                  tokenContract.getContributorCount(),
-                  tokenContract.getContributors()
-                ]);
-
-                // Get detailed info for each contributor
-                const contributorDetails = await Promise.all(
-                  contributors.map(async (addr: string) => {
-                    const details = await tokenContract.getContributorInfo(addr);
-                    return {
-                      address: addr,
-                      contribution: formatEther(details.contribution),
-                      tokenAllocation: formatEther(details.tokenAllocation),
-                      isWhitelisted: details.isWhitelisted
-                    };
-                  })
-                );
-
-                presaleInfo = {
-                  softCap: formatEther(info.softCap),
-                  hardCap: formatEther(info.hardCap),
-                  minContribution: formatEther(info.minContribution),
-                  maxContribution: formatEther(info.maxContribution),
-                  presaleRate: info.presaleRate.toString(),
-                  startTime: Number(info.startTime),
-                  endTime: Number(info.endTime),
-                  whitelistEnabled: info.whitelistEnabled,
-                  finalized: info.finalized,
-                  totalContributed: formatEther(info.totalContributed),
-                  totalTokensSold: formatEther(info.totalTokensSold || BigInt(0)),
-                  contributorCount: Number(contributorCount),
-                  contributors: contributorDetails
-                };
-              } catch (e) {
-                console.log('No presale info for token:', tokenAddress);
-              }
-
-              // Try to get liquidity info
-              let liquidityInfo;
-              try {
-                const info = await tokenContract.liquidityInfo();
-                liquidityInfo = {
-                  percentage: info.percentage.toString(),
-                  lockDuration: info.lockDuration.toString(),
-                  unlockTime: Number(info.unlockTime),
-                  locked: info.locked
-                };
-              } catch (e) {
-                console.log('No liquidity info for token:', tokenAddress);
-              }
-
-              // Try to get platform fee info
-              let platformFee;
-              try {
-                const info = await tokenContract.platformFee();
-                platformFee = {
-                  recipient: info.recipient,
-                  totalTokens: formatEther(info.totalTokens),
-                  vestingEnabled: info.vestingEnabled,
-                  vestingDuration: Number(info.vestingDuration),
-                  cliffDuration: Number(info.cliffDuration),
-                  vestingStart: Number(info.vestingStart),
-                  tokensClaimed: formatEther(info.tokensClaimed)
-                };
-              } catch (e) {
-                console.log('No platform fee info for token:', tokenAddress);
-              }
-
-              // Try to get vesting info
-              let vestingInfo;
-              try {
-                const hasVesting = await tokenContract.hasVestingSchedule(userAddress);
-                if (hasVesting) {
-                  const scheduleInfo = await tokenContract.getVestingSchedule(userAddress);
-                  vestingInfo = {
-                    hasVesting: true,
-                    totalAmount: formatEther(scheduleInfo.totalAmount),
-                    startTime: Number(scheduleInfo.startTime),
-                    cliffDuration: Number(scheduleInfo.cliffDuration),
-                    vestingDuration: Number(scheduleInfo.vestingDuration),
-                    releasedAmount: formatEther(scheduleInfo.releasedAmount),
-                    revocable: scheduleInfo.revocable,
-                    revoked: scheduleInfo.revoked,
-                    releasableAmount: formatEther(scheduleInfo.releasableAmount)
-                  };
-                }
-              } catch (e) {
-                console.log('No vesting info for token:', tokenAddress);
-              }
-
-              return {
-        address: tokenAddress,
-                name,
-                symbol,
-                totalSupply: formatEther(totalSupply),
-                owner,
-                presaleInfo,
-                liquidityInfo,
-                platformFee,
-                paused: await tokenContract.paused(),
-                vestingInfo,
-                createdAt: Date.now()
-              } as TokenInfo;
-            } catch (error) {
-              console.error(`Error loading token ${tokenAddress}:`, error);
+              const isCreator = await factory.isTokenCreator(userAddress, token);
+              return isCreator ? token : null;
+            } catch {
               return null;
             }
           });
-
-        const loadedTokens = (await Promise.all(tokenPromises))
-          .filter((token): token is TokenInfo => token !== null)
-          .sort((a, b) => {
-            // Sort by creation time (newest first)
-            const timeA = a.createdAt || 0;
-            const timeB = b.createdAt || 0;
-            return timeB - timeA;
-          });
-
-        console.log('Loaded tokens:', loadedTokens);
-        setTokens(loadedTokens);
-      } catch (error) {
-        console.error('TCAP_v3 Error loading tokens:', error);
-        setError('Failed to load tokens. Please try again.');
+          deployedTokens = (await Promise.all(tokenPromises)).filter(Boolean);
+        } catch (error) {
+          console.error('Both token retrieval methods failed:', error);
+          throw new Error('Failed to retrieve tokens');
+        }
       }
+
+      console.log('TCAP_v3: Deployed tokens:', deployedTokens);
+
+      if (!Array.isArray(deployedTokens)) {
+        throw new Error('Unexpected response format from token retrieval');
+      }
+
+      const blockedTokens = getBlockedTokens();
+      
+      const tokenPromises = deployedTokens
+        .filter(token => !blockedTokens.includes(token)) // Filter out blocked tokens
+        .map(async (tokenAddress: string) => {
+          try {
+            const tokenContract = getTokenContract(tokenAddress, signer);
+
+            // Basic token info
+            const [name, symbol, totalSupply, owner] = await Promise.all([
+              tokenContract.name(),
+              tokenContract.symbol(),
+              tokenContract.totalSupply(),
+              tokenContract.owner()
+            ]);
+
+            // Get presale info with additional details
+            let presaleInfo;
+            let contributorInfo;
+            try {
+              const [info, contributorCount, contributors] = await Promise.all([
+                tokenContract.presaleInfo(),
+                tokenContract.getContributorCount(),
+                tokenContract.getContributors()
+              ]);
+
+              // Get detailed info for each contributor
+              const contributorDetails = await Promise.all(
+                contributors.map(async (addr: string) => {
+                  const details = await tokenContract.getContributorInfo(addr);
+                  return {
+                    address: addr,
+                    contribution: formatEther(details.contribution),
+                    tokenAllocation: formatEther(details.tokenAllocation),
+                    isWhitelisted: details.isWhitelisted
+                  };
+                })
+              );
+
+              presaleInfo = {
+                softCap: formatEther(info.softCap),
+                hardCap: formatEther(info.hardCap),
+                minContribution: formatEther(info.minContribution),
+                maxContribution: formatEther(info.maxContribution),
+                presaleRate: info.presaleRate.toString(),
+                startTime: Number(info.startTime),
+                endTime: Number(info.endTime),
+                whitelistEnabled: info.whitelistEnabled,
+                finalized: info.finalized,
+                totalContributed: formatEther(info.totalContributed),
+                totalTokensSold: formatEther(info.totalTokensSold || BigInt(0)),
+                contributorCount: Number(contributorCount),
+                contributors: contributorDetails
+              };
+            } catch (e) {
+              console.log('No presale info for token:', tokenAddress);
+            }
+
+            // Try to get liquidity info
+            let liquidityInfo;
+            try {
+              const info = await tokenContract.liquidityInfo();
+              liquidityInfo = {
+                percentage: info.percentage.toString(),
+                lockDuration: info.lockDuration.toString(),
+                unlockTime: Number(info.unlockTime),
+                locked: info.locked
+              };
+            } catch (e) {
+              console.log('No liquidity info for token:', tokenAddress);
+            }
+
+            // Try to get platform fee info
+            let platformFee;
+            try {
+              const info = await tokenContract.platformFee();
+              platformFee = {
+                recipient: info.recipient,
+                totalTokens: formatEther(info.totalTokens),
+                vestingEnabled: info.vestingEnabled,
+                vestingDuration: Number(info.vestingDuration),
+                cliffDuration: Number(info.cliffDuration),
+                vestingStart: Number(info.vestingStart),
+                tokensClaimed: formatEther(info.tokensClaimed)
+              };
+            } catch (e) {
+              console.log('No platform fee info for token:', tokenAddress);
+            }
+
+            // Try to get vesting info
+            let vestingInfo;
+            try {
+              const hasVesting = await tokenContract.hasVestingSchedule(userAddress);
+              if (hasVesting) {
+                const scheduleInfo = await tokenContract.getVestingSchedule(userAddress);
+                vestingInfo = {
+                  hasVesting: true,
+                  totalAmount: formatEther(scheduleInfo.totalAmount),
+                  startTime: Number(scheduleInfo.startTime),
+                  cliffDuration: Number(scheduleInfo.cliffDuration),
+                  vestingDuration: Number(scheduleInfo.vestingDuration),
+                  releasedAmount: formatEther(scheduleInfo.releasedAmount),
+                  revocable: scheduleInfo.revocable,
+                  revoked: scheduleInfo.revoked,
+                  releasableAmount: formatEther(scheduleInfo.releasableAmount)
+                };
+              }
+            } catch (e) {
+              console.log('No vesting info for token:', tokenAddress);
+            }
+
+            return {
+              address: tokenAddress,
+              name,
+              symbol,
+              totalSupply: formatEther(totalSupply),
+              owner,
+              presaleInfo,
+              liquidityInfo,
+              platformFee,
+              paused: await tokenContract.paused(),
+              vestingInfo,
+              createdAt: Date.now()
+            } as TokenInfo;
+          } catch (error) {
+            console.error(`Error loading token ${tokenAddress}:`, error);
+            return null;
+          }
+        });
+
+      const loadedTokens = (await Promise.all(tokenPromises))
+        .filter((token): token is TokenInfo => token !== null)
+        .sort((a, b) => {
+          // Sort by creation time (newest first)
+          const timeA = a.createdAt || 0;
+          const timeB = b.createdAt || 0;
+          return timeB - timeA;
+        });
+
+      console.log('Loaded tokens:', loadedTokens);
+      setTokens(loadedTokens);
     } catch (error) {
       console.error('TCAP_v3 Error loading tokens:', error);
       setError('Failed to load tokens. Please try again.');

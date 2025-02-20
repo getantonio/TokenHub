@@ -14,6 +14,11 @@ if (!projectId) {
 
 // Debug: Log available networks
 console.log('Available networks:', {
+  mainnet: mainnet?.id,
+  sepolia: sepolia?.id,
+  arbitrumSepolia: arbitrumSepolia?.id,
+  optimismSepolia: optimismSepolia?.id,
+  polygonAmoy: polygonAmoy?.id,
   bscMainnet: bscMainnet?.id,
   bscTestnet: bscTestnet?.id,
   projectId: projectId.slice(0, 6) + '...' // Only log part of the project ID for security
@@ -36,13 +41,12 @@ const customArbitrumSepolia = {
 
 // Define supported chains array
 const supportedChains = [
-  mainnet,
   sepolia,
-  customArbitrumSepolia,
+  bscTestnet,
+  arbitrumSepolia,
   optimismSepolia,
   polygonAmoy,
-  bscMainnet,
-  bscTestnet
+  bscMainnet
 ] as const;
 
 export const config = getDefaultConfig({
@@ -50,9 +54,9 @@ export const config = getDefaultConfig({
   projectId,
   chains: supportedChains,
   transports: {
-    [mainnet.id]: http(),
-    [sepolia.id]: http(),
-    [customArbitrumSepolia.id]: http(
+    [sepolia.id]: http('https://eth-sepolia.g.alchemy.com/v2/MGnqEI_g1f7R-ozYpSAUpnsivv0lp86t'),
+    [bscTestnet.id]: http(bscTestnet.rpcUrls.default.http[0]),
+    [arbitrumSepolia.id]: http(
       'https://sepolia-rollup.arbitrum.io/rpc',
       {
         batch: true,
@@ -68,8 +72,7 @@ export const config = getDefaultConfig({
     ),
     [optimismSepolia.id]: http(),
     [polygonAmoy.id]: http(polygonAmoy.rpcUrls.default.http[0]),
-    [bscMainnet.id]: http(bscMainnet.rpcUrls.default.http[0]),
-    [bscTestnet.id]: http(bscTestnet.rpcUrls.default.http[0]),
+    [bscMainnet.id]: http(bscMainnet.rpcUrls.default.http[0])
   },
   ssr: true
 });

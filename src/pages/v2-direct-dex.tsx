@@ -55,7 +55,7 @@ function V2DirectDEXContent() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState('list');
   
-  const factoryAddress = chainId ? getNetworkContractAddress(chainId, 'factoryAddressV2DirectDEX') : null;
+  const factoryAddress = chainId ? getNetworkContractAddress(chainId, 'dexListingFactory') : null;
   
   return (
     <div className="min-h-screen bg-background-primary">
@@ -67,53 +67,40 @@ function V2DirectDEXContent() {
 
       <div className="container mx-auto px-4 py-4">
         <div className="max-w-6xl mx-auto">
-          <h1 className="text-4xl font-black mb-6 bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent" style={{ fontFamily: "'Roboto', monospace" }}>
-            TokenHub<span className="text-gray-400">.dev</span>
-          </h1>
-          
-          {chainId && (
-            <div className="mb-4 text-text-primary">
-              <p className="text-text-secondary">Create and instantly list your token on DEX with advanced trading controls.</p>
-            </div>
-          )}
+          <div className="mb-6">
+            <h1 className="text-4xl font-black mb-2 text-white">DEX Listing Factory</h1>
+            <p className="text-gray-400">List your tokens on DEX with advanced features, fees, and admin controls.</p>
+          </div>
           
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-            <TabsList className="grid w-full grid-cols-3 mb-8">
+            <TabsList className="grid w-full grid-cols-4 mb-8">
               <TabsTrigger 
                 value="features"
-                className="flex-1 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-text-secondary rounded-md px-6"
+                className="flex-1 data-[state=active]:bg-blue-600 bg-gray-800 data-[state=active]:text-white text-text-secondary rounded-md px-6"
               >
                 Features
               </TabsTrigger>
               <TabsTrigger 
-                value="create"
-                className="flex-1 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-text-secondary rounded-md px-6 opacity-50 cursor-not-allowed"
-                disabled
-                title="Token creation temporarily disabled for maintenance"
-              >
-                Create Token
-              </TabsTrigger>
-              <TabsTrigger 
                 value="list"
-                className="flex-1 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-text-secondary rounded-md px-6"
+                className="flex-1 data-[state=active]:bg-blue-600 bg-gray-800 data-[state=active]:text-white text-text-secondary rounded-md px-6"
               >
                 List Token
               </TabsTrigger>
               <TabsTrigger 
                 value="tokens"
-                className="flex-1 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-text-secondary rounded-md px-6"
+                className="flex-1 data-[state=active]:bg-blue-600 bg-gray-800 data-[state=active]:text-white text-text-secondary rounded-md px-6"
               >
                 Listed Tokens
               </TabsTrigger>
               <TabsTrigger 
                 value="admin"
-                className="flex-1 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-text-secondary rounded-md px-6"
+                className="flex-1 data-[state=active]:bg-blue-600 bg-gray-800 data-[state=active]:text-white text-text-secondary rounded-md px-6"
               >
                 Admin
               </TabsTrigger>
             </TabsList>
             
-            <TabsContent value="features" className="space-y-4">
+            <TabsContent value="features" className="space-y-6">
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="bg-background-secondary p-4 rounded-lg border border-border">
                   <h3 className="text-lg font-semibold text-text-primary mb-3">Advanced Token Features</h3>
@@ -158,19 +145,17 @@ function V2DirectDEXContent() {
                   </ul>
                 </div>
               </div>
-            </TabsContent>
-            
-            <TabsContent value="create">
-              <Suspense fallback={<div className="flex justify-center py-8"><Spinner /></div>}>
-                <TokenForm_v2DD_2Step
-                  onSuccess={() => {
-                    console.log('Token deployed successfully');
-                  }}
-                  onError={(error) => {
-                    console.error('Error deploying token:', error);
-                  }}
-                />
-              </Suspense>
+              
+              <div className="bg-background-secondary p-4 rounded-lg border border-border">
+                <h3 className="text-lg font-semibold text-text-primary mb-3">Token Creation & Listing Flow</h3>
+                <ol className="space-y-2 text-text-secondary list-decimal list-inside">
+                  <li>Load and select your token from one of our token factories</li>
+                  <li>Submit your token for approval</li>
+                  <li>Submit again to finally deploy your token to your chosen DEX for trading</li>
+                  <li>Track your listed tokens and manage them in the "Listed Tokens" tab after deployment</li>
+                  <li>Access advanced controls and settings in the "Admin" tab</li>
+                </ol>
+              </div>
             </TabsContent>
 
             <TabsContent value="list">

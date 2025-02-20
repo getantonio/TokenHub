@@ -3,7 +3,7 @@ import { BrowserProvider, Contract, parseUnits, formatUnits } from 'ethers';
 import { useNetwork } from '@contexts/NetworkContext';
 import TokenFactory_v2 from '../../../contracts/abi/TokenFactory_v2.json';
 import { getExplorerUrl } from '@config/networks';
-import { getNetworkContractAddress } from '@config/contracts';
+import { getNetworkContractAddress, FACTORY_ADDRESSES } from '@config/contracts';
 import { useToast } from '@/components/ui/toast/use-toast';
 import TokenPreview from '@components/features/token/TokenPreview';
 import TokenAdminV2 from '@components/features/token/TCAP_v2';
@@ -63,7 +63,8 @@ const TOKEN_DECIMALS = 18;
 
 const getDefaultTimes = () => {
   const now = new Date();
-  const startTime = new Date(now.getTime() + 24 * 3600000); // 24 hours in the future
+  // Set start time to 1 hour from now to ensure it's in the future
+  const startTime = new Date(now.getTime() + 60 * 60 * 1000); // 1 hour in the future
   const endTime = new Date(now.getTime() + 48 * 3600000);   // 48 hours in the future
   return {
     startTime: startTime.toISOString().slice(0, 16),
@@ -131,8 +132,23 @@ export function TokenFormV2({ isConnected, onSuccess, onError }: TokenFormV2Prop
       }
 
       try {
-        const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddressV2');
-        if (!factoryAddress || factoryAddress === '') {
+        // Try multiple ways to get the factory address
+        let factoryAddress = null;
+        
+        // First try FACTORY_ADDRESSES
+        if (FACTORY_ADDRESSES.v2[chainId]) {
+          factoryAddress = FACTORY_ADDRESSES.v2[chainId];
+          console.log("Got factory address from FACTORY_ADDRESSES:", factoryAddress);
+        }
+        
+        // If not found, try getNetworkContractAddress
+        if (!factoryAddress) {
+          factoryAddress = getNetworkContractAddress(Number(chainId), 'factoryV2');
+          console.log("Got factory address from getNetworkContractAddress:", factoryAddress);
+        }
+
+        if (!factoryAddress) {
+          console.error("Factory address not found for chain:", chainId);
           setV2Available(false);
           return;
         }
@@ -140,14 +156,22 @@ export function TokenFormV2({ isConnected, onSuccess, onError }: TokenFormV2Prop
         if (window.ethereum) {
           const provider = new BrowserProvider(window.ethereum);
           try {
+            // Verify the factory contract exists
             const code = await provider.getCode(factoryAddress);
-            const hasCode = code !== '0x' && code !== '0x0';
+            const hasCode = code !== '0x' && code !== '';
+            console.log("Factory contract verification:", { 
+              address: factoryAddress, 
+              hasCode, 
+              codeLength: code.length 
+            });
             setV2Available(hasCode);
           } catch (error) {
+            console.error("Error verifying factory contract:", error);
             setV2Available(false);
           }
         }
       } catch (error) {
+        console.error("Error checking V2 availability:", error);
         setV2Available(false);
       }
     };
@@ -164,7 +188,7 @@ export function TokenFormV2({ isConnected, onSuccess, onError }: TokenFormV2Prop
       }
 
       try {
-        const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddressV2');
+        const factoryAddress = getNetworkContractAddress(chainId, 'factoryV2');
         if (!factoryAddress) {
           setDeploymentFee('Not available on this network');
           return;
@@ -222,14 +246,38 @@ export function TokenFormV2({ isConnected, onSuccess, onError }: TokenFormV2Prop
       const userAddress = await signer.getAddress();
       const chainId = Number(await window.ethereum.request({ method: 'eth_chainId' }));
       
-      const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddressV2');
+      // Try multiple ways to get the factory address
+      let factoryAddress = null;
+      
+      // First try FACTORY_ADDRESSES
+      if (FACTORY_ADDRESSES.v2[chainId]) {
+        factoryAddress = FACTORY_ADDRESSES.v2[chainId];
+        console.log("Got factory address from FACTORY_ADDRESSES:", factoryAddress);
+      }
+      
+      // If not found, try getNetworkContractAddress
       if (!factoryAddress) {
-        console.error("Factory address not found for this network");
+        factoryAddress = getNetworkContractAddress(Number(chainId), 'factoryV2');
+        console.log("Got factory address from getNetworkContractAddress:", factoryAddress);
+      }
+
+      if (!factoryAddress) {
+        console.error("Factory address not found for chain:", chainId);
         showToast('error', 'TokenFactory V2 is not deployed on this network');
         setLoading(false);
         return;
       }
 
+      // Verify the factory contract exists
+      const code = await provider.getCode(factoryAddress);
+      if (code === '0x' || code === '') {
+        console.error("Factory contract not deployed at:", factoryAddress);
+        showToast('error', 'Factory contract not found on this network');
+        setLoading(false);
+        return;
+      }
+
+      console.log("Using factory address:", factoryAddress);
       const factory = new Contract(factoryAddress, TokenFactory_v2.abi, signer);
       const fee = await factory.getDeploymentFee(userAddress);
 
@@ -335,8 +383,8 @@ export function TokenFormV2({ isConnected, onSuccess, onError }: TokenFormV2Prop
     return (
       <div className="p-1 bg-gray-800 rounded-lg shadow-lg">
         <div className="rounded-md bg-yellow-800/20 p-1 border border-yellow-800">
-          <h3 className="text-sm font-medium text-yellow-800">TokenFactory V2.1.0 is not yet deployed on this network.</h3>
-          <p className="text-xs text-yellow-800">Note: V2.1.0 is currently only available on specific networks.</p>
+          <h3 className="text-sm font-medium text-yellow-800">Token Factory V2 is not available on this network.</h3>
+          <p className="text-xs text-yellow-800">Please switch to a supported network to create V2 tokens.</p>
         </div>
       </div>
     );

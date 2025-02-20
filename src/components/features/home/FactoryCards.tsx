@@ -61,15 +61,15 @@ const factoryConfigs: FactoryConfig[] = [
   },
   {
     version: "v2_DirectDEX",
-    title: "Token Factory v2 DirectDEX",
-    description: "Create and instantly list your token on DEX with advanced trading controls.",
+    title: "DEX Listing Factory",
+    description: "List your tokens on DEX with advanced trading controls and features.",
     features: [
-      "Instant DEX Listing",
       "Multi-DEX Support",
+      "Advanced Trading Controls",
       "Marketing & Dev Fees",
-      "Holder Rewards",
       "Anti-Bot Protection",
-      "Auto-Liquidity"
+      "Auto-Liquidity",
+      "Token Listing Management"
     ],
     href: "/v2-direct-dex",
     status: "new",

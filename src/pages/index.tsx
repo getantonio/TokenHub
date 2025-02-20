@@ -43,8 +43,8 @@ export default function HomePage() {
     },
     {
       version: 'v2_DirectDEX',
-      title: 'Factory v2 DirectDEX',
-      description: 'Create and instantly list your token on DEX with advanced trading controls',
+      title: 'DEX Listing Factory',
+      description: 'Instantly list your token on a DEX with advanced trading controls',
       features: ['Instant DEX listing', 'Multi-DEX support', 'Marketing & Dev fees', 'Anti-bot protection'],
       icon: '🚀'
     },

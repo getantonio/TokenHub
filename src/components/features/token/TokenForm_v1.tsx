@@ -84,7 +84,7 @@ export default function TokenForm_v1({ isConnected }: Props) {
 
   useEffect(() => {
     if (chainId) {
-      const address = getNetworkContractAddress(chainId, 'factoryAddress');
+      const address = FACTORY_ADDRESSES.v1[chainId];
       console.log("V1 Factory address set to:", address);
     }
   }, [chainId]);
@@ -99,7 +99,7 @@ export default function TokenForm_v1({ isConnected }: Props) {
         const signer = await provider.getSigner();
         const userAddress = await signer.getAddress();
         const chainId = Number(await window.ethereum.request({ method: 'eth_chainId' }));
-        const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddress');
+        const factoryAddress = FACTORY_ADDRESSES.v1[chainId];
         if (!factoryAddress) {
           setDeploymentFee('Not available on this network');
           return;
@@ -154,7 +154,7 @@ export default function TokenForm_v1({ isConnected }: Props) {
       const userAddress = await signer.getAddress();
       const chainId = Number(await window.ethereum.request({ method: 'eth_chainId' }));
       
-      const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddress');
+      const factoryAddress = FACTORY_ADDRESSES.v1[chainId];
       if (!factoryAddress) {
         console.error("Factory address not found for this network");
         showToast('error', 'TokenFactory V1 is not deployed on this network');

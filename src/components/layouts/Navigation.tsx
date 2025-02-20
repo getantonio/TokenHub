@@ -89,7 +89,7 @@ export function Navigation() {
                     ? 'text-blue-400'
                     : 'text-gray-400 hover:text-gray-200'
                 )}>
-                  Token Factory V2 DirectDEX
+                  DEX Listing Factory
                 </Link>
                 <Link href="/v1" className={cn(
                   'block px-4 py-2 text-sm',

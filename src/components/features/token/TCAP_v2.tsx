@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { BrowserProvider, Contract, formatUnits, parseUnits, EventLog } from 'ethers';
 import TokenFactory_v2 from '@contracts/abi/TokenFactory_v2.json';
 import TokenTemplate_v2 from '@contracts/abi/TokenTemplate_v2.json';
-import { getNetworkContractAddress } from '@config/contracts';
+import { getNetworkContractAddress, FACTORY_ADDRESSES } from '@config/contracts';
 import { getExplorerUrl } from '@config/networks';
 import { useNetwork } from '@contexts/NetworkContext';
 import { Spinner } from '@components/ui/Spinner';
@@ -224,9 +224,32 @@ export default function TokenAdminV2({ address }: TokenAdminV2Props) {
       setIsLoading(true);
       setError(null);
       
-      const factoryV2Address = chainId ? getNetworkContractAddress(Number(chainId), 'factoryAddressV2') : null;
+      // Try multiple ways to get the factory address
+      let factoryV2Address = null;
+      
+      // First try FACTORY_ADDRESSES
+      if (chainId && FACTORY_ADDRESSES.v2[chainId]) {
+        factoryV2Address = FACTORY_ADDRESSES.v2[chainId];
+        console.log("Got factory address from FACTORY_ADDRESSES:", factoryV2Address);
+      }
+      
+      // If not found, try getNetworkContractAddress
       if (!factoryV2Address) {
+        factoryV2Address = getNetworkContractAddress(Number(chainId), 'factoryV2');
+        console.log("Got factory address from getNetworkContractAddress:", factoryV2Address);
+      }
+
+      if (!factoryV2Address) {
+        console.error("No factory address found for chain:", chainId);
         showToast('error', 'No V2 factory deployed on this network');
+        return;
+      }
+
+      // Verify the factory contract exists
+      const code = await provider.getCode(factoryV2Address);
+      if (code === '0x' || code === '') {
+        console.error("Factory contract not deployed at:", factoryV2Address);
+        showToast('error', 'Factory contract not found on this network');
         return;
       }
 
@@ -246,10 +269,30 @@ export default function TokenAdminV2({ address }: TokenAdminV2Props) {
       const userAddress = await signer.getAddress();
       console.log('TCAP_v2: Got user address:', userAddress);
       
-      // Get user's tokens directly using the new function
-      console.log('TCAP_v2: Calling getUserCreatedTokens');
-      const userTokens = await factory.getUserCreatedTokens(userAddress);
-      console.log('TCAP_v2: User tokens:', userTokens);
+      // Try both methods to get user's tokens
+      let userTokens = [];
+      try {
+        console.log('TCAP_v2: Trying getUserCreatedTokens');
+        userTokens = await factory.getUserCreatedTokens(userAddress);
+      } catch (error) {
+        console.log('TCAP_v2: getUserCreatedTokens failed, trying getDeployedTokens');
+        try {
+          const allTokens = await factory.getDeployedTokens();
+          // Filter tokens created by user
+          const tokenPromises = allTokens.map(async (token: string) => {
+            try {
+              const isCreator = await factory.isTokenCreator(userAddress, token);
+              return isCreator ? token : null;
+            } catch {
+              return null;
+            }
+          });
+          userTokens = (await Promise.all(tokenPromises)).filter(Boolean);
+        } catch (error) {
+          console.error('Both token retrieval methods failed:', error);
+          throw new Error('Failed to retrieve tokens');
+        }
+      }
 
       if (!Array.isArray(userTokens)) {
         throw new Error('Unexpected response format from getUserCreatedTokens');
