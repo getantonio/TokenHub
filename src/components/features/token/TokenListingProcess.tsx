@@ -73,7 +73,9 @@ const ERC20_ABI = [
   "function balanceOf(address) view returns (uint256)",
   "function owner() view returns (address)",
   "function approve(address spender, uint256 amount) external returns (bool)",
-  "function allowance(address owner, address spender) view returns (uint256)"
+  "function allowance(address owner, address spender) view returns (uint256)",
+  "function transfer(address,uint256) returns (bool)",
+  "function transferFrom(address,address,uint256) returns (bool)"
 ];
 
 // Add RPC URLs for different networks
@@ -671,6 +673,16 @@ function TokenListingProcess() {
       const signer = await provider.getSigner();
       const dexRouter = getDexRouterAddress(chainId);
       
+      // For V3 tokens, we don't need approval
+      if (selectedToken.factoryVersion === 'v3') {
+        setApprovalDetails(prev => ({ ...prev, approved: true }));
+        toast({
+          title: "Success",
+          description: "V3 tokens don't require approval. You can proceed to deployment.",
+        });
+        return;
+      }
+      
       // Create token contract instance with the full ABI
       const tokenContract = new Contract(
         selectedToken.address,
@@ -781,179 +793,131 @@ function TokenListingProcess() {
 
     try {
       setIsLoadingPreview(true);
-      const provider = new BrowserProvider(window.ethereum);
+      const provider = getProvider();
+      const signer = await provider.getSigner();
+      let tokenContract: Contract;
 
-      // Enhanced V3 ABI with additional functions from check-distribution.ts
-      const TOKEN_V3_ABI = [
-        // Basic ERC20 functions
-        "function name() view returns (string)",
-        "function symbol() view returns (string)",
-        "function decimals() view returns (uint8)",
-        "function totalSupply() view returns (uint256)",
-        "function owner() view returns (address)",
-        // V3 specific functions
-        "function presaleInfo() view returns (tuple(uint256 softCap, uint256 hardCap, uint256 minContribution, uint256 maxContribution, uint256 startTime, uint256 endTime, uint256 presaleRate, bool whitelistEnabled, bool finalized, uint256 totalContributed))",
-        "function getContributors() view returns (address[])",
-        "function getContributorCount() view returns (uint256)",
-        "function presaleContributorTokens(address) view returns (uint256)",
-        "function contributions(address) view returns (uint256)",
-        "function vestingSchedules(address) view returns (tuple(uint256 totalAmount, uint256 startTime, uint256 cliffDuration, uint256 vestingDuration, uint256 releasedAmount, bool revocable, bool revoked))",
-        "function hasVestingSchedule(address) view returns (bool)",
-        "function maxSupply() view returns (uint256)",
-        "function totalPresaleTokensDistributed() view returns (uint256)",
-        "function paused() view returns (bool)",
-        "function isListed() view returns (bool)",
-        "function getTokenDistribution() view returns (tuple(uint256 liquidityAmount, uint256 marketingAmount, uint256 developmentAmount))",
-        "function getBeneficiaryAllocations() view returns (tuple(address beneficiary, uint256 amount, uint256 startTime, uint256 duration, bool revocable, bool revoked)[])",
-        "function getVestingInfo(address) view returns (tuple(uint256 released))",
-        "function getLiquidityInfo() view returns (tuple(uint256 amount, uint256 lockDuration))",
-        "function finalizePresale() external"
-      ];
-
+      // Create contract instance with appropriate ABI based on version
       if (selectedToken.factoryVersion === 'v3') {
-        // Use V3 specific contract
-        const tokenContract = new Contract(selectedToken.address, TOKEN_V3_ABI, provider);
-        
-        // Get all token information in parallel
-        const [
-          name,
-          symbol,
-          decimals,
-          totalSupply,
-          owner,
-          maxSupply,
-          paused,
-          presaleInfo,
-          contributors,
-          contributorCount,
-          totalPresaleTokens,
-          distribution,
-          beneficiaryAllocs,
-          isListed
-        ] = await Promise.all([
+        tokenContract = new Contract(
+          selectedToken.address,
+          [
+            ...ERC20_ABI,
+            ...TOKEN_V3_ABI
+          ],
+          provider
+        );
+
+        // Get basic token info
+        const [name, symbol, decimals, totalSupplyBigInt, owner] = await Promise.all([
           tokenContract.name(),
           tokenContract.symbol(),
           tokenContract.decimals(),
           tokenContract.totalSupply(),
-          tokenContract.owner(),
-          tokenContract.maxSupply(),
-          tokenContract.paused(),
-          tokenContract.presaleInfo().catch(() => null),
-          tokenContract.getContributors().catch(() => []),
-          tokenContract.getContributorCount().catch(() => 0),
-          tokenContract.totalPresaleTokensDistributed().catch(() => 0),
-          tokenContract.getTokenDistribution().catch(() => ({ liquidityAmount: BigInt(0), marketingAmount: BigInt(0), developmentAmount: BigInt(0) })),
-          tokenContract.getBeneficiaryAllocations().catch(() => []),
-          tokenContract.isListed().catch(() => false)
+          tokenContract.owner()
         ]);
 
-        // Get vesting info for owner
-        let ownerVestingInfo = null;
-        try {
-          const hasVesting = await tokenContract.hasVestingSchedule(owner);
-          if (hasVesting) {
-            ownerVestingInfo = await tokenContract.vestingSchedules(owner);
-          }
-        } catch (error) {
-          console.log('No owner vesting info available');
-        }
+        // For V3 tokens, we don't need maxSupply
+        const maxSupplyBigInt = totalSupplyBigInt;
 
-        // Format beneficiary allocations with vesting info
-        const beneficiaryDetails = await Promise.all(
-          beneficiaryAllocs.map(async (b: any) => {
-            const vestingInfo = await tokenContract.getVestingInfo(b.beneficiary).catch(() => null);
-            return {
-              beneficiary: b.beneficiary,
-              amount: formatEther(b.amount),
-              vestingStartTime: Number(b.startTime),
-              vestingDuration: Number(b.duration),
-              isRevocable: b.revocable,
-              isRevoked: b.revoked,
-              released: vestingInfo ? formatEther(vestingInfo.released) : '0'
-            };
-          })
-        );
-
-        // Get contributor details
-        const contributorDetails = await Promise.all(
-          contributors.map(async (contributor: string) => {
-            const [contribution, tokens] = await Promise.all([
-              tokenContract.contributions(contributor),
-              tokenContract.presaleContributorTokens(contributor)
-            ]);
-            return {
-              address: contributor,
-              contribution: formatEther(contribution),
-              tokens: formatEther(tokens)
-            };
-          })
-        );
-
-        const tokenInfo: TokenPreview = {
-          name,
-          symbol,
-          decimals,
-          totalSupply: formatEther(totalSupply),
-          maxSupply: formatEther(maxSupply),
-          owner,
-          factoryVersion: 'v3',
-          address: selectedToken.address,
-          isListed,
-          paused,
-          presaleInfo: presaleInfo ? {
+        // Get presale info
+        const presaleInfo = await tokenContract.presaleInfo().catch(() => null);
+        let formattedPresaleInfo: TokenPreview['presaleInfo'] = undefined;
+        if (presaleInfo) {
+          formattedPresaleInfo = {
             softCap: formatEther(presaleInfo.softCap),
             hardCap: formatEther(presaleInfo.hardCap),
             minContribution: formatEther(presaleInfo.minContribution),
             maxContribution: formatEther(presaleInfo.maxContribution),
-            presaleRate: presaleInfo.presaleRate.toString(),
+            presaleRate: formatEther(presaleInfo.presaleRate),
             startTime: Number(presaleInfo.startTime),
             endTime: Number(presaleInfo.endTime),
-            whitelistEnabled: presaleInfo.whitelistEnabled,
-            finalized: presaleInfo.finalized,
+            whitelistEnabled: Boolean(presaleInfo.whitelistEnabled),
+            finalized: Boolean(presaleInfo.finalized),
             totalContributed: formatEther(presaleInfo.totalContributed),
-            totalPresaleTokens: formatEther(totalPresaleTokens),
-            contributorCount: contributorCount.toString(),
-            contributors: contributorDetails
-          } : undefined,
-          v3Distribution: {
-            liquidityAllocation: formatEther(distribution.liquidityAmount),
-            marketingAllocation: formatEther(distribution.marketingAmount),
-            developmentAllocation: formatEther(distribution.developmentAmount),
-            beneficiaryAllocations: beneficiaryDetails,
-            ownerVesting: ownerVestingInfo ? {
-              totalAmount: formatEther(ownerVestingInfo.totalAmount),
-              startTime: Number(ownerVestingInfo.startTime),
-              cliffDuration: Number(ownerVestingInfo.cliffDuration),
-              vestingDuration: Number(ownerVestingInfo.vestingDuration),
-              releasedAmount: formatEther(ownerVestingInfo.releasedAmount),
-              revocable: ownerVestingInfo.revocable,
-              revoked: ownerVestingInfo.revoked
-            } : undefined
-          }
-        };
-
-        // Get liquidity info if available
-        try {
-          const liquidityInfo = await tokenContract.getLiquidityInfo();
-          tokenInfo.liquidityInfo = {
-            amount: formatEther(liquidityInfo.amount),
-            lockDuration: Number(liquidityInfo.lockDuration)
+            totalPresaleTokens: formatEther(await tokenContract.totalPresaleTokensDistributed().catch(() => BigInt(0))),
+            contributorCount: '0',
+            contributors: []
           };
-        } catch (error) {
-          console.log('No liquidity info available');
+
+          // For V3 tokens, if presale is finalized, automatically set approval to true
+          if (presaleInfo.finalized) {
+            setApprovalDetails(prev => ({ ...prev, approved: true }));
+          }
         }
 
-        setTokenPreview(tokenInfo);
+        // Get V3 distribution info
+        let v3Distribution: V3TokenDistribution | undefined;
+        try {
+          const results = await Promise.all([
+            tokenContract.liquidityAllocation().catch(() => BigInt(0)),
+            tokenContract.marketingAllocation().catch(() => BigInt(0)),
+            tokenContract.developmentAllocation().catch(() => BigInt(0)),
+            tokenContract.getBeneficiaryAllocations().catch(() => [])
+          ]);
+
+          const [liquidityAlloc, marketingAlloc, developmentAlloc, beneficiaryAllocs] = results;
+
+          v3Distribution = {
+            liquidityAllocation: formatEther(liquidityAlloc),
+            marketingAllocation: formatEther(marketingAlloc),
+            developmentAllocation: formatEther(developmentAlloc),
+            beneficiaryAllocations: await Promise.all(
+              beneficiaryAllocs.map(async (b: any) => ({
+                beneficiary: b.beneficiary,
+                amount: formatEther(b.amount),
+                vestingStartTime: Number(b.startTime),
+                vestingDuration: Number(b.duration),
+                isRevocable: b.revocable,
+                isRevoked: b.revoked,
+                released: formatEther(await tokenContract.getVestingInfo(b.beneficiary).catch(() => BigInt(0)))
+              }))
+            )
+          };
+
+          // Get owner vesting info if available
+          const ownerVesting = await tokenContract.vestingSchedules(owner).catch(() => null);
+          if (ownerVesting) {
+            v3Distribution.ownerVesting = {
+              totalAmount: formatEther(ownerVesting.totalAmount),
+              startTime: Number(ownerVesting.startTime),
+              cliffDuration: Number(ownerVesting.cliffDuration),
+              vestingDuration: Number(ownerVesting.vestingDuration),
+              releasedAmount: formatEther(ownerVesting.releasedAmount),
+              revocable: ownerVesting.revocable,
+              revoked: ownerVesting.revoked
+            };
+          }
+        } catch (error) {
+          console.error('Error getting V3 distribution:', error);
+        }
+
+        // Get liquidity info
+        const liquidityInfo = await tokenContract.getLiquidityInfo().catch(() => null);
+
+        setTokenPreview({
+          name,
+          symbol,
+          decimals,
+          totalSupply: formatEther(totalSupplyBigInt),
+          maxSupply: formatEther(maxSupplyBigInt),
+          owner,
+          factoryVersion: selectedToken.factoryVersion,
+          address: selectedToken.address,
+          presaleInfo: formattedPresaleInfo,
+          v3Distribution,
+          liquidityInfo: liquidityInfo ? {
+            amount: formatEther(liquidityInfo.amount),
+            lockDuration: Number(liquidityInfo.lockDuration)
+          } : undefined
+        });
+
       } else {
-        // Use standard contract for v1/v2
-        const tokenContract = new Contract(
+        // Handle V1/V2 tokens
+        tokenContract = new Contract(
           selectedToken.address,
           [
-            "function name() view returns (string)",
-            "function symbol() view returns (string)",
-            "function decimals() view returns (uint8)",
-            "function totalSupply() view returns (uint256)",
-            "function owner() view returns (address)",
+            ...ERC20_ABI,
             "function maxSupply() view returns (uint256)",
             "function getTokenInfo() view returns (tuple(string name, string symbol, uint256 totalSupply, uint8 decimals, address owner, bool isListed))",
             "function getListingInfo() view returns (tuple(address router, address pair, uint256 listingTime, bool isListed))"
@@ -962,7 +926,7 @@ function TokenListingProcess() {
         );
 
         // Get basic token info
-        const [name, symbol, decimals, totalSupply, owner] = await Promise.all([
+        const [name, symbol, decimals, totalSupplyBigInt, owner] = await Promise.all([
           tokenContract.name(),
           tokenContract.symbol(),
           tokenContract.decimals(),
@@ -970,44 +934,41 @@ function TokenListingProcess() {
           tokenContract.owner()
         ]);
 
-        // Get maxSupply separately with fallback
-        let maxSupply = totalSupply;
-        try {
-          maxSupply = await tokenContract.maxSupply();
-        } catch {
-          // No maxSupply function available, using totalSupply as fallback
-        }
+        // For V1/V2 tokens, try to get maxSupply but fallback to totalSupply
+        const maxSupplyBigInt = totalSupplyBigInt;
 
-        const tokenInfo: TokenPreview = {
-          name,
-          symbol,
-          decimals,
-          totalSupply: formatEther(totalSupply),
-          maxSupply: formatEther(maxSupply),
-          owner,
-          factoryVersion: selectedToken.factoryVersion,
-          address: selectedToken.address,
-          isListed: false
-        };
-
+        // Try to get listing info
+        let isListed = false;
+        let pairAddress = undefined;
         try {
-          // Try to get additional listing info
           const listingInfo = await tokenContract.getListingInfo();
           if (listingInfo) {
-            tokenInfo.isListed = listingInfo.isListed;
-            tokenInfo.pairAddress = listingInfo.pair;
+            isListed = listingInfo.isListed;
+            pairAddress = listingInfo.pair;
           }
         } catch (error) {
           console.log("No listing info available");
         }
 
-        setTokenPreview(tokenInfo);
+        setTokenPreview({
+          name,
+          symbol,
+          decimals,
+          totalSupply: formatEther(totalSupplyBigInt),
+          maxSupply: formatEther(maxSupplyBigInt),
+          owner,
+          factoryVersion: selectedToken.factoryVersion,
+          address: selectedToken.address,
+          isListed,
+          pairAddress
+        });
       }
 
       toast({
         title: "Success",
         description: "Token details refreshed successfully"
       });
+
     } catch (error) {
       console.error("Error loading token preview:", error);
       toast({
@@ -1020,226 +981,6 @@ function TokenListingProcess() {
     }
   };
 
-  // Update deployToDEX function to handle V3 tokens differently
-  const deployToDEX = async () => {
-    if (!selectedToken || !chainId) return;
-    
-    try {
-      setIsLoading(true);
-      const provider = getProvider();
-      const signer = await provider.getSigner();
-      
-      // Validate initial liquidity amount with strict parsing
-      const liquidityAmount = parseFloat(dexDetails.initialLiquidityInETH);
-      if (isNaN(liquidityAmount) || liquidityAmount < 0.1) {
-        toast({
-          title: "Error",
-          description: `Minimum liquidity required is 0.1 ${getNetworkCurrency(chainId)}`,
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Convert to exact Wei value and store in ethAmount
-      const ethAmount = parseEther(liquidityAmount.toString());
-      console.log('Liquidity amount in ETH:', formatEther(ethAmount));
-      
-      // Get the DEX router address
-      const dexRouter = getDexRouterAddress(chainId);
-      console.log('Using DEX router:', dexRouter);
-      
-      let tokenContract;
-      let tokenAmount;
-
-      if (selectedToken.factoryVersion === 'v3') {
-        // Use V3 specific contract
-        tokenContract = new Contract(
-          selectedToken.address,
-          TOKEN_V3_ABI,
-          signer
-        );
-
-        // Get liquidity info for V3 tokens
-        const distribution = await tokenContract.getTokenDistribution();
-        tokenAmount = distribution.liquidityAmount;
-        console.log('V3 Token liquidity allocation:', formatEther(tokenAmount));
-      } else {
-        // Use standard contract for v1/v2
-        tokenContract = new Contract(
-          selectedToken.address,
-          [...ERC20_ABI, ...TOKEN_APPROVAL_ABI],
-          signer
-        );
-
-        // Get total supply and calculate token amount (40% for v1/v2)
-        const totalSupply = await tokenContract.totalSupply();
-        tokenAmount = (totalSupply * BigInt(40)) / BigInt(100);
-      }
-
-      // Check token balance
-      const userAddress = await signer.getAddress();
-      const balance = await tokenContract.balanceOf(userAddress);
-      console.log('User token balance:', formatEther(balance));
-      console.log('Token amount for liquidity:', formatEther(tokenAmount));
-      
-      if (balance < tokenAmount) {
-        toast({
-          title: "Error",
-          description: "Insufficient token balance for liquidity",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Use ethAmount from earlier validation
-      console.log('ETH/BNB amount for liquidity:', formatEther(ethAmount));
-      
-      // Check BNB balance
-      const bnbBalance = await provider.getBalance(userAddress);
-      console.log('User BNB balance:', formatEther(bnbBalance));
-      
-      if (bnbBalance < ethAmount) {
-        toast({
-          title: "Error",
-          description: `Insufficient ${getNetworkCurrency(chainId)} balance for liquidity`,
-          variant: "destructive",
-        });
-        return;
-      }
-      
-      // Check current allowance
-      const currentAllowance = await tokenContract.allowance(userAddress, dexRouter);
-      console.log('Current allowance:', formatEther(currentAllowance));
-      console.log('Required token amount:', formatEther(tokenAmount));
-      
-      if (currentAllowance < tokenAmount) {
-        toast({
-          title: "Error",
-          description: "Insufficient token approval. Please approve tokens first.",
-          variant: "destructive",
-        });
-        setActiveTab('approve');
-        return;
-      }
-
-      // Create router contract with full ABI for PancakeSwap
-      const routerContract = new Contract(dexRouter, routerABI, signer);
-      
-      // Set deadline 30 minutes from now (increased from 20)
-      const deadline = Math.floor(Date.now() / 1000) + 1800;
-      
-      // Calculate minimum amounts (2% slippage tolerance - increased from 1%)
-      const amountTokenMin = (tokenAmount * BigInt(98)) / BigInt(100);
-      const amountETHMin = (ethAmount * BigInt(98)) / BigInt(100);
-      
-      console.log('Deployment parameters:', {
-        token: selectedToken.address,
-        tokenAmount: formatEther(tokenAmount),
-        ethAmount: formatEther(ethAmount),
-        amountTokenMin: formatEther(amountTokenMin),
-        amountETHMin: formatEther(amountETHMin),
-        deadline,
-        router: dexRouter
-      });
-
-      // Prepare transaction parameters with higher gas for BSC
-      const txParams = {
-        value: ethAmount,
-        gasLimit: chainId === 97 ? BigInt(4000000) : BigInt(1000000), // Increased gas limit for BSC
-        gasPrice: chainId === 97 ? BigInt(12000000000) : undefined // 12 Gwei for BSC Testnet
-      };
-      
-      console.log('Transaction parameters:', txParams);
-      
-      // Estimate gas first with a try-catch
-      try {
-        const gasEstimate = await routerContract.addLiquidityETH.estimateGas(
-          selectedToken.address,
-          tokenAmount,
-          amountTokenMin,
-          amountETHMin,
-          userAddress,
-          deadline,
-          { value: ethAmount }
-        );
-        console.log('Estimated gas:', gasEstimate.toString());
-        // Add 50% buffer instead of 20%
-        txParams.gasLimit = gasEstimate * BigInt(150) / BigInt(100);
-        console.log('Adjusted gas limit:', txParams.gasLimit.toString());
-      } catch (error) {
-        console.error('Gas estimation failed:', error);
-        // Continue with default gas limit
-      }
-      
-      console.log('Sending transaction with parameters:', {
-        token: selectedToken.address,
-        tokenAmount: formatEther(tokenAmount),
-        amountTokenMin: formatEther(amountTokenMin),
-        amountETHMin: formatEther(amountETHMin),
-        to: userAddress,
-        deadline,
-        value: formatEther(ethAmount),
-        gasLimit: txParams.gasLimit.toString(),
-        gasPrice: txParams.gasPrice ? txParams.gasPrice.toString() : 'auto'
-      });
-
-      // Add liquidity
-      const tx = await routerContract.addLiquidityETH(
-        selectedToken.address,
-        tokenAmount,
-        amountTokenMin,
-        amountETHMin,
-        userAddress,
-        deadline,
-        txParams
-      );
-      
-      console.log('Transaction submitted:', tx.hash);
-      
-      toast({
-        title: "Transaction Submitted",
-        description: "Please wait while your transaction is being processed",
-      });
-      
-      const receipt = await tx.wait();
-      console.log('Transaction receipt:', receipt);
-      
-      if (!receipt || receipt.status === 0) {
-        throw new Error("Transaction failed. Please check your token approval and BNB balance.");
-      }
-      
-      toast({
-        title: "Success",
-        description: "Token successfully listed on DEX!",
-      });
-      
-    } catch (error) {
-      console.error('Error deploying to DEX:', error);
-      
-      let errorMessage = "Failed to deploy token to DEX.";
-      if (error instanceof Error) {
-        if (error.message.includes("insufficient allowance")) {
-          errorMessage = "Insufficient token approval. Please approve more tokens.";
-        } else if (error.message.includes("insufficient balance")) {
-          errorMessage = `Insufficient ${getNetworkCurrency(chainId)} balance for liquidity.`;
-        } else if (error.message.includes("TRANSFER_FROM_FAILED")) {
-          errorMessage = "Token transfer failed. Please check your token approval.";
-        } else {
-          errorMessage = error.message;
-        }
-      }
-      
-      toast({
-        title: "Error Deploying to DEX",
-        description: errorMessage,
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Add these functions before the deployToDEX function
   const handleFinalizePresale = async (tokenAddress: string) => {
     if (!tokenAddress || !chainId) return;
     
@@ -1316,141 +1057,6 @@ function TokenListingProcess() {
     }
   };
 
-  const resetApproval = async () => {
-    if (!selectedToken || !chainId) return;
-    
-    try {
-      setIsLoading(true);
-      const provider = getProvider();
-      const signer = await provider.getSigner();
-      
-      // Get the DEX router address
-      const dexRouter = getDexRouterAddress(chainId);
-      
-      // Create token contract instance
-      const tokenContract = new Contract(selectedToken.address, [
-        ...ERC20_ABI,
-        ...TOKEN_APPROVAL_ABI
-      ], signer);
-      
-      // Set allowance to 0
-      const tx = await tokenContract.approve(dexRouter, 0);
-      
-      toast({
-        title: "Resetting Approval",
-        description: "Please confirm the transaction in your wallet",
-      });
-      
-      await tx.wait();
-      
-      toast({
-        title: "Success",
-        description: "Token approval has been reset",
-      });
-      
-      setApprovalDetails(prev => ({ ...prev, approved: false }));
-    } catch (error) {
-      console.error('Error resetting approval:', error);
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to reset approval",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Add this component for displaying token distribution
-  const TokenDistributionInfo = ({ distribution }: { distribution: any }) => {
-    if (!distribution) return null;
-
-    const formatPercentage = (amount: string, totalSupply: string) => {
-      const percentage = (Number(amount) / Number(totalSupply)) * 100;
-      return percentage.toFixed(2) + '%';
-    };
-
-    return (
-      <div className="mt-4 space-y-2">
-        <h4 className="font-medium text-sm text-gray-300">Token Distribution</h4>
-        <div className="bg-gray-800 rounded-md p-3 space-y-3">
-          <div>
-            <p className="text-sm text-gray-400">Liquidity Allocation:</p>
-            <p className="text-sm">
-              {Number(distribution.liquidityAllocation).toLocaleString()} tokens 
-              ({formatPercentage(distribution.liquidityAllocation, tokenPreview?.totalSupply || '0')})
-            </p>
-          </div>
-
-          {Number(distribution.marketingAllocation) > 0 && (
-            <div>
-              <p className="text-sm text-gray-400">Marketing Allocation:</p>
-              <p className="text-sm">
-                {Number(distribution.marketingAllocation).toLocaleString()} tokens
-                ({formatPercentage(distribution.marketingAllocation, tokenPreview?.totalSupply || '0')})
-              </p>
-            </div>
-          )}
-
-          {Number(distribution.developmentAllocation) > 0 && (
-            <div>
-              <p className="text-sm text-gray-400">Development Allocation:</p>
-              <p className="text-sm">
-                {Number(distribution.developmentAllocation).toLocaleString()} tokens
-                ({formatPercentage(distribution.developmentAllocation, tokenPreview?.totalSupply || '0')})
-              </p>
-            </div>
-          )}
-          
-          {distribution.beneficiaryAllocations?.length > 0 && (
-            <div>
-              <p className="text-sm text-gray-400 mb-2">Beneficiary Allocations:</p>
-              <div className="space-y-2">
-                {distribution.beneficiaryAllocations.map((allocation: any, index: number) => (
-                  <div key={index} className="text-sm bg-gray-700/50 p-2 rounded">
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Address:</span>
-                      <span className="text-xs">{allocation.beneficiary}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Amount:</span>
-                      <span>
-                        {Number(allocation.amount).toLocaleString()} tokens
-                        ({formatPercentage(allocation.amount, tokenPreview?.totalSupply || '0')})
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Vesting Duration:</span>
-                      <span className="text-xs">{secondsToDays(allocation.vestingDuration)} days</span>
-                    </div>
-                    {allocation.released && (
-                      <div className="flex justify-between">
-                        <span className="text-gray-400">Released:</span>
-                        <span>{Number(allocation.released).toLocaleString()} tokens</span>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
-
-  // Add helper function for converting seconds to days
-  const secondsToDays = (seconds: number): number => {
-    return Math.floor(seconds / (60 * 60 * 24));
-  };
-
-  // Add this helper function near the top with other utility functions
-  const formatTimeDisplay = (seconds: number): string => {
-    const days = Math.floor(seconds / (24 * 60 * 60));
-    return `${days} days`;
-  };
-
-  // Update the handleBurnUnsoldTokens function
   const handleBurnUnsoldTokens = async (tokenAddress: string) => {
     if (!tokenAddress || !chainId) return;
     
@@ -1552,7 +1158,6 @@ function TokenListingProcess() {
     }
   };
 
-  // Update the handleCancelPresale function
   const handleCancelPresale = async (tokenAddress: string) => {
     if (!tokenAddress || !chainId) return;
     
@@ -1642,8 +1247,8 @@ function TokenListingProcess() {
       await loadTokenPreview();
     } catch (error) {
       console.error('Error cancelling presale:', error);
-      
       let errorMessage = "Failed to cancel presale";
+      
       if (error instanceof Error) {
         if (error.message.includes("Only owner")) {
           errorMessage = "Only the owner can cancel the presale";
@@ -1661,6 +1266,196 @@ function TokenListingProcess() {
       toast({
         title: "Error",
         description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const resetApproval = async () => {
+    if (!selectedToken || !chainId) return;
+    
+    try {
+      setIsLoading(true);
+      const provider = getProvider();
+      const signer = await provider.getSigner();
+      
+      // Get the DEX router address
+      const dexRouter = getDexRouterAddress(chainId);
+      
+      // Create token contract instance
+      const tokenContract = new Contract(selectedToken.address, [
+        ...ERC20_ABI,
+        ...TOKEN_APPROVAL_ABI
+      ], signer);
+      
+      // Set allowance to 0
+      const tx = await tokenContract.approve(dexRouter, 0);
+      
+      toast({
+        title: "Resetting Approval",
+        description: "Please confirm the transaction in your wallet",
+      });
+      
+      await tx.wait();
+      
+      toast({
+        title: "Success",
+        description: "Token approval has been reset",
+      });
+      
+      setApprovalDetails(prev => ({ ...prev, approved: false }));
+    } catch (error) {
+      console.error('Error resetting approval:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to reset approval",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const deployToDEX = async () => {
+    if (!selectedToken || !chainId) return;
+    
+    try {
+      setIsLoading(true);
+      const provider = getProvider();
+      const signer = await provider.getSigner();
+      let tokenContract: Contract;
+      let deployTokenAmount: bigint;
+      
+      // Validate initial liquidity amount with strict parsing
+      const liquidityAmount = parseFloat(dexDetails.initialLiquidityInETH);
+      if (isNaN(liquidityAmount) || liquidityAmount < 0.1) {
+        toast({
+          title: "Error",
+          description: `Minimum liquidity required is 0.1 ${getNetworkCurrency(chainId)}`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Convert to exact Wei value and store in ethAmount
+      const ethAmount = parseEther(liquidityAmount.toString());
+      console.log('Liquidity amount in ETH:', formatEther(ethAmount));
+      
+      // Get the DEX router address
+      const dexRouter = getDexRouterAddress(chainId);
+      console.log('Using DEX router:', dexRouter);
+      
+      // Create token contract with both ERC20 and V3 ABIs
+      tokenContract = new Contract(
+        selectedToken.address,
+        [
+          ...ERC20_ABI,
+          ...TOKEN_APPROVAL_ABI,
+          ...TOKEN_V3_ABI
+        ],
+        signer
+      );
+
+      // Check if presale is finalized for V3 tokens
+      if (selectedToken.factoryVersion === 'v3') {
+        const presaleInfo = await tokenContract.presaleInfo();
+        if (!presaleInfo.finalized) {
+          throw new Error('Presale must be finalized before deploying to DEX');
+        }
+      }
+
+      // Get user address
+      const userAddress = await signer.getAddress();
+
+      // Check BNB/ETH balance
+      const bnbBalance = await provider.getBalance(userAddress);
+      if (bnbBalance < ethAmount) {
+        throw new Error(`Insufficient ${getNetworkCurrency(chainId)} balance for liquidity`);
+      }
+
+      // Get liquidity allocation or calculate 40% of total supply
+      try {
+        console.log('Attempting to get V3 liquidity allocation...');
+        const liquidityAllocation = await tokenContract.liquidityAllocation();
+        deployTokenAmount = liquidityAllocation;
+        console.log('V3 Token liquidity allocation:', formatEther(deployTokenAmount));
+      } catch (error) {
+        console.log('Failed to get liquidity allocation, falling back to 40% of total supply');
+        const totalSupply = await tokenContract.totalSupply();
+        deployTokenAmount = (totalSupply * BigInt(40)) / BigInt(100);
+        console.log('Fallback token amount (40% of total supply):', formatEther(deployTokenAmount));
+      }
+
+      // Create router contract
+      const routerContract = new Contract(dexRouter, routerABI, signer);
+      
+      // Set deadline 30 minutes from now
+      const deadline = Math.floor(Date.now() / 1000) + 1800;
+      
+      // Calculate minimum amounts (2% slippage tolerance)
+      const amountTokenMin = (deployTokenAmount * BigInt(98)) / BigInt(100);
+      const amountETHMin = (ethAmount * BigInt(98)) / BigInt(100);
+
+      // For V3 tokens, the contract will handle the approval and transfer
+      if (selectedToken.factoryVersion === 'v3') {
+        // The contract will handle the approval and liquidity addition
+        const tx = await tokenContract.addLiquidity(
+          dexRouter,
+          deployTokenAmount,
+          amountTokenMin,
+          amountETHMin,
+          userAddress,
+          deadline,
+          { value: ethAmount }
+        );
+
+        toast({
+          title: "Transaction Submitted",
+          description: "Please wait for confirmation",
+        });
+
+        await tx.wait();
+      } else {
+        // For non-V3 tokens, check allowance and handle approval
+        const allowance = await tokenContract.allowance(userAddress, dexRouter);
+        if (allowance < deployTokenAmount) {
+          throw new Error('Insufficient token approval. Please approve tokens first.');
+        }
+
+        // Add liquidity
+        const tx = await routerContract.addLiquidityETH(
+          selectedToken.address,
+          deployTokenAmount,
+          amountTokenMin,
+          amountETHMin,
+          userAddress,
+          deadline,
+          {
+            value: ethAmount,
+            gasLimit: chainId === 97 ? BigInt(4000000) : BigInt(1000000)
+          }
+        );
+
+        toast({
+          title: "Transaction Submitted",
+          description: "Please wait for confirmation",
+        });
+
+        await tx.wait();
+      }
+
+      toast({
+        title: "Success",
+        description: "Liquidity added successfully!",
+      });
+
+    } catch (error) {
+      console.error('Error deploying to DEX:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to deploy to DEX",
         variant: "destructive",
       });
     } finally {
@@ -1852,7 +1647,7 @@ function TokenListingProcess() {
                           {tokenPreview?.presaleInfo && !tokenPreview.presaleInfo.finalized && (
                             <div className="flex gap-2">
                               <Button
-                                onClick={() => handleFinalizePresale(tokenPreview.address!)}
+                                onClick={() => selectedToken && handleFinalizePresale(selectedToken.address)}
                                 className="bg-green-600 hover:bg-green-700 text-white h-7 text-xs px-3"
                                 disabled={isLoading || (
                                   Number(tokenPreview.presaleInfo.totalContributed) < Number(tokenPreview.presaleInfo.softCap) && 
@@ -1871,14 +1666,14 @@ function TokenListingProcess() {
                                Number(tokenPreview.presaleInfo.totalContributed) < Number(tokenPreview.presaleInfo.softCap) && (
                                 <>
                                   <Button
-                                    onClick={() => handleBurnUnsoldTokens(tokenPreview.address!)}
+                                    onClick={() => selectedToken && handleBurnUnsoldTokens(selectedToken.address)}
                                     className="bg-red-600 hover:bg-red-700 text-white h-7 text-xs px-3"
                                     disabled={isLoading}
                                   >
                                     {isLoading ? <Spinner className="h-3 w-3" /> : 'Burn Unsold Tokens'}
                                   </Button>
                                   <Button
-                                    onClick={() => handleCancelPresale(tokenPreview.address!)}
+                                    onClick={() => selectedToken && handleCancelPresale(selectedToken.address)}
                                     className="bg-yellow-600 hover:bg-yellow-700 text-white h-7 text-xs px-3"
                                     disabled={isLoading}
                                   >

@@ -101,6 +101,13 @@ export function getNetworkContractAddress(chainId: number, contractType: string)
     if (contractType.toLowerCase().startsWith('factory')) {
       const version = contractType.match(/v(\d+)/i)?.[1] || '1';
       envKey = `NEXT_PUBLIC_${networkName}_FACTORY_ADDRESS_V${version}`;
+
+      // Hardcoded fallback for BSC testnet V3 factory
+      if (chainId === 97 && version === '3') {
+        const fallbackAddress = '0x9d24be721dcf4390a25C42CF90260909BAb46e2a';
+        console.log('Using fallback address for BSC testnet V3 factory:', fallbackAddress);
+        return fallbackAddress;
+      }
     } else {
       envKey = `NEXT_PUBLIC_${networkName}_${contractType.toUpperCase()}`;
     }

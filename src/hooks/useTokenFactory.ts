@@ -49,7 +49,7 @@ export function useTokenFactory() {
       throw new Error('Wallet not connected');
     }
 
-    const factoryAddress = getNetworkContractAddress(Number(chainId), 'dexListingFactory');
+    const factoryAddress = getNetworkContractAddress(Number(chainId), 'factoryV3');
     if (!factoryAddress) {
       throw new Error('Factory not deployed on this network');
     }
@@ -58,11 +58,11 @@ export function useTokenFactory() {
       // Get listing fee
       const listingFee = await publicClient.readContract({
         address: factoryAddress as `0x${string}`,
-        abi: FACTORY_ABI,
-        functionName: 'listingFee',
+        abi: TokenFactoryV3ABI.abi,
+        functionName: 'deploymentFee',
       }) as bigint;
 
-      console.log('Listing Fee:', listingFee.toString());
+      console.log('Deployment Fee:', listingFee.toString());
 
       // Validate percentages
       const totalPercentage = params.presalePercentage + params.liquidityPercentage + 
@@ -111,9 +111,35 @@ export function useTokenFactory() {
       // Create the contract request
       const { request } = await publicClient.simulateContract({
         address: factoryAddress as `0x${string}`,
-        abi: FACTORY_ABI,
+        abi: TokenFactoryV3ABI.abi,
         functionName: 'createToken',
-        args: [params],
+        args: [{
+          name: params.name,
+          symbol: params.symbol,
+          initialSupply: params.initialSupply,
+          maxSupply: params.maxSupply,
+          owner: params.owner,
+          enableBlacklist: params.enableBlacklist,
+          enableTimeLock: params.enableTimeLock,
+          presaleRate: params.presaleRate,
+          softCap: params.softCap,
+          hardCap: params.hardCap,
+          minContribution: params.minContribution,
+          maxContribution: params.maxContribution,
+          startTime: params.startTime,
+          endTime: params.endTime,
+          presalePercentage: BigInt(params.presalePercentage),
+          liquidityPercentage: BigInt(params.liquidityPercentage),
+          liquidityLockDuration: BigInt(params.liquidityLockDuration * 24 * 60 * 60),
+          walletAllocations: params.wallets.map(w => ({
+            wallet: w.address,
+            percentage: BigInt(w.percentage),
+            vestingEnabled: w.vestingEnabled,
+            vestingDuration: BigInt(w.vestingDuration * 24 * 60 * 60),
+            cliffDuration: BigInt(w.cliffDuration * 24 * 60 * 60),
+            vestingStartTime: w.vestingStartTime
+          }))
+        }],
         value: listingFee,
       });
 
