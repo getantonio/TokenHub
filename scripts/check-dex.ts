@@ -1,41 +1,43 @@
 const hre = require("hardhat");
-const { ethers } = hre;
 
 async function main() {
-    try {
-        const [deployer] = await ethers.getSigners();
-        console.log("Checking DEX configuration with account:", deployer.address);
+    const { ethers, network } = hre;
+    const [deployer] = await ethers.getSigners();
+    console.log(`Checking DEXes on ${network.name}...`);
+    console.log("Using account:", deployer.address);
 
-        // Get factory contract
-        const factoryAddress = "0x2619c799294E799060e8f213Fb11a9b55293bE47";
-        const Factory = await ethers.getContractFactory("TokenFactory_v2_DirectDEX");
-        const factory = Factory.attach(factoryAddress);
+    const factoryAddress = "0xc300648556860006771f1f982d3dDE65A54C1BA0";
+    const factory = await ethers.getContractAt("TokenFactory_v2_DirectDEX_TwoStep", factoryAddress);
 
-        // Get supported DEXes
-        const supportedDEXes = await factory.getSupportedDEXes();
-        console.log("\nSupported DEXes:", supportedDEXes);
+    // Get supported DEXes
+    console.log('\nGetting supported DEXes...');
+    const supportedDEXes = await factory.getSupportedDEXes();
+    console.log('Supported DEXes:', supportedDEXes);
 
-        // Check each DEX configuration
-        console.log("\nDEX Configurations:");
-        for (const dexName of supportedDEXes) {
-            const dexInfo = await factory.getDEXRouter(dexName);
-            console.log(`\n${dexName}:`);
-            console.log("Router:", dexInfo.router);
-            console.log("Is Active:", dexInfo.isActive);
-        }
+    // Get details for each DEX
+    console.log('\nDEX Details:');
+    for (const dexName of supportedDEXes) {
+        const dexInfo = await factory.getDEXRouter(dexName);
+        console.log(`\n${dexName}:`, {
+            router: dexInfo.router,
+            isActive: dexInfo.isActive
+        });
 
-    } catch (error) {
-        console.error("\nError checking DEX configuration:");
-        console.error(error);
-        process.exit(1);
+        // Verify router interface
+        const router = await ethers.getContractAt("IUniswapV2Router02", dexInfo.router);
+        const factory_address = await router.factory();
+        const weth_address = await router.WETH();
+        
+        console.log('Router details:', {
+            factory: factory_address,
+            WETH: weth_address
+        });
     }
 }
 
-if (require.main === module) {
-    main()
-        .then(() => process.exit(0))
-        .catch((error) => {
-            console.error(error);
-            process.exit(1);
-        });
-} 
+main()
+    .then(() => process.exit(0))
+    .catch((error) => {
+        console.error(error);
+        process.exit(1);
+    }); 

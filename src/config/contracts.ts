@@ -77,30 +77,65 @@ function getNetworkName(chainId: number): string {
 export function getNetworkContractAddress(chainId: number, contractType: string): string {
   const networkName = getNetworkName(chainId).toUpperCase();
   
-  // Log the environment variable being accessed
-  const envKey = `NEXT_PUBLIC_${networkName}_${contractType.toUpperCase()}`;
-  console.log('Looking for contract address:', {
-    network: networkName,
-    type: contractType,
-    envKey,
-    value: process.env[envKey]
+  // Log input parameters
+  console.log('Getting contract address for:', {
+    chainId,
+    networkName,
+    contractType
   });
   
+  let envKey = '';
+  
+  // Handle special cases for environment variable keys
+  if (contractType === 'dexListingFactory') {
+    envKey = `NEXT_PUBLIC_${networkName}_DEX_LISTING_FACTORY_ADDRESS`;
+    
+    // Hardcoded fallback for Sepolia DEX listing factory
+    if (chainId === 11155111) {
+      const fallbackAddress = '0xc300648556860006771f1f982d3dDE65A54C1BA0';
+      console.log('Using fallback address for Sepolia DEX listing factory:', fallbackAddress);
+      return fallbackAddress;
+    }
+  } else {
+    // Handle factory addresses specially
+    if (contractType.toLowerCase().startsWith('factory')) {
+      const version = contractType.match(/v(\d+)/i)?.[1] || '1';
+      envKey = `NEXT_PUBLIC_${networkName}_FACTORY_ADDRESS_V${version}`;
+    } else {
+      envKey = `NEXT_PUBLIC_${networkName}_${contractType.toUpperCase()}`;
+    }
+  }
+  
+  // Get the value from environment
+  const value = process.env[envKey];
+  
+  // Log the environment variable details
+  console.log('Environment variable details:', {
+    envKey,
+    value,
+    exists: envKey in process.env,
+    allKeys: Object.keys(process.env).filter(key => key.includes(networkName))
+  });
+  
+  // Return the value directly for dexListingFactory
+  if (contractType === 'dexListingFactory') {
+    return value || '';
+  }
+  
+  // Handle other contract types
   switch (contractType) {
     case 'factoryV1':
     case 'factoryAddress':
     case 'factoryAddressV1':
-      return process.env[`NEXT_PUBLIC_${networkName}_FACTORY_ADDRESS_V1`] || '';
+      return value || process.env[`NEXT_PUBLIC_${networkName}_FACTORY_ADDRESS_V1`] || '';
     case 'factoryV2':
     case 'factoryAddressV2':
     case 'FACTORY_ADDRESS_V2':
-      return process.env[`NEXT_PUBLIC_${networkName}_FACTORY_ADDRESS_V2`] || '';
+      return value || process.env[`NEXT_PUBLIC_${networkName}_FACTORY_ADDRESS_V2`] || '';
     case 'factoryV3':
     case 'factoryAddressV3':
     case 'FACTORY_ADDRESS_V3':
-      return process.env[`NEXT_PUBLIC_${networkName}_FACTORY_ADDRESS_V3`] || '';
-    case 'dexListingFactory':
-      return process.env[`NEXT_PUBLIC_${networkName}_DEX_LISTING_FACTORY_ADDRESS`] || '';
+      return value || process.env[`NEXT_PUBLIC_${networkName}_FACTORY_ADDRESS_V3`] || '';
     case 'dexListingTemplate':
       return process.env[`NEXT_PUBLIC_${networkName}_DEX_LISTING_TEMPLATE_ADDRESS`] || '';
     case 'factoryAddressV2DirectDEX_Make':

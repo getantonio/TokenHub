@@ -1,45 +1,55 @@
 const hre = require("hardhat");
-const { ethers } = require("hardhat");
 
 async function main() {
-    try {
-        const [deployer] = await ethers.getSigners();
-        console.log("Adding DEX with account:", deployer.address);
+    const { ethers, network } = hre;
+    const [deployer] = await ethers.getSigners();
+    console.log(`Adding DEX on ${network.name}...`);
+    console.log("Using account:", deployer.address);
 
-        // Get factory contract
-        const factoryAddress = "0xF0Fa40d9A6Ce543F917E073FA409a27DA5bE36fB"; // Bake factory address
-        const Factory = await ethers.getContractFactory("TokenFactory_v2_Bake");
-        const factory = Factory.attach(factoryAddress);
+    const factoryAddress = "0xc300648556860006771f1f982d3dDE65A54C1BA0";
+    const factory = await ethers.getContractAt("TokenFactory_v2_DirectDEX_TwoStep", factoryAddress);
 
-        // Uniswap V2 Router address (Sepolia)
-        const UNISWAP_ROUTER = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D";
+    // Updated Uniswap V2 Router address for Sepolia
+    const UNISWAP_ROUTER = "0xC532a74256D3Db42D0Bf7a0400fEFDbad7694008";
 
-        console.log("\nAdding Uniswap DEX...");
-        const tx = await factory.addDEX("uniswap-test", UNISWAP_ROUTER);
-        console.log("Transaction sent:", tx.hash);
-        
-        const receipt = await tx.wait();
-        console.log("Transaction confirmed in block:", receipt.blockNumber);
+    // First verify the router interface
+    console.log('\nVerifying router interface...');
+    const router = await ethers.getContractAt("IUniswapV2Router02", UNISWAP_ROUTER);
+    
+    console.log('Checking router factory...');
+    const uniswapFactory = await router.factory();
+    console.log('Router factory address:', uniswapFactory);
 
-        // Verify DEX was added
-        const dexInfo = await factory.getDEXRouter("uniswap-test");
-        console.log("\nDEX Configuration:");
-        console.log("Name: uniswap-test");
-        console.log("Router:", dexInfo.router);
-        console.log("Is Active:", dexInfo.isActive);
+    console.log('Checking router WETH...');
+    const weth = await router.WETH();
+    console.log('Router WETH address:', weth);
 
-    } catch (error) {
-        console.error("\nError adding DEX:");
-        console.error(error);
-        process.exit(1);
-    }
+    // Now add the DEX
+    console.log('\nAdding Uniswap V2 as supported DEX...');
+    const tx = await factory.addDEX(
+        "uniswap-v2",
+        UNISWAP_ROUTER,
+        {
+            gasLimit: 1000000
+        }
+    );
+    
+    console.log('Transaction sent:', tx.hash);
+    const receipt = await tx.wait();
+    console.log('Transaction confirmed in block:', receipt.blockNumber);
+
+    // Verify the DEX was added
+    const dexInfo = await factory.getDEXRouter("uniswap-v2");
+    console.log('DEX Configuration:', {
+        name: "uniswap-v2",
+        router: dexInfo.router,
+        isActive: dexInfo.isActive
+    });
 }
 
-if (require.main === module) {
-    main()
-        .then(() => process.exit(0))
-        .catch((error) => {
-            console.error(error);
-            process.exit(1);
-        });
-} 
+main()
+    .then(() => process.exit(0))
+    .catch((error) => {
+        console.error(error);
+        process.exit(1);
+    }); 

@@ -4,11 +4,12 @@ import { bsc, bscTestnet, mainnet, sepolia } from 'viem/chains';
 import { http } from 'viem';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '@rainbow-me/rainbowkit/styles.css';
+import { polygonAmoy } from '@/config/chains';
 
 const projectId = process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID || '';
 
 // Configure supported chains
-const chains = [sepolia, bscTestnet, mainnet, bsc] as const;
+const chains = [sepolia, bscTestnet, polygonAmoy, mainnet, bsc] as const;
 
 const { wallets } = getDefaultWallets({
   appName: 'TokenHub.dev',
@@ -20,7 +21,8 @@ const config = createConfig({
   chains,
   transports: {
     [sepolia.id]: http(process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL),
-    [bscTestnet.id]: http(),
+    [bscTestnet.id]: http(process.env.NEXT_PUBLIC_BSCTESTNET_RPC_URL),
+    [polygonAmoy.id]: http(process.env.NEXT_PUBLIC_POLYGONAMOY_RPC_URL),
     [mainnet.id]: http(),
     [bsc.id]: http()
   }

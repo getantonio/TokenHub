@@ -600,6 +600,7 @@ const TCAP_v2DirectDEX = forwardRef<TCAP_v2DirectDEXRef, Props>(({ isConnected, 
                           <SelectContent>
                             <SelectItem value="uniswap-test">Uniswap</SelectItem>
                             <SelectItem value="pancakeswap-test">PancakeSwap</SelectItem>
+                            <SelectItem value="quickswap-test">QuickSwap</SelectItem>
                           </SelectContent>
                         </Select>
                         <Input

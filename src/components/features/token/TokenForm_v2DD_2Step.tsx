@@ -312,13 +312,17 @@ export default function TokenForm_v2DD_2Step({ onSuccess, onError }: TokenFormV2
       const provider = new BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       
+      // Get both factory and router addresses
       const factoryAddress = getNetworkContractAddress(Number(chainId), 'factoryAddressV2DirectDEX_Bake');
-      console.log("Bake Factory Address:", factoryAddress);
+      const routerAddress = getNetworkContractAddress(Number(chainId), 'uniswapV2Router');
       
-      if (!factoryAddress) {
+      console.log("Factory Address:", factoryAddress);
+      console.log("Router Address:", routerAddress);
+      
+      if (!factoryAddress || !routerAddress) {
         toast({
           title: "Error",
-          description: "Factory not deployed on this network",
+          description: "Contract addresses not found for this network",
           variant: "destructive"
         });
         return;
@@ -346,36 +350,51 @@ export default function TokenForm_v2DD_2Step({ onSuccess, onError }: TokenFormV2
       const totalSupply = await tokenContract.totalSupply();
       const tokensForLiquidity = (BigInt(totalSupply) * BigInt(listingParams.liquidityPercentage)) / BigInt(100);
 
-      // Check current allowance
-      const currentAllowance = await tokenContract.allowance(await signer.getAddress(), factoryAddress);
+      // Check and set approvals for both factory and router
+      const factoryAllowance = await tokenContract.allowance(await signer.getAddress(), factoryAddress);
+      const routerAllowance = await tokenContract.allowance(await signer.getAddress(), routerAddress);
       
-      // If allowance is insufficient, approve tokens
-      if (BigInt(currentAllowance) < tokensForLiquidity) {
-        console.log("Approving tokens for liquidity...");
-        const approveTx = await tokenContract.approve(factoryAddress, tokensForLiquidity);
-        await approveTx.wait();
-        console.log("Token approval confirmed");
-        
-        // Set approval state and move to next step
-        setListingParams(prev => ({
-          ...prev,
-          isApproved: true
-        }));
-        setStep(3);
-        
-        toast({
-          title: "Success",
-          description: "Token approved for listing. You can now complete the listing process.",
-          variant: "default"
-        });
-      } else {
-        console.log("Token already has sufficient allowance");
-        setListingParams(prev => ({
-          ...prev,
-          isApproved: true
-        }));
-        setStep(3);
+      const approvalPromises = [];
+      
+      // If factory allowance is insufficient, approve tokens
+      if (BigInt(factoryAllowance) < tokensForLiquidity) {
+        console.log("Approving tokens for factory...");
+        approvalPromises.push(
+          tokenContract.approve(factoryAddress, tokensForLiquidity)
+            .then(tx => tx.wait())
+        );
       }
+      
+      // If router allowance is insufficient, approve tokens
+      if (BigInt(routerAllowance) < tokensForLiquidity) {
+        console.log("Approving tokens for router...");
+        approvalPromises.push(
+          tokenContract.approve(routerAddress, tokensForLiquidity)
+            .then(tx => tx.wait())
+        );
+      }
+
+      // Wait for all approvals
+      if (approvalPromises.length > 0) {
+        await Promise.all(approvalPromises);
+        console.log("All token approvals confirmed");
+      } else {
+        console.log("Token already has sufficient allowances");
+      }
+
+      // Set approval state and move to next step
+      setListingParams(prev => ({
+        ...prev,
+        isApproved: true,
+        dexName: 'uniswap-test' // Ensure consistent DEX naming
+      }));
+      setStep(3);
+      
+      toast({
+        title: "Success",
+        description: "Token approved for listing. You can now complete the listing process.",
+        variant: "default"
+      });
     } catch (error) {
       console.error("Error approving token:", error);
       const errorMessage = error instanceof Error ? error.message : "Failed to approve token. Please try again.";
@@ -582,6 +601,25 @@ export default function TokenForm_v2DD_2Step({ onSuccess, onError }: TokenFormV2
       // Calculate total value needed (listing fee + initial liquidity)
       const totalValue = BigInt(listingFee) + parseEther(listingParams.initialLiquidityInETH);
 
+      // Show confirmation dialog with fee breakdown
+      const confirmListing = window.confirm(
+        `Please confirm the listing details:\n\n` +
+        `Initial Liquidity: ${listingParams.initialLiquidityInETH} ETH\n` +
+        `Listing Fee: ${formatEther(listingFee)} ETH\n` +
+        `Total Cost: ${formatEther(totalValue)} ETH\n\n` +
+        `This will list your token on ${listingParams.dexName}.\n` +
+        `Any excess ETH will be automatically refunded.`
+      );
+
+      if (!confirmListing) {
+        toast({
+          title: "Cancelled",
+          description: "Token listing cancelled by user",
+          variant: "default"
+        });
+        return;
+      }
+
       // Debug values
       console.log("Listing parameters:", {
         tokenAddress: listingParams.tokenAddress,
@@ -593,7 +631,7 @@ export default function TokenForm_v2DD_2Step({ onSuccess, onError }: TokenFormV2
         dexRouter: dexInfo.router
       });
 
-      // Call listTokenOnDEX with the correct parameters for the Bake contract
+      // Call listTokenOnDEX with the correct parameters
       const tx = await factory.listTokenOnDEX(
         listingParams.tokenAddress,
         parseEther(listingParams.initialLiquidityInETH),
@@ -606,30 +644,127 @@ export default function TokenForm_v2DD_2Step({ onSuccess, onError }: TokenFormV2
         }
       );
 
-      console.log("Transaction sent:", tx.hash);
-      const receipt = await tx.wait();
-
       toast({
-        title: "Success",
-        description: `Token listed successfully on ${listingParams.dexName}`,
+        title: "Transaction Sent",
+        description: `Transaction submitted. Waiting for confirmation...`,
         variant: "default"
       });
 
-      if (typeof onSuccess === 'function') {
-        onSuccess();
+      console.log("Transaction sent:", tx.hash);
+      const receipt = await tx.wait();
+
+      // Check if the transaction was successful
+      if (receipt.status === 1) {
+        toast({
+          title: "Success",
+          description: `Token listed successfully on ${listingParams.dexName}`,
+          variant: "default"
+        });
+
+        // Add link to view on DEX
+        const dexUrl = listingParams.dexName.includes('uniswap') 
+          ? `https://app.uniswap.org/#/swap?outputCurrency=${listingParams.tokenAddress}`
+          : `https://pancakeswap.finance/swap?outputCurrency=${listingParams.tokenAddress}`;
+
+        toast({
+          title: "View on DEX",
+          description: (
+            <a href={dexUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600">
+              Click here to view your token on {listingParams.dexName}
+            </a>
+          ),
+          variant: "default"
+        });
+
+        if (typeof onSuccess === 'function') {
+          onSuccess();
+        }
+      } else {
+        throw new Error("Transaction failed");
       }
     } catch (error) {
       console.error("Error listing token:", error);
       const errorMessage = error instanceof Error ? error.message : "Failed to list token. Please try again.";
-      toast({
-        title: "Error",
-        description: errorMessage,
-        variant: "destructive"
-      });
+      
+      // Check if we need to show emergency refund option
+      if (errorMessage.includes("LiquidityAdditionFailed")) {
+        toast({
+          title: "Error",
+          description: (
+            <div>
+              <p>{errorMessage}</p>
+              <button 
+                onClick={() => handleEmergencyRefund(listingParams.tokenAddress)}
+                className="mt-2 text-blue-500 hover:text-blue-600"
+              >
+                Click here to request emergency refund
+              </button>
+            </div>
+          ),
+          variant: "destructive"
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: errorMessage,
+          variant: "destructive"
+        });
+      }
       
       if (typeof onError === 'function') {
         onError(error instanceof Error ? error : new Error(errorMessage));
       }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Add emergency refund handler
+  const handleEmergencyRefund = async (tokenAddress: string) => {
+    if (!isConnected || !chainId) {
+      toast({
+        title: "Error",
+        description: "Please connect your wallet first",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const provider = new BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      
+      const factory = new Contract(
+        getNetworkContractAddress(Number(chainId), 'factoryAddressV2DirectDEX_Bake'),
+        TokenFactoryV2DirectDEXTwoStepABI.abi,
+        signer
+      );
+
+      const tx = await factory.emergencyRefund(tokenAddress, {
+        gasLimit: 200000
+      });
+
+      toast({
+        title: "Refund Requested",
+        description: "Processing your refund request...",
+        variant: "default"
+      });
+
+      await tx.wait();
+
+      toast({
+        title: "Success",
+        description: "Emergency refund processed successfully",
+        variant: "default"
+      });
+    } catch (error) {
+      console.error("Error processing refund:", error);
+      toast({
+        title: "Error",
+        description: "Failed to process refund. Please try again later.",
+        variant: "destructive"
+      });
     } finally {
       setIsLoading(false);
     }

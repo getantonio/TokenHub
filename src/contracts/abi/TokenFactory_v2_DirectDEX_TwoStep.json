@@ -378,6 +378,16 @@
               "internalType": "uint256",
               "name": "autoLiquidityFeePercentage",
               "type": "uint256"
+            },
+            {
+              "internalType": "bool",
+              "name": "enableBuyFees",
+              "type": "bool"
+            },
+            {
+              "internalType": "bool",
+              "name": "enableSellFees",
+              "type": "bool"
             }
           ],
           "internalType": "struct TokenFactory_v2_DirectDEX_TwoStep.TokenCreationParams",

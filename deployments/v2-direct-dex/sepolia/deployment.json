@@ -1,7 +1,7 @@
 {
-  "templateAddress": "0x646a93E877012EF15A1A3dB99970a1A61654e740",
-  "twoStepFactoryAddress": "0xda317F76C1e61a93d3C92A6cDA59cD462359FD4A",
+  "templateAddress": "0x62fc76249E5785FC11Aae4D701C1b4b0B2a03B00",
+  "twoStepFactoryAddress": "0xf54E2Cd62C71BeF9D79054B2B20b331beedCa5AA",
   "network": "sepolia",
-  "timestamp": "2025-02-19T12:25:48.659Z",
-  "blockNumber": 7740762
+  "timestamp": "2025-02-21T04:04:13.079Z",
+  "blockNumber": 7752301
 }

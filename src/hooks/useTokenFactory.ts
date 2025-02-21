@@ -4,7 +4,11 @@ import { usePublicClient, useWalletClient, useChainId } from 'wagmi';
 import TokenFactoryV3ABI from '@/contracts/abi/TokenFactory_v3.json';
 import { FACTORY_ADDRESSES } from '@/config/contracts';
 import { ChainId } from '@/types/chain';
-import { Abi } from 'viem';
+import { Abi, PublicClient, WalletClient } from 'viem';
+import { FACTORY_ABI } from '@/contracts/abi/TokenFactory_v2_DirectDEX_TwoStep';
+import { BrowserProvider } from 'ethers';
+import { Contract } from 'ethers';
+import { getNetworkContractAddress } from '@/config/contracts';
 
 interface TokenParams {
   name: string;
@@ -35,16 +39,30 @@ interface TokenParams {
   }[];
 }
 
-export const useTokenFactory = () => {
+export function useTokenFactory() {
   const publicClient = usePublicClient();
   const { data: walletClient } = useWalletClient();
   const chainId = useChainId() as ChainId;
 
   const createToken = async (params: TokenParams) => {
+    if (!publicClient || !chainId || !walletClient) {
+      throw new Error('Wallet not connected');
+    }
+
+    const factoryAddress = getNetworkContractAddress(Number(chainId), 'dexListingFactory');
+    if (!factoryAddress) {
+      throw new Error('Factory not deployed on this network');
+    }
+
     try {
-      if (!publicClient) throw new Error('Public client not available');
-      if (!chainId) throw new Error('Chain ID not available');
-      if (!walletClient) throw new Error('Wallet client not available');
+      // Get listing fee
+      const listingFee = await publicClient.readContract({
+        address: factoryAddress as `0x${string}`,
+        abi: FACTORY_ABI,
+        functionName: 'listingFee',
+      }) as bigint;
+
+      console.log('Listing Fee:', listingFee.toString());
 
       // Validate percentages
       const totalPercentage = params.presalePercentage + params.liquidityPercentage + 
@@ -68,22 +86,6 @@ export const useTokenFactory = () => {
         }
       }
 
-      // Get the factory address for the current chain
-      const factoryAddress = FACTORY_ADDRESSES['v3'][chainId] as `0x${string}` | undefined;
-      console.log('Factory address for chain', chainId, ':', factoryAddress);
-      
-      if (!factoryAddress) {
-        throw new Error(`Token Factory v3 not deployed on network ${chainId}`);
-      }
-
-      const deploymentFee = await publicClient.readContract({
-        address: factoryAddress,
-        abi: TokenFactoryV3ABI.abi as Abi,
-        functionName: 'deploymentFee',
-      }) as bigint;
-
-      console.log('Deployment Fee:', deploymentFee.toString());
-
       // Safe logging of parameters
       const logParams = {
         name: params.name,
@@ -106,69 +108,22 @@ export const useTokenFactory = () => {
       };
       console.log('Creating token with params:', logParams);
 
-      // Structure the parameters according to the InitParams struct
+      // Create the contract request
       const { request } = await publicClient.simulateContract({
-        address: factoryAddress,
-        abi: TokenFactoryV3ABI.abi as Abi,
+        address: factoryAddress as `0x${string}`,
+        abi: FACTORY_ABI,
         functionName: 'createToken',
-        args: [{
-          name: params.name,
-          symbol: params.symbol,
-          initialSupply: params.initialSupply,
-          maxSupply: params.maxSupply,
-          owner: params.owner,
-          enableBlacklist: params.enableBlacklist,
-          enableTimeLock: params.enableTimeLock,
-          presaleRate: params.presaleRate,
-          softCap: params.softCap,
-          hardCap: params.hardCap,
-          minContribution: params.minContribution,
-          maxContribution: params.maxContribution,
-          startTime: params.startTime,
-          endTime: params.endTime,
-          presalePercentage: params.presalePercentage,
-          liquidityPercentage: params.liquidityPercentage,
-          liquidityLockDuration: params.liquidityLockDuration,
-          walletAllocations: params.wallets.map(w => {
-            console.log('Processing wallet allocation:', {
-              wallet: w.address,
-              percentage: w.percentage,
-              vestingEnabled: w.vestingEnabled,
-              vestingDuration: w.vestingDuration,
-              cliffDuration: w.cliffDuration,
-              vestingStartTime: w.vestingStartTime
-            });
-            
-            // Ensure all vesting parameters are properly set when vestingEnabled is true
-            if (w.vestingEnabled) {
-              if (!w.vestingDuration || !w.vestingStartTime) {
-                throw new Error(`Vesting parameters missing for wallet ${w.address}`);
-              }
-            }
-            
-            return {
-              wallet: w.address,
-              percentage: w.percentage,
-              vestingEnabled: w.vestingEnabled,
-              vestingDuration: w.vestingEnabled ? w.vestingDuration * 24 * 60 * 60 : 0,
-              cliffDuration: w.vestingEnabled ? (w.cliffDuration || 0) * 24 * 60 * 60 : 0,
-              vestingStartTime: w.vestingEnabled ? w.vestingStartTime : BigInt(0)
-            };
-          })
-        }],
-        value: deploymentFee,
+        args: [params],
+        value: listingFee,
       });
-
-      console.log('Token creation request:', request);
 
       const hash = await walletClient.writeContract(request);
       return hash;
-
     } catch (error) {
-      console.error('Error in createToken:', error);
+      console.error('Error creating token:', error);
       throw error;
     }
   };
 
   return { createToken };
-};
+}

@@ -85,12 +85,18 @@ const factoryV2DirectDEXABI = [
 const UNISWAP_V2_FACTORY_ABI = [
   "function getPair(address tokenA, address tokenB) external view returns (address pair)",
   "function allPairs(uint) external view returns (address pair)",
-  "function allPairsLength() external view returns (uint)"
+  "function allPairsLength() external view returns (uint)",
+  "function feeTo() external view returns (address)",
+  "function feeToSetter() external view returns (address)",
+  "function createPair(address tokenA, address tokenB) external returns (address pair)",
+  "function setFeeTo(address) external",
+  "function setFeeToSetter(address) external"
 ];
 
 const UNISWAP_V2_FACTORY_ADDRESS = {
   11155111: "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f", // Sepolia
-  97: "0x6725F303b657a9451d8BA641348b6761A6CC7a17" // BSC Testnet
+  97: "0x6725F303b657a9451d8BA641348b6761A6CC7a17", // BSC Testnet
+  11155420: "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f" // Optimism Sepolia
 };
 
 // Update the factory ABI to match Uniswap V2 Factory exactly
@@ -352,6 +358,10 @@ const TCAP_U_DEXLIST = () => {
         return 'BNB';
       case 11155111:
         return 'ETH';
+      case 80002:
+        return 'MATIC';
+      case 11155420:
+        return 'ETH'; // Optimism Sepolia
       default:
         return 'ETH';
     }
@@ -364,6 +374,10 @@ const TCAP_U_DEXLIST = () => {
         return 'https://testnet.bscscan.com';
       case 11155111:
         return 'https://sepolia.etherscan.io';
+      case 80002:
+        return '';
+      case 11155420:
+        return 'https://sepolia-optimism.etherscan.io';
       default:
         return '';
     }
@@ -374,8 +388,10 @@ const TCAP_U_DEXLIST = () => {
     switch (chainId) {
       case 97:
         return 'https://pancakeswap.finance/?chain=bscTestnet&outputCurrency=';
-      case 11155111:
-        return 'https://app.uniswap.org/#';
+      case 11155111: // Sepolia
+        return 'https://app.uniswap.org/swap?chain=sepolia';
+      case 11155420: // Optimism Sepolia
+        return 'https://app.uniswap.org/swap?chain=optimism_sepolia';
       default:
         return '';
     }
@@ -387,12 +403,11 @@ const TCAP_U_DEXLIST = () => {
       case 97: // BSC Testnet
         return `https://pancakeswap.finance/?chain=bscTestnet&outputCurrency=${pairAddress}`;
       case 11155111: // Sepolia
-        return `https://info.uniswap.org/#/sepolia/pools/${pairAddress}`;
+        return `https://app.uniswap.org/pools?chain=sepolia`;
+      case 11155420: // Optimism Sepolia
+        return `https://app.uniswap.org/pools?chain=optimism_sepolia`;
       default:
-        // For BSC Testnet, you can also use these alternative chart viewers:
-        // return `https://dexscreener.com/bsc-testnet/${pairAddress}`;
-        // return `https://www.dextools.io/app/bsc/pair-explorer/${pairAddress}`;
-        return `https://pancakeswap.finance/?chain=bscTestnet&outputCurrency=${pairAddress}`;
+        return `https://app.uniswap.org/pools`;
     }
   };
 
@@ -410,6 +425,129 @@ const TCAP_U_DEXLIST = () => {
         return;
       }
 
+      // Special handling for Optimism Sepolia
+      if (chainId === 11155420) {
+        try {
+          const provider = new BrowserProvider(window.ethereum);
+          const signer = await provider.getSigner();
+
+          // First verify the Router contract
+          const router = new Contract(
+            "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
+            ROUTER_ABI,
+            provider
+          );
+
+          console.log("Checking Uniswap V2 Router...");
+          
+          // Try to get the factory address from the router
+          try {
+            const factoryAddress = await router.factory();
+            console.log("Factory address from router:", factoryAddress);
+          } catch (error) {
+            console.log("Failed to get factory from router:", error);
+          }
+
+          // Try to get WETH address from the router
+          try {
+            const wethAddress = await router.WETH();
+            console.log("WETH address from router:", wethAddress);
+          } catch (error) {
+            console.log("Failed to get WETH from router:", error);
+          }
+
+          // Create token contract instance
+          const tokenContract = new Contract(
+            getAddress(tokenAddress),
+            erc20ABI,
+            provider
+          );
+
+          // Get token details
+          const [name, symbol, totalSupply] = await Promise.all([
+            tokenContract.name(),
+            tokenContract.symbol(),
+            tokenContract.totalSupply()
+          ]);
+
+          console.log("Token details:", {
+            name,
+            symbol,
+            totalSupply: formatEther(totalSupply)
+          });
+
+          // Try to check the pair directly from factory
+          const factory = new Contract(
+            "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f",
+            FACTORY_ABI,
+            provider
+          );
+
+          const weth = "0x4200000000000000000000000000000000000006";
+          
+          try {
+            console.log("Checking pair...");
+            console.log("Token:", tokenAddress);
+            console.log("WETH:", weth);
+            
+            const pair = await factory.getPair(tokenAddress, weth);
+            console.log("Pair address:", pair);
+
+            if (pair && pair !== "0x0000000000000000000000000000000000000000") {
+              // Pair exists, try to get reserves
+              const pairContract = new Contract(pair, pairABI, provider);
+              const reserves = await pairContract.getReserves();
+              console.log("Pair reserves:", reserves);
+            }
+          } catch (error) {
+            console.log("Failed to check pair:", error);
+          }
+
+          toast({
+            title: "Important Note",
+            description: "Uniswap V2 contracts exist on Optimism Sepolia but the interface might not support viewing pools. Check the blockchain explorer for transaction status.",
+          });
+
+          // Set token info
+          const token: ListedToken = {
+            address: getAddress(tokenAddress),
+            name,
+            symbol,
+            factoryVersion: 'v2',
+            isListed: true,
+            creationTime: Math.floor(Date.now() / 1000),
+            listingTime: Math.floor(Date.now() / 1000),
+            dexName: 'Uniswap V2',
+            pairAddress: 'Verifying...',
+            totalSupply: formatEther(totalSupply),
+            liquidityAmount: 'Checking...',
+            listingPrice: 'Checking...',
+            currentPrice: 'Checking...',
+            marketCap: 'Calculating...'
+          };
+
+          setListedToken(token);
+
+          // Open relevant links in new tabs
+          const explorerUrl = `https://sepolia-optimism.etherscan.io/token/${tokenAddress}`;
+          const routerUrl = `https://sepolia-optimism.etherscan.io/address/0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D#writeContract`;
+          
+          window.open(explorerUrl, '_blank');
+          window.open(routerUrl, '_blank');
+
+          return;
+        } catch (error) {
+          console.error("Error checking Optimism Sepolia:", error);
+          toast({
+            title: "Error",
+            description: "Failed to verify Uniswap V2 contracts on Optimism Sepolia",
+            variant: "destructive",
+          });
+          setListedToken(null);
+          return;
+        }
+      }
+
       // Validate token address format
       if (!tokenAddress || !tokenAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
         toast({
@@ -425,7 +563,7 @@ const TCAP_U_DEXLIST = () => {
       const signer = await provider.getSigner();
 
       // Get factory address for current network
-      const factoryAddress = UNISWAP_V2_FACTORY_ADDRESS[chainId as keyof typeof UNISWAP_V2_FACTORY_ADDRESS];
+      let factoryAddress = UNISWAP_V2_FACTORY_ADDRESS[chainId as keyof typeof UNISWAP_V2_FACTORY_ADDRESS];
       if (!factoryAddress) {
         toast({
           title: "Error",
@@ -436,26 +574,33 @@ const TCAP_U_DEXLIST = () => {
         return;
       }
 
-      console.log("Using Uniswap V2 Factory:", factoryAddress);
-      console.log("Checking token:", tokenAddress);
-
-      // Create token contract instance
-      const tokenContract = new Contract(
-        tokenAddress,
-        erc20ABI,
-        provider // Use provider instead of signer for read-only operations
-      );
-      
-      // Get WETH address based on network
-      const wethAddress = chainId === 97 
-        ? "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd" // WBNB on BSC Testnet
-        : "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14"; // WETH on Sepolia
-
-      console.log("Using WETH address:", wethAddress);
-
       try {
-        // First verify the token contract exists and is valid
-        const code = await provider.getCode(tokenAddress);
+        factoryAddress = getAddress(factoryAddress);
+        const checksummedTokenAddress = getAddress(tokenAddress);
+        
+        console.log("Using Uniswap V2 Factory:", factoryAddress);
+        console.log("Checking token:", checksummedTokenAddress);
+
+        // Create token contract instance
+        const tokenContract = new Contract(
+          checksummedTokenAddress,
+          erc20ABI,
+          provider
+        );
+
+        // Get WETH address for Optimism Sepolia
+        const wethAddress = getAddress(
+          chainId === 11155420
+            ? "0x4200000000000000000000000000000000000006" // WETH on Optimism Sepolia
+            : chainId === 97 
+            ? "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd" // WBNB on BSC Testnet
+            : "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14" // WETH on Sepolia
+        );
+
+        console.log("Using WETH address:", wethAddress);
+
+        // First verify the token contract exists
+        const code = await provider.getCode(checksummedTokenAddress);
         if (code === '0x' || code === '') {
           toast({
             title: "Invalid Token",
@@ -479,119 +624,34 @@ const TCAP_U_DEXLIST = () => {
           totalSupply: formatEther(totalSupply)
         });
 
-        // Check if pair exists - use try-catch specifically for this call
-        console.log("Checking for pair between token and WETH...");
+        // For other networks, continue with existing pair check logic
+        // Create factory contract with the correct ABI
+        const factoryContract = new Contract(
+          factoryAddress,
+          chainId === 80002 ? UNISWAP_V2_FACTORY_ABI : FACTORY_ABI,
+          provider
+        );
+        
+        console.log("Attempting to get pair...");
         let pairAddress;
+        
         try {
-          // Create factory contract with the correct ABI
-          const factoryContract = new Contract(
-            factoryAddress,
-            FACTORY_ABI,
-            provider
-          );
-          
-          console.log("Attempting to get pair...");
-          // Add error handling for the getPair call
-          try {
-            // Ensure addresses are checksummed and valid
-            const checksummedToken = getAddress(tokenAddress);
-            const checksummedWeth = getAddress(wethAddress);
-            console.log("Using checksummed addresses:", {
-              token: checksummedToken,
-              weth: checksummedWeth
-            });
+          pairAddress = await factoryContract.getPair(checksummedTokenAddress, wethAddress);
+          console.log("Pair check result:", pairAddress);
+        } catch (pairError) {
+          console.error("Direct pair check failed:", pairError);
+          // Try with tokens in reverse order
+          console.log("Trying reverse order with checksummed addresses:", {
+            weth: wethAddress,
+            token: checksummedTokenAddress
+          });
 
-            pairAddress = await factoryContract.getPair(checksummedToken, checksummedWeth);
-            console.log("Pair check result:", pairAddress);
-          } catch (pairError: any) {
-            console.error("Direct pair check failed:", pairError);
-            // Try with tokens in reverse order
-            const checksummedToken = getAddress(tokenAddress);
-            const checksummedWeth = getAddress(wethAddress);
-            console.log("Trying reverse order with checksummed addresses:", {
-              weth: checksummedWeth,
-              token: checksummedToken
-            });
-
-            pairAddress = await factoryContract.getPair(checksummedWeth, checksummedToken);
-            console.log("Reverse pair check result:", pairAddress);
-          }
-          
-          if (pairAddress === "0x0000000000000000000000000000000000000000") {
-            console.log("No pair found - trying router method...");
-            const routerAddress = '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D';
-            console.log("Using router address:", routerAddress);
-
-            const routerContract = new Contract(
-              routerAddress,
-              ROUTER_ABI,
-              provider
-            );
-            
-            try {
-              const factoryFromRouter = await routerContract.factory();
-              console.log("Factory from router:", factoryFromRouter);
-              
-              if (factoryFromRouter && factoryFromRouter.toLowerCase() === factoryAddress.toLowerCase()) {
-                const altFactoryContract = new Contract(
-                  factoryFromRouter,
-                  FACTORY_ABI,
-                  provider
-                );
-
-                // Try both orders with the alternative factory
-                const checksummedToken = getAddress(tokenAddress);
-                const checksummedWeth = getAddress(wethAddress);
-                
-                pairAddress = await altFactoryContract.getPair(checksummedToken, checksummedWeth);
-                if (pairAddress === "0x0000000000000000000000000000000000000000") {
-                  pairAddress = await altFactoryContract.getPair(checksummedWeth, checksummedToken);
-                }
-                console.log("Pair check through router result:", pairAddress);
-              }
-            } catch (routerError) {
-              console.error("Router method failed:", routerError);
-            }
-          }
-        } catch (error) {
-          console.error("Error getting pair:", error);
-          // Try alternative method using router
-          try {
-            console.log("Attempting to get pair through router...");
-            const routerContract = new Contract(
-              '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D',
-              ROUTER_ABI,
-              provider
-            );
-            
-            const factoryFromRouter = await routerContract.factory();
-            console.log("Factory from router:", factoryFromRouter);
-            
-            if (factoryFromRouter.toLowerCase() === factoryAddress.toLowerCase()) {
-              const altFactoryContract = new Contract(
-                factoryFromRouter,
-                FACTORY_ABI,
-                provider
-              );
-              pairAddress = await altFactoryContract.getPair(tokenAddress, wethAddress);
-              console.log("Pair check through router result:", pairAddress);
-            }
-          } catch (routerError) {
-            console.error("Router check failed:", routerError);
-            toast({
-              title: "Error",
-              description: "Failed to check pair existence. The token might not be listed.",
-              variant: "destructive",
-            });
-            setListedToken(null);
-            return;
-          }
+          pairAddress = await factoryContract.getPair(wethAddress, checksummedTokenAddress);
+          console.log("Reverse pair check result:", pairAddress);
         }
 
-        console.log("Final pair address:", pairAddress);
-        
-        if (!pairAddress || pairAddress === "0x0000000000000000000000000000000000000000") {
-          console.log("No pair found - token is not listed");
+        // Continue with the rest of the existing code for pair contract and price calculations
+        if (pairAddress === "0x0000000000000000000000000000000000000000") {
           toast({
             title: "Not Listed",
             description: "This token is not listed on DEX yet",
@@ -613,12 +673,9 @@ const TCAP_U_DEXLIST = () => {
           return;
         }
 
-        console.log("Found valid pair address:", pairAddress);
         const pairContract = new Contract(pairAddress, pairABI, provider);
-        
-        // Get pair details with error handling
-        console.log("Fetching pair details...");
         let token0, token1, reserves;
+        
         try {
           [token0, token1, reserves] = await Promise.all([
             pairContract.token0(),
@@ -636,28 +693,15 @@ const TCAP_U_DEXLIST = () => {
           return;
         }
 
-        console.log("Pair details:", {
-          token0,
-          token1,
-          reserves: reserves.map((r: bigint) => formatEther(r))
-        });
-
         // Calculate price and format values
-        const isToken0 = tokenAddress.toLowerCase() === token0.toLowerCase();
+        const isToken0 = checksummedTokenAddress.toLowerCase() === token0.toLowerCase();
         const tokenReserve = isToken0 ? reserves[0] : reserves[1];
         const wethReserve = isToken0 ? reserves[1] : reserves[0];
-        
-        console.log("Calculated reserves:", {
-          tokenReserve: formatEther(tokenReserve),
-          wethReserve: formatEther(wethReserve),
-          isToken0
-        });
         
         const tokenAmount = Number(formatEther(tokenReserve));
         const wethAmount = Number(formatEther(wethReserve));
         
         if (tokenAmount === 0) {
-          console.log("No liquidity found in pair");
           toast({
             title: "No Liquidity",
             description: "This pair has no liquidity",
@@ -670,21 +714,20 @@ const TCAP_U_DEXLIST = () => {
         const price = wethAmount / tokenAmount;
         const marketCap = Number(formatEther(totalSupply)) * price;
 
-        console.log("Calculated values:", {
-          price,
-          marketCap
-        });
-
         // Create token info object
         const token: ListedToken = {
-          address: tokenAddress,
+          address: checksummedTokenAddress,
           name,
           symbol,
           factoryVersion: 'v2',
           isListed: true,
           creationTime: Math.floor(Date.now() / 1000),
           listingTime: Math.floor(Date.now() / 1000),
-          dexName: chainId === 97 ? 'PancakeSwap' : 'Uniswap',
+          dexName: chainId === 97 
+            ? 'PancakeSwap' 
+            : chainId === 80002 
+            ? 'QuickSwap'
+            : 'Uniswap',
           pairAddress,
           totalSupply: formatEther(totalSupply),
           liquidityAmount: formatEther(tokenReserve),
@@ -700,11 +743,11 @@ const TCAP_U_DEXLIST = () => {
           description: "Token details loaded successfully",
         });
 
-      } catch (error: any) {
-        console.error("Token contract error:", error);
+      } catch (error) {
+        console.error("Address validation error:", error);
         toast({
           title: "Error",
-          description: error?.message || "Failed to load token details",
+          description: "Invalid address format",
           variant: "destructive",
         });
         setListedToken(null);

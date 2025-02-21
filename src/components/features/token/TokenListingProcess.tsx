@@ -14,6 +14,7 @@ import { getNetworkContractAddress } from '@/config/contracts';
 import { InfoIcon } from "lucide-react";
 import { CopyIcon } from "lucide-react";
 import { Switch } from '@/components/ui/switch';
+import Image from 'next/image';
 
 interface TokenDetails {
   address: string;
@@ -371,6 +372,8 @@ const getNetworkCurrency = (chainId: number): string => {
       return 'BNB';
     case 11155111: // Sepolia
       return 'ETH';
+    case 80002: // Polygon Amoy
+      return 'AMOY';
     default:
       return 'ETH';
   }
@@ -754,6 +757,8 @@ function TokenListingProcess() {
     const ROUTER_ADDRESSES: { [key: number]: string } = {
       11155111: '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D', // Uniswap V2 Router on Sepolia
       97: '0xD99D1c33F9fC3444f8101754aBC46c52416550D1', // PancakeSwap Router on BSC Testnet
+      80002: '0x5d41c10ad6592e39fae96c932a699c6daaa8cf1c', // QuickSwap Router on Polygon Amoy (fixed checksum)
+      11155420: '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D', // Uniswap V2 Router on Optimism Sepolia
     };
     
     const address = ROUTER_ADDRESSES[chainId];
@@ -2152,8 +2157,23 @@ function TokenListingProcess() {
                       <SelectValue placeholder="Select a DEX" />
                     </SelectTrigger>
                     <SelectContent className="bg-gray-900 border-gray-700">
-                      <SelectItem value="pancakeswap" className="text-white hover:bg-gray-800">PancakeSwap</SelectItem>
-                      <SelectItem value="uniswap" className="text-white hover:bg-gray-800">Uniswap</SelectItem>
+                      {chainId === 97 && (
+                        <SelectItem value="pancakeswap" className="text-white hover:bg-gray-800">PancakeSwap</SelectItem>
+                      )}
+                      {chainId === 11155111 && (
+                        <SelectItem value="uniswap" className="text-white hover:bg-gray-800">Uniswap</SelectItem>
+                      )}
+                      {chainId === 80002 && (
+                        <SelectItem value="quickswap" className="text-white hover:bg-gray-800">QuickSwap</SelectItem>
+                      )}
+                      {chainId === 11155420 && (
+                        <SelectItem value="uniswap-v2" className="cursor-pointer">
+                          <div className="flex items-center">
+                            <Image src="/images/uniswap.png" alt="Uniswap" width={24} height={24} className="mr-2" />
+                            Uniswap V2
+                          </div>
+                        </SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -2284,6 +2304,12 @@ const getExplorerUrl = (chainId: number): string => {
       return 'https://testnet.bscscan.com';
     case 11155111:
       return 'https://sepolia.etherscan.io';
+    case 80002:
+      return 'https://www.oklink.com/amoy';
+    case 421614:
+      return 'https://sepolia.arbiscan.io';
+    case 11155420:
+      return 'https://sepolia-optimism.etherscan.io';
     default:
       return '';
   }
@@ -2295,6 +2321,8 @@ const getDexUrl = (chainId: number): string => {
       return 'https://pancake.kiemtienonline360.com/#';
     case 11155111:
       return 'https://app.uniswap.org/#';
+    case 80002:
+      return 'https://quickswap.exchange/#/swap?chain=polygon_amoy';
     default:
       return '';
   }

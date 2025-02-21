@@ -14,6 +14,7 @@ import { Suspense, useState } from 'react';
 import { Spinner } from '@/components/ui/Spinner';
 import TCAP_U_DEXLIST from '@/components/features/token/TCAP_U_DEXLIST';
 import TokenAdminControls from '@/components/features/token/TokenAdminControls';
+import TokenCreationForm from '@/components/features/token/TokenCreationForm';
 
 // Dynamically import components with loading fallback
 const TokenForm_v2DD_2Step = dynamic(
@@ -53,9 +54,14 @@ function V2DirectDEXContent() {
   const publicClient = usePublicClient();
   const { chainId } = useNetwork();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState('list');
+  const [activeTab, setActiveTab] = useState('create');
   
   const factoryAddress = chainId ? getNetworkContractAddress(chainId, 'dexListingFactory') : null;
+  
+  const handleTokenCreated = (tokenAddress: string) => {
+    // Switch to the list tab after token creation
+    setActiveTab('list');
+  };
   
   return (
     <div className="min-h-screen bg-background-primary">
@@ -69,16 +75,22 @@ function V2DirectDEXContent() {
         <div className="max-w-6xl mx-auto">
           <div className="mb-6">
             <h1 className="text-4xl font-black mb-2 text-white">DEX Listing Factory</h1>
-            <p className="text-gray-400">List your tokens on DEX with advanced features, fees, and admin controls.</p>
+            <p className="text-gray-400">Create and list your tokens on DEX with advanced features, fees, and admin controls.</p>
           </div>
           
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-            <TabsList className="grid w-full grid-cols-4 mb-8">
+            <TabsList className="grid w-full grid-cols-5 mb-8">
               <TabsTrigger 
                 value="features"
                 className="flex-1 data-[state=active]:bg-blue-600 bg-gray-800 data-[state=active]:text-white text-text-secondary rounded-md px-6"
               >
                 Features
+              </TabsTrigger>
+              <TabsTrigger 
+                value="create"
+                className="flex-1 data-[state=active]:bg-blue-600 bg-gray-800 data-[state=active]:text-white text-text-secondary rounded-md px-6"
+              >
+                Create Token
               </TabsTrigger>
               <TabsTrigger 
                 value="list"
@@ -156,6 +168,22 @@ function V2DirectDEXContent() {
                   <li>Access advanced controls and settings in the "Admin" tab</li>
                 </ol>
               </div>
+            </TabsContent>
+
+            <TabsContent value="create">
+              <Suspense fallback={<div className="flex justify-center py-8"><Spinner /></div>}>
+                {isConnected ? (
+                  <div className="space-y-4">
+                    <div className="bg-background-secondary p-6 rounded-lg border border-border">
+                      <TokenCreationForm onSuccess={handleTokenCreated} />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 bg-background-secondary rounded-lg border border-border">
+                    <p className="text-text-secondary">Please connect your wallet to create a token.</p>
+                  </div>
+                )}
+              </Suspense>
             </TabsContent>
 
             <TabsContent value="list">

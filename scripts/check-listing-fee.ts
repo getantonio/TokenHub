@@ -4,10 +4,10 @@ const { ethers } = require('hardhat');
 async function main() {
     try {
         // Get factory contract
-        const factoryAddress = "0xefFD5ceC6F2F46531afB2454B840e820D58697C6";
-        const factory = await ethers.getContractAt("TokenFactory_v2_DirectDEX", factoryAddress);
+        const factoryAddress = "0xc300648556860006771f1f982d3dDE65A54C1BA0";
+        const factory = await ethers.getContractAt("TokenFactory_v2_DirectDEX_TwoStep", factoryAddress);
 
-        const listingFee = await factory.getListingFee();
+        const listingFee = await factory.listingFee();
         console.log("Listing fee:", ethers.formatEther(listingFee), "ETH");
 
     } catch (error) {
@@ -17,11 +17,9 @@ async function main() {
     }
 }
 
-if (require.main === module) {
-    main()
-        .then(() => process.exit(0))
-        .catch((error) => {
-            console.error(error);
-            process.exit(1);
-        });
-} 
+main()
+    .then(() => process.exit(0))
+    .catch((error) => {
+        console.error(error);
+        process.exit(1);
+    }); 

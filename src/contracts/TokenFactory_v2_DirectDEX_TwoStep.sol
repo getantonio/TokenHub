@@ -163,9 +163,12 @@ contract TokenFactory_v2_DirectDEX_TwoStep is Ownable, ReentrancyGuard {
         if (info.isListed) revert TokenAlreadyListed(tokenAddress);
         if (info.owner != msg.sender) revert NotTokenOwner(tokenAddress, msg.sender);
         
+        // Store sent ETH value for potential refund
+        uint256 sentValue = msg.value;
+        
         // Validate ETH amount
-        if (msg.value < initialLiquidityInETH + listingFee) {
-            revert InsufficientETH(initialLiquidityInETH + listingFee, msg.value);
+        if (sentValue < initialLiquidityInETH + listingFee) {
+            revert InsufficientETH(initialLiquidityInETH + listingFee, sentValue);
         }
 
         // Validate liquidity percentage
@@ -182,46 +185,49 @@ contract TokenFactory_v2_DirectDEX_TwoStep is Ownable, ReentrancyGuard {
         TokenTemplate_v2DirectDEX token = TokenTemplate_v2DirectDEX(tokenAddress);
         IUniswapV2Router02 router = IUniswapV2Router02(dexRouters[dexName].router);
         
-        // Calculate tokens needed for liquidity using the provided percentage
+        // Calculate tokens needed for liquidity
         uint256 tokensForLiquidity = (token.totalSupply() * liquidityPercentage) / 100;
         
-        // Check allowance
-        uint256 allowance = token.allowance(msg.sender, address(this));
-        if (allowance < tokensForLiquidity) {
-            revert InsufficientTokenAllowance(tokensForLiquidity, allowance);
+        // Check router allowance directly
+        uint256 routerAllowance = token.allowance(msg.sender, address(router));
+        if (routerAllowance < tokensForLiquidity) {
+            revert InsufficientTokenAllowance(tokensForLiquidity, routerAllowance);
         }
         
-        // Transfer tokens for liquidity
-        token.transferFrom(msg.sender, address(this), tokensForLiquidity);
-        
-        // Create pair
+        // Create pair first
         address uniswapFactory = router.factory();
-        address pair = IUniswapV2Factory(uniswapFactory).createPair(
+        address pair;
+        try IUniswapV2Factory(uniswapFactory).createPair(
             tokenAddress,
             router.WETH()
-        );
+        ) returns (address _pair) {
+            pair = _pair;
+        } catch {
+            revert PairCreationFailed(tokenAddress, address(router));
+        }
         
         if (pair == address(0)) {
             revert PairCreationFailed(tokenAddress, address(router));
         }
         
-        // Set router and pair in token
+        // Set router and pair in token contract
         token.setRouter(address(router));
         token.setPair(pair);
         
-        // Approve router
-        token.approve(address(router), tokensForLiquidity);
+        // Calculate minimum amounts with 2% slippage tolerance
+        uint256 minTokens = tokensForLiquidity * 98 / 100;
+        uint256 minETH = initialLiquidityInETH * 98 / 100;
         
-        // Add liquidity
+        // Add liquidity directly through router
         try router.addLiquidityETH{value: initialLiquidityInETH}(
             tokenAddress,
             tokensForLiquidity,
-            0, // Accept any amount of tokens
-            0, // Accept any amount of ETH
-            address(this), // Keep LP tokens in factory
+            minTokens,
+            minETH,
+            msg.sender,
             block.timestamp + 300
         ) {
-            // Update token info
+            // Update token info only after successful liquidity addition
             info.isListed = true;
             info.dexName = dexName;
             info.listingTime = block.timestamp;
@@ -234,9 +240,38 @@ contract TokenFactory_v2_DirectDEX_TwoStep is Ownable, ReentrancyGuard {
                 listingPriceInETH,
                 block.timestamp
             );
+            
+            // Keep listing fee, refund excess ETH if any
+            uint256 excess = sentValue - (initialLiquidityInETH + listingFee);
+            if (excess > 0) {
+                (bool success, ) = msg.sender.call{value: excess}("");
+                require(success, "ETH refund failed");
+            }
         } catch {
+            // Refund everything except listing fee on failure
+            uint256 refundAmount = sentValue - listingFee;
+            (bool success, ) = msg.sender.call{value: refundAmount}("");
+            require(success, "Failed to refund ETH");
+            
+            // Revert with detailed error
             revert LiquidityAdditionFailed(tokenAddress, initialLiquidityInETH, tokensForLiquidity);
         }
+    }
+    
+    // Add refund function for emergency cases
+    function emergencyRefund(address tokenAddress) external nonReentrant {
+        TokenInfo storage info = tokenInfo[tokenAddress];
+        require(info.token == tokenAddress, "Token not found");
+        require(info.owner == msg.sender, "Not token owner");
+        require(!info.isListed, "Token already listed");
+        
+        // Calculate refundable amount (everything except listing fee)
+        uint256 refundAmount = address(this).balance - listingFee;
+        require(refundAmount > 0, "No refund available");
+        
+        // Send refund
+        (bool success, ) = msg.sender.call{value: refundAmount}("");
+        require(success, "Refund failed");
     }
     
     // View functions
@@ -267,13 +302,41 @@ contract TokenFactory_v2_DirectDEX_TwoStep is Ownable, ReentrancyGuard {
     // Admin functions
     function addDEX(string calldata name, address router) external onlyOwner {
         require(dexRouters[name].router == address(0), "DEX already exists");
-        dexRouters[name] = DEXRouter(name, router, true);
-        supportedDEXes.push(name);
-        emit DEXAdded(name, router);
+        
+        // Verify router is valid by checking required interfaces
+        try IUniswapV2Router02(router).factory() returns (address factory) {
+            require(factory != address(0), "Invalid router: no factory");
+            try IUniswapV2Router02(router).WETH() returns (address weth) {
+                require(weth != address(0), "Invalid router: no WETH");
+                // Router is valid, add it
+                dexRouters[name] = DEXRouter(name, router, true);
+                supportedDEXes.push(name);
+                emit DEXAdded(name, router);
+            } catch {
+                revert("Invalid router: WETH check failed");
+            }
+        } catch {
+            revert("Invalid router: factory check failed");
+        }
     }
     
     function updateDEX(string calldata name, address router, bool isActive) external onlyOwner {
         require(dexRouters[name].router != address(0), "DEX not found");
+        
+        // If updating router address, verify it's valid
+        if (router != dexRouters[name].router) {
+            try IUniswapV2Router02(router).factory() returns (address factory) {
+                require(factory != address(0), "Invalid router: no factory");
+                try IUniswapV2Router02(router).WETH() returns (address weth) {
+                    require(weth != address(0), "Invalid router: no WETH");
+                } catch {
+                    revert("Invalid router: WETH check failed");
+                }
+            } catch {
+                revert("Invalid router: factory check failed");
+            }
+        }
+        
         dexRouters[name] = DEXRouter(name, router, isActive);
         emit DEXUpdated(name, router, isActive);
     }

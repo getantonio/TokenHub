@@ -91,14 +91,6 @@ export function Navigation() {
                 )}>
                   DEX Listing Factory
                 </Link>
-                <Link href="/uni-to-dex" className={cn(
-                  'block px-4 py-2 text-sm',
-                  router.pathname === '/uni-to-dex'
-                    ? 'text-blue-400'
-                    : 'text-gray-400 hover:text-gray-200'
-                )}>
-                  Uni To DEX
-                </Link>
                 <Link href="/v1" className={cn(
                   'block px-4 py-2 text-sm',
                   router.pathname === '/v1'

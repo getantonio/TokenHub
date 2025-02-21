@@ -55,14 +55,29 @@ async function main() {
   const twoStepFactoryAddress = await twoStepFactory.getAddress();
   console.log(`TokenFactory_v2_DirectDEX_TwoStep deployed to: ${twoStepFactoryAddress}`);
 
+  /* Commenting out DEX addition for now
   // Add Uniswap V2 as supported DEX
   console.log('Adding Uniswap V2 as supported DEX...');
   const addDexTx = await twoStepFactory.addDEX(
-    "uniswap",
-    "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D" // Uniswap V2 Router on Sepolia
+    "uniswap-test",
+    "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
+    {
+      gasLimit: 500000,
+      maxFeePerGas: ethers.parseUnits("50", "gwei"),
+      maxPriorityFeePerGas: ethers.parseUnits("2", "gwei")
+    }
   );
   await addDexTx.wait();
   console.log('Uniswap V2 added as supported DEX');
+
+  // Verify DEX configuration
+  const dexInfo = await twoStepFactory.getDEXRouter("uniswap-test");
+  console.log('DEX Configuration:', {
+    name: "uniswap-test",
+    router: dexInfo.router,
+    isActive: dexInfo.isActive
+  });
+  */
 
   // Save deployment info
   const deploymentPath = path.join(__dirname, '..', 'deployments', 'v2-direct-dex', networkName);
