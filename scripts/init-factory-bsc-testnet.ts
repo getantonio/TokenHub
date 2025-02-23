@@ -5,7 +5,7 @@ async function main() {
   console.log("Initializing factory with account:", deployer.address);
 
   // Contract addresses
-  const FACTORY_ADDRESS = "0xc932F77C5F38Cf7FA5f0728D34f1dD0517C4ae97";
+  const FACTORY_ADDRESS = "0x822406674Abcf53A7814422AA49756fe69383546";
 
   // Get the factory contract
   const TokenFactory = await ethers.getContractFactory("TokenFactory_v3");

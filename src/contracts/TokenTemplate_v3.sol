@@ -34,7 +34,18 @@ contract TokenTemplate_v3 is
     uint256 public maxActivePresales;
     bool public presaleEnabled;
     
-    // Wallet allocations
+    // Optimized vesting structure
+    struct VestingInfo {
+        uint256 totalAmount;
+        uint256 claimedAmount;
+        uint256 startTime;
+        uint256 duration;
+        uint256 cliff;
+    }
+    
+    // Single mapping for vesting info instead of multiple mappings
+    mapping(address => VestingInfo) private vestingInfo;
+    
     struct WalletAllocation {
         address wallet;
         uint256 percentage;
@@ -66,13 +77,6 @@ contract TokenTemplate_v3 is
         uint256 maxActivePresales;
         bool presaleEnabled;
     }
-
-    WalletAllocation[] public walletAllocations;
-    
-    // Vesting tracking
-    mapping(address => uint256) public vestedAmount;
-    mapping(address => uint256) public claimedAmount;
-    mapping(address => uint256) public vestingStartTime;
     
     // Blacklist and timelock
     mapping(address => bool) private _blacklist;
@@ -85,6 +89,13 @@ contract TokenTemplate_v3 is
     event PresaleStarted(uint256 startTime, uint256 endTime);
     event PresaleEnded(uint256 totalRaised);
     event LiquidityAdded(address indexed pair, uint256 tokensAdded, uint256 ethAdded);
+    event VestingScheduleCreated(
+        address indexed beneficiary,
+        uint256 totalAmount,
+        uint256 startTime,
+        uint256 duration,
+        uint256 cliff
+    );
     event Paused();
     event Unpaused();
 
@@ -94,7 +105,6 @@ contract TokenTemplate_v3 is
     string private tokenName;
     string private tokenSymbol;
     
-    // Add these state variables after the other declarations
     uint256 public liquidityAllocation;
     uint256 public remainingLiquidityAllocation;
     
@@ -113,16 +123,13 @@ contract TokenTemplate_v3 is
     ) external payable {
         require(totalSupply() == 0, "Already initialized");
 
-        // Set token name and symbol
         tokenName = params.name;
         tokenSymbol = params.symbol;
         
-        // Set basic parameters
         maxSupply = params.maxSupply;
         blacklistEnabled = params.enableBlacklist;
         timeLockEnabled = params.enableTimeLock;
         
-        // Set presale parameters
         presaleRate = params.presaleRate;
         softCap = params.softCap;
         hardCap = params.hardCap;
@@ -136,55 +143,60 @@ contract TokenTemplate_v3 is
         maxActivePresales = params.maxActivePresales;
         presaleEnabled = params.presaleEnabled;
         
-        // Calculate and mint initial supply
         uint256 totalTokensNeeded = params.initialSupply;
         _mint(address(this), totalTokensNeeded);
         
         uint256 remainingTokens = totalTokensNeeded;
         uint256 allocatedTokens = 0;
         
-        // Reserve presale tokens if enabled
         if (presaleEnabled) {
             uint256 presaleTokens = (totalTokensNeeded * params.presalePercentage) / 100;
             allocatedTokens += presaleTokens;
             remainingTokens -= presaleTokens;
         }
         
-        // Set liquidity allocation
         liquidityAllocation = (totalTokensNeeded * params.liquidityPercentage) / 100;
         remainingLiquidityAllocation = liquidityAllocation;
         allocatedTokens += liquidityAllocation;
         remainingTokens -= liquidityAllocation;
         
-        // If there's ETH sent with initialization, add liquidity
         if (msg.value > 0 && liquidityAllocation > 0) {
             addLiquidity(liquidityAllocation, msg.value);
         }
         
-        // Set wallet allocations and distribute tokens
+        // Optimized wallet allocation handling
         if (params.walletAllocations.length > 0) {
             for (uint256 i = 0; i < params.walletAllocations.length; i++) {
-                walletAllocations.push(params.walletAllocations[i]);
                 uint256 walletTokens = (totalTokensNeeded * params.walletAllocations[i].percentage) / 100;
                 allocatedTokens += walletTokens;
                 
-                // Ensure we don't exceed total supply
                 require(allocatedTokens <= totalTokensNeeded, "Total allocation exceeds initial supply");
                 
                 if (params.walletAllocations[i].vestingEnabled) {
-                    vestingStartTime[params.walletAllocations[i].wallet] = 
-                        params.walletAllocations[i].vestingStartTime;
-                    vestedAmount[params.walletAllocations[i].wallet] = walletTokens;
+                    // Create vesting schedule
+                    vestingInfo[params.walletAllocations[i].wallet] = VestingInfo({
+                        totalAmount: walletTokens,
+                        claimedAmount: 0,
+                        startTime: params.walletAllocations[i].vestingStartTime,
+                        duration: params.walletAllocations[i].vestingDuration,
+                        cliff: params.walletAllocations[i].cliffDuration
+                    });
+                    
+                    emit VestingScheduleCreated(
+                        params.walletAllocations[i].wallet,
+                        walletTokens,
+                        params.walletAllocations[i].vestingStartTime,
+                        params.walletAllocations[i].vestingDuration,
+                        params.walletAllocations[i].cliffDuration
+                    );
                 } else {
                     _transfer(address(this), params.walletAllocations[i].wallet, walletTokens);
                 }
             }
         }
         
-        // Ensure total allocation is 100%
         require(allocatedTokens == totalTokensNeeded, "Total allocation must equal initial supply");
         
-        // Transfer ownership
         _transferOwnership(params.owner);
     }
 
@@ -211,6 +223,61 @@ contract TokenTemplate_v3 is
         }
     }
 
+    // Optimized vesting claim function
+    function claimVestedTokens() external nonReentrant {
+        VestingInfo storage vesting = vestingInfo[msg.sender];
+        require(vesting.totalAmount > 0, "No vesting schedule");
+        require(block.timestamp >= vesting.startTime + vesting.cliff, "Cliff period not ended");
+        
+        uint256 timeSinceStart = block.timestamp - vesting.startTime;
+        uint256 claimableAmount;
+        
+        if (timeSinceStart >= vesting.duration) {
+            claimableAmount = vesting.totalAmount - vesting.claimedAmount;
+        } else {
+            claimableAmount = (vesting.totalAmount * timeSinceStart / vesting.duration) - vesting.claimedAmount;
+        }
+        
+        require(claimableAmount > 0, "No tokens available to claim");
+        
+        vesting.claimedAmount += claimableAmount;
+        _transfer(address(this), msg.sender, claimableAmount);
+        
+        emit TokensClaimed(msg.sender, claimableAmount);
+    }
+
+    // View functions for vesting info
+    function getVestingInfo(address wallet) external view returns (
+        uint256 totalAmount,
+        uint256 claimedAmount,
+        uint256 startTime,
+        uint256 duration,
+        uint256 cliff
+    ) {
+        VestingInfo memory vesting = vestingInfo[wallet];
+        return (
+            vesting.totalAmount,
+            vesting.claimedAmount,
+            vesting.startTime,
+            vesting.duration,
+            vesting.cliff
+        );
+    }
+
+    function getClaimableAmount(address wallet) external view returns (uint256) {
+        VestingInfo memory vesting = vestingInfo[wallet];
+        if (vesting.totalAmount == 0 || block.timestamp < vesting.startTime + vesting.cliff) {
+            return 0;
+        }
+        
+        uint256 timeSinceStart = block.timestamp - vesting.startTime;
+        if (timeSinceStart >= vesting.duration) {
+            return vesting.totalAmount - vesting.claimedAmount;
+        }
+        
+        return (vesting.totalAmount * timeSinceStart / vesting.duration) - vesting.claimedAmount;
+    }
+
     // Blacklist management
     function setBlacklist(address account, bool status) external onlyOwner {
         require(blacklistEnabled, "Blacklist is not enabled");
@@ -226,60 +293,12 @@ contract TokenTemplate_v3 is
         emit TimeLockSet(account, unlockTime);
     }
 
-    // Vesting claim function
-    function claimVestedTokens() external nonReentrant {
-        require(vestedAmount[msg.sender] > 0, "No tokens to claim");
-        
-        uint256 claimableAmount = 0;
-        for (uint256 i = 0; i < walletAllocations.length; i++) {
-            if (walletAllocations[i].wallet == msg.sender && walletAllocations[i].vestingEnabled) {
-                // Check if cliff period has passed
-                require(
-                    block.timestamp >= vestingStartTime[msg.sender] + walletAllocations[i].cliffDuration,
-                    "Cliff period not ended"
-                );
-                
-                uint256 timeSinceStart = block.timestamp - vestingStartTime[msg.sender];
-                if (timeSinceStart >= walletAllocations[i].vestingDuration) {
-                    // Vesting completed, claim all remaining tokens
-                    claimableAmount = vestedAmount[msg.sender] - claimedAmount[msg.sender];
-                } else {
-                    // Calculate vested tokens based on time
-                    uint256 vestedTokens = (vestedAmount[msg.sender] * timeSinceStart) / 
-                        walletAllocations[i].vestingDuration;
-                    claimableAmount = vestedTokens - claimedAmount[msg.sender];
-                }
-                break;
-            }
-        }
-        
-        require(claimableAmount > 0, "No tokens available to claim");
-        
-        claimedAmount[msg.sender] += claimableAmount;
-        _transfer(address(this), msg.sender, claimableAmount);
-        
-        emit TokensClaimed(msg.sender, claimableAmount);
-    }
-
-    // View functions
     function isBlacklisted(address account) external view returns (bool) {
         return blacklistEnabled && _blacklist[account];
     }
 
     function getUnlockTime(address account) external view returns (uint256) {
         return timeLockEnabled ? _lockTime[account] : 0;
-    }
-
-    function getVestedAmount(address wallet) external view returns (uint256) {
-        return vestedAmount[wallet];
-    }
-
-    function getClaimedAmount(address wallet) external view returns (uint256) {
-        return claimedAmount[wallet];
-    }
-
-    function getWalletAllocations() external view returns (WalletAllocation[] memory) {
-        return walletAllocations;
     }
 
     // Emergency functions
@@ -292,17 +311,14 @@ contract TokenTemplate_v3 is
     }
 
     function addLiquidity(uint256 tokenAmount, uint256 ethAmount) internal {
-        // Approve router to spend tokens
         _approve(address(this), address(uniswapV2Router), tokenAmount);
-
-        // Add liquidity
         uniswapV2Router.addLiquidityETH{value: ethAmount}(
             address(this),
             tokenAmount,
-            0, // Accept any amount of tokens
-            0, // Accept any amount of ETH
+            0,
+            0,
             owner(),
-            block.timestamp + 300 // 5 minutes deadline
+            block.timestamp + 300
         );
     }
 
@@ -310,20 +326,16 @@ contract TokenTemplate_v3 is
         require(msg.value > 0, "Must send ETH");
         require(tokenAmount > 0, "Must provide tokens");
         
-        // Transfer tokens from user to contract
         _transfer(msg.sender, address(this), tokenAmount);
-        
-        // Approve router to spend tokens
         _approve(address(this), address(uniswapV2Router), tokenAmount);
 
-        // Add liquidity
         uniswapV2Router.addLiquidityETH{value: msg.value}(
             address(this),
             tokenAmount,
-            0, // Accept any amount of tokens
-            0, // Accept any amount of ETH
-            msg.sender, // LP tokens go to user
-            block.timestamp + 300 // 5 minutes deadline
+            0,
+            0,
+            msg.sender,
+            block.timestamp + 300
         );
     }
 
@@ -333,26 +345,21 @@ contract TokenTemplate_v3 is
         require(tokenAmount <= remainingLiquidityAllocation, "Amount exceeds remaining liquidity allocation");
         require(balanceOf(address(this)) >= tokenAmount, "Insufficient contract balance");
         
-        // Update remaining allocation
         remainingLiquidityAllocation -= tokenAmount;
-        
-        // Approve router to spend tokens
         _approve(address(this), address(uniswapV2Router), tokenAmount);
 
-        // Add liquidity directly from contract's balance
         uniswapV2Router.addLiquidityETH{value: msg.value}(
             address(this),
             tokenAmount,
-            0, // Accept any amount of tokens
-            0, // Accept any amount of ETH
-            msg.sender, // LP tokens go to user
-            block.timestamp + 300 // 5 minutes deadline
+            0,
+            0,
+            msg.sender,
+            block.timestamp + 300
         );
 
         emit LiquidityAdded(uniswapV2Pair, tokenAmount, msg.value);
     }
 
-    // Add a view function to check remaining liquidity allocation
     function getRemainingLiquidityAllocation() external view returns (uint256) {
         return remainingLiquidityAllocation;
     }

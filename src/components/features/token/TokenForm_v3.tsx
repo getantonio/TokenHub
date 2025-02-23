@@ -266,8 +266,12 @@ const formSchema = z.object({
   maxContribution: z.string().optional(),
   startTime: z.number().optional(),
   endTime: z.number().optional(),
-  presalePercentage: z.number(),
-  liquidityPercentage: z.number(),
+  presalePercentage: z.number()
+    .min(0, "Presale percentage must be at least 0%")
+    .max(95, "Presale percentage cannot exceed 95%"),
+  liquidityPercentage: z.number()
+    .min(0, "Liquidity percentage must be at least 0%")
+    .max(100, "Liquidity percentage cannot exceed 100%"),
   liquidityLockDuration: z.number(),
   wallets: z.array(z.object({
     name: z.string(),
@@ -292,15 +296,25 @@ const formSchema = z.object({
     }))
   }).optional()
 }).refine((data) => {
+  // Validate presale configuration
   if (data.presaleEnabled) {
     if (!data.startTime || !data.endTime || data.startTime >= data.endTime) {
+      return false;
+    }
+    // Validate presale percentage when enabled
+    if (data.presalePercentage < 1 || data.presalePercentage > 95) {
+      return false;
+    }
+  } else {
+    // Validate presale percentage is 0 when disabled
+    if (data.presalePercentage !== 0) {
       return false;
     }
   }
   return true;
 }, {
   message: "Invalid presale configuration",
-  path: ["presaleRate"]
+  path: ["presalePercentage"]
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -312,9 +326,7 @@ function getDefaultTimes() {
   
   return {
     startTime: Math.floor(startTime.getTime() / 1000),
-    endTime: Math.floor(endTime.getTime() / 1000),
-    startTimeFormatted: startTime.toISOString().slice(0, 16),
-    endTimeFormatted: endTime.toISOString().slice(0, 16)
+    endTime: Math.floor(endTime.getTime() / 1000)
   };
 }
 
@@ -337,17 +349,33 @@ const defaultValues: FormData = {
   maxContribution: "2", // Default: 2 BNB
   startTime: defaultTimes.startTime,
   endTime: defaultTimes.endTime,
-  presalePercentage: 0,
-  liquidityPercentage: 95,
+  presalePercentage: 5,
+  liquidityPercentage: 65, // Increased from 35% to 65%
   liquidityLockDuration: 365,
   wallets: [{
-    name: "Owner",
+    name: "Team",
     address: "",
-    percentage: 5,
-    vestingEnabled: false,
-    vestingDuration: 0,
-    cliffDuration: 0,
-    vestingStartTime: 0
+    percentage: 10,
+    vestingEnabled: true,
+    vestingDuration: 365,
+    cliffDuration: 90,
+    vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+  }, {
+    name: "Marketing",
+    address: "",
+    percentage: 10,
+    vestingEnabled: true,
+    vestingDuration: 180,
+    cliffDuration: 30,
+    vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+  }, {
+    name: "Development",
+    address: "",
+    percentage: 10,
+    vestingEnabled: true,
+    vestingDuration: 365,
+    cliffDuration: 60,
+    vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
   }],
   multiPresaleConfig: {
     presales: []
@@ -416,12 +444,14 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
   useEffect(() => {
     const presaleEnabled = form.watch('presaleEnabled');
     
-    // Set presale percentage and trigger validation
-    form.setValue('presalePercentage', presaleEnabled ? 5 : 0, { 
-      shouldValidate: true,
-      shouldDirty: true,
-      shouldTouch: true 
-    });
+    // Set presale percentage to 0 when disabled, but don't force it to 5% when enabled
+    if (!presaleEnabled) {
+      form.setValue('presalePercentage', 0, { 
+        shouldValidate: true,
+        shouldDirty: true,
+        shouldTouch: true 
+      });
+    }
     
     // Set other presale defaults
     if (presaleEnabled) {
@@ -445,14 +475,32 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
       const maxSupply = parseUnits(data.maxSupply.toString(), 18);
 
       // Convert wallet allocations to contract format
-      const walletAllocations = data.wallets.map(wallet => ({
-        wallet: wallet.address as `0x${string}`,
-        percentage: wallet.percentage,
-        vestingEnabled: wallet.vestingEnabled,
-        vestingDuration: BigInt(wallet.vestingDuration * 24 * 60 * 60), // Convert days to seconds
-        cliffDuration: BigInt(wallet.cliffDuration * 24 * 60 * 60), // Convert days to seconds
-        vestingStartTime: BigInt(wallet.vestingStartTime)
-      }));
+      const walletAllocations = data.wallets.map(wallet => {
+        // Calculate vesting start time as Unix timestamp in seconds
+        const vestingStartTime = wallet.vestingEnabled ? 
+          // If vesting is enabled, use the specified start time or default to 24 hours from now
+          BigInt(wallet.vestingStartTime || Math.floor(Date.now() / 1000) + (24 * 3600)) :
+          // If vesting is disabled, use 0
+          BigInt(0);
+
+        // Convert durations from days to seconds
+        const vestingDuration = wallet.vestingEnabled ?
+          BigInt(wallet.vestingDuration * 24 * 60 * 60) : // Convert days to seconds
+          BigInt(0);
+
+        const cliffDuration = wallet.vestingEnabled ?
+          BigInt(wallet.cliffDuration * 24 * 60 * 60) : // Convert days to seconds
+          BigInt(0);
+
+        return {
+          wallet: wallet.address as `0x${string}`,
+          percentage: wallet.percentage,
+          vestingEnabled: wallet.vestingEnabled,
+          vestingDuration,
+          cliffDuration,
+          vestingStartTime
+        };
+      });
 
       const params = {
         name: data.name,
@@ -464,18 +512,26 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
         enableTimeLock: data.enableTimeLock,
         presaleEnabled: data.presaleEnabled,
         maxActivePresales: data.presaleEnabled ? 1 : 0,
-        presaleRate: data.presaleEnabled ? parseUnits(data.presaleRate?.toString() || '0', 18) : BigInt(0),
-        softCap: data.presaleEnabled ? parseUnits(data.softCap?.toString() || '0', 18) : BigInt(0),
-        hardCap: data.presaleEnabled ? parseUnits(data.hardCap?.toString() || '0', 18) : BigInt(0),
-        minContribution: data.presaleEnabled ? parseUnits(data.minContribution?.toString() || '0', 18) : BigInt(0),
-        maxContribution: data.presaleEnabled ? parseUnits(data.maxContribution?.toString() || '0', 18) : BigInt(0),
-        startTime: data.presaleEnabled ? BigInt(data.startTime || 0) : BigInt(0),
-        endTime: data.presaleEnabled ? BigInt(data.endTime || 0) : BigInt(0),
-        presalePercentage: data.presaleEnabled ? 5 : 0,
+        presaleRate: data.presaleEnabled ? parseUnits(data.presaleRate?.toString() || '1000', 18) : BigInt(0),
+        softCap: data.presaleEnabled ? parseUnits(data.softCap?.toString() || '1', 18) : BigInt(0),
+        hardCap: data.presaleEnabled ? parseUnits(data.hardCap?.toString() || '10', 18) : BigInt(0),
+        minContribution: data.presaleEnabled ? parseUnits(data.minContribution?.toString() || '0.1', 18) : BigInt(0),
+        maxContribution: data.presaleEnabled ? parseUnits(data.maxContribution?.toString() || '2', 18) : BigInt(0),
+        startTime: data.presaleEnabled ? BigInt(data.startTime || Math.floor(Date.now() / 1000) + 3600) : BigInt(0),
+        endTime: data.presaleEnabled ? BigInt(data.endTime || Math.floor(Date.now() / 1000) + 86400) : BigInt(0),
+        presalePercentage: data.presaleEnabled ? data.presalePercentage : 0,
         liquidityPercentage: data.liquidityPercentage,
-        liquidityLockDuration: BigInt(Math.min(data.liquidityLockDuration, 365)), // Cap at 365 days
+        liquidityLockDuration: BigInt(Math.min(data.liquidityLockDuration, 365) * 24 * 60 * 60), // Convert days to seconds
         walletAllocations
       };
+
+      // Validate total percentage equals 100%
+      const totalPercentage = params.presalePercentage + params.liquidityPercentage + 
+        walletAllocations.reduce((sum, w) => sum + w.percentage, 0);
+      
+      if (totalPercentage !== 100) {
+        throw new Error(`Total percentage must be 100%. Current total: ${totalPercentage}%`);
+      }
 
       console.log('Submitting with params:', params);
       const tx = await createToken(params);
@@ -492,15 +548,15 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
   };
 
   const addWallet = () => {
-    const defaultTimes = getDefaultTimes();
+    const now = Math.floor(Date.now() / 1000);
     const newWallet = {
       name: '',
-      address: '',
+      address: address || '',
       percentage: 0,
       vestingEnabled: false,
-      vestingDuration: 365,
-      cliffDuration: 90,
-      vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600) // 24 hours from now
+      vestingDuration: 365, // Default to 1 year
+      cliffDuration: 90, // Default to 3 months
+      vestingStartTime: now + (24 * 3600) // Start 24 hours from now
     };
     
     form.setValue('wallets', [...form.getValues('wallets'), newWallet]);
@@ -514,15 +570,21 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
   const applyPreset = (preset: keyof typeof VESTING_PRESETS) => {
     const presetConfig = VESTING_PRESETS[preset];
     const presaleEnabled = form.getValues("presaleEnabled");
+    const now = Math.floor(Date.now() / 1000);
+    
+    // Set presale percentage if presale is enabled
+    if (presaleEnabled) {
+      form.setValue('presalePercentage', presetConfig.presalePercentage);
+    }
     
     // Set liquidity percentage based on presale state
     const liquidityPercentage = presaleEnabled ? 
       presetConfig.liquidityPercentage : // Use preset liquidity if presale enabled
-      presetConfig.liquidityPercentage + 5; // Add presale's 5% to liquidity if disabled
+      presetConfig.liquidityPercentage + presetConfig.presalePercentage; // Add presale's percentage to liquidity if disabled
     
     form.setValue('liquidityPercentage', liquidityPercentage);
     
-    // Set wallets with correct percentages
+    // Set wallets with correct percentages and vesting schedules
     form.setValue('wallets', presetConfig.wallets.map(wallet => ({
       name: wallet.name,
       address: address || '0x0000000000000000000000000000000000000000',
@@ -530,7 +592,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
       vestingEnabled: wallet.vestingEnabled,
       vestingDuration: wallet.vestingDuration,
       cliffDuration: wallet.cliffDuration,
-      vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+      vestingStartTime: now + (24 * 3600) // Start 24 hours from now
     })));
   };
 
@@ -749,46 +811,71 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
   };
 
   const validateDistribution = (form: UseFormReturn<FormData>): ValidationResult => {
-    const presaleEnabled = form.getValues('presaleEnabled');
-    const presalePercentage = presaleEnabled ? 5 : 0;
-    const liquidityPercentage = form.getValues('liquidityPercentage') || 0;
-    const wallets = form.getValues('wallets') || [];
-    const walletPercentages = wallets.reduce((sum: number, w: { percentage?: number }) => sum + (w.percentage || 0), 0);
-    const totalPercentage = presalePercentage + liquidityPercentage + walletPercentages;
+    const values = form.getValues();
+    let totalPercentage = 0;
 
-    // When liquidity is less than 100%, require at least one wallet
-    if (liquidityPercentage < 100 && wallets.length === 0) {
-      return {
-        category: 'Distribution',
-        message: 'At least one wallet allocation is required when liquidity is less than 100%',
-        details: [
-          `Liquidity: ${liquidityPercentage}%`,
-          'Add a wallet allocation for the remaining tokens'
-        ],
-        status: 'error'
-      } as ValidationResult;
+    // Add presale percentage if enabled
+    if (values.presaleEnabled) {
+      totalPercentage += values.presalePercentage;
     }
 
-    // When there are wallet allocations, total must equal 100%
+    // Add liquidity percentage
+    totalPercentage += values.liquidityPercentage;
+
+    // Add wallet percentages
+    const walletPercentages = values.wallets?.reduce((sum, wallet) => sum + (wallet.percentage || 0), 0) || 0;
+    totalPercentage += walletPercentages;
+
+    // Validate total equals 100%
     if (totalPercentage !== 100) {
       return {
-        category: 'Distribution',
-        message: 'Total allocation must be 100%',
+        category: 'distribution',
+        message: `Total allocation must equal 100%. Current total: ${totalPercentage}%`,
         details: [
-          `Presale: ${presalePercentage}%`,
-          `Liquidity: ${liquidityPercentage}%`,
-          `Additional Wallets: ${walletPercentages}%`,
-          `Total: ${totalPercentage}%`
+          `Presale: ${values.presaleEnabled ? values.presalePercentage : 0}%`,
+          `Liquidity: ${values.liquidityPercentage}%`,
+          `Wallets: ${walletPercentages}%`
         ],
         status: 'error'
-      } as ValidationResult;
+      };
+    }
+
+    // Validate liquidity percentage
+    if (values.liquidityPercentage < 25) {
+      return {
+        category: 'distribution',
+        message: 'Liquidity percentage must be at least 25%',
+        status: 'error'
+      };
+    }
+
+    // Validate presale percentage if enabled
+    if (values.presaleEnabled && (values.presalePercentage < 1 || values.presalePercentage > 95)) {
+      return {
+        category: 'distribution',
+        message: 'Presale percentage must be between 1% and 95% when enabled',
+        status: 'error'
+      };
+    }
+
+    // Validate each wallet percentage
+    if (values.wallets?.length > 0) {
+      for (const wallet of values.wallets) {
+        if (!wallet.percentage || wallet.percentage < 1 || wallet.percentage > 60) {
+          return {
+            category: 'distribution',
+            message: 'Each wallet allocation must be between 1% and 60%',
+            status: 'error'
+          };
+        }
+      }
     }
 
     return {
-      category: 'Distribution',
+      category: 'distribution',
       message: 'Distribution percentages are valid',
       status: 'success'
-    } as ValidationResult;
+    };
   };
 
   const validateLiquidity = (): ValidationResult => {
@@ -1033,16 +1120,43 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
             <div className="form-section bg-gray-800/50 rounded-lg p-4">
               <h3 className="text-lg font-medium text-white mb-2">Presale Configuration</h3>
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-sm text-white">Presale Allocation</label>
-                  <Input
-                    type="number"
-                    value="5"
-                    disabled
-                    className="form-input h-8 text-sm bg-gray-700/50 opacity-50"
-                  />
-                  <p className="text-xs text-gray-400 mt-1">Fixed 5% allocation</p>
-                </div>
+                <FormField
+                  control={form.control}
+                  name="presalePercentage"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-white">Presale Allocation (%)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min="1"
+                          max="95"
+                          className="h-8 text-sm bg-gray-700"
+                          {...field}
+                          onChange={(e) => {
+                            const value = Math.min(Math.max(Number(e.target.value) || 0, 1), 95);
+                            field.onChange(value);
+                            
+                            // Recalculate total and adjust liquidity if needed
+                            const liquidityPercentage = form.getValues('liquidityPercentage');
+                            const wallets = form.getValues('wallets');
+                            const walletPercentages = wallets.reduce((sum, w) => sum + (Number(w.percentage) || 0), 0);
+                            const total = value + liquidityPercentage + walletPercentages;
+                            
+                            if (total > 100) {
+                              // Adjust liquidity to maintain valid total
+                              const newLiquidity = Math.max(25, 100 - value - walletPercentages);
+                              form.setValue('liquidityPercentage', newLiquidity);
+                            }
+                          }}
+                        />
+                      </FormControl>
+                      <FormDescription className="text-gray-400 text-xs">
+                        Set presale allocation between 1-95%
+                      </FormDescription>
+                    </FormItem>
+                  )}
+                />
                 
                 <FormField
                   control={form.control}
@@ -1161,19 +1275,50 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                     <FormItem>
                       <FormLabel className="text-white">Start Time</FormLabel>
                       <FormControl>
-                        <Input
-                          type="datetime-local"
-                          className="h-8 text-sm bg-gray-700"
-                          {...field}
-                          value={field.value ? new Date(field.value * 1000).toISOString().slice(0, 16) : ''}
-                          onChange={(e) => {
-                            const date = new Date(e.target.value);
-                            field.onChange(Math.floor(date.getTime() / 1000));
-                          }}
-                        />
+                        <div className="flex gap-2">
+                          <Input
+                            type="date"
+                            className="h-8 text-sm bg-gray-700 flex-1"
+                            value={field.value ? new Date(field.value * 1000).toISOString().split('T')[0] : ''}
+                            onChange={(e) => {
+                              const currentValue = field.value ? new Date(field.value * 1000) : new Date();
+                              const [year, month, day] = e.target.value.split('-').map(Number);
+                              const newDate = new Date(currentValue);
+                              newDate.setFullYear(year, month - 1, day);
+                              const timestamp = Math.floor(newDate.getTime() / 1000);
+                              field.onChange(timestamp);
+                              
+                              // Update end time if necessary
+                              const endTime = form.getValues('endTime');
+                              if (!endTime || timestamp >= endTime) {
+                                form.setValue('endTime', timestamp + 86400);
+                              }
+                            }}
+                            min={new Date(Date.now() + 300000).toISOString().split('T')[0]}
+                          />
+                          <Input
+                            type="time"
+                            className="h-8 text-sm bg-gray-700 w-32"
+                            value={field.value ? new Date(field.value * 1000).toTimeString().slice(0, 5) : ''}
+                            onChange={(e) => {
+                              const currentValue = field.value ? new Date(field.value * 1000) : new Date();
+                              const [hours, minutes] = e.target.value.split(':').map(Number);
+                              const newDate = new Date(currentValue);
+                              newDate.setHours(hours, minutes);
+                              const timestamp = Math.floor(newDate.getTime() / 1000);
+                              field.onChange(timestamp);
+                              
+                              // Update end time if necessary
+                              const endTime = form.getValues('endTime');
+                              if (!endTime || timestamp >= endTime) {
+                                form.setValue('endTime', timestamp + 86400);
+                              }
+                            }}
+                          />
+                        </div>
                       </FormControl>
                       <FormDescription className="text-gray-400 text-xs">
-                        When the presale starts
+                        When the presale starts (must be at least 5 minutes in the future)
                       </FormDescription>
                     </FormItem>
                   )}
@@ -1186,19 +1331,53 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                     <FormItem>
                       <FormLabel className="text-white">End Time</FormLabel>
                       <FormControl>
-                        <Input
-                          type="datetime-local"
-                          className="h-8 text-sm bg-gray-700"
-                          {...field}
-                          value={field.value ? new Date(field.value * 1000).toISOString().slice(0, 16) : ''}
-                          onChange={(e) => {
-                            const date = new Date(e.target.value);
-                            field.onChange(Math.floor(date.getTime() / 1000));
-                          }}
-                        />
+                        <div className="flex gap-2">
+                          <Input
+                            type="date"
+                            className="h-8 text-sm bg-gray-700 flex-1"
+                            value={field.value ? new Date(field.value * 1000).toISOString().split('T')[0] : ''}
+                            onChange={(e) => {
+                              const currentValue = field.value ? new Date(field.value * 1000) : new Date();
+                              const [year, month, day] = e.target.value.split('-').map(Number);
+                              const newDate = new Date(currentValue);
+                              newDate.setFullYear(year, month - 1, day);
+                              const timestamp = Math.floor(newDate.getTime() / 1000);
+                              
+                              const startTime = form.getValues('startTime');
+                              if (startTime && timestamp <= startTime) {
+                                field.onChange(startTime + 86400);
+                              } else {
+                                field.onChange(timestamp);
+                              }
+                            }}
+                            min={(() => {
+                              const startTime = form.watch('startTime');
+                              return startTime ? new Date((startTime + 3600) * 1000).toISOString().split('T')[0] : '';
+                            })()}
+                          />
+                          <Input
+                            type="time"
+                            className="h-8 text-sm bg-gray-700 w-32"
+                            value={field.value ? new Date(field.value * 1000).toTimeString().slice(0, 5) : ''}
+                            onChange={(e) => {
+                              const currentValue = field.value ? new Date(field.value * 1000) : new Date();
+                              const [hours, minutes] = e.target.value.split(':').map(Number);
+                              const newDate = new Date(currentValue);
+                              newDate.setHours(hours, minutes);
+                              const timestamp = Math.floor(newDate.getTime() / 1000);
+                              
+                              const startTime = form.getValues('startTime');
+                              if (startTime && timestamp <= startTime) {
+                                field.onChange(startTime + 86400);
+                              } else {
+                                field.onChange(timestamp);
+                              }
+                            }}
+                          />
+                        </div>
                       </FormControl>
                       <FormDescription className="text-gray-400 text-xs">
-                        When the presale ends
+                        When the presale ends (must be at least 1 hour after start time)
                       </FormDescription>
                     </FormItem>
                   )}
@@ -1334,17 +1513,29 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                 {/* Presale - Only show when enabled */}
                 {form.watch("presaleEnabled") && (
                   <div className="relative">
-                    <div className="absolute -top-4 left-0 text-xs text-gray-400">Mandatory Presale</div>
-                    <Input
-                      type="number"
-                      value="5"
-                      disabled
-                      className="form-input h-7 text-sm bg-gray-700/50 pr-8 w-full opacity-50"
+                    <div className="absolute -top-4 left-0 text-xs text-gray-400">Presale</div>
+                    <FormField
+                      control={form.control}
+                      name="presalePercentage"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              min="1"
+                              max="95"
+                              className="form-input h-7 text-sm bg-gray-700 pr-8 w-full"
+                              {...field}
+                              onChange={(e) => field.onChange(Number(e.target.value))}
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
                     />
                     <div className="absolute inset-y-0 right-0 flex items-center">
                       <span className="text-sm text-gray-400 mr-3">%</span>
                     </div>
-                    <div className="text-xs text-gray-400 mt-1">Fixed 5% allocation when presale enabled</div>
+                    <div className="text-xs text-gray-400 mt-1">Allocation for presale (1-95%)</div>
                   </div>
                 )}
                 
@@ -1352,16 +1543,24 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                 <div className="relative">
                   <div className="absolute -top-4 left-0 text-xs text-gray-400">
                     Liquidity
-                    <InfoIcon content="Percentage of tokens allocated for DEX liquidity. Must be less than 100% to leave tokens for owner." />
+                    <InfoIcon content="Percentage of tokens allocated for DEX liquidity. Must be at least 25% and should make total allocation equal 100%." />
                   </div>
                   <Input
                     {...form.register("liquidityPercentage", {
                       valueAsNumber: true,
                       min: { value: 25, message: "Minimum liquidity is 25%" },
-                      max: { value: 95, message: "Maximum liquidity is 95% to leave tokens for owner" }
+                      max: { value: 95, message: "Maximum liquidity is 95%" },
+                      validate: (value) => {
+                        const presaleEnabled = form.getValues("presaleEnabled");
+                        const presalePercentage = presaleEnabled ? 5 : 0;
+                        const wallets = form.getValues("wallets");
+                        const walletPercentages = wallets.reduce((sum, w) => sum + (Number(w.percentage) || 0), 0);
+                        const total = presalePercentage + value + walletPercentages;
+                        return total === 100 || "Total allocation must equal 100%";
+                      }
                     })}
                     type="number"
-                    placeholder="95"
+                    placeholder="65"
                     className="form-input h-7 text-sm bg-gray-700 pr-8 w-full"
                   />
                   <div className="absolute inset-y-0 right-0 flex items-center">
@@ -1371,7 +1570,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                     <p className="text-xs text-red-400 mt-1">{form.formState.errors.liquidityPercentage.message}</p>
                   )}
                   <div className="text-xs text-gray-400 mt-1">
-                    Remaining allocation: {95 - (Number(form.watch("liquidityPercentage")) + form.watch('wallets').reduce((sum, w) => sum + Number(w.percentage), 0))}%
+                    Set to 65% to achieve 100% total allocation with current presale (5%) and wallet (30%) percentages
                   </div>
                 </div>
               </div>
@@ -1381,9 +1580,9 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                 <ul className="list-disc list-inside mt-1">
                   {form.watch("presaleEnabled") ? (
                     <>
-                      <li>5% is reserved for presale</li>
-                      <li>Distribute the remaining 95% between liquidity and wallets</li>
-                      <li>Recommended: 65% liquidity, 30% wallets</li>
+                      <li>Presale allocation can be set between 1-95%</li>
+                      <li>Distribute the remaining tokens between liquidity and wallets</li>
+                      <li>Recommended: 65% liquidity, remaining % for wallets</li>
                     </>
                   ) : (
                     <>
@@ -1423,38 +1622,97 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                     />
                   </div>
                   <div className="w-20 relative">
-                    <input
-                      type="number"
-                      {...form.register(`wallets.${index}.percentage`)}
-                      placeholder="%"
-                      className="w-full bg-gray-700 text-text-primary rounded px-2 py-1 text-xs h-7 pr-5"
+                    <FormField
+                      control={form.control}
+                      name={`wallets.${index}.percentage`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              min={1}
+                              max={60}
+                              placeholder="Enter percentage"
+                              {...field}
+                              onChange={(e) => {
+                                const value = Math.min(Math.max(Number(e.target.value) || 0, 1), 60);
+                                field.onChange(value);
+                                
+                                // Recalculate total and validate
+                                const presaleEnabled = form.getValues('presaleEnabled');
+                                const presalePercentage = presaleEnabled ? 5 : 0;
+                                const liquidityPercentage = form.getValues('liquidityPercentage');
+                                const total = presalePercentage + liquidityPercentage + value;
+                                
+                                if (total > 100) {
+                                  // Adjust liquidity to maintain valid total
+                                  const newLiquidity = Math.max(25, 100 - presalePercentage - value);
+                                  form.setValue('liquidityPercentage', newLiquidity);
+                                }
+                              }}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
                     />
-                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">%</span>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <input
-                      type="checkbox"
-                      {...form.register(`wallets.${index}.vestingEnabled`)}
-                      className="w-2.5 h-2.5 bg-gray-700 rounded"
-                    />
-                    <span className="text-xs text-gray-400">Vest</span>
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="checkbox"
+                        {...form.register(`wallets.${index}.vestingEnabled`)}
+                        className="w-5 h-5 bg-gray-700 rounded"
+                      />
+                      <span className="text-xs text-gray-400">Vest</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeWallet(index)}
+                      className="text-xs px-1 py-0.5 bg-red-900/50 hover:bg-red-800 text-red-100 rounded"
+                    >
+                      ×
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => removeWallet(index)}
-                    className="text-xs px-1 py-0.5 bg-red-900/50 hover:bg-red-800 text-red-100 rounded"
-                  >
-                    ×
-                  </button>
                 </div>
 
-                <div className="flex gap-2 mt-0.5">
+                <div className="flex gap-2 mt-2">
                   <input
                     {...form.register(`wallets.${index}.address`)}
                     placeholder="Wallet Address"
-                    className="w-full bg-gray-700 text-text-primary rounded px-2 py-1 text-xs h-7"
+                    className="flex-1 bg-gray-700 text-text-primary rounded px-2 py-1 text-xs h-7"
                   />
                 </div>
+
+                {/* Vesting Configuration - Only show when vesting is enabled */}
+                {form.watch(`wallets.${index}.vestingEnabled`) && (
+                  <div className="grid grid-cols-2 gap-2 mt-2">
+                    <div>
+                      <label className="text-xs text-gray-400">Vesting Duration (days)</label>
+                      <input
+                        type="number"
+                        {...form.register(`wallets.${index}.vestingDuration`, {
+                          valueAsNumber: true,
+                          min: 1
+                        })}
+                        placeholder="365"
+                        className="w-full bg-gray-700 text-text-primary rounded px-2 py-1 text-xs h-7"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-400">Cliff Duration (days)</label>
+                      <input
+                        type="number"
+                        {...form.register(`wallets.${index}.cliffDuration`, {
+                          valueAsNumber: true,
+                          min: 0
+                        })}
+                        placeholder="90"
+                        className="w-full bg-gray-700 text-text-primary rounded px-2 py-1 text-xs h-7"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>

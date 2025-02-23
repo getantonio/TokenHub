@@ -14,6 +14,9 @@ import { InfoIcon } from '@/components/ui/InfoIcon';
 import { shortenAddress } from '@/utils/address';
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { getNetworkContractAddress, FACTORY_ADDRESSES } from '@config/contracts';
+import { ethers } from 'ethers';
+import { Form, FormControl, FormField, FormItem } from "@/components/ui/form";
+import { useForm, UseFormReturn } from "react-hook-form";
 
 interface Props {
   isConnected: boolean;
@@ -28,6 +31,7 @@ interface TokenInfo {
   totalSupply: string;
   owner: string;
   pairAddress?: string;
+  lpTokenBalance?: string;
   presaleInfo?: {
     softCap: string;
     hardCap: string;
@@ -54,6 +58,12 @@ interface TokenInfo {
     unlockTime: number;
     locked: boolean;
     hasLiquidity?: boolean;
+    lpTokenBalance?: string;
+    sharePercentage?: string;
+    token0?: string;
+    token1?: string;
+    reserve0?: string;
+    reserve1?: string;
   };
   platformFee?: {
     recipient: string;
@@ -128,6 +138,249 @@ export interface TCAP_v3Ref {
   loadTokens: () => void;
 }
 
+interface VestingPreset {
+  presalePercentage: number;
+  liquidityPercentage: number;
+  wallets: {
+    name: string;
+    percentage: number;
+    vestingEnabled: boolean;
+    vestingDuration: number;
+    cliffDuration: number;
+    vestingStartTime: number;
+  }[];
+}
+
+interface ValidationResult {
+  category: string;
+  message: string;
+  details?: string[];
+  status: 'success' | 'warning' | 'error';
+}
+
+interface FormData {
+  presaleEnabled: boolean;
+  presalePercentage: number;
+  liquidityPercentage: number;
+  wallets: {
+    name: string;
+    address: string;
+    percentage: number;
+    vestingEnabled: boolean;
+    vestingDuration: number;
+    cliffDuration: number;
+    vestingStartTime: number;
+  }[];
+}
+
+const VESTING_PRESETS: Record<string, VestingPreset> = {
+  standard: {
+    presalePercentage: 10,
+    liquidityPercentage: 65, // 65% when presale enabled, 75% when disabled
+    wallets: [
+      { 
+        name: 'Team', 
+        percentage: 15,
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 90,
+        vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+      },
+      { 
+        name: 'Marketing', 
+        percentage: 10,
+        vestingEnabled: true,
+        vestingDuration: 180,
+        cliffDuration: 30,
+        vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+      }
+    ],
+  },
+  fair_launch: {
+    presalePercentage: 5,
+    liquidityPercentage: 85, // 85% when presale enabled, 90% when disabled
+    wallets: [
+      {
+        name: 'Team',
+        percentage: 10,
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 180,
+        vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+      }
+    ]
+  },
+  community: {
+    presalePercentage: 15,
+    liquidityPercentage: 65, // 65% when presale enabled, 80% when disabled
+    wallets: [
+      {
+        name: 'Community Rewards',
+        percentage: 10,
+        vestingEnabled: true,
+        vestingDuration: 180,
+        cliffDuration: 30,
+        vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+      },
+      {
+        name: 'Team',
+        percentage: 10,
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 90,
+        vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+      }
+    ]
+  },
+  growth: {
+    presalePercentage: 20,
+    liquidityPercentage: 45, // 45% when presale enabled, 65% when disabled
+    wallets: [
+      {
+        name: 'Team',
+        percentage: 15,
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 90,
+        vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+      },
+      {
+        name: 'Marketing',
+        percentage: 10,
+        vestingEnabled: true,
+        vestingDuration: 180,
+        cliffDuration: 30,
+        vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+      },
+      {
+        name: 'Development',
+        percentage: 10,
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 60,
+        vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+      }
+    ]
+  },
+  bootstrap: {
+    presalePercentage: 25,
+    liquidityPercentage: 35, // 35% when presale enabled, 60% when disabled
+    wallets: [
+      {
+        name: 'Team',
+        percentage: 20,
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 90,
+        vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+      },
+      {
+        name: 'Marketing',
+        percentage: 10,
+        vestingEnabled: true,
+        vestingDuration: 180,
+        cliffDuration: 30,
+        vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+      },
+      {
+        name: 'Development',
+        percentage: 10,
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 60,
+        vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+      }
+    ]
+  },
+  governance: {
+    presalePercentage: 30,
+    liquidityPercentage: 30, // 30% when presale enabled, 60% when disabled
+    wallets: [
+      {
+        name: 'Governance',
+        percentage: 20,
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 90,
+        vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+      },
+      {
+        name: 'Team',
+        percentage: 10,
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 180,
+        vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+      },
+      {
+        name: 'Treasury',
+        percentage: 10,
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 60,
+        vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+      }
+    ]
+  }
+};
+
+const validateDistribution = (form: UseFormReturn<FormData>): ValidationResult => {
+  const values = form.getValues();
+  const presaleEnabled = values.presaleEnabled;
+  const presalePercentage = presaleEnabled ? values.presalePercentage : 0;
+  const liquidityPercentage = values.liquidityPercentage || 0;
+  const wallets = values.wallets || [];
+  const walletPercentages = wallets.reduce((sum: number, w: { percentage: number }) => sum + (w.percentage || 0), 0);
+  const totalPercentage = presalePercentage + liquidityPercentage + walletPercentages;
+
+  // Validate presale percentage range
+  if (presaleEnabled && (presalePercentage < 1 || presalePercentage > 30)) {
+    return {
+      category: 'Distribution',
+      message: 'Invalid presale percentage',
+      details: [
+        'Presale percentage must be between 1% and 30%',
+        `Current: ${presalePercentage}%`
+      ],
+      status: 'error'
+    };
+  }
+
+  // When liquidity is less than 100%, require at least one wallet
+  if (liquidityPercentage < 100 && wallets.length === 0) {
+    return {
+      category: 'Distribution',
+      message: 'At least one wallet allocation is required when liquidity is less than 100%',
+      details: [
+        `Liquidity: ${liquidityPercentage}%`,
+        'Add a wallet allocation for the remaining tokens'
+      ],
+      status: 'error'
+    };
+  }
+
+  // When there are wallet allocations, total must equal 100%
+  if (totalPercentage !== 100) {
+    return {
+      category: 'Distribution',
+      message: 'Total allocation must be 100%',
+      details: [
+        `Presale: ${presalePercentage}%`,
+        `Liquidity: ${liquidityPercentage}%`,
+        `Additional Wallets: ${walletPercentages}%`,
+        `Total: ${totalPercentage}%`
+      ],
+      status: 'error'
+    };
+  }
+
+  return {
+    category: 'Distribution',
+    message: 'Distribution percentages are valid',
+    status: 'success'
+  };
+};
+
 const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAddress, provider: externalProvider }, ref) => {
   const [tokens, setTokens] = useState<TokenInfo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -137,6 +390,7 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
   const [showOnlyRecent, setShowOnlyRecent] = useState(true);
   const { chainId } = useNetwork();
   const { toast } = useToast();
+  const form = useForm<FormData>();
 
   // Add state for vesting schedules popup
   const [showVestingSchedules, setShowVestingSchedules] = useState(false);
@@ -183,56 +437,7 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
   }, [isConnected, factoryAddress, externalProvider]);
 
   const getTokenContract = (tokenAddress: string, signer: any) => {
-    return new Contract(tokenAddress, [
-      // Basic token functions
-      'function name() view returns (string)',
-      'function symbol() view returns (string)',
-      'function totalSupply() view returns (uint256)',
-      'function owner() view returns (address)',
-      'function balanceOf(address account) view returns (uint256)',
-      'function transfer(address to, uint256 amount) returns (bool)',
-      'function allowance(address owner, address spender) view returns (uint256)',
-      'function approve(address spender, uint256 amount) returns (bool)',
-      'function transferFrom(address from, address to, uint256 amount) returns (bool)',
-      // Control functions
-      'function pause() external',
-      'function unpause() external',
-      'function paused() view returns (bool)',
-      // Blacklist functions
-      'function setBlacklist(address account, bool status) external',
-      'function isBlacklisted(address account) view returns (bool)',
-      // Time lock functions
-      'function setTimeLock(address account, uint256 unlockTime) external',
-      'function getUnlockTime(address account) view returns (uint256)',
-      // Vesting functions
-      'function claimVestedTokens() external',
-      'function getVestedAmount(address wallet) view returns (uint256)',
-      'function getClaimedAmount(address wallet) view returns (uint256)',
-      'function getWalletAllocations() view returns (tuple(address wallet, uint256 percentage, bool vestingEnabled, uint256 vestingDuration, uint256 cliffDuration, uint256 vestingStartTime)[])',
-      // Presale functions
-      'function presaleRate() view returns (uint256)',
-      'function softCap() view returns (uint256)',
-      'function hardCap() view returns (uint256)',
-      'function minContribution() view returns (uint256)',
-      'function maxContribution() view returns (uint256)',
-      'function startTime() view returns (uint256)',
-      'function endTime() view returns (uint256)',
-      'function presalePercentage() view returns (uint256)',
-      'function liquidityPercentage() view returns (uint256)',
-      'function liquidityLockDuration() view returns (uint256)',
-      'function maxActivePresales() view returns (uint256)',
-      'function presaleEnabled() view returns (bool)',
-      // Liquidity functions
-      'function addLiquidity(uint256 tokenAmount) external payable',
-      'function addLiquidityFromContract(uint256 tokenAmount) external payable',
-      'function removeLiquidity(uint256 lpTokenAmount) external',
-      'function getLiquidityInfo() view returns (tuple(uint256 percentage, uint256 lockDuration, uint256 unlockTime, bool locked, bool hasLiquidity))',
-      'function uniswapV2Pair() view returns (address)',
-      'function uniswapV2Router() view returns (address)',
-      // Liquidity allocation functions
-      'function getRemainingLiquidityAllocation() view returns (uint256)',
-      'function liquidityAllocation() view returns (uint256)'
-    ], signer);
+    return new Contract(tokenAddress, TokenV3ABI.abi, signer);
   };
 
   // Add this function to handle blocked tokens
@@ -259,244 +464,92 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
       setIsLoading(true);
       setError(null);
 
-      // Get chainId
-      const network = await externalProvider.getNetwork();
-      const chainId = Number(network.chainId);
-
-      // Use the factory address from props first, then fall back to hardcoded address for BSC Testnet
-      let factoryV3Address = null;
-      
-      if (chainId === 97) { // BSC Testnet
-        factoryV3Address = '0xc932F77C5F38Cf7FA5f0728D34f1dD0517C4ae97';
-        console.log("Using hardcoded BSC Testnet V3 Factory address:", factoryV3Address);
-      } else {
-        // For other networks, try FACTORY_ADDRESSES first
-        if (FACTORY_ADDRESSES.v3[chainId]) {
-          factoryV3Address = FACTORY_ADDRESSES.v3[chainId];
-          console.log("Got factory address from FACTORY_ADDRESSES:", factoryV3Address);
-        }
-        
-        // If not found, try getNetworkContractAddress
-        if (!factoryV3Address) {
-          factoryV3Address = getNetworkContractAddress(chainId, 'factoryAddressV3');
-          if (factoryV3Address) {
-            console.log("Got factory address from getNetworkContractAddress:", factoryV3Address);
-          }
-        }
-      }
-
-      if (!factoryV3Address) {
-        console.error("No factory address found for chain:", chainId);
-        setError('No V3 factory deployed on this network');
-        return;
-      }
-
-      // Verify the factory contract exists
-      const code = await externalProvider.getCode(factoryV3Address);
-      if (code === '0x' || code === '') {
-        console.error("Factory contract not deployed at:", factoryV3Address);
-        setError('Factory contract not found on this network');
-        return;
-      }
-
       const signer = await externalProvider.getSigner();
-      console.log('TCAP_v3: Got signer');
-      
-      const factory = new Contract(factoryV3Address, [
-        'function getUserCreatedTokens(address user) view returns (address[])',
-        'function getDeployedTokens() view returns (address[])',
-        'function getTokenCreator(address token) view returns (address)',
-        'function isTokenCreator(address user, address token) view returns (bool)',
-        'function getUserTokenCount(address user) view returns (uint256)'
-      ], signer);
-      
-      console.log('TCAP_v3: Factory contract created with signer');
-      
       const userAddress = await signer.getAddress();
-      console.log('TCAP_v3: Got user address:', userAddress);
       
-      // Try both methods to get user's tokens
-      let deployedTokens = [];
-      try {
-        console.log('TCAP_v3: Trying getUserCreatedTokens');
-        deployedTokens = await factory.getUserCreatedTokens(userAddress);
-      } catch (error) {
-        console.log('TCAP_v3: getUserCreatedTokens failed, trying getDeployedTokens');
-        try {
-          const allTokens = await factory.getDeployedTokens();
-          // Filter tokens created by user
-          const tokenPromises = allTokens.map(async (token: string) => {
-            try {
-              const isCreator = await factory.isTokenCreator(userAddress, token);
-              return isCreator ? token : null;
-            } catch {
-              return null;
-            }
-          });
-          deployedTokens = (await Promise.all(tokenPromises)).filter(Boolean);
-        } catch (error) {
-          console.error('Both token retrieval methods failed:', error);
-          throw new Error('Failed to retrieve tokens');
-        }
+      // Get deployed tokens
+      if (!factoryAddress) {
+        throw new Error('Factory address is not defined');
       }
 
-      console.log('TCAP_v3: Deployed tokens:', deployedTokens);
-
-      if (!Array.isArray(deployedTokens)) {
-        throw new Error('Unexpected response format from token retrieval');
-      }
+      console.log('Using factory address:', factoryAddress);
+      const factory = new ethers.Contract(factoryAddress, TokenFactoryV3ABI.abi, signer);
+      
+      console.log('Getting user created tokens for:', userAddress);
+      const deployedTokens = await factory.getUserCreatedTokens(userAddress);
+      console.log('Deployed tokens:', deployedTokens);
 
       const blockedTokens = getBlockedTokens();
       
       const tokenPromises = deployedTokens
-        .filter(token => !blockedTokens.includes(token)) // Filter out blocked tokens
+        .filter((token: string) => !blockedTokens.includes(token))
         .map(async (tokenAddress: string) => {
           try {
-            const tokenContract = getTokenContract(tokenAddress, signer);
+            console.log('Creating contract for token:', tokenAddress);
+            // Create minimal ABI for initial token info
+            const minimalABI = [
+              "function name() view returns (string)",
+              "function symbol() view returns (string)",
+              "function totalSupply() view returns (uint256)",
+              "function owner() view returns (address)",
+              "function paused() view returns (bool)",
+              "function uniswapV2Pair() view returns (address)"
+            ];
+            const tokenContract = new ethers.Contract(tokenAddress, minimalABI, signer);
+            console.log('Loading token:', tokenAddress);
 
             // Basic token info
-            const [name, symbol, totalSupply, owner] = await Promise.all([
+            const [name, symbol, totalSupply, owner, paused, pairAddress] = await Promise.all([
               tokenContract.name(),
               tokenContract.symbol(),
               tokenContract.totalSupply(),
-              tokenContract.owner()
+              tokenContract.owner(),
+              tokenContract.paused(),
+              tokenContract.uniswapV2Pair()
             ]);
 
-            let tokenInfo: TokenInfo = {
+            console.log('Token info loaded:', { 
+              name, 
+              symbol, 
+              totalSupply: formatEther(totalSupply),
+              pairAddress 
+            });
+
+            let liquidityInfo = undefined;
+
+            // Get LP token info if pair exists
+            if (pairAddress && pairAddress !== ethers.ZeroAddress) {
+              console.log('Getting LP info for pair:', pairAddress);
+              try {
+                const lpInfo = await getLPTokenInfo(tokenAddress, pairAddress, signer);
+                if (lpInfo) {
+                  liquidityInfo = {
+                    hasLiquidity: lpInfo.hasLiquidity,
+                    lpTokenBalance: lpInfo.lpTokenBalance,
+                    sharePercentage: lpInfo.sharePercentage,
+                    reserve0: lpInfo.reserve0,
+                    reserve1: lpInfo.reserve1,
+                    token0: lpInfo.token0,
+                    token1: lpInfo.token1
+                  };
+                  console.log('LP info loaded:', liquidityInfo);
+                }
+              } catch (lpError) {
+                console.error('Error loading LP info:', lpError);
+              }
+            }
+
+            return {
               address: tokenAddress,
               name,
               symbol,
               totalSupply: formatEther(totalSupply),
               owner,
-              paused: await tokenContract.paused(),
+              paused,
+              pairAddress,
+              liquidityInfo,
               createdAt: Date.now()
             };
-
-            // Get presale info with additional details
-            try {
-              const [info, contributorCount, contributors] = await Promise.all([
-                tokenContract.presaleInfo(),
-                tokenContract.getContributorCount(),
-                tokenContract.getContributors()
-              ]);
-
-              // Get detailed info for each contributor
-              const contributorDetails = await Promise.all(
-                contributors.map(async (addr: string) => {
-                  const details = await tokenContract.getContributorInfo(addr);
-                  return {
-                    address: addr,
-                    contribution: formatEther(details.contribution),
-                    tokenAllocation: formatEther(details.tokenAllocation),
-                    isWhitelisted: details.isWhitelisted
-                  };
-                })
-              );
-
-              tokenInfo.presaleInfo = {
-                softCap: formatEther(info.softCap),
-                hardCap: formatEther(info.hardCap),
-                minContribution: formatEther(info.minContribution),
-                maxContribution: formatEther(info.maxContribution),
-                presaleRate: info.presaleRate.toString(),
-                startTime: Number(info.startTime),
-                endTime: Number(info.endTime),
-                whitelistEnabled: info.whitelistEnabled,
-                finalized: info.finalized,
-                totalContributed: formatEther(info.totalContributed),
-                totalTokensSold: formatEther(info.totalTokensSold || BigInt(0)),
-                contributorCount: Number(contributorCount),
-                contributors: contributorDetails
-              };
-            } catch (e) {
-              console.log('No presale info for token:', tokenAddress);
-            }
-
-            // Try to get liquidity info
-            try {
-              const info = await tokenContract.getLiquidityInfo();
-              
-              // Get pair address first
-              const pair = await tokenContract.uniswapV2Pair();
-              tokenInfo.pairAddress = pair;
-              
-              // Then check if there's actual liquidity
-              if (pair) {
-                const pairContract = new Contract(pair, [
-                    'function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)'
-                ], signer);
-                
-                try {
-                  const reserves = await pairContract.getReserves();
-                  const hasLiquidity = reserves[0].gt(0) && reserves[1].gt(0);
-                  
-                  tokenInfo.liquidityInfo = {
-                      percentage: info.percentage.toString(),
-                      lockDuration: info.lockDuration.toString(),
-                      unlockTime: Number(info.unlockTime),
-                      locked: info.locked,
-                      hasLiquidity
-                  };
-                } catch (e) {
-                  console.log('Error getting reserves:', e);
-                  tokenInfo.liquidityInfo = {
-                      percentage: info.percentage.toString(),
-                      lockDuration: info.lockDuration.toString(),
-                      unlockTime: Number(info.unlockTime),
-                      locked: info.locked,
-                      hasLiquidity: false
-                  };
-                }
-              }
-            } catch (e) {
-              console.log('Error getting liquidity info:', e);
-              // Even if getting liquidity info fails, try to get pair address
-              try {
-                const pair = await tokenContract.uniswapV2Pair();
-                tokenInfo.pairAddress = pair;
-              } catch (pairError) {
-                console.log('Failed to get pair address:', pairError);
-              }
-            }
-
-            // Try to get platform fee info
-            try {
-              const info = await tokenContract.platformFee();
-              tokenInfo.platformFee = {
-                recipient: info.recipient,
-                totalTokens: formatEther(info.totalTokens),
-                vestingEnabled: info.vestingEnabled,
-                vestingDuration: Number(info.vestingDuration),
-                cliffDuration: Number(info.cliffDuration),
-                vestingStart: Number(info.vestingStart),
-                tokensClaimed: formatEther(info.tokensClaimed)
-              };
-            } catch (e) {
-              console.log('No platform fee info for token:', tokenAddress);
-            }
-
-            // Try to get vesting info
-            try {
-              const hasVesting = await tokenContract.hasVestingSchedule(userAddress);
-              if (hasVesting) {
-                const scheduleInfo = await tokenContract.getVestingSchedule(userAddress);
-                tokenInfo.vestingInfo = {
-                  hasVesting: true,
-                  totalAmount: formatEther(scheduleInfo.totalAmount),
-                  startTime: Number(scheduleInfo.startTime),
-                  cliffDuration: Number(scheduleInfo.cliffDuration),
-                  vestingDuration: Number(scheduleInfo.vestingDuration),
-                  releasedAmount: formatEther(scheduleInfo.releasedAmount),
-                  revocable: scheduleInfo.revocable,
-                  revoked: scheduleInfo.revoked,
-                  releasableAmount: formatEther(scheduleInfo.releasableAmount)
-                };
-              }
-            } catch (e) {
-              console.log('No vesting info for token:', tokenAddress);
-            }
-
-            return tokenInfo;
           } catch (error) {
             console.error(`Error loading token ${tokenAddress}:`, error);
             return null;
@@ -506,7 +559,6 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
       const loadedTokens = (await Promise.all(tokenPromises))
         .filter((token): token is TokenInfo => token !== null)
         .sort((a, b) => {
-          // Sort by creation time (newest first)
           const timeA = a.createdAt || 0;
           const timeB = b.createdAt || 0;
           return timeB - timeA;
@@ -753,55 +805,108 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
       const signer = await externalProvider.getSigner();
       const tokenContract = getTokenContract(tokenAddress, signer);
       
-      // Get token info and remaining allocation
-      const [name, symbol, remainingAllocation] = await Promise.all([
-        tokenContract.name(),
+      // Get token info
+      const [symbol, decimals] = await Promise.all([
         tokenContract.symbol(),
-        tokenContract.getRemainingLiquidityAllocation()
+        tokenContract.decimals()
       ]);
 
-      // Format remaining allocation for display
-      const remainingAllocationFormatted = formatEther(remainingAllocation);
+      // Create dialog content
+      const content = `
+        <div class="space-y-4">
+          <div>
+            <label class="text-xs text-text-secondary">Token Amount (${symbol})</label>
+            <input type="number" id="tokenAmount" class="w-full bg-gray-800 text-text-primary rounded px-2 py-1 text-sm" placeholder="Enter token amount" />
+          </div>
+          <div>
+            <label class="text-xs text-text-secondary">BNB Amount</label>
+            <input type="number" id="bnbAmount" class="w-full bg-gray-800 text-text-primary rounded px-2 py-1 text-sm" placeholder="Enter BNB amount" />
+          </div>
+        </div>
+      `;
 
-      // Prompt for liquidity amount
-      const liquidityBNB = prompt(`Enter amount of BNB to add as liquidity for ${symbol}:`);
-      if (!liquidityBNB) return;
+      // Show dialog
+      const dialog = await new Promise<{ tokenAmount: string; bnbAmount: string } | null>((resolve) => {
+        const dialog = document.createElement('dialog');
+        dialog.className = 'bg-gray-900 rounded-lg p-6 max-w-md w-full border border-border';
+        dialog.innerHTML = `
+          <h3 class="text-lg font-bold text-text-primary mb-4">Add Initial Liquidity</h3>
+          ${content}
+          <div class="flex justify-end gap-3 mt-6">
+            <button id="cancelBtn" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-text-primary">Cancel</button>
+            <button id="confirmBtn" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white">Add Liquidity</button>
+          </div>
+        `;
+        
+        document.body.appendChild(dialog);
+        dialog.showModal();
 
-      const maxTokens = remainingAllocationFormatted;
-      const tokenAmount = prompt(
-        `Enter amount of ${symbol} tokens to add as liquidity (max ${maxTokens} from liquidity allocation):`
-      );
-      if (!tokenAmount) return;
+        const cancelBtn = dialog.querySelector('#cancelBtn');
+        const confirmBtn = dialog.querySelector('#confirmBtn');
+        const tokenAmountInput = dialog.querySelector<HTMLInputElement>('#tokenAmount');
+        const bnbAmountInput = dialog.querySelector<HTMLInputElement>('#bnbAmount');
 
-      // Convert to Wei
-      const liquidityBNBWei = parseEther(liquidityBNB);
-      const tokenAmountWei = parseEther(tokenAmount);
+        if (cancelBtn && confirmBtn && tokenAmountInput && bnbAmountInput) {
+          cancelBtn.addEventListener('click', () => {
+            dialog.close();
+            resolve(null);
+          });
 
-      // Verify amount is within allocation
-      if (tokenAmountWei > remainingAllocation) {
-        throw new Error(`Amount exceeds remaining liquidity allocation of ${remainingAllocationFormatted} ${symbol}`);
+          confirmBtn.addEventListener('click', () => {
+            dialog.close();
+            resolve({
+              tokenAmount: tokenAmountInput.value,
+              bnbAmount: bnbAmountInput.value
+            });
+          });
+        } else {
+          dialog.close();
+          resolve(null);
+        }
+      });
+
+      if (!dialog) return;
+
+      const { tokenAmount, bnbAmount } = dialog;
+      if (!tokenAmount || !bnbAmount) {
+        throw new Error('Please enter both token and BNB amounts');
       }
 
-      // Call the contract's addLiquidityFromContract function
-      console.log('Adding liquidity from contract allocation...');
-      const addLiquidityTx = await tokenContract.addLiquidityFromContract(tokenAmountWei, {
-        value: liquidityBNBWei
+      // Convert amounts to wei
+      const tokenAmountWei = parseEther(tokenAmount);
+      const bnbAmountWei = parseEther(bnbAmount);
+
+      // Approve router
+      const routerAddress = await tokenContract.uniswapV2Router();
+      const currentAllowance = await tokenContract.allowance(await signer.getAddress(), routerAddress);
+      
+      if (currentAllowance < tokenAmountWei) {
+        const approveTx = await tokenContract.approve(routerAddress, ethers.MaxUint256);
+        await approveTx.wait();
+        toast({
+          title: 'Approval Successful',
+          description: 'Router approved to spend tokens'
+        });
+      }
+
+      // Add liquidity
+      const addLiquidityTx = await tokenContract.addLiquidity(tokenAmountWei, {
+        value: bnbAmountWei
+      });
+      await addLiquidityTx.wait();
+
+      toast({
+        title: 'Success',
+        description: 'Liquidity added successfully'
       });
 
-      await addLiquidityTx.wait();
-      
-      toast({
-        title: 'Liquidity Added',
-        description: `Successfully added ${liquidityBNB} BNB and ${tokenAmount} ${symbol} as liquidity`
-      });
-      
-      // Refresh token info
-      loadTokens();
+      // Refresh token data
+      await loadTokens();
     } catch (error: any) {
       console.error('Error adding liquidity:', error);
       toast({
         title: 'Error',
-        description: error.message || 'Failed to add liquidity. Check console for details.',
+        description: error.message || 'Failed to add liquidity',
         variant: 'destructive'
       });
     }
@@ -970,6 +1075,308 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
       description: "The token has been permanently removed from your management panel",
       variant: "default"
     });
+  };
+
+  const handleRemoveLiquidity = async (tokenAddress: string) => {
+    try {
+      setIsLoading(true);
+      const signer = await externalProvider.getSigner();
+      
+      // Create minimal ABI for initial token info
+      const minimalABI = [
+        "function balanceOf(address) view returns (uint256)",
+        "function approve(address spender, uint256 amount) returns (bool)",
+        "function allowance(address owner, address spender) view returns (uint256)",
+        "function uniswapV2Router() view returns (address)",
+        "function uniswapV2Pair() view returns (address)"
+      ];
+      
+      const tokenContract = new Contract(tokenAddress, minimalABI, signer);
+      
+      // Get pair address
+      const pairAddress = await tokenContract.uniswapV2Pair();
+      console.log('Pair address:', pairAddress);
+      
+      if (!pairAddress || pairAddress === ethers.ZeroAddress) {
+        throw new Error('No liquidity pair found');
+      }
+
+      // Create pair contract instance
+      const pairContract = new Contract(pairAddress, [
+        'function approve(address spender, uint256 amount) returns (bool)',
+        'function allowance(address owner, address spender) view returns (uint256)',
+        'function balanceOf(address account) view returns (uint256)',
+        'function transfer(address to, uint256 amount) returns (bool)'
+      ], signer);
+
+      // Get router address
+      const routerAddress = await tokenContract.uniswapV2Router();
+      console.log('Router address:', routerAddress);
+      
+      // Get user's LP token balance
+      const userAddress = await signer.getAddress();
+      const lpBalance = await pairContract.balanceOf(userAddress);
+      console.log('LP Balance:', lpBalance.toString());
+      
+      if (lpBalance <= 0) {
+        throw new Error('No LP tokens to remove');
+      }
+
+      // Check allowance
+      const allowance = await pairContract.allowance(userAddress, routerAddress);
+      console.log('Current allowance:', allowance.toString());
+      
+      // Approve router if needed
+      if (allowance < lpBalance) {
+        console.log('Approving router...');
+        const approveTx = await pairContract.approve(routerAddress, ethers.MaxUint256);
+        await approveTx.wait();
+        toast({
+          title: 'Approval Successful',
+          description: 'Router approved to spend LP tokens'
+        });
+      }
+
+      // Create router contract
+      const routerABI = [
+        'function removeLiquidityETH(address token, uint liquidity, uint amountTokenMin, uint amountETHMin, address to, uint deadline) external returns (uint amountToken, uint amountETH)'
+      ];
+      const routerContract = new Contract(routerAddress, routerABI, signer);
+
+      // Remove liquidity
+      console.log('Removing liquidity...');
+      const removeTx = await routerContract.removeLiquidityETH(
+        tokenAddress,
+        lpBalance,
+        0, // Accept any amount of tokens
+        0, // Accept any amount of ETH
+        userAddress,
+        Math.floor(Date.now() / 1000) + 300 // 5 minutes deadline
+      );
+
+      await removeTx.wait();
+      console.log('Liquidity removed successfully');
+
+      toast({
+        title: 'Success',
+        description: 'Liquidity removed successfully'
+      });
+
+      // Refresh token data
+      await loadTokens();
+    } catch (error: any) {
+      console.error('Error removing liquidity:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to remove liquidity',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleBurnLPTokens = async (tokenAddress: string) => {
+    try {
+      const signer = await externalProvider.getSigner();
+      const tokenContract = getTokenContract(tokenAddress, signer);
+      
+      // Create minimal ABI for initial token info
+      const minimalABI = [
+        "function uniswapV2Pair() view returns (address)"
+      ];
+      const tokenContractMinimal = new ethers.Contract(tokenAddress, minimalABI, signer);
+      
+      // Get pair address
+      const pairAddress = await tokenContractMinimal.uniswapV2Pair();
+      if (!pairAddress || pairAddress === ethers.ZeroAddress) {
+        throw new Error('No liquidity pair found');
+      }
+
+      // Get LP token info
+      const lpInfo = await getLPTokenInfo(tokenAddress, pairAddress, signer);
+      if (!lpInfo || !lpInfo.lpTokenBalance || Number(lpInfo.lpTokenBalance) <= 0) {
+        throw new Error('No LP tokens to burn');
+      }
+
+      // Create pair contract instance
+      const pairContract = new Contract(pairAddress, [
+        'function transfer(address to, uint256 amount) returns (bool)',
+        'function balanceOf(address account) view returns (uint256)'
+      ], signer);
+
+      // Get balance
+      const balance = await pairContract.balanceOf(await signer.getAddress());
+      
+      // Burn LP tokens by sending to zero address
+      const burnTx = await pairContract.transfer(ethers.ZeroAddress, balance);
+      await burnTx.wait();
+
+      toast({
+        title: 'Success',
+        description: 'LP tokens burned successfully'
+      });
+
+      // Refresh token data
+      await loadTokens();
+    } catch (error: any) {
+      console.error('Error burning LP tokens:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to burn LP tokens',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleAddBackLiquidity = async (tokenAddress: string) => {
+    try {
+      const signer = await externalProvider.getSigner();
+      const tokenContract = getTokenContract(tokenAddress, signer);
+      
+      // Create minimal ABI for initial token info
+      const minimalABI = [
+        "function uniswapV2Pair() view returns (address)",
+        "function balanceOf(address account) view returns (uint256)"
+      ];
+      const tokenContractMinimal = new ethers.Contract(tokenAddress, minimalABI, signer);
+      
+      // Get token balance
+      const userAddress = await signer.getAddress();
+      const tokenBalance = await tokenContractMinimal.balanceOf(userAddress);
+      
+      if (tokenBalance <= 0) {
+        throw new Error('No tokens available to add liquidity');
+      }
+
+      // Show dialog to get amounts
+      const dialog = await new Promise<{ tokenAmount: string; bnbAmount: string } | null>((resolve) => {
+        const dialog = document.createElement('dialog');
+        dialog.className = 'bg-gray-900 rounded-lg p-6 max-w-md w-full border border-border';
+        dialog.innerHTML = `
+          <h3 class="text-lg font-bold text-text-primary mb-4">Add Back Liquidity</h3>
+          <div class="space-y-4">
+            <div>
+              <label class="text-xs text-text-secondary">Token Amount</label>
+              <input type="number" id="tokenAmount" class="w-full bg-gray-800 text-text-primary rounded px-2 py-1 text-sm" placeholder="Enter token amount" />
+            </div>
+            <div>
+              <label class="text-xs text-text-secondary">BNB Amount</label>
+              <input type="number" id="bnbAmount" class="w-full bg-gray-800 text-text-primary rounded px-2 py-1 text-sm" placeholder="Enter BNB amount" />
+            </div>
+          </div>
+          <div class="flex justify-end gap-3 mt-6">
+            <button id="cancelBtn" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-text-primary">Cancel</button>
+            <button id="confirmBtn" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white">Add Liquidity</button>
+          </div>
+        `;
+        
+        document.body.appendChild(dialog);
+        dialog.showModal();
+
+        const cancelBtn = dialog.querySelector('#cancelBtn');
+        const confirmBtn = dialog.querySelector('#confirmBtn');
+        const tokenAmountInput = dialog.querySelector<HTMLInputElement>('#tokenAmount');
+        const bnbAmountInput = dialog.querySelector<HTMLInputElement>('#bnbAmount');
+
+        if (cancelBtn && confirmBtn && tokenAmountInput && bnbAmountInput) {
+          cancelBtn.addEventListener('click', () => {
+            dialog.close();
+            resolve(null);
+          });
+
+          confirmBtn.addEventListener('click', () => {
+            dialog.close();
+            resolve({
+              tokenAmount: tokenAmountInput.value,
+              bnbAmount: bnbAmountInput.value
+            });
+          });
+        } else {
+          dialog.close();
+          resolve(null);
+        }
+      });
+
+      if (!dialog) return;
+
+      const { tokenAmount, bnbAmount } = dialog;
+      if (!tokenAmount || !bnbAmount) {
+        throw new Error('Please enter both token and BNB amounts');
+      }
+
+      // Add liquidity
+      await handleAddLiquidity(tokenAddress);
+
+    } catch (error: any) {
+      console.error('Error adding back liquidity:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to add back liquidity',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const getLPTokenInfo = async (tokenAddress: string, pairAddress: string, signer: any) => {
+    try {
+      console.log('Getting LP info for:', { tokenAddress, pairAddress });
+      const userAddress = await signer.getAddress();
+      
+      const pairContract = new Contract(pairAddress, [
+        'function token0() view returns (address)',
+        'function token1() view returns (address)',
+        'function getReserves() view returns (uint112,uint112,uint32)',
+        'function totalSupply() view returns (uint256)',
+        'function balanceOf(address) view returns (uint256)'
+      ], signer);
+
+      // Get all pair info in parallel
+      const [token0, token1, reserves, totalSupply, lpBalance] = await Promise.all([
+        pairContract.token0(),
+        pairContract.token1(),
+        pairContract.getReserves(),
+        pairContract.totalSupply(),
+        pairContract.balanceOf(userAddress)
+      ]);
+
+      console.log('Pair info:', {
+        token0,
+        token1,
+        reserves: reserves.map((r: bigint) => r.toString()),
+        totalSupply: totalSupply.toString(),
+        lpBalance: lpBalance.toString()
+      });
+
+      // Determine which token is the project token and which is BNB
+      const isToken0 = tokenAddress.toLowerCase() === token0.toLowerCase();
+      const [projectTokenReserve, bnbReserve] = isToken0 
+        ? [reserves[0], reserves[1]] 
+        : [reserves[1], reserves[0]];
+
+      // Calculate share percentage if there is total supply
+      const sharePercentage = totalSupply.toString() !== '0' 
+        ? (Number(formatEther(lpBalance)) / Number(formatEther(totalSupply))) * 100
+        : 0;
+
+      const hasLiquidity = Number(projectTokenReserve) > 0 && Number(bnbReserve) > 0;
+
+      const result = {
+        hasLiquidity,
+        lpTokenBalance: formatEther(lpBalance),
+        sharePercentage: sharePercentage.toFixed(2),
+        reserve0: formatEther(projectTokenReserve),
+        reserve1: formatEther(bnbReserve),
+        token0,
+        token1
+      };
+
+      console.log('LP info result:', result);
+      return result;
+    } catch (error) {
+      console.error('Error getting LP info:', error);
+      return null;
+    }
   };
 
   useImperativeHandle(ref, () => ({
@@ -1188,10 +1595,10 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
                               Start: {new Date(token.vestingInfo.startTime * 1000).toLocaleString()}
                             </p>
                             <p className="text-xs text-text-secondary">
-                              Cliff: {Math.floor(token.vestingInfo.cliffDuration / (30 * 24 * 60 * 60))} months
+                              Cliff: {Math.floor(token.vestingInfo.cliffDuration / (30 * 24 * 60 * 60))} days
                             </p>
                             <p className="text-xs text-text-secondary">
-                              Duration: {Math.floor(token.vestingInfo.vestingDuration / (30 * 24 * 60 * 60))} months
+                              Duration: {Math.floor(token.vestingInfo.vestingDuration / (30 * 24 * 60 * 60))} days
                             </p>
                             {token.vestingInfo.revoked && (
                               <p className="text-xs text-red-500">Vesting Revoked</p>
@@ -1278,55 +1685,95 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
                       {/* Liquidity Management Section */}
                       <div className="col-span-2">
                         <h4 className="text-xs font-medium text-text-primary mb-1">Liquidity Management</h4>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleAddLiquidity(token.address)}
-                            className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
-                          >
-                            Add Liquidity
-                          </button>
+                        <div className="flex flex-col gap-2">
+                          {token.liquidityInfo?.hasLiquidity ? (
+                            <div className="space-y-2">
+                              <div className="bg-gray-800 rounded p-3">
+                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                  <div>
+                                    <span className="text-gray-400">Your LP Balance:</span>
+                                    <span className="text-white ml-1">{token.liquidityInfo.lpTokenBalance} LP</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-gray-400">Pool Share:</span>
+                                    <span className="text-white ml-1">{token.liquidityInfo.sharePercentage}%</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-gray-400">Token Reserve:</span>
+                                    <span className="text-white ml-1">{Number(token.liquidityInfo.reserve0).toFixed(6)} {token.symbol}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-gray-400">BNB Reserve:</span>
+                                    <span className="text-white ml-1">{Number(token.liquidityInfo.reserve1).toFixed(6)} BNB</span>
+                                  </div>
+                                </div>
+
+                                <div className="mt-3 flex gap-2">
+                                  <button
+                                    onClick={() => handleAddLiquidity(token.address)}
+                                    className="text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+                                  >
+                                    Add More Liquidity
+                                  </button>
+                                  {Number(token.liquidityInfo.lpTokenBalance) > 0 && (
+                                    <>
+                                      <button
+                                        onClick={() => handleRemoveLiquidity(token.address)}
+                                        className="text-xs px-2 py-1 bg-red-600/20 hover:bg-red-600/40 text-red-400 hover:text-red-300 rounded"
+                                      >
+                                        Remove Liquidity
+                                      </button>
+                                      <button
+                                        onClick={() => handleBurnLPTokens(token.address)}
+                                        className="text-xs px-2 py-1 bg-red-600/20 hover:bg-red-600/40 text-red-400 hover:text-red-300 rounded"
+                                      >
+                                        Burn LP
+                                      </button>
+                                      <button
+                                        onClick={() => handleAddBackLiquidity(token.address)}
+                                        className="text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+                                      >
+                                        Add Back LP
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+
+                                <div className="mt-2 flex gap-2">
+                                  <a
+                                    href={`https://testnet.bscscan.com/address/${token.pairAddress}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+                                  >
+                                    View Pair Info
+                                  </a>
+                                  <a
+                                    href={`https://pancakeswap.finance/?chain=bscTestnet&outputCurrency=TBNB&inputCurrency=${token.address}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+                                  >
+                                    Trade
+                                  </a>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => handleAddLiquidity(token.address)}
+                              className="text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+                            >
+                              Add Initial Liquidity
+                            </button>
+                          )}
+
                           {token.pairAddress && (
-                            <>
-                              <a
-                                href={`https://pancakeswap.finance/v2/add/TBNB/${token.address}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
-                              >
-                                Add More Liquidity
-                              </a>
-                              <a
-                                href={`https://pancakeswap.finance/info/v2/pairs/${token.pairAddress}?chain=bscTestnet`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
-                              >
-                                View Pair Info
-                              </a>
-                              <a
-                                href={`https://pancakeswap.finance/v2/swap?chain=bscTestnet&outputCurrency=${token.address}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
-                              >
-                                Trade on PancakeSwap
-                              </a>
-                              <a
-                                href={`https://testnet.bscscan.com/address/${token.pairAddress}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
-                              >
-                                View Pair Contract
-                              </a>
-                            </>
+                            <div className="mt-2 text-xs text-text-secondary">
+                              <p>Pair Address: {token.pairAddress}</p>
+                            </div>
                           )}
                         </div>
-                        {token.pairAddress && (
-                          <div className="mt-2 text-xs text-text-secondary">
-                            <p>Pair Address: {token.pairAddress}</p>
-                          </div>
-                        )}
                       </div>
                     </div>
                               </div>
