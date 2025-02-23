@@ -1,6 +1,6 @@
-import { useEffect, useState, forwardRef, useImperativeHandle, useMemo, useRef } from 'react';
+import { useEffect, useState, forwardRef, useImperativeHandle, useMemo, useRef, ReactNode } from 'react';
 import { Contract } from 'ethers';
-import { formatEther, parseEther } from 'viem';
+import { formatEther, parseEther, parseUnits } from 'viem';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -803,24 +803,61 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
   const handleAddLiquidity = async (tokenAddress: string) => {
     try {
       const signer = await externalProvider.getSigner();
-      const tokenContract = getTokenContract(tokenAddress, signer);
       
+      // Create token contract instance with minimal ABI
+      const tokenContract = new Contract(tokenAddress, [
+        "function symbol() view returns (string)",
+        "function decimals() view returns (uint8)",
+        "function approve(address spender, uint256 amount) returns (bool)",
+        "function allowance(address owner, address spender) view returns (uint256)",
+        "function balanceOf(address) view returns (uint256)",
+        "function liquidityAllocation() view returns (uint256)",
+        "function remainingLiquidityAllocation() view returns (uint256)",
+        "function addLiquidityFromContract(uint256) payable returns (bool)"
+      ], signer);
+
       // Get token info
-      const [symbol, decimals] = await Promise.all([
+      const [symbol, decimals, remainingLiquidityAllocation] = await Promise.all([
         tokenContract.symbol(),
-        tokenContract.decimals()
+        tokenContract.decimals(),
+        tokenContract.remainingLiquidityAllocation()
       ]);
+
+      // Create full contract instance to check presale status
+      const fullContract = new Contract(tokenAddress, TokenV3ABI.abi, signer);
+      
+      try {
+        // Check if presale is active
+        const presaleEnabled = await fullContract.presaleEnabled();
+        if (presaleEnabled) {
+          const presaleInfo = await fullContract.presaleInfo();
+          if (!presaleInfo.finalized) {
+            const currentTime = Math.floor(Date.now() / 1000);
+            if (currentTime < Number(presaleInfo.endTime)) {
+              throw new Error('Cannot add liquidity while presale is active. Please wait until presale ends and is finalized.');
+            }
+          }
+        }
+      } catch (presaleError) {
+        console.warn('Could not check presale status:', presaleError);
+        // Continue if presale functions are not available
+      }
+
+      const formattedRemainingLiquidity = formatEther(remainingLiquidityAllocation);
 
       // Create dialog content
       const content = `
         <div class="space-y-4">
+          <div class="bg-gray-700/30 rounded p-2 mb-2">
+            <p class="text-xs text-gray-300">Remaining Liquidity Allocation: ${formattedRemainingLiquidity} ${symbol}</p>
+          </div>
           <div>
             <label class="text-xs text-text-secondary">Token Amount (${symbol})</label>
-            <input type="number" id="tokenAmount" class="w-full bg-gray-800 text-text-primary rounded px-2 py-1 text-sm" placeholder="Enter token amount" />
+            <input type="text" id="tokenAmount" class="w-full bg-gray-800 text-text-primary rounded px-2 py-1 text-sm" placeholder="Enter token amount" />
           </div>
           <div>
             <label class="text-xs text-text-secondary">BNB Amount</label>
-            <input type="number" id="bnbAmount" class="w-full bg-gray-800 text-text-primary rounded px-2 py-1 text-sm" placeholder="Enter BNB amount" />
+            <input type="text" id="bnbAmount" class="w-full bg-gray-800 text-text-primary rounded px-2 py-1 text-sm" placeholder="Enter BNB amount" />
           </div>
         </div>
       `;
@@ -872,25 +909,17 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
         throw new Error('Please enter both token and BNB amounts');
       }
 
-      // Convert amounts to wei
-      const tokenAmountWei = parseEther(tokenAmount);
-      const bnbAmountWei = parseEther(bnbAmount);
-
-      // Approve router
-      const routerAddress = await tokenContract.uniswapV2Router();
-      const currentAllowance = await tokenContract.allowance(await signer.getAddress(), routerAddress);
-      
-      if (currentAllowance < tokenAmountWei) {
-        const approveTx = await tokenContract.approve(routerAddress, ethers.MaxUint256);
-        await approveTx.wait();
-        toast({
-          title: 'Approval Successful',
-          description: 'Router approved to spend tokens'
-        });
+      // Validate token amount against remaining liquidity allocation
+      const tokenAmountBN = parseUnits(tokenAmount, decimals);
+      if (tokenAmountBN > remainingLiquidityAllocation) {
+        throw new Error(`Amount exceeds remaining liquidity allocation of ${formattedRemainingLiquidity} ${symbol}`);
       }
 
-      // Add liquidity
-      const addLiquidityTx = await tokenContract.addLiquidity(tokenAmountWei, {
+      // Convert BNB amount to wei
+      const bnbAmountWei = parseEther(bnbAmount);
+
+      // Add liquidity using the contract's allocation
+      const addLiquidityTx = await tokenContract.addLiquidityFromContract(tokenAmountBN, {
         value: bnbAmountWei
       });
       await addLiquidityTx.wait();
@@ -1361,7 +1390,7 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
 
       const hasLiquidity = Number(projectTokenReserve) > 0 && Number(bnbReserve) > 0;
 
-      const result = {
+      return {
         hasLiquidity,
         lpTokenBalance: formatEther(lpBalance),
         sharePercentage: sharePercentage.toFixed(2),
@@ -1370,9 +1399,6 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
         token0,
         token1
       };
-
-      console.log('LP info result:', result);
-      return result;
     } catch (error) {
       console.error('Error getting LP info:', error);
       return null;
