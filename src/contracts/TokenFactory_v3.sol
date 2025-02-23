@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.22;
 
-import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./TokenTemplate_v3.sol";
 
-contract TokenFactory_v3 is UUPSUpgradeable, OwnableUpgradeable {
+contract TokenFactory_v3 is Ownable, ReentrancyGuard {
+    string public constant VERSION = "3.0.0";
+    
     // Contract state variables
-    address public implementation;
-    uint256 public deploymentFee;
+    uint256 public deploymentFee = 0.001 ether; // 0.001 BNB for testnet
     address[] public deployedTokens;
     
     // Enhanced user token tracking
@@ -30,38 +30,29 @@ contract TokenFactory_v3 is UUPSUpgradeable, OwnableUpgradeable {
     event DeploymentFeeUpdated(uint256 newFee);
     event CustomDeploymentFeeSet(address indexed user, uint256 fee);
 
-    struct WalletAllocation {
-        address wallet;
-        uint256 percentage;
-        bool vestingEnabled;
-        uint256 vestingDuration;
-        uint256 cliffDuration;
-        uint256 vestingStartTime;
-    }
-
-    function initialize(address _implementation) public initializer {
-        __Ownable_init();
-        __UUPSUpgradeable_init();
-        implementation = _implementation;
-        deploymentFee = 0.1 ether;
+    constructor() {
+        _transferOwnership(msg.sender);
     }
 
     function createToken(
         TokenTemplate_v3.InitParams calldata params
-    ) external payable returns (address) {
+    ) external payable nonReentrant returns (address) {
         uint256 userFee = getDeploymentFee(msg.sender);
         require(msg.value >= userFee, "Insufficient deployment fee");
 
         // Validate token distribution parameters
-        require(params.presalePercentage > 0, "Presale percentage must be > 0");
+        if (params.presaleEnabled) {
+            require(params.presalePercentage > 0, "Presale percentage must be > 0");
+            require(params.maxActivePresales > 0, "Max active presales must be > 0");
+        }
         require(params.liquidityPercentage > 0, "Liquidity percentage must be > 0");
         
         // Calculate total percentage
-        uint256 totalPercentage = params.presalePercentage + params.liquidityPercentage;
+        uint256 totalPercentage = params.presaleEnabled ? params.presalePercentage : 0;
+        totalPercentage += params.liquidityPercentage;
         
         // Validate wallet allocations if present
         if (params.walletAllocations.length > 0) {
-            // Add and validate wallet allocation percentages
             for (uint256 i = 0; i < params.walletAllocations.length; i++) {
                 require(params.walletAllocations[i].wallet != address(0), "Wallet address cannot be zero");
                 require(params.walletAllocations[i].percentage > 0, "Wallet percentage must be > 0");
@@ -74,33 +65,25 @@ contract TokenFactory_v3 is UUPSUpgradeable, OwnableUpgradeable {
                 totalPercentage += params.walletAllocations[i].percentage;
             }
         } else {
-            // If no additional wallets, presale and liquidity must total 100%
             require(totalPercentage == 100, "Presale and liquidity must total 100% when no additional wallets");
         }
 
-        // Validate total percentage
         require(totalPercentage == 100, "Total percentage must be 100");
 
-        bytes memory initData = abi.encodeWithSelector(
-            TokenTemplate_v3.initialize.selector,
-            params
-        );
-
-        ERC1967Proxy proxy = new ERC1967Proxy(
-            implementation,
-            initData
-        );
-
-        address token = address(proxy);
+        // Deploy new token directly
+        TokenTemplate_v3 token = new TokenTemplate_v3();
+        token.initialize(params);
+        
+        address tokenAddress = address(token);
         
         // Enhanced token tracking
-        deployedTokens.push(token);
-        userCreatedTokens[msg.sender].push(token);
-        isUserToken[msg.sender][token] = true;
-        tokenCreator[token] = msg.sender;
+        deployedTokens.push(tokenAddress);
+        userCreatedTokens[msg.sender].push(tokenAddress);
+        isUserToken[msg.sender][tokenAddress] = true;
+        tokenCreator[tokenAddress] = msg.sender;
 
-        emit TokenCreated(token, msg.sender, params.name, params.symbol);
-        return token;
+        emit TokenCreated(tokenAddress, msg.sender, params.name, params.symbol);
+        return tokenAddress;
     }
 
     function getDeploymentFee(address user) public view returns (uint256) {
@@ -142,11 +125,4 @@ contract TokenFactory_v3 is UUPSUpgradeable, OwnableUpgradeable {
         (bool success, ) = payable(owner()).call{value: address(this).balance}("");
         require(success, "Transfer failed");
     }
-
-    function updateImplementation(address _implementation) external onlyOwner {
-        require(_implementation != address(0), "Invalid implementation address");
-        implementation = _implementation;
-    }
-
-    function _authorizeUpgrade(address) internal override onlyOwner {}
 } 

@@ -25,23 +25,30 @@ interface TokenDetails {
   isVerified: boolean;
 }
 
-interface ApprovalDetails {
-  liquidityAmount: string;
-  approved: boolean;
+interface FeeSettings {
+  enabled: boolean;
   marketingFee: string;
   developmentFee: string;
   liquidityFee: string;
+}
+
+interface TradingControls {
+  enabled: boolean;
   maxTransactionAmount: string;
   maxWalletAmount: string;
   enableTrading: boolean;
   tradingStartTime: number;
   antiBot: boolean;
   blacklist: boolean;
-  maxBuyAmount: string;
-  maxSellAmount: string;
+}
+
+interface ApprovalDetails {
+  liquidityAmount: string;
+  approved: boolean;
+  fees: FeeSettings;
+  tradingControls: TradingControls;
   marketingWallet?: string;
   developmentWallet?: string;
-  liquidityWallet?: string;
 }
 
 interface PriceCalculation {
@@ -278,7 +285,7 @@ const checkTokenDistribution = async (tokenContract: Contract): Promise<TokenDis
   }
 };
 
-// Update the TOKEN_V3_ABI to include the correct presale info structure
+// Update the TOKEN_V3_ABI to include the addLiquidity function
 const TOKEN_V3_ABI = [
   // Basic ERC20
   "function name() view returns (string)",
@@ -300,7 +307,10 @@ const TOKEN_V3_ABI = [
   "function withdrawTokens() external",
   "function presaleInfo() view returns (tuple(uint256 softCap, uint256 hardCap, uint256 minContribution, uint256 maxContribution, uint256 startTime, uint256 endTime, uint256 presaleRate, bool whitelistEnabled, bool finalized, uint256 totalContributed))",
   "function totalPresaleTokensDistributed() view returns (uint256)",
-  "function vestingSchedules(address) view returns (tuple(uint256 totalAmount, uint256 startTime, uint256 cliffDuration, uint256 vestingDuration, uint256 releasedAmount, bool revocable, bool revoked))"
+  "function vestingSchedules(address) view returns (tuple(uint256 totalAmount, uint256 startTime, uint256 cliffDuration, uint256 vestingDuration, uint256 releasedAmount, bool revocable, bool revoked))",
+  // Add liquidity function
+  "function addLiquidityToV2(address router, uint256 tokenAmount, uint256 minTokenAmount, uint256 minEthAmount, address to, uint256 deadline) external payable",
+  "function addLiquidityToV3(address router, uint256 tokenAmount, uint256 minTokenAmount, uint256 minEthAmount, address to, uint256 deadline) external payable"
 ];
 
 // Add this interface for V3 token distribution
@@ -389,23 +399,50 @@ const routerABI = [
 ];
 
 // Add this helper function near the top with other utility functions
-const handleContractError = (error: any): string => {
-  if (!error) return "Unknown error occurred";
-  
-  // Handle ethers contract errors
-  if (error.code === 'CALL_EXCEPTION') {
-    const revertReason = error.revert?.args?.[0] || error.reason || error.message;
-    return revertReason;
+const handleContractError = (error: unknown): string => {
+  if (error instanceof Error) {
+    if (error.message.includes('execution reverted')) {
+      return error.message;
+    }
+    if (error.message.includes('user rejected')) {
+      return 'Transaction was rejected';
+    }
+    return error.message;
   }
-  
-  // Handle MetaMask errors
-  if (error.code === -32000) {
-    return error.message.includes("execution reverted:") 
-      ? error.message.split("execution reverted:")[1].trim()
-      : error.message;
+  return 'Unknown error occurred';
+};
+
+// Add utility object at the top after imports
+const utils = {
+  secondsToDays: (seconds: number) => seconds / 86400,
+  getExplorerUrl: (chainId: number): string => {
+    switch (chainId) {
+      case 97:
+        return 'https://testnet.bscscan.com';
+      case 11155111:
+        return 'https://sepolia.etherscan.io';
+      case 80002:
+        return 'https://www.oklink.com/amoy';
+      case 421614:
+        return 'https://sepolia.arbiscan.io';
+      case 11155420:
+        return 'https://sepolia-optimism.etherscan.io';
+      default:
+        return '';
+    }
+  },
+  getDexUrl: (chainId: number): string => {
+    switch (chainId) {
+      case 97:
+        return 'https://pancake.kiemtienonline360.com/#';
+      case 11155111:
+        return 'https://app.uniswap.org/#';
+      case 80002:
+        return 'https://quickswap.exchange/#/swap?chain=polygon_amoy';
+      default:
+        return '';
+    }
   }
-  
-  return error.message || "Unknown error occurred";
 };
 
 function TokenListingProcess() {
@@ -422,17 +459,21 @@ function TokenListingProcess() {
   const [approvalDetails, setApprovalDetails] = useState<ApprovalDetails>({
     liquidityAmount: '',
     approved: false,
+    fees: {
+      enabled: false,
     marketingFee: '2',
     developmentFee: '2',
-    liquidityFee: '2',
+      liquidityFee: '2'
+    },
+    tradingControls: {
+      enabled: false,
     maxTransactionAmount: '2',
     maxWalletAmount: '5',
     enableTrading: true,
-    tradingStartTime: Date.now() + 600000, // 10 minutes in the future
+      tradingStartTime: Date.now() + 600000,
     antiBot: true,
-    blacklist: true,
-    maxBuyAmount: '2',
-    maxSellAmount: '2',
+      blacklist: true
+    },
     marketingWallet: '0x10C8c279c6b381156733ec160A89Abb260bfcf0C',
     developmentWallet: '0x991Ed392F033B2228DC55A1dE2b706ef8D9d9DcD'
   });
@@ -470,11 +511,7 @@ function TokenListingProcess() {
   // Function to load all tokens created by the user
   const loadUserTokens = async () => {
     if (!chainId || !isConnected) {
-      toast({
-        title: "Connection Required",
-        description: "Please connect your wallet first.",
-        variant: "destructive",
-      });
+      showToast('error', "Connection Required", "Please connect your wallet first.");
       return;
     }
 
@@ -490,11 +527,7 @@ function TokenListingProcess() {
       const v3Address = FACTORY_ADDRESSES.v3[chainId];
 
       if (!v1Address || !v2Address || !v3Address) {
-        toast({
-          title: "Configuration Error",
-          description: "Factory addresses not configured for this network.",
-          variant: "destructive",
-        });
+        showToast('error', "Configuration Error", "Factory addresses not configured for this network.");
         return;
       }
 
@@ -578,12 +611,8 @@ function TokenListingProcess() {
       setUserTokens(tokens);
 
     } catch (error) {
-      console.error('Error loading user tokens:', handleContractError(error));
-      toast({
-        title: "Error",
-        description: "Failed to load your tokens. Please try again.",
-        variant: "destructive",
-      });
+      const message = handleContractError(error);
+      showToast('error', 'Error', message);
     } finally {
       setIsLoading(false);
     }
@@ -637,11 +666,7 @@ function TokenListingProcess() {
         console.log('Token distribution loaded:', tokenDist);
       } catch (error) {
         console.error('Error getting token distribution:', error);
-        toast({
-          title: "Warning",
-          description: "Could not fetch token distribution information. The token may not be properly configured.",
-          variant: "destructive",
-        });
+        showToast('error', "Warning", "Could not fetch token distribution information. The token may not be properly configured.");
       }
     }
   };
@@ -676,10 +701,7 @@ function TokenListingProcess() {
       // For V3 tokens, we don't need approval
       if (selectedToken.factoryVersion === 'v3') {
         setApprovalDetails(prev => ({ ...prev, approved: true }));
-        toast({
-          title: "Success",
-          description: "V3 tokens don't require approval. You can proceed to deployment.",
-        });
+        showToast('success', "Success", "V3 tokens don't require approval. You can proceed to deployment.");
         return;
       }
       
@@ -702,11 +724,7 @@ function TokenListingProcess() {
         
       } catch (error) {
         console.error('Error getting approval amount:', error);
-        toast({
-          title: "Error",
-          description: "Failed to calculate approval amount",
-          variant: "destructive",
-        });
+        showToast('error', "Error", "Failed to calculate approval amount");
         return;
       }
       
@@ -716,10 +734,7 @@ function TokenListingProcess() {
       
       if (currentAllowance >= approvalAmount) {
         console.log('Already approved sufficient amount');
-        toast({
-          title: "Already Approved",
-          description: "Token already has sufficient approval",
-        });
+        showToast('info', "Already Approved", "Token already has sufficient approval");
         setApprovalDetails(prev => ({ ...prev, approved: true }));
         return;
       }
@@ -738,27 +753,17 @@ function TokenListingProcess() {
         gasLimit
       });
       
-      toast({
-        title: "Approval Pending",
-        description: "Please confirm the transaction in your wallet",
-      });
+      showToast('info', "Approval Pending", "Please confirm the transaction in your wallet");
       
       // Wait for transaction confirmation
       await tx.wait();
       
-      toast({
-        title: "Success",
-        description: "Token approved for listing",
-      });
+      showToast('success', "Success", "Token approved for listing");
       setApprovalDetails(prev => ({ ...prev, approved: true }));
       
     } catch (error) {
       console.error('Error approving token:', error);
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to approve token. Please try again.",
-        variant: "destructive",
-      });
+      showToast('error', "Error", error instanceof Error ? error.message : "Failed to approve token. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -783,11 +788,7 @@ function TokenListingProcess() {
   // Update loadTokenPreview function
   const loadTokenPreview = async () => {
     if (!selectedToken?.address) {
-      toast({
-        title: "Error",
-        description: "No token address provided",
-        variant: "destructive",
-      });
+      showToast('error', "Error", "No token address provided");
       return;
     }
 
@@ -864,12 +865,12 @@ function TokenListingProcess() {
             developmentAllocation: formatEther(developmentAlloc),
             beneficiaryAllocations: await Promise.all(
               beneficiaryAllocs.map(async (b: any) => ({
-                beneficiary: b.beneficiary,
-                amount: formatEther(b.amount),
-                vestingStartTime: Number(b.startTime),
-                vestingDuration: Number(b.duration),
-                isRevocable: b.revocable,
-                isRevoked: b.revoked,
+              beneficiary: b.beneficiary,
+              amount: formatEther(b.amount),
+              vestingStartTime: Number(b.startTime),
+              vestingDuration: Number(b.duration),
+              isRevocable: b.revocable,
+              isRevoked: b.revoked,
                 released: formatEther(await tokenContract.getVestingInfo(b.beneficiary).catch(() => BigInt(0)))
               }))
             )
@@ -964,18 +965,11 @@ function TokenListingProcess() {
         });
       }
 
-      toast({
-        title: "Success",
-        description: "Token details refreshed successfully"
-      });
+      showToast('success', "Success", "Token details refreshed successfully");
 
     } catch (error) {
       console.error("Error loading token preview:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load token details. Please try again.",
-        variant: "destructive",
-      });
+      showToast('error', "Error", "Failed to load token details. Please try again.");
     } finally {
       setIsLoadingPreview(false);
     }
@@ -999,59 +993,32 @@ function TokenListingProcess() {
         const softCap = formatEther(presaleInfo.softCap);
         
         if (Number(totalContributed) < Number(softCap)) {
-          toast({
-            title: "Cannot Finalize Presale",
-            description: `Soft cap not reached. Current: ${Number(totalContributed).toFixed(2)} ETH, Required: ${Number(softCap).toFixed(2)} ETH`,
-            variant: "destructive",
-          });
+          showToast('error', "Cannot Finalize Presale", `Soft cap not reached. Current: ${Number(totalContributed).toFixed(2)} ETH, Required: ${Number(softCap).toFixed(2)} ETH`);
           return;
         }
         
         if (currentTime < Number(presaleInfo.endTime)) {
-          toast({
-            title: "Cannot Finalize Presale",
-            description: `Presale is still active. Ends at ${new Date(Number(presaleInfo.endTime) * 1000).toLocaleString()}`,
-            variant: "destructive",
-          });
+          showToast('error', "Cannot Finalize Presale", `Presale is still active. Ends at ${new Date(Number(presaleInfo.endTime) * 1000).toLocaleString()}`);
           return;
         }
       }
       
       const tx = await tokenContract.finalizePresale();
       
-      toast({
-        title: "Finalizing Presale",
-        description: "Please wait for the transaction to be confirmed",
-      });
+      showToast('info', "Finalizing Presale", "Please wait for the transaction to be confirmed");
       
       await tx.wait();
       
-      toast({
-        title: "Success",
-        description: "Presale has been finalized successfully",
-      });
+      showToast('success', "Success", "Presale has been finalized successfully");
       
       // Refresh token preview
       await loadTokenPreview();
     } catch (error) {
-      console.error('Error finalizing presale:', error);
-      let errorMessage = "Failed to finalize presale";
-      
-      if (error instanceof Error) {
-        if (error.message.includes("Soft cap not reached")) {
-          errorMessage = "Cannot finalize: Soft cap not reached";
-        } else if (error.message.includes("Presale not ended")) {
-          errorMessage = "Cannot finalize: Presale is still active";
-        } else if (error.message.includes("Already finalized")) {
-          errorMessage = "Presale has already been finalized";
-        }
+      const message = handleContractError(error);
+      showToast('error', 'Error', message);
+      if (error instanceof Error && error.message.includes('presale')) {
+        showToast('error', 'Presale Error', error.message);
       }
-      
-      toast({
-        title: "Error",
-        description: errorMessage,
-        variant: "destructive",
-      });
     } finally {
       setIsLoading(false);
     }
@@ -1078,20 +1045,12 @@ function TokenListingProcess() {
       const currentTime = Math.floor(Date.now() / 1000);
       
       if (currentTime <= Number(presaleInfo.endTime)) {
-        toast({
-          title: "Cannot Burn Tokens",
-          description: "Presale has not ended yet",
-          variant: "destructive",
-        });
+        showToast('error', "Cannot Burn Tokens", "Presale has not ended yet");
         return;
       }
       
       if (Number(formatEther(presaleInfo.totalContributed)) >= Number(formatEther(presaleInfo.softCap))) {
-        toast({
-          title: "Cannot Burn Tokens",
-          description: "Soft cap was reached, tokens cannot be burned",
-          variant: "destructive",
-        });
+        showToast('error', "Cannot Burn Tokens", "Soft cap was reached, tokens cannot be burned");
         return;
       }
       
@@ -1104,11 +1063,7 @@ function TokenListingProcess() {
       const unsoldTokens = contractBalance;
       
       if (unsoldTokens <= BigInt(0)) {
-        toast({
-          title: "No Tokens to Burn",
-          description: "There are no unsold tokens to burn",
-          variant: "destructive",
-        });
+        showToast('error', "No Tokens to Burn", "There are no unsold tokens to burn");
         return;
       }
       
@@ -1132,27 +1087,18 @@ function TokenListingProcess() {
         gasLimit
       });
       
-      toast({
-        title: "Burning Unsold Tokens",
-        description: "Please wait for the transaction to be confirmed",
-      });
+      showToast('info', "Burning Unsold Tokens", "Please wait for the transaction to be confirmed");
       
       await tx.wait();
       
-      toast({
-        title: "Success",
-        description: `Successfully burned ${formatEther(unsoldTokens)} unsold tokens`,
-      });
+      showToast('success', `Successfully burned ${formatEther(unsoldTokens)} unsold tokens`, "");
       
       // Refresh token preview
       await loadTokenPreview();
     } catch (error) {
-      console.error('Error burning unsold tokens:', error);
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to burn unsold tokens",
-        variant: "destructive",
-      });
+      const message = handleContractError(error);
+      showToast('error', 'Error', message);
+      showToast('error', "Error", error instanceof Error ? error.message : "Failed to burn unsold tokens");
     } finally {
       setIsLoading(false);
     }
@@ -1211,10 +1157,7 @@ function TokenListingProcess() {
         gasLimit: BigInt(500000) // Set fixed gas limit since estimation is failing
       });
       
-      toast({
-        title: "Cancelling Presale",
-        description: "Please wait for the transaction to be confirmed",
-      });
+      showToast('info', "Cancelling Presale", "Please wait for the transaction to be confirmed");
       
       const receipt = await tx.wait();
       
@@ -1230,23 +1173,17 @@ function TokenListingProcess() {
         
         await withdrawTx.wait();
         
-        toast({
-          title: "Success",
-          description: "Presale cancelled and tokens withdrawn successfully",
-        });
+        showToast('success', "Success", "Presale cancelled and tokens withdrawn successfully");
       } catch (withdrawError) {
         console.error('Failed to withdraw tokens:', withdrawError);
-        toast({
-          title: "Partial Success",
-          description: "Presale cancelled but failed to withdraw tokens. Please try withdrawing tokens separately.",
-          variant: "destructive",
-        });
+        showToast('error', "Partial Success", "Presale cancelled but failed to withdraw tokens. Please try withdrawing tokens separately.");
       }
       
       // Refresh token preview
       await loadTokenPreview();
     } catch (error) {
-      console.error('Error cancelling presale:', error);
+      const message = handleContractError(error);
+      showToast('error', 'Error', message);
       let errorMessage = "Failed to cancel presale";
       
       if (error instanceof Error) {
@@ -1263,11 +1200,7 @@ function TokenListingProcess() {
         }
       }
       
-      toast({
-        title: "Error",
-        description: errorMessage,
-        variant: "destructive",
-      });
+      showToast('error', "Error", errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -1293,26 +1226,16 @@ function TokenListingProcess() {
       // Set allowance to 0
       const tx = await tokenContract.approve(dexRouter, 0);
       
-      toast({
-        title: "Resetting Approval",
-        description: "Please confirm the transaction in your wallet",
-      });
+      showToast('info', "Resetting Approval", "Please confirm the transaction in your wallet");
       
       await tx.wait();
       
-      toast({
-        title: "Success",
-        description: "Token approval has been reset",
-      });
+      showToast('success', "Success", "Token approval has been reset");
       
       setApprovalDetails(prev => ({ ...prev, approved: false }));
     } catch (error) {
       console.error('Error resetting approval:', error);
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to reset approval",
-        variant: "destructive",
-      });
+      showToast('error', "Error", error instanceof Error ? error.message : "Failed to reset approval");
     } finally {
       setIsLoading(false);
     }
@@ -1331,15 +1254,11 @@ function TokenListingProcess() {
       // Validate initial liquidity amount with strict parsing
       const liquidityAmount = parseFloat(dexDetails.initialLiquidityInETH);
       if (isNaN(liquidityAmount) || liquidityAmount < 0.1) {
-        toast({
-          title: "Error",
-          description: `Minimum liquidity required is 0.1 ${getNetworkCurrency(chainId)}`,
-          variant: "destructive",
-        });
+        showToast('error', "Error", `Minimum liquidity required is 0.1 ${getNetworkCurrency(chainId)}`);
         return;
       }
 
-      // Convert to exact Wei value and store in ethAmount
+      // Convert to exact Wei value
       const ethAmount = parseEther(liquidityAmount.toString());
       console.log('Liquidity amount in ETH:', formatEther(ethAmount));
       
@@ -1352,8 +1271,10 @@ function TokenListingProcess() {
         selectedToken.address,
         [
           ...ERC20_ABI,
-          ...TOKEN_APPROVAL_ABI,
-          ...TOKEN_V3_ABI
+          ...TOKEN_V3_ABI,
+          "function liquidityAllocation() view returns (uint256)",
+          "function addLiquidity(address router, uint256 tokenAmount, uint256 minTokenAmount, uint256 minEthAmount, address to, uint256 deadline) external payable",
+          "function addLiquidityV2(address router, uint256 tokenAmount, uint256 minTokenAmount, uint256 minEthAmount, address to, uint256 deadline) external payable"
         ],
         signer
       );
@@ -1375,22 +1296,35 @@ function TokenListingProcess() {
         throw new Error(`Insufficient ${getNetworkCurrency(chainId)} balance for liquidity`);
       }
 
-      // Get liquidity allocation or calculate 40% of total supply
-      try {
-        console.log('Attempting to get V3 liquidity allocation...');
-        const liquidityAllocation = await tokenContract.liquidityAllocation();
-        deployTokenAmount = liquidityAllocation;
-        console.log('V3 Token liquidity allocation:', formatEther(deployTokenAmount));
-      } catch (error) {
-        console.log('Failed to get liquidity allocation, falling back to 40% of total supply');
-        const totalSupply = await tokenContract.totalSupply();
-        deployTokenAmount = (totalSupply * BigInt(40)) / BigInt(100);
-        console.log('Fallback token amount (40% of total supply):', formatEther(deployTokenAmount));
-      }
-
-      // Create router contract
-      const routerContract = new Contract(dexRouter, routerABI, signer);
+      // Get liquidity allocation based on token version
+      console.log('Getting token allocation...');
+      const totalSupply = await tokenContract.totalSupply();
+      console.log('Total supply:', formatEther(totalSupply));
       
+      if (selectedToken.factoryVersion === 'v3') {
+        try {
+          // For V3 tokens, use the predefined liquidity allocation
+          const liquidityAlloc = await tokenContract.liquidityAllocation();
+          console.log('V3 liquidity allocation:', formatEther(liquidityAlloc));
+          
+          if (liquidityAlloc > BigInt(0)) {
+            deployTokenAmount = liquidityAlloc;
+          } else {
+            console.log('No predefined liquidity allocation, falling back to 40%');
+            deployTokenAmount = (totalSupply * BigInt(40)) / BigInt(100);
+          }
+        } catch (error) {
+          console.log('Error getting liquidity allocation:', error);
+          console.log('Falling back to 40% allocation');
+          deployTokenAmount = (totalSupply * BigInt(40)) / BigInt(100);
+        }
+      } else {
+        // For V1/V2 tokens, use 40% of total supply
+        deployTokenAmount = (totalSupply * BigInt(40)) / BigInt(100);
+      }
+      
+      console.log('Token amount for liquidity:', formatEther(deployTokenAmount));
+
       // Set deadline 30 minutes from now
       const deadline = Math.floor(Date.now() / 1000) + 1800;
       
@@ -1398,33 +1332,107 @@ function TokenListingProcess() {
       const amountTokenMin = (deployTokenAmount * BigInt(98)) / BigInt(100);
       const amountETHMin = (ethAmount * BigInt(98)) / BigInt(100);
 
-      // For V3 tokens, the contract will handle the approval and transfer
+      // For V3 tokens, ensure the contract has the tokens
       if (selectedToken.factoryVersion === 'v3') {
-        // The contract will handle the approval and liquidity addition
-        const tx = await tokenContract.addLiquidity(
-          dexRouter,
-          deployTokenAmount,
-          amountTokenMin,
-          amountETHMin,
-          userAddress,
-          deadline,
-          { value: ethAmount }
-        );
-
-        toast({
-          title: "Transaction Submitted",
-          description: "Please wait for confirmation",
-        });
-
-        await tx.wait();
-      } else {
-        // For non-V3 tokens, check allowance and handle approval
-        const allowance = await tokenContract.allowance(userAddress, dexRouter);
-        if (allowance < deployTokenAmount) {
-          throw new Error('Insufficient token approval. Please approve tokens first.');
+        console.log('Using V3 liquidity addition...');
+        
+        const contractBalance = await tokenContract.balanceOf(tokenContract.target);
+        console.log('Contract balance:', formatEther(contractBalance));
+        
+        if (contractBalance < deployTokenAmount) {
+          throw new Error('Insufficient token balance in contract for liquidity');
         }
 
-        // Add liquidity
+        // Log parameters for debugging
+        console.log('Liquidity parameters:', {
+          router: dexRouter,
+          tokenAmount: formatEther(deployTokenAmount),
+          minTokenAmount: formatEther(amountTokenMin),
+          minEthAmount: formatEther(amountETHMin),
+          to: userAddress,
+          deadline: deadline,
+          value: formatEther(ethAmount)
+        });
+
+        let tx;
+        try {
+          console.log('Attempting addLiquidityV2...');
+          tx = await tokenContract.addLiquidityV2(
+            dexRouter,
+            deployTokenAmount,
+            amountTokenMin,
+            amountETHMin,
+            userAddress,
+            deadline,
+            { 
+              value: ethAmount,
+              gasLimit: chainId === 97 ? BigInt(4000000) : BigInt(1000000)
+            }
+          );
+
+          showToast('info', "Transaction Submitted", "Please wait for confirmation");
+          
+          try {
+            const receipt = await tx.wait();
+            if (!receipt || receipt.status === 0) {
+              throw new Error('Transaction failed during execution');
+            }
+            showToast('success', "Success", "Liquidity added successfully");
+            return;
+          } catch (err) {
+            if (err instanceof Error && err.message.includes('Non-200 status code')) {
+              showToast('info', "Transaction Status", "Transaction submitted. Please check your wallet or the explorer for confirmation.");
+              return;
+            }
+            throw err;
+          }
+        } catch (e) {
+          const error = e as Error;
+          console.error('Error in addLiquidityV2:', error);
+          
+          // Only try addLiquidity if we get an execution revert
+          if (error.message && error.message.includes('execution reverted')) {
+            console.log('Execution reverted, trying addLiquidity...');
+            showToast('info', "Retrying", "First attempt failed, trying alternative method...");
+            
+            tx = await tokenContract.addLiquidity(
+              dexRouter,
+              deployTokenAmount,
+              amountTokenMin,
+              amountETHMin,
+              userAddress,
+              deadline,
+              { 
+                value: ethAmount,
+                gasLimit: chainId === 97 ? BigInt(4000000) : BigInt(1000000)
+              }
+            );
+
+            showToast('info', "Transaction Submitted", "Please wait for confirmation");
+            
+            try {
+              const receipt = await tx.wait();
+              if (!receipt || receipt.status === 0) {
+                throw new Error('Transaction failed during execution');
+              }
+              showToast('success', "Success", "Liquidity added successfully");
+              return;
+            } catch (err) {
+              if (err instanceof Error && err.message.includes('Non-200 status code')) {
+                showToast('info', "Transaction Status", "Transaction submitted. Please check your wallet or the explorer for confirmation.");
+                return;
+              }
+              throw err;
+            }
+          } else {
+            // If it's not an execution revert, rethrow the error
+            throw error;
+          }
+        }
+      } else {
+        // For non-V3 tokens, use the router contract directly
+        const routerContract = new Contract(dexRouter, routerABI, signer);
+        
         const tx = await routerContract.addLiquidityETH(
           selectedToken.address,
           deployTokenAmount,
@@ -1438,29 +1446,39 @@ function TokenListingProcess() {
           }
         );
 
-        toast({
-          title: "Transaction Submitted",
-          description: "Please wait for confirmation",
-        });
-
-        await tx.wait();
+        showToast('info', "Transaction Submitted", "Please wait for confirmation");
+        
+        try {
+          const receipt = await tx.wait();
+          if (!receipt || receipt.status === 0) {
+            throw new Error('Transaction failed during execution');
+          }
+          showToast('success', "Success", "Liquidity added successfully");
+        } catch (err) {
+          if (err instanceof Error && err.message.includes('Non-200 status code')) {
+            showToast('info', "Transaction Status", "Transaction submitted. Please check your wallet or the explorer for confirmation.");
+            return;
+          }
+          throw err;
+        }
       }
-
-      toast({
-        title: "Success",
-        description: "Liquidity added successfully!",
-      });
 
     } catch (error) {
       console.error('Error deploying to DEX:', error);
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to deploy to DEX",
-        variant: "destructive",
-      });
+      const message = handleContractError(error);
+      showToast('error', "Error", message);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Update the showToast function to use the toast from component scope
+  const showToast = (type: 'success' | 'error' | 'info', title: string, description: string) => {
+    toast({
+      title,
+      description,
+      variant: type === 'error' ? 'destructive' : 'default'
+    });
   };
 
   return (
@@ -1568,7 +1586,7 @@ function TokenListingProcess() {
 
                         <div className="flex gap-2 pt-2">
                           <Button
-                            onClick={() => chainId && window.open(`${getExplorerUrl(chainId)}/token/${token.address}`, '_blank')}
+                            onClick={() => chainId && window.open(`${utils.getExplorerUrl(chainId)}/token/${token.address}`, '_blank')}
                             className="flex-1 h-8 text-xs bg-gray-700 hover:bg-gray-600"
                             disabled={!chainId}
                           >
@@ -1576,7 +1594,7 @@ function TokenListingProcess() {
                           </Button>
                           {tokenPreview?.isListed && tokenPreview.address === token.address && (
                             <Button
-                              onClick={() => chainId && window.open(`${getDexUrl(chainId)}/swap?outputCurrency=${token.address}`, '_blank')}
+                              onClick={() => chainId && window.open(`${utils.getDexUrl(chainId)}/swap?outputCurrency=${token.address}`, '_blank')}
                               className="flex-1 h-8 text-xs bg-blue-600 hover:bg-blue-700"
                               disabled={!chainId}
                             >
@@ -1692,7 +1710,45 @@ function TokenListingProcess() {
                           </div>
                           <div>
                             <p className="text-xs text-gray-400">Rate</p>
-                            <p className="text-white">{tokenPreview.presaleInfo.presaleRate}/ETH</p>
+                            <p className="text-white">
+                              {tokenPreview.presaleInfo ? (
+                                (() => {
+                                  const rate = tokenPreview.presaleInfo.presaleRate;
+                                  if (!rate || rate === '0') return '0 tokens/ETH';
+
+                                  // For V3 tokens, rate is already in ETH/token format
+                                  if (selectedToken?.factoryVersion === 'v3') {
+                                    const tokensPerEth = 1 / Number(rate);
+                                    return `${tokensPerEth.toFixed(2)} tokens/ETH`;
+                                  }
+                                  
+                                  // For V2 tokens, rate is in Wei (1e18)
+                                  // Convert the string to BigInt for precise calculation
+                                  const rateInWei = BigInt(rate.replace('.', ''));
+                                  const oneEthInWei = BigInt('1000000000000000000'); // 1e18
+                                  const tokensPerEth = Number(oneEthInWei) / Number(rateInWei);
+                                  
+                                  return `${tokensPerEth.toFixed(2)} tokens/ETH`;
+                                })()
+                              ) : '0 tokens/ETH'}
+                            </p>
+                            <p className="text-xs text-gray-400 mt-1">
+                              {tokenPreview.presaleInfo ? (
+                                (() => {
+                                  const rate = tokenPreview.presaleInfo.presaleRate;
+                                  if (!rate || rate === '0') return '';
+
+                                  if (selectedToken?.factoryVersion === 'v3') {
+                                    return `(${Number(rate).toFixed(8)} ETH/token)`;
+                                  }
+                                  
+                                  // For V2 tokens, convert Wei to ETH
+                                  const rateInWei = BigInt(rate.replace('.', ''));
+                                  const ethPerToken = Number(rateInWei) / 1e18;
+                                  return `(${ethPerToken.toFixed(18)} ETH/token)`;
+                                })()
+                              ) : ''}
+                            </p>
                           </div>
                         </div>
                         <div className="grid grid-cols-2 gap-3 text-sm mt-3">
@@ -1745,11 +1801,11 @@ function TokenListingProcess() {
                           </div>
                           <div>
                             <p className="text-xs text-gray-400">Duration</p>
-                            <p className="text-white">{secondsToDays(Number(tokenPreview.v3Distribution.ownerVesting.vestingDuration))} days</p>
+                            <p className="text-white">{utils.secondsToDays(Number(tokenPreview.v3Distribution.ownerVesting.vestingDuration))} days</p>
                           </div>
                           <div>
                             <p className="text-xs text-gray-400">Cliff Duration</p>
-                            <p className="text-white">{secondsToDays(Number(tokenPreview.v3Distribution.ownerVesting.cliffDuration))} days</p>
+                            <p className="text-white">{utils.secondsToDays(Number(tokenPreview.v3Distribution.ownerVesting.cliffDuration))} days</p>
                           </div>
                           <div>
                             <p className="text-xs text-gray-400">Start Date</p>
@@ -1772,7 +1828,17 @@ function TokenListingProcess() {
 
                 {/* Fee Settings */}
                 <div className="space-y-4">
+                  <div className="flex items-center justify-between">
                   <h5 className="text-sm text-gray-400">Fee Settings</h5>
+                    <Switch
+                      checked={approvalDetails.fees.enabled}
+                      onCheckedChange={(checked) => setApprovalDetails(prev => ({
+                        ...prev,
+                        fees: { ...prev.fees, enabled: checked }
+                      }))}
+                    />
+                  </div>
+                  {approvalDetails.fees.enabled && (
                   <div className="grid grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label className="text-text-primary flex items-center gap-2">
@@ -1783,8 +1849,11 @@ function TokenListingProcess() {
                         type="number"
                         min="0"
                         max="10"
-                        value={approvalDetails.marketingFee}
-                        onChange={(e) => setApprovalDetails(prev => ({ ...prev, marketingFee: e.target.value }))}
+                          value={approvalDetails.fees.marketingFee}
+                          onChange={(e) => setApprovalDetails(prev => ({
+                            ...prev,
+                            fees: { ...prev.fees, marketingFee: e.target.value }
+                          }))}
                         className="bg-gray-800 text-text-primary border-gray-700"
                       />
                     </div>
@@ -1797,8 +1866,11 @@ function TokenListingProcess() {
                         type="number"
                         min="0"
                         max="10"
-                        value={approvalDetails.developmentFee}
-                        onChange={(e) => setApprovalDetails(prev => ({ ...prev, developmentFee: e.target.value }))}
+                          value={approvalDetails.fees.developmentFee}
+                          onChange={(e) => setApprovalDetails(prev => ({
+                            ...prev,
+                            fees: { ...prev.fees, developmentFee: e.target.value }
+                          }))}
                         className="bg-gray-800 text-text-primary border-gray-700"
                       />
                     </div>
@@ -1811,17 +1883,32 @@ function TokenListingProcess() {
                         type="number"
                         min="0"
                         max="10"
-                        value={approvalDetails.liquidityFee}
-                        onChange={(e) => setApprovalDetails(prev => ({ ...prev, liquidityFee: e.target.value }))}
+                          value={approvalDetails.fees.liquidityFee}
+                          onChange={(e) => setApprovalDetails(prev => ({
+                            ...prev,
+                            fees: { ...prev.fees, liquidityFee: e.target.value }
+                          }))}
                         className="bg-gray-800 text-text-primary border-gray-700"
                       />
                     </div>
                   </div>
+                  )}
                 </div>
 
                 {/* Trading Controls */}
                 <div className="space-y-4">
+                  <div className="flex items-center justify-between">
                   <h5 className="text-sm text-gray-400">Trading Controls</h5>
+                    <Switch
+                      checked={approvalDetails.tradingControls.enabled}
+                      onCheckedChange={(checked) => setApprovalDetails(prev => ({
+                        ...prev,
+                        tradingControls: { ...prev.tradingControls, enabled: checked }
+                      }))}
+                    />
+                  </div>
+                  {approvalDetails.tradingControls.enabled && (
+                    <>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label className="text-text-primary flex items-center gap-2">
@@ -1832,8 +1919,11 @@ function TokenListingProcess() {
                         type="number"
                         min="0.1"
                         max="100"
-                        value={approvalDetails.maxTransactionAmount}
-                        onChange={(e) => setApprovalDetails(prev => ({ ...prev, maxTransactionAmount: e.target.value }))}
+                            value={approvalDetails.tradingControls.maxTransactionAmount}
+                            onChange={(e) => setApprovalDetails(prev => ({
+                              ...prev,
+                              tradingControls: { ...prev.tradingControls, maxTransactionAmount: e.target.value }
+                            }))}
                         className="bg-gray-800 text-text-primary border-gray-700"
                       />
                     </div>
@@ -1846,12 +1936,47 @@ function TokenListingProcess() {
                         type="number"
                         min="0.1"
                         max="100"
-                        value={approvalDetails.maxWalletAmount}
-                        onChange={(e) => setApprovalDetails(prev => ({ ...prev, maxWalletAmount: e.target.value }))}
+                            value={approvalDetails.tradingControls.maxWalletAmount}
+                            onChange={(e) => setApprovalDetails(prev => ({
+                              ...prev,
+                              tradingControls: { ...prev.tradingControls, maxWalletAmount: e.target.value }
+                            }))}
                         className="bg-gray-800 text-text-primary border-gray-700"
                       />
                     </div>
                   </div>
+
+                      {/* Additional Controls */}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                          <div className="flex items-center gap-2">
+                            <Label className="text-text-primary">Anti-Bot Protection</Label>
+                            <InfoTooltip content={TOOLTIP_CONTENT.antiBot} />
+                          </div>
+                          <Switch
+                            checked={approvalDetails.tradingControls.antiBot}
+                            onCheckedChange={(checked) => setApprovalDetails(prev => ({
+                              ...prev,
+                              tradingControls: { ...prev.tradingControls, antiBot: checked }
+                            }))}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                          <div className="flex items-center gap-2">
+                            <Label className="text-text-primary">Blacklist</Label>
+                            <InfoTooltip content={TOOLTIP_CONTENT.blacklist} />
+                          </div>
+                          <Switch
+                            checked={approvalDetails.tradingControls.blacklist}
+                            onCheckedChange={(checked) => setApprovalDetails(prev => ({
+                              ...prev,
+                              tradingControls: { ...prev.tradingControls, blacklist: checked }
+                            }))}
+                          />
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* Wallet Settings */}
@@ -1862,7 +1987,10 @@ function TokenListingProcess() {
                       <Label className="text-text-primary">Marketing Wallet</Label>
                       <Input
                         value={approvalDetails.marketingWallet}
-                        onChange={(e) => setApprovalDetails(prev => ({ ...prev, marketingWallet: e.target.value }))}
+                        onChange={(e) => setApprovalDetails(prev => ({
+                          ...prev,
+                          marketingWallet: e.target.value
+                        }))}
                         className="bg-gray-800 text-text-primary border-gray-700"
                         placeholder="0x..."
                       />
@@ -1871,36 +1999,12 @@ function TokenListingProcess() {
                       <Label className="text-text-primary">Development Wallet</Label>
                       <Input
                         value={approvalDetails.developmentWallet}
-                        onChange={(e) => setApprovalDetails(prev => ({ ...prev, developmentWallet: e.target.value }))}
+                        onChange={(e) => setApprovalDetails(prev => ({
+                          ...prev,
+                          developmentWallet: e.target.value
+                        }))}
                         className="bg-gray-800 text-text-primary border-gray-700"
                         placeholder="0x..."
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Additional Controls */}
-                <div className="space-y-4">
-                  <h5 className="text-sm text-gray-400">Additional Controls</h5>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
-                      <div className="flex items-center gap-2">
-                        <Label className="text-text-primary">Anti-Bot Protection</Label>
-                        <InfoTooltip content={TOOLTIP_CONTENT.antiBot} />
-                      </div>
-                      <Switch
-                        checked={approvalDetails.antiBot}
-                        onCheckedChange={(checked) => setApprovalDetails(prev => ({ ...prev, antiBot: checked }))}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
-                      <div className="flex items-center gap-2">
-                        <Label className="text-text-primary">Blacklist</Label>
-                        <InfoTooltip content={TOOLTIP_CONTENT.blacklist} />
-                      </div>
-                      <Switch
-                        checked={approvalDetails.blacklist}
-                        onCheckedChange={(checked) => setApprovalDetails(prev => ({ ...prev, blacklist: checked }))}
                       />
                     </div>
                   </div>
@@ -2091,39 +2195,3 @@ function TokenListingProcess() {
 
 // Keep only this export at the end of the file
 export default TokenListingProcess; 
-
-// Add these helper functions at the top with other utility functions
-const getExplorerUrl = (chainId: number): string => {
-  switch (chainId) {
-    case 97:
-      return 'https://testnet.bscscan.com';
-    case 11155111:
-      return 'https://sepolia.etherscan.io';
-    case 80002:
-      return 'https://www.oklink.com/amoy';
-    case 421614:
-      return 'https://sepolia.arbiscan.io';
-    case 11155420:
-      return 'https://sepolia-optimism.etherscan.io';
-    default:
-      return '';
-  }
-};
-
-const getDexUrl = (chainId: number): string => {
-  switch (chainId) {
-    case 97:
-      return 'https://pancake.kiemtienonline360.com/#';
-    case 11155111:
-      return 'https://app.uniswap.org/#';
-    case 80002:
-      return 'https://quickswap.exchange/#/swap?chain=polygon_amoy';
-    default:
-      return '';
-  }
-};
-
-// Add seconds to days conversion utility
-const secondsToDays = (seconds: number): number => {
-  return Number((seconds / 86400).toFixed(2)); // Round to 2 decimal places
-};

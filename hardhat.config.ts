@@ -2,6 +2,7 @@ require("@nomicfoundation/hardhat-toolbox");
 require("@nomicfoundation/hardhat-verify");
 require("hardhat-deploy");
 require("dotenv").config();
+require('@openzeppelin/hardhat-upgrades');
 
 const config = {
   paths: {
@@ -18,7 +19,6 @@ const config = {
       url: "https://eth-sepolia.g.alchemy.com/v2/MGnqEI_g1f7R-ozYpSAUpnsivv0lp86t",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : undefined,
       chainId: 11155111,
-      verifyApiKey: process.env.ETHERSCAN_API_KEY,
       gasPrice: 2000000000,  // 2 gwei
       gas: 2000000,  // 2M gas limit
       maxPriorityFeePerGas: 100000000,  // 0.1 gwei
@@ -34,14 +34,12 @@ const config = {
     "optimism-sepolia": {
       url: process.env.NEXT_PUBLIC_OPSEPOLIA_RPC_URL,
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : undefined,
-      chainId: 11155420,
-      verifyApiKey: process.env.OPTIMISM_API_KEY
+      chainId: 11155420
     },
     "arbitrumsepolia": {
       url: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_RPC_URL,
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : undefined,
       chainId: 421614,
-      verifyApiKey: process.env.ARBITRUM_API_KEY,
       gasPrice: 100000000,  // 0.1 gwei
       gas: 1000000,  // 1M gas limit
       maxPriorityFeePerGas: 100000000,  // 0.1 gwei
@@ -55,7 +53,6 @@ const config = {
       url: process.env.POLYGON_AMOY_RPC_URL,
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : undefined,
       chainId: 80002,
-      verifyApiKey: process.env.POLYGONSCAN_API_KEY,
       gasPrice: 50000000000,  // 50 gwei
       gas: 3000000,  // 3M gas limit
       timeout: 300000,  // 5 minutes
@@ -76,8 +73,7 @@ const config = {
       timeout: 180000,      // 3 minutes
       confirmations: 3,     // Wait for 3 confirmations
       networkCheckTimeout: 100000,
-      timeoutBlocks: 200,
-      verifyApiKey: process.env.BSCSCAN_API_KEY
+      timeoutBlocks: 200
     },
     bsc: {
       url: "https://bsc-dataseed1.binance.org",
@@ -88,8 +84,7 @@ const config = {
       timeout: 180000,      // 3 minutes
       confirmations: 3,     // Wait for 3 confirmations
       networkCheckTimeout: 100000,
-      timeoutBlocks: 200,
-      verifyApiKey: process.env.BSCSCAN_API_KEY
+      timeoutBlocks: 200
     }
   },
   solidity: {

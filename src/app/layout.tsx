@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google';
 import { WagmiConfig } from 'wagmi';
 import { config } from '@/lib/wagmi';
 import { Footer } from '@/components/layouts/Footer';
+import { Toaster } from '@/components/ui/toaster';
 import './globals.css';
 
 const inter = Inter({ subsets: ['latin'] });
@@ -25,6 +26,7 @@ export default function RootLayout({
             {children}
           </main>
           <Footer />
+          <Toaster />
         </WagmiConfig>
       </body>
     </html>

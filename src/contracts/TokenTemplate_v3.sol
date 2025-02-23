@@ -1,105 +1,40 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.22;
 
-import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20BurnableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PausableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Pausable.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
+import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 
 contract TokenTemplate_v3 is 
-    Initializable,
-    ERC20Upgradeable,
-    ERC20BurnableUpgradeable,
-    ERC20PausableUpgradeable,
-    OwnableUpgradeable,
-    UUPSUpgradeable,
-    ReentrancyGuardUpgradeable
+    ERC20,
+    ERC20Burnable,
+    ERC20Pausable,
+    Ownable,
+    ReentrancyGuard
 {
-    string public constant VERSION = "3.0.0";
-    
-    // User tracking
-    mapping(address => bool) public isUser;
-    address[] public users;
-    uint256 public userCount;
-    
-    struct PresaleInfo {
-        uint256 softCap;
-        uint256 hardCap;
-        uint256 minContribution;
-        uint256 maxContribution;
-        uint256 startTime;
-        uint256 endTime;
-        uint256 presaleRate;
-        bool whitelistEnabled;
-        bool finalized;
-        uint256 totalContributed;
-    }
-
-    // Contract state variables
-    PresaleInfo public presaleInfo;
-    mapping(address => bool) public whitelist;
-    mapping(address => uint256) public contributions;
     uint256 public maxSupply;
     bool public blacklistEnabled;
     bool public timeLockEnabled;
-    mapping(address => bool) public blacklist;
-    mapping(address => uint256) public timeLocks;
     
-    // Distribution tracking
-    address[] public contributors;
-    mapping(address => bool) public isContributor;
-    mapping(address => uint256) public presaleContributorTokens;
-    uint256 public totalPresaleTokensDistributed;
+    // Presale configuration
+    uint256 public presaleRate;
+    uint256 public softCap;
+    uint256 public hardCap;
+    uint256 public minContribution;
+    uint256 public maxContribution;
+    uint256 public startTime;
+    uint256 public endTime;
+    uint256 public presalePercentage;
+    uint256 public liquidityPercentage;
+    uint256 public liquidityLockDuration;
+    uint256 public maxActivePresales;
+    bool public presaleEnabled;
     
-    // Add after the existing struct declarations
-    struct VestingSchedule {
-        uint256 totalAmount;      // Total amount of tokens to be vested
-        uint256 startTime;        // Start time of the vesting period
-        uint256 cliffDuration;    // Duration of the cliff period in seconds
-        uint256 vestingDuration;  // Total duration of the vesting period in seconds
-        uint256 releasedAmount;   // Amount of tokens already released
-        bool revocable;           // Whether the vesting is revocable by the owner
-        bool revoked;             // Whether the vesting has been revoked
-    }
-
-    // Vesting state variables
-    mapping(address => VestingSchedule) public vestingSchedules;
-    mapping(address => bool) public hasVestingSchedule;
-    uint256 private _totalVesting;
-
-    // Events
-    event PresaleStarted(
-        uint256 softCap,
-        uint256 hardCap,
-        uint256 startTime,
-        uint256 endTime,
-        uint256 presaleRate
-    );
-    event WhitelistUpdated(address[] addresses, bool status);
-    event BlacklistUpdated(address[] addresses, bool status);
-    event TimeLockSet(address account, uint256 unlockTime);
-    event ContributionReceived(address contributor, uint256 amount, uint256 tokenAmount);
-    event PresaleFinalized(uint256 totalContributed, uint256 totalTokensDistributed);
-    event ContributionRefunded(address contributor, uint256 amount);
-    event TokensDistributed(address indexed recipient, uint256 amount);
-    event LiquidityPoolCreated(address indexed pair, uint256 tokensAdded, uint256 ethAdded);
-    event PresaleParticipation(address indexed contributor, uint256 amount, uint256 tokensReceived);
-    event RefundClaimed(address indexed contributor, uint256 amount);
-
-    // Events for vesting
-    event VestingScheduleCreated(
-        address indexed beneficiary,
-        uint256 totalAmount,
-        uint256 startTime,
-        uint256 cliffDuration,
-        uint256 vestingDuration
-    );
-    event VestingTokensReleased(address indexed beneficiary, uint256 amount);
-    event VestingScheduleRevoked(address indexed beneficiary, uint256 returnedAmount);
-
+    // Wallet allocations
     struct WalletAllocation {
         address wallet;
         uint256 percentage;
@@ -128,508 +63,241 @@ contract TokenTemplate_v3 is
         uint256 liquidityPercentage;
         uint256 liquidityLockDuration;
         WalletAllocation[] walletAllocations;
+        uint256 maxActivePresales;
+        bool presaleEnabled;
     }
 
-    /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
-        _disableInitializers();
-    }
+    WalletAllocation[] public walletAllocations;
+    
+    // Vesting tracking
+    mapping(address => uint256) public vestedAmount;
+    mapping(address => uint256) public claimedAmount;
+    mapping(address => uint256) public vestingStartTime;
+    
+    // Blacklist and timelock
+    mapping(address => bool) private _blacklist;
+    mapping(address => uint256) private _lockTime;
+    
+    // Events
+    event BlacklistUpdated(address indexed account, bool status);
+    event TimeLockSet(address indexed account, uint256 timestamp);
+    event TokensClaimed(address indexed wallet, uint256 amount);
+    event PresaleStarted(uint256 startTime, uint256 endTime);
+    event PresaleEnded(uint256 totalRaised);
+    event LiquidityAdded(address indexed pair, uint256 tokensAdded, uint256 ethAdded);
+    event Paused();
+    event Unpaused();
 
-    function initialize(InitParams calldata params) public initializer {
-        __ERC20_init(params.name, params.symbol);
-        __ERC20Burnable_init();
-        __ERC20Pausable_init();
-        __Ownable_init();
-        __ReentrancyGuard_init();
-        __UUPSUpgradeable_init();
-        _transferOwnership(params.owner);
-
-        require(params.maxSupply >= params.initialSupply, "Max supply must be >= initial supply");
+    IUniswapV2Router02 public immutable uniswapV2Router;
+    address public immutable uniswapV2Pair;
+    
+    string private tokenName;
+    string private tokenSymbol;
+    
+    constructor() ERC20("", "") {
+        // BSC Testnet PancakeSwap Router
+        IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(0xD99D1c33F9fC3444f8101754aBC46c52416550D1);
+        uniswapV2Router = _uniswapV2Router;
         
-        // Validate wallet allocations - now allows any number of wallets
-        if (params.walletAllocations.length > 0) {
-            // Calculate total percentage including presale and liquidity
-            uint256 totalPercentage = params.presalePercentage + params.liquidityPercentage;
-            
-            // Add percentages from wallet allocations
-            for (uint256 i = 0; i < params.walletAllocations.length; i++) {
-                require(params.walletAllocations[i].wallet != address(0), "Wallet address cannot be zero");
-                require(params.walletAllocations[i].percentage > 0, "Percentage must be > 0");
-                totalPercentage += params.walletAllocations[i].percentage;
-            }
-            
-            require(totalPercentage == 100, "Total percentage must be 100");
-        } else {
-            // If no additional wallets, presale and liquidity must total 100%
-            require(params.presalePercentage + params.liquidityPercentage == 100, 
-                    "Presale and liquidity must total 100% when no additional wallets");
-        }
+        // Create pair
+        uniswapV2Pair = IUniswapV2Factory(_uniswapV2Router.factory())
+            .createPair(address(this), _uniswapV2Router.WETH());
+    }
 
+    function initialize(
+        InitParams calldata params
+    ) external payable {
+        require(totalSupply() == 0, "Already initialized");
+
+        // Set token name and symbol
+        tokenName = params.name;
+        tokenSymbol = params.symbol;
+        
+        // Set basic parameters
         maxSupply = params.maxSupply;
         blacklistEnabled = params.enableBlacklist;
         timeLockEnabled = params.enableTimeLock;
-
-        // Calculate token allocations
-        uint256 presaleTokens = (params.initialSupply * params.presalePercentage) / 100;
-        uint256 liquidityTokens = (params.initialSupply * params.liquidityPercentage) / 100;
-
-        // Validate token amounts
-        require(presaleTokens > 0, "Presale tokens must be > 0");
-        require(liquidityTokens > 0, "Liquidity tokens must be > 0");
-
-        // Mint presale tokens to the contract itself
-        _mint(address(this), presaleTokens);
-        emit TokensDistributed(address(this), presaleTokens);
-
-        // Mint liquidity tokens to the contract itself
-        _mint(address(this), liquidityTokens);
-        emit TokensDistributed(address(this), liquidityTokens);
-
-        // Initialize presale info
-        presaleInfo = PresaleInfo({
-            softCap: params.softCap, // Use the provided soft cap value
-            hardCap: params.hardCap,
-            minContribution: params.minContribution,
-            maxContribution: params.maxContribution,
-            startTime: params.startTime,
-            endTime: params.endTime,
-            presaleRate: params.presaleRate,
-            whitelistEnabled: false,
-            finalized: false,
-            totalContributed: 0
-        });
-
-        // Mint tokens for each wallet allocation
-        for (uint256 i = 0; i < params.walletAllocations.length; i++) {
-            uint256 walletTokens = (params.initialSupply * params.walletAllocations[i].percentage) / 100;
-            require(walletTokens > 0, "Wallet tokens must be > 0");
-            
-            if (params.walletAllocations[i].vestingEnabled) {
-                // Mint tokens to contract for vesting
-                _mint(address(this), walletTokens);
-                
-                // Validate vesting parameters
-                require(params.walletAllocations[i].vestingStartTime > block.timestamp, 
-                    "Vesting start time must be in the future");
-                require(params.walletAllocations[i].vestingDuration >= 1 days, 
-                    "Vesting duration must be at least 1 day");
-                
-                // Create vesting schedule with proper time conversion
-                uint256 startTime = params.walletAllocations[i].vestingStartTime;
-                uint256 cliffDuration = params.walletAllocations[i].cliffDuration * 1 days;
-                uint256 vestingDuration = params.walletAllocations[i].vestingDuration * 1 days;
-                
-                vestingSchedules[params.walletAllocations[i].wallet] = VestingSchedule({
-                    totalAmount: walletTokens,
-                    startTime: startTime,
-                    cliffDuration: cliffDuration,
-                    vestingDuration: vestingDuration,
-                    releasedAmount: 0,
-                    revocable: true,
-                    revoked: false
-                });
-                
-                hasVestingSchedule[params.walletAllocations[i].wallet] = true;
-                _totalVesting += walletTokens;
-                
-                emit VestingScheduleCreated(
-                    params.walletAllocations[i].wallet,
-                    walletTokens,
-                    startTime,
-                    cliffDuration,
-                    vestingDuration
-                );
-            } else {
-                // Mint directly to wallet if no vesting
-                _mint(params.walletAllocations[i].wallet, walletTokens);
-            }
-            
-            emit TokensDistributed(params.walletAllocations[i].wallet, walletTokens);
-            _addUser(params.walletAllocations[i].wallet);
+        
+        // Set presale parameters
+        presaleRate = params.presaleRate;
+        softCap = params.softCap;
+        hardCap = params.hardCap;
+        minContribution = params.minContribution;
+        maxContribution = params.maxContribution;
+        startTime = params.startTime;
+        endTime = params.endTime;
+        presalePercentage = params.presalePercentage;
+        liquidityPercentage = params.liquidityPercentage;
+        liquidityLockDuration = params.liquidityLockDuration;
+        maxActivePresales = params.maxActivePresales;
+        presaleEnabled = params.presaleEnabled;
+        
+        // Calculate and mint initial supply
+        uint256 totalTokensNeeded = params.initialSupply;
+        _mint(address(this), totalTokensNeeded);
+        
+        uint256 remainingTokens = totalTokensNeeded;
+        uint256 allocatedTokens = 0;
+        
+        // Reserve presale tokens if enabled
+        if (presaleEnabled) {
+            uint256 presaleTokens = (totalTokensNeeded * params.presalePercentage) / 100;
+            allocatedTokens += presaleTokens;
+            remainingTokens -= presaleTokens;
         }
-    }
-
-    function contribute() external payable nonReentrant {
-        require(block.timestamp >= presaleInfo.startTime, "Presale not started");
-        require(block.timestamp <= presaleInfo.endTime, "Presale ended");
-        require(!presaleInfo.finalized, "Presale finalized");
-        require(msg.value >= presaleInfo.minContribution, "Below min contribution");
-        require(msg.value <= presaleInfo.maxContribution, "Above max contribution");
-        require(
-            presaleInfo.totalContributed + msg.value <= presaleInfo.hardCap,
-            "Hard cap reached"
-        );
-
-        if (presaleInfo.whitelistEnabled) {
-            require(whitelist[msg.sender], "Not whitelisted");
+        
+        // Handle liquidity
+        uint256 liquidityTokens = (totalTokensNeeded * params.liquidityPercentage) / 100;
+        allocatedTokens += liquidityTokens;
+        remainingTokens -= liquidityTokens;
+        
+        // If there's ETH sent with initialization, add liquidity
+        if (msg.value > 0 && liquidityTokens > 0) {
+            addLiquidity(liquidityTokens, msg.value);
         }
-
-        uint256 newContribution = contributions[msg.sender] + msg.value;
-        require(
-            newContribution <= presaleInfo.maxContribution,
-            "Would exceed max contribution"
-        );
-
-        // Track contributor
-        if (!isContributor[msg.sender]) {
-            contributors.push(msg.sender);
-            isContributor[msg.sender] = true;
-        }
-
-        // Calculate and track tokens
-        uint256 tokensToReceive = msg.value * presaleInfo.presaleRate;
-        presaleContributorTokens[msg.sender] += tokensToReceive;
-
-        // Update contribution tracking
-        contributions[msg.sender] = newContribution;
-        presaleInfo.totalContributed += msg.value;
-
-        emit ContributionReceived(msg.sender, msg.value, tokensToReceive);
-    }
-
-    function finalize() external onlyOwner nonReentrant {
-        require(block.timestamp > presaleInfo.endTime, "Presale not ended");
-        require(!presaleInfo.finalized, "Already finalized");
-        require(
-            presaleInfo.totalContributed >= presaleInfo.softCap,
-            "Soft cap not reached"
-        );
-
-        presaleInfo.finalized = true;
-
-        // Distribute presale tokens to contributors
-        for (uint256 i = 0; i < contributors.length; i++) {
-            address contributor = contributors[i];
-            uint256 tokensToDistribute = presaleContributorTokens[contributor];
-            
-            if (tokensToDistribute > 0) {
-                require(transfer(contributor, tokensToDistribute), "Token transfer failed");
-                totalPresaleTokensDistributed += tokensToDistribute;
-                emit TokensDistributed(contributor, tokensToDistribute);
+        
+        // Set wallet allocations and distribute tokens
+        if (params.walletAllocations.length > 0) {
+            for (uint256 i = 0; i < params.walletAllocations.length; i++) {
+                walletAllocations.push(params.walletAllocations[i]);
+                uint256 walletTokens = (totalTokensNeeded * params.walletAllocations[i].percentage) / 100;
+                allocatedTokens += walletTokens;
                 
-                // Clear the allocation after distribution
-                presaleContributorTokens[contributor] = 0;
+                // Ensure we don't exceed total supply
+                require(allocatedTokens <= totalTokensNeeded, "Total allocation exceeds initial supply");
+                
+                if (params.walletAllocations[i].vestingEnabled) {
+                    vestingStartTime[params.walletAllocations[i].wallet] = 
+                        params.walletAllocations[i].vestingStartTime;
+                    vestedAmount[params.walletAllocations[i].wallet] = walletTokens;
+                } else {
+                    _transfer(address(this), params.walletAllocations[i].wallet, walletTokens);
+                }
             }
         }
-
-        // Transfer remaining ETH to owner
-        uint256 remainingBalance = address(this).balance;
-        if (remainingBalance > 0) {
-            (bool success, ) = owner().call{value: remainingBalance}("");
-            require(success, "ETH transfer failed");
-        }
-
-        emit PresaleFinalized(presaleInfo.totalContributed, totalPresaleTokensDistributed);
+        
+        // Ensure total allocation is 100%
+        require(allocatedTokens == totalTokensNeeded, "Total allocation must equal initial supply");
+        
+        // Transfer ownership
+        _transferOwnership(params.owner);
     }
 
-    function updateWhitelist(address[] calldata addresses, bool status) external onlyOwner {
-        require(presaleInfo.whitelistEnabled, "Whitelist not enabled");
-        for (uint256 i = 0; i < addresses.length; i++) {
-            whitelist[addresses[i]] = status;
-        }
-        emit WhitelistUpdated(addresses, status);
+    function name() public view virtual override returns (string memory) {
+        return tokenName;
     }
 
-    function updateBlacklist(address[] calldata addresses, bool status) external onlyOwner {
-        require(blacklistEnabled, "Blacklist not enabled");
-        for (uint256 i = 0; i < addresses.length; i++) {
-            blacklist[addresses[i]] = status;
-        }
-        emit BlacklistUpdated(addresses, status);
-    }
-
-    function setTimeLock(address account, uint256 unlockTime) external onlyOwner {
-        require(timeLockEnabled, "Time lock not enabled");
-        require(unlockTime > block.timestamp, "Unlock time must be in future");
-        timeLocks[account] = unlockTime;
-        emit TimeLockSet(account, unlockTime);
+    function symbol() public view virtual override returns (string memory) {
+        return tokenSymbol;
     }
 
     function _beforeTokenTransfer(
         address from,
         address to,
-        uint256 amount
-    ) internal virtual override(ERC20Upgradeable, ERC20PausableUpgradeable) {
+        uint256 value
+    ) internal virtual override(ERC20, ERC20Pausable) {
+        super._beforeTokenTransfer(from, to, value);
+        
         if (blacklistEnabled) {
-            require(!blacklist[from] && !blacklist[to], "Address blacklisted");
+            require(!_blacklist[from] && !_blacklist[to], "Address is blacklisted");
         }
-        if (timeLockEnabled && from != address(0)) {
-            require(block.timestamp >= timeLocks[from], "Tokens locked");
-        }
-        super._beforeTokenTransfer(from, to, amount);
-    }
-
-    function _authorizeUpgrade(address) internal override onlyOwner {}
-
-    // View function to get all contributors
-    function getContributors() external view returns (address[] memory) {
-        return contributors;
-    }
-
-    // View function to get contributor count
-    function getContributorCount() external view returns (uint256) {
-        return contributors.length;
-    }
-
-    // View function to get contributor info
-    function getContributorInfo(address contributor) external view returns (
-        uint256 contribution,
-        uint256 tokenAllocation,
-        bool isWhitelisted
-    ) {
-        return (
-            contributions[contributor],
-            presaleContributorTokens[contributor],
-            whitelist[contributor]
-        );
-    }
-
-    // User tracking functions
-    function _addUser(address user) internal {
-        if (!isUser[user]) {
-            isUser[user] = true;
-            users.push(user);
-            userCount++;
+        if (timeLockEnabled) {
+            require(block.timestamp >= _lockTime[from], "Tokens are time-locked");
         }
     }
 
-    function getUsers() external view returns (address[] memory) {
-        return users;
+    // Blacklist management
+    function setBlacklist(address account, bool status) external onlyOwner {
+        require(blacklistEnabled, "Blacklist is not enabled");
+        _blacklist[account] = status;
+        emit BlacklistUpdated(account, status);
     }
 
-    function getUserCount() external view returns (uint256) {
-        return userCount;
+    // Time lock management
+    function setTimeLock(address account, uint256 unlockTime) external onlyOwner {
+        require(timeLockEnabled, "Time lock is not enabled");
+        require(unlockTime > block.timestamp, "Unlock time must be in future");
+        _lockTime[account] = unlockTime;
+        emit TimeLockSet(account, unlockTime);
     }
 
-    // Override transfer functions to track users
-    function _transfer(
-        address from,
-        address to,
-        uint256 amount
-    ) internal virtual override {
-        super._transfer(from, to, amount);
-        _addUser(to);
-    }
-
-    // Function to participate in presale
-    function participateInPresale() external payable nonReentrant {
-        require(block.timestamp >= presaleInfo.startTime, "Presale has not started");
-        require(block.timestamp <= presaleInfo.endTime, "Presale has ended");
-        require(!presaleInfo.finalized, "Presale is finalized");
-        require(msg.value >= presaleInfo.minContribution, "Below min contribution");
-        require(msg.value <= presaleInfo.maxContribution, "Above max contribution");
-        require(presaleInfo.totalContributed + msg.value <= presaleInfo.hardCap, "Hard cap reached");
-
-        uint256 tokensToReceive = msg.value * presaleInfo.presaleRate;
-        require(tokensToReceive > 0, "Must receive tokens");
-
-        // Update state
-        presaleInfo.totalContributed += msg.value;
-        contributions[msg.sender] += msg.value;
-        totalPresaleTokensDistributed += tokensToReceive;
-
-        // Transfer tokens
-        _transfer(address(this), msg.sender, tokensToReceive);
+    // Vesting claim function
+    function claimVestedTokens() external nonReentrant {
+        require(vestedAmount[msg.sender] > 0, "No tokens to claim");
         
-        // Add user to tracking
-        _addUser(msg.sender);
-
-        emit PresaleParticipation(msg.sender, msg.value, tokensToReceive);
-    }
-
-    // Function to finalize presale and create liquidity pool
-    function finalizePresale() external onlyOwner {
-        require(block.timestamp > presaleInfo.endTime || 
-                presaleInfo.totalContributed >= presaleInfo.hardCap, 
-                "Presale not ended");
-        require(!presaleInfo.finalized, "Already finalized");
-        require(presaleInfo.totalContributed >= presaleInfo.softCap, "Soft cap not reached");
-
-        presaleInfo.finalized = true;
-
-        // TODO: Add liquidity pool creation logic here
-        // This will involve:
-        // 1. Creating a pair on the DEX
-        // 2. Adding liquidity using the collected ETH and locked tokens
-        // 3. Locking the LP tokens
-
-        emit PresaleFinalized(presaleInfo.totalContributed, totalPresaleTokensDistributed);
-    }
-
-    // Function to claim refund if presale fails
-    function claimRefund() external nonReentrant {
-        require(block.timestamp > presaleInfo.endTime, "Presale not ended");
-        require(!presaleInfo.finalized, "Presale finalized");
-        require(presaleInfo.totalContributed < presaleInfo.softCap, "Soft cap reached");
-
-        uint256 contribution = contributions[msg.sender];
-        require(contribution > 0, "No contribution");
-
-        contributions[msg.sender] = 0;
-        payable(msg.sender).transfer(contribution);
-
-        emit RefundClaimed(msg.sender, contribution);
-    }
-
-    // Add after the initialize function
-    function createVestingSchedule(
-        address beneficiary,
-        uint256 totalAmount,
-        uint256 startTime,
-        uint256 cliffDuration,
-        uint256 vestingDuration,
-        bool revocable
-    ) external onlyOwner {
-        require(beneficiary != address(0), "Invalid beneficiary");
-        require(totalAmount > 0, "Amount must be > 0");
-        require(vestingDuration > 0, "Duration must be > 0");
-        require(!hasVestingSchedule[beneficiary], "Already has vesting");
-        require(balanceOf(address(this)) >= totalAmount, "Insufficient balance");
-
-        uint256 currentTime = block.timestamp;
-        require(startTime >= currentTime, "Start time must be future");
-        require(cliffDuration <= vestingDuration, "Cliff longer than vesting");
-
-        vestingSchedules[beneficiary] = VestingSchedule({
-            totalAmount: totalAmount,
-            startTime: startTime,
-            cliffDuration: cliffDuration,
-            vestingDuration: vestingDuration,
-            releasedAmount: 0,
-            revocable: revocable,
-            revoked: false
-        });
-
-        hasVestingSchedule[beneficiary] = true;
-        _totalVesting += totalAmount;
-
-        emit VestingScheduleCreated(
-            beneficiary,
-            totalAmount,
-            startTime,
-            cliffDuration,
-            vestingDuration
-        );
-    }
-
-    function releaseVestedTokens() external {
-        require(hasVestingSchedule[msg.sender], "No vesting schedule");
-        
-        VestingSchedule storage schedule = vestingSchedules[msg.sender];
-        require(!schedule.revoked, "Vesting revoked");
-        
-        uint256 releasable = _computeReleasableAmount(schedule);
-        require(releasable > 0, "No tokens to release");
-
-        schedule.releasedAmount += releasable;
-        _totalVesting -= releasable;
-
-        _transfer(address(this), msg.sender, releasable);
-        emit VestingTokensReleased(msg.sender, releasable);
-    }
-
-    function revokeVesting(address beneficiary) external onlyOwner {
-        require(hasVestingSchedule[beneficiary], "No vesting schedule");
-        
-        VestingSchedule storage schedule = vestingSchedules[beneficiary];
-        require(schedule.revocable, "Not revocable");
-        require(!schedule.revoked, "Already revoked");
-
-        uint256 releasable = _computeReleasableAmount(schedule);
-        uint256 unreleased = schedule.totalAmount - schedule.releasedAmount;
-
-        schedule.revoked = true;
-
-        if (releasable > 0) {
-            schedule.releasedAmount += releasable;
-            _transfer(address(this), beneficiary, releasable);
-            emit VestingTokensReleased(beneficiary, releasable);
+        uint256 claimableAmount = 0;
+        for (uint256 i = 0; i < walletAllocations.length; i++) {
+            if (walletAllocations[i].wallet == msg.sender && walletAllocations[i].vestingEnabled) {
+                // Check if cliff period has passed
+                require(
+                    block.timestamp >= vestingStartTime[msg.sender] + walletAllocations[i].cliffDuration,
+                    "Cliff period not ended"
+                );
+                
+                uint256 timeSinceStart = block.timestamp - vestingStartTime[msg.sender];
+                if (timeSinceStart >= walletAllocations[i].vestingDuration) {
+                    // Vesting completed, claim all remaining tokens
+                    claimableAmount = vestedAmount[msg.sender] - claimedAmount[msg.sender];
+                } else {
+                    // Calculate vested tokens based on time
+                    uint256 vestedTokens = (vestedAmount[msg.sender] * timeSinceStart) / 
+                        walletAllocations[i].vestingDuration;
+                    claimableAmount = vestedTokens - claimedAmount[msg.sender];
+                }
+                break;
+            }
         }
-
-        uint256 returnAmount = unreleased - releasable;
-        if (returnAmount > 0) {
-            _totalVesting -= returnAmount;
-            emit VestingScheduleRevoked(beneficiary, returnAmount);
-        }
-    }
-
-    function getVestingSchedule(address beneficiary) external view returns (
-        uint256 totalAmount,
-        uint256 startTime,
-        uint256 cliffDuration,
-        uint256 vestingDuration,
-        uint256 releasedAmount,
-        bool revocable,
-        bool revoked,
-        uint256 releasableAmount
-    ) {
-        require(hasVestingSchedule[beneficiary], "No vesting schedule");
-        VestingSchedule memory schedule = vestingSchedules[beneficiary];
         
-        return (
-            schedule.totalAmount,
-            schedule.startTime,
-            schedule.cliffDuration,
-            schedule.vestingDuration,
-            schedule.releasedAmount,
-            schedule.revocable,
-            schedule.revoked,
-            _computeReleasableAmount(schedule)
-        );
-    }
-
-    function _computeReleasableAmount(VestingSchedule memory schedule) internal view returns (uint256) {
-        if (schedule.revoked) return 0;
-        if (block.timestamp < schedule.startTime + schedule.cliffDuration) return 0;
-        if (block.timestamp >= schedule.startTime + schedule.vestingDuration) {
-            return schedule.totalAmount - schedule.releasedAmount;
-        }
-
-        uint256 timeFromStart = block.timestamp - schedule.startTime;
-        uint256 vestedAmount = (schedule.totalAmount * timeFromStart) / schedule.vestingDuration;
-        return vestedAmount - schedule.releasedAmount;
-    }
-
-    function getVestingStatus(address beneficiary) external view returns (
-        bool hasSchedule,
-        uint256 totalAmount,
-        uint256 releasedAmount,
-        uint256 releasableAmount,
-        uint256 remainingAmount,
-        uint256 vestingEndTime,
-        bool isCliffPeriod,
-        bool isFullyVested
-    ) {
-        hasSchedule = hasVestingSchedule[beneficiary];
-        if (!hasSchedule) {
-            return (false, 0, 0, 0, 0, 0, false, false);
-        }
-
-        VestingSchedule memory schedule = vestingSchedules[beneficiary];
-        if (schedule.revoked) {
-            return (true, schedule.totalAmount, schedule.releasedAmount, 0, 0, 0, false, true);
-        }
-
-        uint256 currentTime = block.timestamp;
-        uint256 endTime = schedule.startTime + schedule.vestingDuration;
-        isCliffPeriod = currentTime < (schedule.startTime + schedule.cliffDuration);
-        isFullyVested = currentTime >= endTime;
+        require(claimableAmount > 0, "No tokens available to claim");
         
-        totalAmount = schedule.totalAmount;
-        releasedAmount = schedule.releasedAmount;
-        releasableAmount = _computeReleasableAmount(schedule);
-        remainingAmount = totalAmount - releasedAmount - releasableAmount;
-        vestingEndTime = endTime;
+        claimedAmount[msg.sender] += claimableAmount;
+        _transfer(address(this), msg.sender, claimableAmount);
+        
+        emit TokensClaimed(msg.sender, claimableAmount);
+    }
 
-        return (
-            hasSchedule,
-            totalAmount,
-            releasedAmount,
-            releasableAmount,
-            remainingAmount,
-            vestingEndTime,
-            isCliffPeriod,
-            isFullyVested
+    // View functions
+    function isBlacklisted(address account) external view returns (bool) {
+        return blacklistEnabled && _blacklist[account];
+    }
+
+    function getUnlockTime(address account) external view returns (uint256) {
+        return timeLockEnabled ? _lockTime[account] : 0;
+    }
+
+    function getVestedAmount(address wallet) external view returns (uint256) {
+        return vestedAmount[wallet];
+    }
+
+    function getClaimedAmount(address wallet) external view returns (uint256) {
+        return claimedAmount[wallet];
+    }
+
+    function getWalletAllocations() external view returns (WalletAllocation[] memory) {
+        return walletAllocations;
+    }
+
+    // Emergency functions
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    function unpause() external onlyOwner {
+        _unpause();
+    }
+
+    function addLiquidity(uint256 tokenAmount, uint256 ethAmount) internal {
+        // Approve router to spend tokens
+        _approve(address(this), address(uniswapV2Router), tokenAmount);
+
+        // Add liquidity
+        uniswapV2Router.addLiquidityETH{value: ethAmount}(
+            address(this),
+            tokenAmount,
+            0, // Accept any amount of tokens
+            0, // Accept any amount of ETH
+            owner(),
+            block.timestamp + 300 // 5 minutes deadline
         );
     }
 } 

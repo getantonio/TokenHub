@@ -5,42 +5,41 @@ async function main() {
   const [deployer] = await ethers.getSigners();
   console.log("Withdrawing fees with account:", deployer.address);
 
-  // Contract addresses
-  const factoryAddresses = [
-    "0x9A3C81bF993701250d35072182E58c3A35F30239", // Current factory
-    "0x61bd5538a41E42B6EDd88b71f056521Aa4b27671"  // Previous factory
-  ];
+  // Contract addresses for BSC Testnet
+  const FACTORY_ADDRESSES = {
+    v1: "0x0000000000000000000000000000000000000000",
+    v2: "0x0000000000000000000000000000000000000000",
+    v3: "0x8Bd2E8228C277Cc2A72efB62F8Ccc4Fb9Bb3fc51"
+  };
 
-  const TokenFactory = await ethers.getContractFactory("TokenFactory_v3_clone");
-
-  for (const factoryAddress of factoryAddresses) {
-    console.log(`\nProcessing factory at ${factoryAddress}`);
-    const factory = TokenFactory.attach(factoryAddress);
-
+  // Process each factory version
+  for (const [version, address] of Object.entries(FACTORY_ADDRESSES)) {
+    console.log(`\nProcessing ${version.toUpperCase()} factory at ${address}`);
+    
     try {
-      // Get contract balance before withdrawal
-      const balanceBefore = await ethers.provider.getBalance(factoryAddress);
-      console.log("Contract balance before withdrawal:", ethers.formatEther(balanceBefore), "ETH");
+      // Get contract balance
+      const balance = await ethers.provider.getBalance(address);
+      console.log(`Balance before withdrawal: ${ethers.formatEther(balance)} BNB`);
 
-      if (balanceBefore > 0) {
+      if (balance > 0) {
+        // Get the appropriate factory contract
+        const Factory = await ethers.getContractFactory(`TokenFactory_${version}`);
+        const factory = Factory.attach(address);
+
         // Withdraw fees
+        console.log("Withdrawing fees...");
         const tx = await factory.withdrawFees();
-        console.log("Withdrawal transaction hash:", tx.hash);
-
-        // Wait for transaction to be mined
-        console.log("Waiting for transaction confirmation...");
         await tx.wait();
 
-        // Get contract balance after withdrawal
-        const balanceAfter = await ethers.provider.getBalance(factoryAddress);
-        console.log("Contract balance after withdrawal:", ethers.formatEther(balanceAfter), "ETH");
-        console.log("Withdrawn amount:", ethers.formatEther(balanceBefore - balanceAfter), "ETH");
+        // Verify withdrawal
+        const newBalance = await ethers.provider.getBalance(address);
+        console.log(`Balance after withdrawal: ${ethers.formatEther(newBalance)} BNB`);
+        console.log(`Withdrawn amount: ${ethers.formatEther(balance.sub(newBalance))} BNB`);
       } else {
-        console.log("No balance to withdraw");
+        console.log("No fees to withdraw");
       }
-
     } catch (error) {
-      console.error("Error withdrawing fees from", factoryAddress, ":", error);
+      console.error(`Error processing ${version.toUpperCase()} factory:`, error.message);
     }
   }
 }

@@ -40,7 +40,7 @@ export const contractAddresses: { [key: number]: ContractAddresses } = {
   97: { // BSC Testnet
     factoryAddress: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V1 || '',
     factoryAddressV2: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V2 || '',
-    factoryAddressV3: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V3 || '',
+    factoryAddressV3: '0xD9dF868977ef71e7B22256993AF730bDA613544F',
     dexListingFactory: process.env.NEXT_PUBLIC_BSCTESTNET_DEX_LISTING_FACTORY_ADDRESS || '',
     dexListingTemplate: process.env.NEXT_PUBLIC_BSCTESTNET_DEX_LISTING_TEMPLATE_ADDRESS || ''
   },
@@ -81,33 +81,27 @@ export function getNetworkContractAddress(chainId: number, contractType: string)
   console.log('Getting contract address for:', {
     chainId,
     networkName,
-    contractType
+    contractType,
+    env: process.env
   });
+  
+  // Special handling for BSC Testnet V3 Factory
+  if (chainId === 97 && contractType === 'factoryAddressV3') {
+    const address = '0xD9dF868977ef71e7B22256993AF730bDA613544F';
+    console.log('Using hardcoded BSC Testnet V3 Factory address:', address);
+    return address;
+  }
   
   let envKey = '';
   
   // Handle special cases for environment variable keys
   if (contractType === 'dexListingFactory') {
     envKey = `NEXT_PUBLIC_${networkName}_DEX_LISTING_FACTORY_ADDRESS`;
-    
-    // Hardcoded fallback for Sepolia DEX listing factory
-    if (chainId === 11155111) {
-      const fallbackAddress = '0xc300648556860006771f1f982d3dDE65A54C1BA0';
-      console.log('Using fallback address for Sepolia DEX listing factory:', fallbackAddress);
-      return fallbackAddress;
-    }
   } else {
     // Handle factory addresses specially
     if (contractType.toLowerCase().startsWith('factory')) {
       const version = contractType.match(/v(\d+)/i)?.[1] || '1';
       envKey = `NEXT_PUBLIC_${networkName}_FACTORY_ADDRESS_V${version}`;
-
-      // Hardcoded fallback for BSC testnet V3 factory
-      if (chainId === 97 && version === '3') {
-        const fallbackAddress = '0x9d24be721dcf4390a25C42CF90260909BAb46e2a';
-        console.log('Using fallback address for BSC testnet V3 factory:', fallbackAddress);
-        return fallbackAddress;
-      }
     } else {
       envKey = `NEXT_PUBLIC_${networkName}_${contractType.toUpperCase()}`;
     }
@@ -177,7 +171,7 @@ export const FACTORY_ADDRESSES: Record<string, Record<number, string>> = {
     [ChainId.ARBITRUM_SEPOLIA]: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V3 || '',
     [ChainId.OPTIMISM_SEPOLIA]: process.env.NEXT_PUBLIC_OPSEPOLIA_FACTORY_ADDRESS_V3 || '',
     [ChainId.POLYGON_AMOY]: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V3 || '',
-    [ChainId.BSC_TESTNET]: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V3 || '',
+    [ChainId.BSC_TESTNET]: '0xD9dF868977ef71e7B22256993AF730bDA613544F',
     [ChainId.BSC_MAINNET]: process.env.NEXT_PUBLIC_BSC_FACTORY_ADDRESS_V3 || '',
   },
   dexListing: {

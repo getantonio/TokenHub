@@ -7,6 +7,7 @@ export interface TokenConfig {
   blacklistEnabled?: boolean;
   timeLockEnabled?: boolean;
   presaleEnabled?: boolean;
+  maxActivePresales?: number;
   presaleAllocation?: number;
   liquidityAllocation?: number;
   teamAllocation?: number;
@@ -21,6 +22,21 @@ export interface TokenConfig {
     startTime: number;
     endTime: number;
     whitelistEnabled: boolean;
+    isActive?: boolean;
+  };
+  multiPresaleConfig?: {
+    maxActivePresales: number;
+    presales: Array<{
+      softCap: string;
+      hardCap: string;
+      minContribution: string;
+      maxContribution: string;
+      presaleRate: string;
+      startTime: number;
+      endTime: number;
+      whitelistEnabled: boolean;
+      isActive: boolean;
+    }>;
   };
 }
 

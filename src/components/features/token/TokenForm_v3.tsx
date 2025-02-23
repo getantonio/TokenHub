@@ -1,23 +1,33 @@
 import { useState, useEffect } from 'react';
 import { useNetwork } from '@contexts/NetworkContext';
-import { useToast } from '@/components/ui/toast/use-toast';
+import { useToast } from '@/components/ui/use-toast';
 import TokenPreview from '@components/features/token/TokenPreview';
 import { InfoIcon } from '@/components/ui/InfoIcon';
-import { Spinner } from '@components/ui/Spinner';
+import { Spinner } from '@/components/ui/Spinner';
 import { useTokenFactory } from '@/hooks/useTokenFactory';
 import { useAccount, usePublicClient } from 'wagmi';
 import TokenFactory_v3 from '@contracts/abi/TokenFactory_v3.json';
 import { FACTORY_ADDRESSES } from '@config/contracts';
 import * as z from 'zod';
 import { addDays } from 'date-fns';
-import { parseEther } from 'viem';
-import { useForm } from "react-hook-form";
+import { parseEther, parseUnits } from 'viem';
+import { useForm, UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import TokenDeploymentTest from './TokenDeploymentTest';
 import { Alert } from "@/components/ui/alert";
 import { Dialog, DialogContent } from '@/components/ui/dialog';
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage
+} from "@/components/ui/form";
+import { Switch } from "@/components/ui/switch";
 
 interface TokenFormV3Props {
   isConnected: boolean;
@@ -25,110 +35,378 @@ interface TokenFormV3Props {
   onError?: (error: any) => void;
 }
 
-const formSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  symbol: z.string().min(1, "Symbol is required"),
-  initialSupply: z.coerce.number().min(0, "Initial supply must be >= 0"),
-  maxSupply: z.coerce.number().min(0, "Max supply must be >= 0"),
-  owner: z.string().min(1, "Owner address is required"),
-  enableBlacklist: z.boolean(),
-  enableTimeLock: z.boolean(),
-  presaleRate: z.string().min(1, "Presale rate is required"),
-  softCap: z.coerce.number().min(0, "Soft cap must be >= 0"),
-  hardCap: z.coerce.number().min(0, "Hard cap must be >= 0"),
-  minContribution: z.coerce.number().min(0, "Min contribution must be >= 0"),
-  maxContribution: z.coerce.number().min(0, "Max contribution must be >= 0"),
-  startTime: z.string().min(1, "Start time is required"),
-  endTime: z.string().min(1, "End time is required"),
-  presalePercentage: z.coerce.number().min(0, "Presale percentage must be >= 0").max(100, "Presale percentage must be <= 100"),
-  liquidityPercentage: z.coerce.number().min(0, "Liquidity percentage must be >= 0").max(100, "Liquidity percentage must be <= 100"),
-  liquidityLockDuration: z.coerce.number().min(1, "Lock duration must be >= 1"),
-  wallets: z.array(z.object({
-    name: z.string().min(1, "Name is required"),
-    address: z.string().min(1, "Address is required"),
-    percentage: z.coerce.number().min(0, "Percentage must be >= 0").max(100, "Percentage must be <= 100"),
-    vestingEnabled: z.boolean(),
-    vestingDuration: z.coerce.number().optional(),
-    cliffDuration: z.coerce.number().optional(),
-    vestingStartTime: z.string().optional()
-  }))
-}).refine((data) => {
-  try {
-    const startDate = new Date(data.startTime);
-    const endDate = new Date(data.endTime);
-    return endDate > startDate;
-  } catch (e) {
-    return false;
-  }
-}, "End time must be after start time")
-.refine((data) => {
-  const totalPercentage = data.presalePercentage + data.liquidityPercentage + 
-    data.wallets.reduce((sum, wallet) => sum + wallet.percentage, 0);
-  return totalPercentage === 100;
-}, "Total allocation must equal 100%");
-
-type FormData = z.infer<typeof formSchema>;
-
-const getDefaultTimes = () => {
-  const now = new Date();
-  const startTime = new Date(now.getTime() + 24 * 60 * 60 * 1000); // Tomorrow
-  const endTime = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000); // 14 days from now
-  
-  // Format dates to match datetime-local input format (yyyy-MM-ddThh:mm)
-  const formatDate = (date: Date) => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    return `${year}-${month}-${day}T${hours}:${minutes}`;
-  };
-
-  return {
-    startTime,
-    endTime,
-    startTimeFormatted: formatDate(startTime),
-    endTimeFormatted: formatDate(endTime)
-  };
-};
-
-const defaultValues = {
-  name: 'Test Token',
-  symbol: 'TEST',
-  initialSupply: 1000000,
-  maxSupply: 2000000,
-  owner: '',
-  enableBlacklist: false,
-  enableTimeLock: false,
-  presaleRate: '0.001',
-  softCap: 50,
-  hardCap: 100,
-  minContribution: 0.1,
-  maxContribution: 10,
-  startTime: getDefaultTimes().startTimeFormatted,
-  endTime: getDefaultTimes().endTimeFormatted,
-  presalePercentage: 40,
-  liquidityPercentage: 40,
-  liquidityLockDuration: 180,
-  wallets: [
-    {
-      name: 'Team',
-      address: '',
-      percentage: 20,
-      vestingEnabled: true,
-      vestingDuration: 365,
-      cliffDuration: 90,
-      vestingStartTime: getDefaultTimes().startTimeFormatted
-    }
-  ]
-};
-
-type ValidationResult = {
+interface ValidationResult {
   category: string;
   message: string;
   details?: string[];
   status: 'success' | 'warning' | 'error';
+}
+
+interface TokenParams {
+  name: string;
+  symbol: string;
+  initialSupply: bigint;
+  maxSupply: bigint;
+  owner: `0x${string}`;
+  enableBlacklist: boolean;
+  enableTimeLock: boolean;
+  presaleEnabled: boolean;
+  maxActivePresales: number;
+  presaleRate: bigint;
+  softCap: bigint;
+  hardCap: bigint;
+  minContribution: bigint;
+  maxContribution: bigint;
+  startTime: bigint;
+  endTime: bigint;
+  presalePercentage: number;
+  liquidityPercentage: number;
+  liquidityLockDuration: bigint;
+  walletAllocations: {
+    wallet: `0x${string}`;
+    percentage: number;
+    vestingEnabled: boolean;
+    vestingDuration: bigint;
+    cliffDuration: bigint;
+    vestingStartTime: bigint;
+  }[];
+}
+
+interface WalletPreset {
+  name: string;
+  percentage: number;
+  vestingEnabled: boolean;
+  vestingDuration: number;
+  cliffDuration: number;
+  vestingStartTime: number;
+}
+
+interface VestingPreset {
+  presalePercentage: number;
+  liquidityPercentage: number;
+  wallets: WalletPreset[];
+}
+
+const VESTING_PRESETS: Record<string, VestingPreset> = {
+  standard: {
+    presalePercentage: 5,
+    liquidityPercentage: 70, // 70% when presale enabled, 75% when disabled
+    wallets: [
+      { 
+        name: 'Team', 
+        percentage: 15,
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 90,
+        vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+      },
+      { 
+        name: 'Marketing', 
+        percentage: 10,
+        vestingEnabled: true,
+        vestingDuration: 180,
+        cliffDuration: 30,
+        vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+      }
+    ],
+  },
+  fair_launch: {
+    presalePercentage: 5,
+    liquidityPercentage: 85, // 85% when presale enabled, 90% when disabled
+    wallets: [
+      {
+        name: 'Team',
+        percentage: 10,
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 180,
+        vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+      }
+    ]
+  },
+  community: {
+    presalePercentage: 5,
+    liquidityPercentage: 75, // 75% when presale enabled, 80% when disabled
+    wallets: [
+      {
+        name: 'Community Rewards',
+        percentage: 10,
+        vestingEnabled: true,
+        vestingDuration: 180,
+        cliffDuration: 30,
+        vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+      },
+      {
+        name: 'Team',
+        percentage: 10,
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 90,
+        vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+      }
+    ]
+  },
+  growth: {
+    presalePercentage: 5,
+    liquidityPercentage: 65, // 65% when presale enabled, 70% when disabled
+    wallets: [
+      {
+        name: 'Team',
+        percentage: 15,
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 90,
+        vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+      },
+      {
+        name: 'Marketing',
+        percentage: 10,
+        vestingEnabled: true,
+        vestingDuration: 180,
+        cliffDuration: 30,
+        vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+      },
+      {
+        name: 'Development',
+        percentage: 10,
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 60,
+        vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+      }
+    ]
+  },
+  bootstrap: {
+    presalePercentage: 5,
+    liquidityPercentage: 60, // 60% when presale enabled, 65% when disabled
+    wallets: [
+      {
+        name: 'Team',
+        percentage: 20,
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 90,
+        vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+      },
+      {
+        name: 'Marketing',
+        percentage: 10,
+        vestingEnabled: true,
+        vestingDuration: 180,
+        cliffDuration: 30,
+        vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+      },
+      {
+        name: 'Development',
+        percentage: 10,
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 60,
+        vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+      }
+    ]
+  },
+  governance: {
+    presalePercentage: 5,
+    liquidityPercentage: 60, // 60% when presale enabled, 65% when disabled
+    wallets: [
+      {
+        name: 'Governance',
+        percentage: 20,
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 90,
+        vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+      },
+      {
+        name: 'Team',
+        percentage: 10,
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 180,
+        vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+      },
+      {
+        name: 'Treasury',
+        percentage: 10,
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 60,
+        vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+      }
+    ]
+  }
 };
+
+const formSchema = z.object({
+  name: z.string()
+    .min(1, "Name is required")
+    .refine(
+      (name) => name.length >= 3 && name.length <= 32,
+      "Name must be between 3 and 32 characters"
+    )
+    .refine(
+      (name) => /^[a-zA-Z0-9\s]+$/.test(name),
+      "Name can only contain letters, numbers, and spaces"
+    ),
+  symbol: z.string()
+    .min(1, "Symbol is required")
+    .refine(
+      (symbol) => /^[A-Z]{2,6}$/.test(symbol),
+      "Symbol must be 2-6 uppercase letters"
+    )
+    .refine(
+      (symbol) => !['ETH', 'BTC', 'BNB', 'USDT', 'USDC'].includes(symbol),
+      "Symbol is already in use by a major token"
+    ),
+  initialSupply: z.string().min(1, "Initial supply is required"),
+  maxSupply: z.string().min(1, "Max supply is required"),
+  owner: z.string().min(42, "Invalid owner address"),
+  enableBlacklist: z.boolean(),
+  enableTimeLock: z.boolean(),
+  presaleEnabled: z.boolean().default(false),
+  maxActivePresales: z.number().min(0).optional(),
+  presaleRate: z.string().optional().nullable(),
+  softCap: z.string().optional().nullable(),
+  hardCap: z.string().optional().nullable(),
+  minContribution: z.string().optional().nullable(),
+  maxContribution: z.string().optional().nullable(),
+  startTime: z.number().optional().nullable(),
+  endTime: z.number().optional().nullable(),
+  presalePercentage: z.number().min(0).max(100),
+  liquidityPercentage: z.number().min(0).max(100),
+  liquidityLockDuration: z.number().min(1),
+  wallets: z.array(z.object({
+    name: z.string().min(1, "Name is required"),
+    address: z.string().min(42, "Invalid address"),
+    percentage: z.number().min(0).max(100),
+    vestingEnabled: z.boolean(),
+    vestingDuration: z.number().min(0),
+    cliffDuration: z.number().min(0),
+    vestingStartTime: z.number().min(0)
+  })),
+  multiPresaleConfig: z.object({
+    presales: z.array(z.object({
+      softCap: z.string(),
+      hardCap: z.string(),
+      minContribution: z.string(),
+      maxContribution: z.string(),
+      presaleRate: z.string(),
+      startTime: z.number(),
+      endTime: z.number(),
+      whitelistEnabled: z.boolean(),
+      isActive: z.boolean()
+    }))
+  }).optional()
+}).refine((data) => {
+  console.log('Validating presale times:', {
+    presaleEnabled: data.presaleEnabled,
+    startTime: data.startTime,
+    endTime: data.endTime
+  });
+  
+  // Only validate presale times if presale is enabled
+  if (data.presaleEnabled && data.startTime && data.endTime) {
+    const startDate = new Date(data.startTime);
+    const endDate = new Date(data.endTime);
+    return endDate > startDate;
+  }
+  return true;
+}, {
+  message: "End time must be after start time",
+  path: ["endTime"]
+})
+.refine((data) => {
+  console.log('Validating presale configuration:', {
+    presaleEnabled: data.presaleEnabled,
+    presaleRate: data.presaleRate,
+    softCap: data.softCap,
+    hardCap: data.hardCap,
+    minContribution: data.minContribution,
+    maxContribution: data.maxContribution
+  });
+  
+  // Only validate presale configuration if presale is enabled
+  if (data.presaleEnabled) {
+    if (!data.presaleRate || !data.softCap || !data.hardCap || !data.minContribution || !data.maxContribution) {
+      return false;
+    }
+    const softCap = Number(data.softCap);
+    const hardCap = Number(data.hardCap);
+    const minContribution = Number(data.minContribution);
+    const maxContribution = Number(data.maxContribution);
+    
+    if (softCap >= hardCap || minContribution >= maxContribution) {
+      return false;
+    }
+  }
+  return true;
+}, {
+  message: "Invalid presale configuration",
+  path: ["presaleRate"]
+})
+.refine((data) => {
+  // Calculate total percentage based on presale state
+  const totalPercentage = data.presaleEnabled ? 
+    (data.presalePercentage + data.liquidityPercentage) :
+    data.liquidityPercentage;
+  const totalWithWallets = totalPercentage + 
+    data.wallets.reduce((sum, wallet) => sum + wallet.percentage, 0);
+  
+  return totalWithWallets === 100;
+}, {
+  message: "Total allocation must be 100%",
+  path: ["liquidityPercentage"]
+});
+
+type FormData = z.infer<typeof formSchema>;
+
+const defaultValues: FormData = {
+  name: "",
+  symbol: "",
+  initialSupply: "",
+  maxSupply: "",
+  owner: "",
+  enableBlacklist: false,
+  enableTimeLock: false,
+  presaleEnabled: false,
+  maxActivePresales: 0,
+  presaleRate: null,
+  softCap: null,
+  hardCap: null,
+  minContribution: null,
+  maxContribution: null,
+  startTime: null,
+  endTime: null,
+  presalePercentage: 0,
+  liquidityPercentage: 95,
+  liquidityLockDuration: 365,
+  wallets: [{
+    name: "Owner",
+    address: "",
+    percentage: 5,
+    vestingEnabled: false,
+    vestingDuration: 0,
+    cliffDuration: 0,
+    vestingStartTime: 0
+  }],
+  multiPresaleConfig: {
+    presales: []
+  }
+};
+
+function getDefaultTimes() {
+  const now = new Date();
+  const startTime = new Date(now.getTime() + 3600000); // 1 hour from now
+  const endTime = new Date(now.getTime() + 86400000);  // 24 hours from now
+  
+  return {
+    startTime: Math.floor(startTime.getTime() / 1000),
+    endTime: Math.floor(endTime.getTime() / 1000),
+    startTimeFormatted: startTime.toISOString().slice(0, 16),
+    endTimeFormatted: endTime.toISOString().slice(0, 16)
+  };
+}
 
 export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenFormV3Props) {
   const { chainId } = useNetwork();
@@ -143,221 +421,150 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
   const [simulationResults, setSimulationResults] = useState<ValidationResult[]>([]);
   const [showTokenomicsInfo, setShowTokenomicsInfo] = useState(false);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
-    defaultValues: {
-      ...defaultValues,
-      owner: address || '',
-      wallets: defaultValues.wallets.map(wallet => ({
-        ...wallet,
-        address: address || ''
-      }))
-    }
+    defaultValues,
+    mode: "onChange",
+    shouldUnregister: false
   });
 
   useEffect(() => {
+    if (mounted) {
+      // Mark required fields as touched to trigger validation
+      form.trigger([
+        'name',
+        'symbol',
+        'initialSupply',
+        'maxSupply',
+        'liquidityPercentage'
+      ]);
+    }
+  }, [mounted, form]);
+
+  useEffect(() => {
+    console.log('Form mounted with values:', form.getValues());
+    console.log('Form validation state:', {
+      isValid: form.formState.isValid,
+      errors: form.formState.errors,
+      isDirty: form.formState.isDirty,
+      dirtyFields: form.formState.dirtyFields,
+      touchedFields: form.formState.touchedFields
+    });
+    setMounted(true);
+  }, [form]);
+
+  useEffect(() => {
     if (address) {
+      console.log('Setting owner address:', address);
       form.setValue('owner', address);
-      form.setValue('wallets', form.getValues('wallets').map(wallet => ({
+      const currentWallets = form.getValues('wallets');
+      form.setValue('wallets', currentWallets.map(wallet => ({
         ...wallet,
-        address: address
+        address
       })));
     }
   }, [address, form]);
 
+  // Add handler for presale toggle
+  useEffect(() => {
+    const presaleEnabled = form.watch('presaleEnabled');
+    const currentWallets = form.watch('wallets');
+    const totalWalletPercentage = currentWallets.reduce((sum, w) => sum + w.percentage, 0);
+
+    // Set presale percentage and maxActivePresales based on toggle
+    form.setValue('presalePercentage', presaleEnabled ? 5 : 0, { shouldValidate: true });
+    form.setValue('maxActivePresales', presaleEnabled ? 1 : 0);
+
+    // Adjust liquidity percentage based on presale state and wallets
+    const newLiquidity = presaleEnabled ? 
+      Math.min(95 - totalWalletPercentage, 90) : // Cap at 90% with presale
+      100 - totalWalletPercentage;  // Allow up to 100% without presale
+    
+    form.setValue('liquidityPercentage', Math.max(0, newLiquidity), { shouldValidate: true });
+
+    // Force form validation
+    form.trigger(['presalePercentage', 'liquidityPercentage']);
+  }, [form.watch('presaleEnabled'), form.watch('wallets')]);
+
   const onSubmit = async (data: FormData) => {
     try {
-      console.log('Form submission started');
-      console.log('Wallet address:', address);
-      console.log('Chain ID:', chainId);
-      console.log('Is Connected:', isConnected);
+      console.log('Form submission started', { data });
+      console.log('Form validation errors:', form.formState.errors);
+      console.log('Form values:', data);
 
-      if (!address) {
-        console.log('No wallet address found');
-        toast({
-          title: "Error",
-          description: "Please connect your wallet first",
-          variant: "destructive"
-        });
-        return;
+      // Add supply validation
+      if (Number(data.initialSupply) > 1e9 || Number(data.maxSupply) > 1e9) {
+        throw new Error('Token supply is too large. Please use a supply less than 1 billion.');
       }
 
-      if (!isConnected) {
-        console.log('Wallet not connected');
-        toast({
-          title: "Error",
-          description: "Please connect your wallet first",
-          variant: "destructive"
-        });
-        return;
+      // Validate total percentage
+      const validationResult = validateDistribution(form);
+      if (validationResult.status === 'error') {
+        throw new Error(validationResult.message);
       }
 
-      // Validate soft cap and hard cap
-      const softCap = Number(data.softCap);
-      const hardCap = Number(data.hardCap);
-      if (softCap >= hardCap) {
-        toast({
-          title: "Error",
-          description: "Soft cap must be less than hard cap",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      // Calculate total percentage
-      const totalPercentage = data.presalePercentage + 
-        data.liquidityPercentage + 
-        data.wallets.reduce((sum, wallet) => sum + wallet.percentage, 0);
-
-      console.log('Wallet allocations:', data.wallets.map(w => ({ name: w.name, percentage: w.percentage })));
-      console.log('Total percentage:', totalPercentage);
-
-      if (totalPercentage !== 100) {
-        toast({
-          title: "Error",
-          description: `Total allocation must be exactly 100%. Current total: ${totalPercentage}%`,
-          variant: "destructive"
-        });
-        return;
-      }
-
-      // Validate individual percentages
-      if (data.presalePercentage <= 0) throw new Error('Presale percentage must be greater than 0');
-      if (data.liquidityPercentage <= 0) throw new Error('Liquidity percentage must be greater than 0');
-
-      // Validate wallet percentages and addresses
-      for (const wallet of data.wallets) {
-        if (wallet.percentage <= 0) {
-          throw new Error(`Percentage for ${wallet.name} must be greater than 0`);
-        }
-        if (!wallet.address || wallet.address === '0x0000000000000000000000000000000000000000') {
-          throw new Error(`Please provide a valid address for wallet "${wallet.name}"`);
-        }
-      }
-
-      if (!publicClient) {
-        throw new Error('Failed to get public client');
-      }
-
-      setLoading(true);
-
-      // Convert presale rate from ETH to tokens per ETH
-      const ethPerToken = Number(data.presaleRate);
-      const tokensPerEth = Math.floor(1 / ethPerToken);
-      console.log('Converting presale rate:', { ethPerToken, tokensPerEth });
-
-      // Convert dates to Unix timestamps
-      const startTime = BigInt(Math.floor(new Date(data.startTime).getTime() / 1000));
-      const endTime = BigInt(Math.floor(new Date(data.endTime).getTime() / 1000));
-
-      // Process wallet allocations with vesting
-      const processedWallets = data.wallets.map(wallet => ({
-        name: wallet.name,
-        address: wallet.address as `0x${string}`,
+      // Convert values to BigInt with proper decimals (reduce from 18 to 9 decimals for large supplies)
+      const decimals = Number(data.initialSupply) > 1e6 ? 9 : 18;
+      const initialSupply = parseUnits(data.initialSupply, decimals);
+      const maxSupply = parseUnits(data.maxSupply, decimals);
+      
+      // Prepare wallet allocations
+      const walletAllocations = data.wallets.map(wallet => ({
+        wallet: wallet.address as `0x${string}`,
         percentage: wallet.percentage,
-        vestingEnabled: wallet.vestingEnabled || false,
-        vestingDuration: wallet.vestingEnabled ? (wallet.vestingDuration || 365) : 0,
-        cliffDuration: wallet.vestingEnabled ? (wallet.cliffDuration || 90) : 0,
-        vestingStartTime: wallet.vestingEnabled ? 
-          BigInt(Math.floor(new Date(wallet.vestingStartTime || Date.now()).getTime() / 1000)) :
-          BigInt(0)
+        vestingEnabled: wallet.vestingEnabled,
+        vestingDuration: wallet.vestingEnabled ? BigInt(wallet.vestingDuration) : BigInt(0),
+        cliffDuration: wallet.vestingEnabled ? BigInt(wallet.cliffDuration) : BigInt(0),
+        vestingStartTime: wallet.vestingEnabled ? BigInt(Math.floor(Date.now() / 1000) + (24 * 3600)) : BigInt(0)
       }));
-
-      // Log the wallet allocations for debugging
-      console.log('Processed wallets:', processedWallets);
 
       const params = {
         name: data.name,
         symbol: data.symbol,
-        initialSupply: parseEther(data.initialSupply.toString()),
-        maxSupply: parseEther(data.maxSupply.toString()),
-        owner: address as `0x${string}`,
+        initialSupply,
+        maxSupply,
+        owner: data.owner as `0x${string}`,
         enableBlacklist: data.enableBlacklist,
         enableTimeLock: data.enableTimeLock,
-        presaleRate: BigInt(tokensPerEth),
-        softCap: parseEther(data.softCap.toString()),
-        hardCap: parseEther(data.hardCap.toString()),
-        minContribution: parseEther(data.minContribution.toString()),
-        maxContribution: parseEther(data.maxContribution.toString()),
-        startTime,
-        endTime,
-        presalePercentage: data.presalePercentage,
+        presaleEnabled: data.presaleEnabled,
+        maxActivePresales: data.presaleEnabled ? 1 : 0,
+        presaleRate: data.presaleEnabled ? parseUnits(data.presaleRate?.toString() || '0', 18) : BigInt(0),
+        softCap: data.presaleEnabled ? parseUnits(data.softCap?.toString() || '0', 18) : BigInt(0),
+        hardCap: data.presaleEnabled ? parseUnits(data.hardCap?.toString() || '0', 18) : BigInt(0),
+        minContribution: data.presaleEnabled ? parseUnits(data.minContribution?.toString() || '0', 18) : BigInt(0),
+        maxContribution: data.presaleEnabled ? parseUnits(data.maxContribution?.toString() || '0', 18) : BigInt(0),
+        startTime: data.presaleEnabled ? BigInt(data.startTime || 0) : BigInt(0),
+        endTime: data.presaleEnabled ? BigInt(data.endTime || 0) : BigInt(0),
+        presalePercentage: data.presaleEnabled ? 5 : 0,
         liquidityPercentage: data.liquidityPercentage,
-        liquidityLockDuration: data.liquidityLockDuration,
-        wallets: processedWallets
+        liquidityLockDuration: BigInt(Math.min(data.liquidityLockDuration, 365)), // Cap at 365 days
+        walletAllocations
       };
 
-      console.log('Token creation params:', params);
+      console.log('Submitting with params:', params);
       const tx = await createToken(params);
       
-      // Wait for transaction receipt to get the token address
-      const receipt = await publicClient.waitForTransactionReceipt({ hash: tx });
-      console.log('Transaction receipt:', receipt);
-      
-      // Get the token address from the event logs
-      const tokenCreatedEvent = receipt.logs.find(log => {
-        // Check if this is the TokenCreated event
-        return log.topics[0] === '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef' || // Transfer event
-               log.topics[0] === '0x0f6798a560793a54c3bcfe86a93cde1e73087d944c0ea20544137d4121396885' || // TokenCreated event
-               log.topics[0] === '0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0';  // OwnershipTransferred event
-      });
-      
-      let tokenAddress: `0x${string}`;
-      
-      if (!tokenCreatedEvent) {
-        // If we can't find the event, use the first contract created in the transaction
-        const contractCreationLog = receipt.logs.find(log => 
-          log.address && log.topics.length > 0
-        );
-        
-        if (!contractCreationLog) {
-          throw new Error('Token address not found in transaction logs');
-        }
-        
-        tokenAddress = contractCreationLog.address as `0x${string}`;
-        console.log('Token address (from contract creation):', tokenAddress);
-      } else {
-        tokenAddress = tokenCreatedEvent.address as `0x${string}`;
-        console.log('Token address (from event):', tokenAddress);
+      if (onSuccess) {
+        onSuccess();
       }
-      
-      toast({
-        title: "Success",
-        description: "Token created successfully",
-      });
-      
-      onSuccess?.();
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error creating token:', error);
-      console.error('Error details:', {
-        message: error?.message,
-        code: error?.code,
-        data: error?.data
-      });
-      toast({
-        title: "Error",
-        description: error?.message || "Failed to create token",
-        variant: "destructive"
-      });
-      onError?.(error);
-    } finally {
-      setLoading(false);
+      if (onError) {
+        onError(error);
+      }
     }
   };
 
   const addWallet = () => {
+    const defaultTimes = getDefaultTimes();
     const newWallet = {
       name: '',
       address: '',
       percentage: 0,
       vestingEnabled: false,
-      vestingDuration: 365, // Default to 1 year
-      cliffDuration: 90,   // Default to 3 months
-      vestingStartTime: getDefaultTimes().startTimeFormatted
+      vestingDuration: 365,
+      cliffDuration: 90,
+      vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600) // 24 hours from now
     };
     
     form.setValue('wallets', [...form.getValues('wallets'), newWallet]);
@@ -370,16 +577,24 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
 
   const applyPreset = (preset: keyof typeof VESTING_PRESETS) => {
     const presetConfig = VESTING_PRESETS[preset];
-    form.setValue('presalePercentage', presetConfig.presalePercentage);
-    form.setValue('liquidityPercentage', presetConfig.liquidityPercentage);
+    const presaleEnabled = form.getValues("presaleEnabled");
+    
+    // Set liquidity percentage based on presale state
+    const liquidityPercentage = presaleEnabled ? 
+      presetConfig.liquidityPercentage : // Use preset liquidity if presale enabled
+      presetConfig.liquidityPercentage + 5; // Add presale's 5% to liquidity if disabled
+    
+    form.setValue('liquidityPercentage', liquidityPercentage);
+    
+    // Set wallets with correct percentages
     form.setValue('wallets', presetConfig.wallets.map(wallet => ({
-      name: wallet.walletName,
+      name: wallet.name,
       address: address || '0x0000000000000000000000000000000000000000',
-      percentage: wallet.amount,
+      percentage: wallet.percentage,
       vestingEnabled: wallet.vestingEnabled,
       vestingDuration: wallet.vestingDuration,
       cliffDuration: wallet.cliffDuration,
-      vestingStartTime: wallet.vestingStartTime
+      vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
     })));
   };
 
@@ -481,14 +696,16 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
       };
     }
 
-    if (max > 1e12) {
+    // Add warning for very large supplies
+    if (initial > 1e9 || max > 1e9) {
       return {
         category: 'Token Supply',
         status: 'warning' as const,
-        message: 'Very large max supply',
+        message: 'Very large supply',
         details: [
-          'Consider reducing max supply for better tokenomics',
-          'Large supplies can be perceived as less valuable'
+          'Consider reducing supply to less than 1 billion',
+          'Large supplies may cause transaction issues',
+          'Recommended: 1M-100M total supply'
         ]
       };
     }
@@ -595,47 +812,47 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
     };
   };
 
-  const validateDistribution = (): ValidationResult => {
-    const formValues = form.getValues();
-    const totalPercentage = Number(formValues.presalePercentage) + 
-      Number(formValues.liquidityPercentage) +
-      formValues.wallets.reduce((sum, w) => sum + Number(w.percentage), 0);
+  const validateDistribution = (form: UseFormReturn<FormData>): ValidationResult => {
+    const presaleEnabled = form.getValues('presaleEnabled');
+    const presalePercentage = presaleEnabled ? 5 : 0;
+    const liquidityPercentage = form.getValues('liquidityPercentage') || 0;
+    const wallets = form.getValues('wallets') || [];
+    const walletPercentages = wallets.reduce((sum: number, w: { percentage?: number }) => sum + (w.percentage || 0), 0);
+    const totalPercentage = presalePercentage + liquidityPercentage + walletPercentages;
 
-    if (totalPercentage !== 100) {
+    // When liquidity is less than 100%, require at least one wallet
+    if (liquidityPercentage < 100 && wallets.length === 0) {
       return {
-        category: 'Token Distribution',
-        status: 'error',
-        message: 'Invalid total allocation',
-        details: [`Total allocation is ${totalPercentage}%, should be 100%`]
-      };
+        category: 'Distribution',
+        message: 'At least one wallet allocation is required when liquidity is less than 100%',
+        details: [
+          `Liquidity: ${liquidityPercentage}%`,
+          'Add a wallet allocation for the remaining tokens'
+        ],
+        status: 'error'
+      } as ValidationResult;
     }
 
-    const teamAllocation = formValues.wallets
-      .filter(w => w.name.toLowerCase().includes('team'))
-      .reduce((sum, w) => sum + Number(w.percentage), 0);
-
-    if (teamAllocation > 20) {
+    // When there are wallet allocations, total must equal 100%
+    if (totalPercentage !== 100) {
       return {
-        category: 'Token Distribution',
-        status: 'warning',
-        message: 'High team allocation',
+        category: 'Distribution',
+        message: 'Total allocation must be 100%',
         details: [
-          `Team allocation is ${teamAllocation}%`,
-          'Consider reducing team allocation to build trust'
-        ]
-      };
+          `Presale: ${presalePercentage}%`,
+          `Liquidity: ${liquidityPercentage}%`,
+          `Additional Wallets: ${walletPercentages}%`,
+          `Total: ${totalPercentage}%`
+        ],
+        status: 'error'
+      } as ValidationResult;
     }
 
     return {
-      category: 'Token Distribution',
-      status: 'success',
-      message: 'Good token distribution',
-      details: [
-        `Presale: ${formValues.presalePercentage}%`,
-        `Liquidity: ${formValues.liquidityPercentage}%`,
-        ...formValues.wallets.map(w => `${w.name}: ${w.percentage}%`)
-      ]
-    };
+      category: 'Distribution',
+      message: 'Distribution percentages are valid',
+      status: 'success'
+    } as ValidationResult;
   };
 
   const validateLiquidity = (): ValidationResult => {
@@ -691,7 +908,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
       validateSupply(formValues.initialSupply.toString(), formValues.maxSupply.toString()),
       validatePresale(),
       validateVesting(),
-      validateDistribution(),
+      validateDistribution(form),
       validateLiquidity()
     ];
     
@@ -702,505 +919,480 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
 
   return (
     <div className="form-container form-compact">
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-2">
-        <div className="form-grid">
-          <div className="form-group">
-            <label htmlFor="name" className="form-label">Token Name</label>
-            <Input
-              {...form.register("name")}
-              placeholder="My Token"
-              className="form-input"
-            />
-            {form.formState.errors.name && (
-              <p className="form-error">{form.formState.errors.name.message}</p>
-            )}
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="symbol" className="form-label">Token Symbol</label>
-            <Input
-              {...form.register("symbol")}
-              placeholder="MTK"
-              className="form-input"
-            />
-            {form.formState.errors.symbol && (
-              <p className="form-error">{form.formState.errors.symbol.message}</p>
-            )}
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="initialSupply" className="form-label">Initial Supply</label>
-            <Input
-              {...form.register("initialSupply")}
-              placeholder="1000000"
-              className="form-input"
-            />
-            {form.formState.errors.initialSupply && (
-              <p className="form-error">{form.formState.errors.initialSupply.message}</p>
-            )}
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="maxSupply" className="form-label">Max Supply</label>
-            <Input
-              {...form.register("maxSupply")}
-              placeholder="2000000"
-              className="form-input"
-            />
-            {form.formState.errors.maxSupply && (
-              <p className="form-error">{form.formState.errors.maxSupply.message}</p>
-            )}
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="presaleRate" className="form-label">
-              Presale Rate (ETH/token)
-              <InfoIcon content="Amount of ETH needed to buy 1 token. Example: 0.001 means 1 token costs 0.001 ETH" />
-            </label>
-            <div className="relative">
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-2">
+          <div className="form-grid">
+            <div className="form-group">
+              <label htmlFor="name" className="form-label">Token Name</label>
               <Input
-                type="number"
-                step="0.0000000001"
-                placeholder="0.001"
-                {...form.register("presaleRate")}
+                {...form.register("name")}
+                placeholder="My Token"
                 className="form-input"
               />
-              <div className="absolute right-0 top-0 h-full flex items-center pr-2">
-                <span className="text-xs text-gray-400">
-                  {form.watch("presaleRate") ? `≈ ${Math.floor(1 / Number(form.watch("presaleRate")))} tokens/ETH` : ''}
-                </span>
+              {form.formState.errors.name && (
+                <p className="form-error">{form.formState.errors.name.message}</p>
+              )}
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="symbol" className="form-label">Token Symbol</label>
+              <Input
+                {...form.register("symbol")}
+                placeholder="MTK"
+                className="form-input"
+              />
+              {form.formState.errors.symbol && (
+                <p className="form-error">{form.formState.errors.symbol.message}</p>
+              )}
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="initialSupply" className="form-label">Initial Supply</label>
+              <Input
+                {...form.register("initialSupply")}
+                placeholder="1000000"
+                className="form-input"
+              />
+              {form.formState.errors.initialSupply && (
+                <p className="form-error">{form.formState.errors.initialSupply.message}</p>
+              )}
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="maxSupply" className="form-label">Max Supply</label>
+              <Input
+                {...form.register("maxSupply")}
+                placeholder="2000000"
+                className="form-input"
+              />
+              {form.formState.errors.maxSupply && (
+                <p className="form-error">{form.formState.errors.maxSupply.message}</p>
+              )}
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="liquidityLockPeriod" className="form-label">
+                Liquidity Lock Period (days)
+                <InfoIcon content="Duration the initial liquidity will be locked in the DEX" />
+              </label>
+              <Input
+                type="number"
+                min="30"
+                {...form.register("liquidityLockDuration", {
+                  valueAsNumber: true,
+                  min: {
+                    value: 30,
+                    message: "Minimum lock period is 30 days"
+                  }
+                })}
+                placeholder="180"
+                className="form-input"
+              />
+              {form.formState.errors.liquidityLockDuration && (
+                <p className="form-error">{form.formState.errors.liquidityLockDuration.message}</p>
+              )}
+              <p className="text-xs text-gray-400 mt-1">
+                Recommended: 180+ days for better trust and token stability
+              </p>
+            </div>
+          </div>
+
+          <div className="form-section">
+            <h3 className="text-lg font-medium text-white mb-2">Token Features</h3>
+            <div className="grid grid-cols-2 gap-2">
+              <FormField
+                control={form.control}
+                name="presaleEnabled"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-2 shadow-sm">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-white">Enable Presale</FormLabel>
+                      <FormDescription className="text-gray-400 text-xs">
+                        Enable token presale functionality
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="enableBlacklist"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-2 shadow-sm">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-white">Enable Blacklist</FormLabel>
+                      <FormDescription className="text-gray-400 text-xs">
+                        Allow blocking malicious addresses
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="enableTimeLock"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-2 shadow-sm">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-white">Enable Time Lock</FormLabel>
+                      <FormDescription className="text-gray-400 text-xs">
+                        Lock tokens for a specific time period
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {form.watch("presaleEnabled") && (
+              <div className="mt-2">
+                <FormField
+                  control={form.control}
+                  name="maxActivePresales"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-white">Max Active Presales</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min="1"
+                          placeholder="1"
+                          className="w-full h-8 text-sm bg-gray-700"
+                          {...field}
+                          onChange={(e) => field.onChange(Number(e.target.value))}
+                        />
+                      </FormControl>
+                      <FormDescription className="text-gray-400 text-xs">
+                        Maximum number of concurrent active presales
+                      </FormDescription>
+                    </FormItem>
+                  )}
+                />
               </div>
-            </div>
-            {form.formState.errors.presaleRate && (
-              <p className="form-error">{form.formState.errors.presaleRate.message}</p>
             )}
           </div>
 
-          <div className="form-group">
-            <label htmlFor="softCap" className="form-label">
-              Soft Cap (ETH)
-              <InfoIcon content="Minimum amount of ETH needed for presale to be considered successful" />
-            </label>
-            <Input
-              {...form.register("softCap")}
-              placeholder="50"
-              className="form-input"
-            />
-            {form.formState.errors.softCap && (
-              <p className="form-error">{form.formState.errors.softCap.message}</p>
-            )}
-          </div>
+          {/* Hide presale configuration if presale is disabled */}
+          {form.watch("presaleEnabled") && (
+            <div className="form-section bg-gray-800/50 rounded-lg p-4">
+              <h3 className="text-lg font-medium text-white mb-2">Presale Configuration</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="relative">
+                  <label htmlFor="presaleRate" className="text-sm text-white">Presale Rate</label>
+                  <div className="relative">
+                    <Input
+                      type="number"
+                      step="0.0000000001"
+                      placeholder="0.001"
+                      {...form.register("presaleRate", {
+                        required: "Presale rate is required",
+                        min: { value: 0.000000001, message: "Minimum rate is 0.000000001" },
+                        max: { value: 1, message: "Maximum rate is 1" },
+                        validate: {
+                          validNumber: (value) => value ? !isNaN(Number(value)) || "Please enter a valid number" : "Value is required",
+                          notZero: (value) => value ? Number(value) > 0 || "Rate must be greater than 0" : "Value is required"
+                        }
+                      })}
+                      className="form-input h-8 text-sm bg-gray-700 pr-16"
+                    />
+                    <div className="absolute inset-y-0 right-0 flex items-center pr-2">
+                      <span className="text-xs text-gray-400">
+                        {form.watch("presaleRate") && Number(form.watch("presaleRate")) > 0 
+                          ? `≈ ${(1 / Number(form.watch("presaleRate"))).toLocaleString(undefined, {maximumFractionDigits: 2})} tokens/ETH` 
+                          : ''}
+                      </span>
+                    </div>
+                  </div>
+                  {form.formState.errors.presaleRate && (
+                    <p className="text-xs text-red-400 mt-1">{form.formState.errors.presaleRate.message}</p>
+                  )}
+                </div>
+                
+                <div className="relative">
+                  <label htmlFor="softCap" className="text-sm text-white">Soft Cap (ETH)</label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    placeholder="1"
+                    {...form.register("softCap", {
+                      required: "Soft cap is required",
+                      min: { value: 0.01, message: "Minimum soft cap is 0.01 ETH" },
+                      validate: {
+                        validNumber: (value) => value ? !isNaN(Number(value)) || "Please enter a valid number" : "Value is required",
+                        notZero: (value) => value ? Number(value) > 0 || "Soft cap must be greater than 0" : "Value is required",
+                        lessThanHardCap: (value) => {
+                          if (!value) return "Value is required";
+                          const hardCap = form.watch("hardCap");
+                          return !hardCap || Number(value) <= Number(hardCap) || "Soft cap must be less than hard cap";
+                        }
+                      }
+                    })}
+                    className="form-input h-8 text-sm bg-gray-700"
+                  />
+                  {form.formState.errors.softCap && (
+                    <p className="text-xs text-red-400 mt-1">{form.formState.errors.softCap.message}</p>
+                  )}
+                </div>
+                
+                <div className="relative">
+                  <label htmlFor="hardCap" className="text-sm text-white">Hard Cap (ETH)</label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    placeholder="10"
+                    {...form.register("hardCap", {
+                      required: "Hard cap is required",
+                      min: { value: 0.01, message: "Minimum hard cap is 0.01 ETH" },
+                      validate: {
+                        validNumber: (value) => value ? !isNaN(Number(value)) || "Please enter a valid number" : "Value is required",
+                        notZero: (value) => value ? Number(value) > 0 || "Hard cap must be greater than 0" : "Value is required",
+                        greaterThanSoftCap: (value) => {
+                          if (!value) return "Value is required";
+                          const softCap = form.watch("softCap");
+                          return !softCap || Number(value) >= Number(softCap) || "Hard cap must be greater than soft cap";
+                        }
+                      }
+                    })}
+                    className="form-input h-8 text-sm bg-gray-700"
+                  />
+                  {form.formState.errors.hardCap && (
+                    <p className="text-xs text-red-400 mt-1">{form.formState.errors.hardCap.message}</p>
+                  )}
+                </div>
+                
+                <div className="relative">
+                  <label htmlFor="minContribution" className="text-sm text-white">Min Contribution (ETH)</label>
+                  <Input
+                    type="number"
+                    step="0.001"
+                    placeholder="0.01"
+                    {...form.register("minContribution", {
+                      required: "Minimum contribution is required",
+                      min: { value: 0.001, message: "Minimum contribution must be at least 0.001 ETH" },
+                      validate: {
+                        validNumber: (value) => value ? !isNaN(Number(value)) || "Please enter a valid number" : "Value is required",
+                        notZero: (value) => value ? Number(value) > 0 || "Minimum contribution must be greater than 0" : "Value is required",
+                        lessThanMax: (value) => {
+                          if (!value) return "Value is required";
+                          const maxContribution = form.watch("maxContribution");
+                          return !maxContribution || Number(value) <= Number(maxContribution) || "Minimum contribution must be less than maximum contribution";
+                        }
+                      }
+                    })}
+                    className="form-input h-8 text-sm bg-gray-700"
+                  />
+                  {form.formState.errors.minContribution && (
+                    <p className="text-xs text-red-400 mt-1">{form.formState.errors.minContribution.message}</p>
+                  )}
+                </div>
+                
+                <div className="relative">
+                  <label htmlFor="maxContribution" className="text-sm text-white">Max Contribution (ETH)</label>
+                  <Input
+                    type="number"
+                    step="0.001"
+                    placeholder="1"
+                    {...form.register("maxContribution", {
+                      required: "Maximum contribution is required",
+                      min: { value: 0.001, message: "Maximum contribution must be at least 0.001 ETH" },
+                      validate: {
+                        validNumber: (value) => value ? !isNaN(Number(value)) || "Please enter a valid number" : "Value is required",
+                        notZero: (value) => value ? Number(value) > 0 || "Maximum contribution must be greater than 0" : "Value is required",
+                        greaterThanMin: (value) => {
+                          if (!value) return "Value is required";
+                          const minContribution = form.watch("minContribution");
+                          return !minContribution || Number(value) >= Number(minContribution) || "Maximum contribution must be greater than minimum contribution";
+                        },
+                        lessThanHardCap: (value) => {
+                          if (!value) return "Value is required";
+                          const hardCap = form.watch("hardCap");
+                          return !hardCap || Number(value) <= Number(hardCap) || "Maximum contribution must be less than hard cap";
+                        }
+                      }
+                    })}
+                    className="form-input h-8 text-sm bg-gray-700"
+                  />
+                  {form.formState.errors.maxContribution && (
+                    <p className="text-xs text-red-400 mt-1">{form.formState.errors.maxContribution.message}</p>
+                  )}
+                </div>
+              </div>
 
-          <div className="form-group">
-            <label htmlFor="hardCap" className="form-label">
-              Hard Cap (ETH)
-              <InfoIcon content="Maximum amount of ETH that can be raised during presale" />
-            </label>
-            <Input
-              {...form.register("hardCap")}
-              placeholder="100"
-              className="form-input"
-            />
-            {form.formState.errors.hardCap && (
-              <p className="form-error">{form.formState.errors.hardCap.message}</p>
-            )}
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="minContribution" className="form-label">
-              Min Contribution (ETH)
-              <InfoIcon content="Minimum amount of ETH a user can contribute" />
-            </label>
-            <Input
-              {...form.register("minContribution")}
-              placeholder="0.1"
-              className="form-input"
-            />
-            {form.formState.errors.minContribution && (
-              <p className="form-error">{form.formState.errors.minContribution.message}</p>
-            )}
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="maxContribution" className="form-label">
-              Max Contribution (ETH)
-              <InfoIcon content="Maximum amount of ETH a user can contribute" />
-            </label>
-            <Input
-              {...form.register("maxContribution")}
-              placeholder="10"
-              className="form-input"
-            />
-            {form.formState.errors.maxContribution && (
-              <p className="form-error">{form.formState.errors.maxContribution.message}</p>
-            )}
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="startTime" className="form-label">Start Time</label>
-            <Input
-              {...form.register("startTime")}
-              type="datetime-local"
-              className="form-input"
-            />
-            {form.formState.errors.startTime && (
-              <p className="form-error">{form.formState.errors.startTime.message}</p>
-            )}
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="endTime" className="form-label">End Time</label>
-            <Input
-              {...form.register("endTime")}
-              type="datetime-local"
-              className="form-input"
-            />
-            {form.formState.errors.endTime && (
-              <p className="form-error">{form.formState.errors.endTime.message}</p>
-            )}
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="liquidityLockPeriod" className="form-label">
-              Liquidity Lock Period (days)
-              <InfoIcon content="Number of days the liquidity will be locked" />
-            </label>
-            <Input
-              {...form.register("liquidityLockDuration")}
-              placeholder="180"
-              className="form-input"
-            />
-            {form.formState.errors.liquidityLockDuration && (
-              <p className="form-error">{form.formState.errors.liquidityLockDuration.message}</p>
-            )}
-          </div>
-        </div>
-
-        <div className="form-section">
-          <h3 className="text-lg font-medium text-white mb-2">Token Features</h3>
-          <div className="form-grid">
-            <div className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                {...form.register("enableBlacklist")}
-                className="form-checkbox"
-              />
-              <label htmlFor="enableBlacklist" className="form-label">Enable Blacklist</label>
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                {...form.register("enableTimeLock")}
-                className="form-checkbox"
-              />
-              <label htmlFor="enableTimeLock" className="form-label">Enable Time Lock</label>
-            </div>
-          </div>
-        </div>
-
-        <div className="form-section col-span-2 bg-gray-900/50 rounded-lg p-2">
-          <div className="mb-2">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
+              {/* Date/Time inputs in their own row */}
+              <div className="col-span-2 space-y-2">
                 <div>
-                  <h3 className="text-lg font-medium text-white">Distribution & Vesting</h3>
-                  <p className="text-sm text-gray-400">Configure token allocations and vesting schedules</p>
+                  <label htmlFor="startTime" className="text-sm text-white">Start Time</label>
+                  <Input
+                    type="datetime-local"
+                    {...form.register("startTime", {
+                      required: "Start time is required",
+                      validate: {
+                        futureDate: (value) => {
+                          if (!value) return "Start time is required";
+                          const date = new Date(value);
+                          return date > new Date() || "Start time must be in the future";
+                        }
+                      }
+                    })}
+                    className="form-input h-8 text-sm bg-gray-700"
+                  />
+                  {form.formState.errors.startTime && (
+                    <p className="text-xs text-red-400 mt-1">{form.formState.errors.startTime.message}</p>
+                  )}
                 </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="h-8 px-2 text-sm text-blue-400 hover:text-blue-300"
-                  onClick={() => {
-                    // Using the Dialog component to show tokenomics info
-                    setShowTokenomicsInfo(true);
-                  }}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <path d="M12 16v-4"></path>
-                    <path d="M12 8h.01"></path>
-                  </svg>
-                  Tokenomics Guide
-                </Button>
+                <div>
+                  <label htmlFor="endTime" className="text-sm text-white">End Time</label>
+                  <Input
+                    type="datetime-local"
+                    {...form.register("endTime", {
+                      required: "End time is required",
+                      validate: {
+                        afterStart: (value) => {
+                          if (!value) return "End time is required";
+                          const startTime = form.watch("startTime");
+                          if (!startTime) return true;
+                          const start = new Date(startTime);
+                          const end = new Date(value);
+                          return end > start || "End time must be after start time";
+                        }
+                      }
+                    })}
+                    className="form-input h-8 text-sm bg-gray-700"
+                  />
+                  {form.formState.errors.endTime && (
+                    <p className="text-xs text-red-400 mt-1">{form.formState.errors.endTime.message}</p>
+                  )}
+                </div>
               </div>
-              <select
-                onChange={(e) => applyPreset(e.target.value as keyof typeof VESTING_PRESETS)}
-                className="h-8 px-2 text-sm bg-gray-800 border border-gray-700 rounded-md text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-32"
-                defaultValue=""
-              >
-                <option value="" disabled>Select Preset</option>
-                <option value="standard">Standard</option>
-                <option value="fair_launch">Fair</option>
-                <option value="community">Community</option>
-                <option value="growth">Growth</option>
-                <option value="bootstrap">Bootstrap</option>
-                <option value="governance">Gov</option>
-              </select>
+            </div>
+          )}
+
+          {/* Multiple Presale Configuration */}
+          {form.watch("presaleEnabled") && (form.watch("maxActivePresales") || 1) > 1 && (
+            <div className="form-section bg-gray-800/50 rounded-lg p-4">
+              <h3 className="text-lg font-medium text-white mb-2">Multiple Presale Configuration</h3>
+              <div className="space-y-3">
+                {Array.from({ length: Math.max(1, form.watch("maxActivePresales") || 1) }).map((_, index) => (
+                  <div key={index} className="p-3 bg-gray-800 rounded-lg">
+                    <h4 className="text-sm font-medium text-white mb-2">Presale #{index + 1}</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-xs text-gray-400">Soft Cap</label>
+                          <Input
+                            {...form.register(`multiPresaleConfig.presales.${index}.softCap`)}
+                            type="number"
+                            placeholder="50"
+                            className="h-7 text-sm bg-gray-700"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-400">Hard Cap</label>
+                          <Input
+                            {...form.register(`multiPresaleConfig.presales.${index}.hardCap`)}
+                            type="number"
+                            placeholder="100"
+                            className="h-7 text-sm bg-gray-700"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-xs text-gray-400">Rate</label>
+                          <Input
+                            {...form.register(`multiPresaleConfig.presales.${index}.presaleRate`)}
+                            type="number"
+                            step="0.0000000001"
+                            placeholder="0.001"
+                            className="h-7 text-sm bg-gray-700"
+                          />
+                        </div>
+                        <div className="flex items-end">
+                          <FormField
+                            control={form.control}
+                            name={`multiPresaleConfig.presales.${index}.whitelistEnabled`}
+                            render={({ field }) => (
+                              <FormItem className="flex items-center gap-2">
+                                <FormControl>
+                                  <Switch
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                  />
+                                </FormControl>
+                                <FormLabel className="text-xs text-gray-400">Whitelist</FormLabel>
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="form-section col-span-2 bg-gray-900/50 rounded-lg p-2">
+            <div className="mb-2">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div>
+                    <h3 className="text-lg font-medium text-white">Distribution & Vesting</h3>
+                    <p className="text-sm text-gray-400">Configure token allocations and vesting schedules</p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="h-8 px-2 text-sm text-blue-400 hover:text-blue-300"
+                    onClick={() => {
+                      // Using the Dialog component to show tokenomics info
+                      setShowTokenomicsInfo(true);
+                    }}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1">
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <path d="M12 16v-4"></path>
+                      <path d="M12 8h.01"></path>
+                    </svg>
+                    Tokenomics Guide
+                  </Button>
+                </div>
+                <select
+                  onChange={(e) => applyPreset(e.target.value as keyof typeof VESTING_PRESETS)}
+                  className="h-8 px-2 text-sm bg-gray-800 border border-gray-700 rounded-md text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-32"
+                  defaultValue=""
+                >
+                  <option value="" disabled>Select Preset</option>
+                  <option value="standard">Standard</option>
+                  <option value="fair_launch">Fair</option>
+                  <option value="community">Community</option>
+                  <option value="growth">Growth</option>
+                  <option value="bootstrap">Bootstrap</option>
+                  <option value="governance">Gov</option>
+                </select>
+              </div>
             </div>
           </div>
-
-          {/* Tokenomics Guide Dialog */}
-          <Dialog 
-            open={showTokenomicsInfo} 
-            onOpenChange={(open) => setShowTokenomicsInfo(open)}
-          >
-            <DialogContent className="bg-gray-800 p-0">
-              <div className="p-6 max-w-4xl w-full">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-xl font-semibold text-white">Token Distribution Guide</h3>
-                  <button
-                    onClick={() => setShowTokenomicsInfo(false)}
-                    className="text-gray-400 hover:text-gray-300"
-                  >
-                    ×
-                  </button>
-                </div>
-                <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-2">
-                  {/* Standard Distribution */}
-                  <div className="bg-gradient-to-r from-blue-900/30 to-blue-800/10 rounded-lg p-6 border border-blue-800/50">
-                    <div className="flex items-start gap-4">
-                      <div className="bg-blue-500/20 rounded-lg p-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="text-lg font-medium text-blue-400 mb-2">Standard Distribution (35/35/30)</h3>
-                        <p className="text-gray-300 mb-3">A balanced approach suitable for most projects, offering stability and growth potential</p>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <h4 className="text-sm font-medium text-white mb-2">Allocation Breakdown</h4>
-                            <ul className="space-y-2 text-sm">
-                              <li className="flex items-center gap-2 text-gray-300">
-                                <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                                Presale (35%): Initial investor allocation
-                              </li>
-                              <li className="flex items-center gap-2 text-gray-300">
-                                <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                                Liquidity (35%): Market stability
-                              </li>
-                              <li className="flex items-center gap-2 text-gray-300">
-                                <span className="w-2 h-2 rounded-full bg-purple-500"></span>
-                                Team (15%): Long-term development
-                              </li>
-                              <li className="flex items-center gap-2 text-gray-300">
-                                <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
-                                Marketing (10%): Growth initiatives
-                              </li>
-                              <li className="flex items-center gap-2 text-gray-300">
-                                <span className="w-2 h-2 rounded-full bg-red-500"></span>
-                                Development (5%): Future improvements
-                              </li>
-                            </ul>
-                          </div>
-                          <div>
-                            <h4 className="text-sm font-medium text-white mb-2">Key Benefits</h4>
-                            <ul className="space-y-2 text-sm text-gray-300">
-                              <li className="flex items-center gap-2">
-                                <svg className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                                Balanced liquidity for price stability
-                              </li>
-                              <li className="flex items-center gap-2">
-                                <svg className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                                Fair team allocation with vesting
-                              </li>
-                              <li className="flex items-center gap-2">
-                                <svg className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                                Sustainable marketing budget
-                              </li>
-                            </ul>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Fair Launch */}
-                  <div className="bg-gradient-to-r from-green-900/30 to-green-800/10 rounded-lg p-6 border border-green-800/50">
-                    <div className="flex items-start gap-4">
-                      <div className="bg-green-500/20 rounded-lg p-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                        </svg>
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="text-lg font-medium text-green-400 mb-2">Fair Launch Model (45/35/20)</h3>
-                        <p className="text-gray-300 mb-3">Community-focused distribution emphasizing public participation and fair access</p>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <h4 className="text-sm font-medium text-white mb-2">Distribution Strategy</h4>
-                            <ul className="space-y-2 text-sm">
-                              <li className="flex items-center gap-2 text-gray-300">
-                                <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                                Presale (45%): Maximum community allocation
-                              </li>
-                              <li className="flex items-center gap-2 text-gray-300">
-                                <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                                Liquidity (35%): Strong market foundation
-                              </li>
-                              <li className="flex items-center gap-2 text-gray-300">
-                                <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
-                                Team & Marketing (20%): Lean operations
-                              </li>
-                            </ul>
-                          </div>
-                          <div>
-                            <h4 className="text-sm font-medium text-white mb-2">Advantages</h4>
-                            <ul className="space-y-2 text-sm text-gray-300">
-                              <li className="flex items-center gap-2">
-                                <svg className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                                Higher community ownership
-                              </li>
-                              <li className="flex items-center gap-2">
-                                <svg className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                                Reduced whale concentration
-                              </li>
-                              <li className="flex items-center gap-2">
-                                <svg className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                                Better price discovery
-                              </li>
-                            </ul>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Growth Model */}
-                  <div className="bg-gradient-to-r from-purple-900/30 to-purple-800/10 rounded-lg p-6 border border-purple-800/50">
-                    <div className="flex items-start gap-4">
-                      <div className="bg-purple-500/20 rounded-lg p-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                        </svg>
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="text-lg font-medium text-purple-400 mb-2">Growth Model (35/35/30)</h3>
-                        <p className="text-gray-300 mb-3">Marketing-focused distribution designed for rapid expansion and market penetration</p>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <h4 className="text-sm font-medium text-white mb-2">Strategic Allocation</h4>
-                            <ul className="space-y-2 text-sm">
-                              <li className="flex items-center gap-2 text-gray-300">
-                                <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                                Presale (35%): Initial raise
-                              </li>
-                              <li className="flex items-center gap-2 text-gray-300">
-                                <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                                Liquidity (35%): Market stability
-                              </li>
-                              <li className="flex items-center gap-2 text-gray-300">
-                                <span className="w-2 h-2 rounded-full bg-purple-500"></span>
-                                Team & Marketing (30%): Development
-                              </li>
-                            </ul>
-                          </div>
-                          <div>
-                            <h4 className="text-sm font-medium text-white mb-2">Vesting Schedule</h4>
-                            <ul className="space-y-2 text-sm">
-                              <li className="flex items-center gap-2 text-gray-300">
-                                <InfoIcon content="The cliff period is a duration where tokens are locked and cannot be claimed. This helps ensure long-term commitment.">
-                                  <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
-                                  Cliff Period: 3 months
-                                </InfoIcon>
-                              </li>
-                              <li className="flex items-center gap-2 text-gray-300">
-                                <InfoIcon content="After the cliff period, tokens are gradually released over the vesting duration. This prevents large sell-offs and promotes sustainable growth.">
-                                  <span className="w-2 h-2 rounded-full bg-orange-500"></span>
-                                  Vesting Duration: 12 months
-                                </InfoIcon>
-                              </li>
-                              <li className="flex items-center gap-2 text-gray-300">
-                                <InfoIcon content="Linear vesting means tokens are released at a constant rate over time, ensuring fair and predictable distribution.">
-                                  <span className="w-2 h-2 rounded-full bg-red-500"></span>
-                                  Linear Release Schedule
-                                </InfoIcon>
-                              </li>
-                            </ul>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Best Practices */}
-                  <div className="bg-gradient-to-r from-amber-900/30 to-amber-800/10 rounded-lg p-6 border border-amber-800/50">
-                    <div className="flex items-start gap-4">
-                      <div className="bg-amber-500/20 rounded-lg p-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                        </svg>
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="text-lg font-medium text-amber-400 mb-2">Key Considerations & Best Practices</h3>
-                        <div className="grid grid-cols-2 gap-6">
-                          <div>
-                            <h4 className="text-sm font-medium text-white mb-2">Essential Rules</h4>
-                            <ul className="space-y-3 text-sm">
-                              <li className="flex items-start gap-2 text-gray-300">
-                                <svg className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                                </svg>
-                                <span>Never allocate less than 25% to liquidity to ensure price stability</span>
-                              </li>
-                              <li className="flex items-start gap-2 text-gray-300">
-                                <svg className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                                </svg>
-                                <span>Always implement vesting for team tokens (minimum 6 months)</span>
-                              </li>
-                              <li className="flex items-start gap-2 text-gray-300">
-                                <svg className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                                </svg>
-                                <span>Keep team allocation under 20% to maintain trust</span>
-                              </li>
-                            </ul>
-                          </div>
-                          <div>
-                            <h4 className="text-sm font-medium text-white mb-2">Advanced Tips</h4>
-                            <ul className="space-y-3 text-sm">
-                              <li className="flex items-start gap-2 text-gray-300">
-                                <svg className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                </svg>
-                                <span>Consider implementing cliff periods for large allocations</span>
-                              </li>
-                              <li className="flex items-start gap-2 text-gray-300">
-                                <svg className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                </svg>
-                                <span>Split marketing allocation into time-locked tranches</span>
-                              </li>
-                              <li className="flex items-start gap-2 text-gray-300">
-                                <svg className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                </svg>
-                                <span>Reserve small allocation for future partnerships</span>
-                              </li>
-                            </ul>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
 
           <div className="bg-gray-800/50 rounded-lg p-1 mb-2">
             <div className="space-y-2">
@@ -1220,33 +1412,68 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
               </div>
               
               <div className="grid grid-cols-3 gap-2 mt-2">
-                {/* Presale */}
-                <div className="relative">
-                  <div className="absolute -top-4 left-0 text-xs text-gray-400">Presale</div>
-                  <Input
-                    {...form.register("presalePercentage")}
-                    type="number"
-                    placeholder="25"
-                    className="form-input h-7 text-sm bg-gray-700 pr-8 w-full"
-                  />
-                  <div className="absolute inset-y-0 right-0 flex items-center">
-                    <span className="text-sm text-gray-400 mr-3">%</span>
+                {/* Presale - Only show when enabled */}
+                {form.watch("presaleEnabled") && (
+                  <div className="relative">
+                    <div className="absolute -top-4 left-0 text-xs text-gray-400">Mandatory Presale</div>
+                    <Input
+                      type="number"
+                      value="5"
+                      disabled
+                      className="form-input h-7 text-sm bg-gray-700/50 pr-8 w-full opacity-50"
+                    />
+                    <div className="absolute inset-y-0 right-0 flex items-center">
+                      <span className="text-sm text-gray-400 mr-3">%</span>
+                    </div>
+                    <div className="text-xs text-gray-400 mt-1">Fixed 5% allocation when presale enabled</div>
                   </div>
-                </div>
+                )}
                 
                 {/* Liquidity */}
                 <div className="relative">
-                  <div className="absolute -top-4 left-0 text-xs text-gray-400">Liquidity</div>
+                  <div className="absolute -top-4 left-0 text-xs text-gray-400">
+                    Liquidity
+                    <InfoIcon content="Percentage of tokens allocated for DEX liquidity. Must be less than 100% to leave tokens for owner." />
+                  </div>
                   <Input
-                    {...form.register("liquidityPercentage")}
+                    {...form.register("liquidityPercentage", {
+                      valueAsNumber: true,
+                      min: { value: 25, message: "Minimum liquidity is 25%" },
+                      max: { value: 95, message: "Maximum liquidity is 95% to leave tokens for owner" }
+                    })}
                     type="number"
-                    placeholder="25"
+                    placeholder="95"
                     className="form-input h-7 text-sm bg-gray-700 pr-8 w-full"
                   />
                   <div className="absolute inset-y-0 right-0 flex items-center">
                     <span className="text-sm text-gray-400 mr-3">%</span>
                   </div>
+                  {form.formState.errors.liquidityPercentage && (
+                    <p className="text-xs text-red-400 mt-1">{form.formState.errors.liquidityPercentage.message}</p>
+                  )}
+                  <div className="text-xs text-gray-400 mt-1">
+                    Remaining allocation: {95 - (Number(form.watch("liquidityPercentage")) + form.watch('wallets').reduce((sum, w) => sum + Number(w.percentage), 0))}%
+                  </div>
                 </div>
+              </div>
+
+              <div className="text-xs text-gray-400 mt-2 p-2 bg-gray-800/50 rounded">
+                <p>Distribution Guide:</p>
+                <ul className="list-disc list-inside mt-1">
+                  {form.watch("presaleEnabled") ? (
+                    <>
+                      <li>5% is reserved for presale</li>
+                      <li>Distribute the remaining 95% between liquidity and wallets</li>
+                      <li>Recommended: 65% liquidity, 30% wallets</li>
+                    </>
+                  ) : (
+                    <>
+                      <li>Distribute 100% between liquidity and wallets</li>
+                      <li>At least one wallet is required when liquidity is less than 100%</li>
+                      <li>Recommended: 95% liquidity, 5% owner wallet</li>
+                    </>
+                  )}
+                </ul>
               </div>
             </div>
             
@@ -1335,107 +1562,108 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
               </div>
             ))}
           </div>
-        </div>
 
-        <div className="form-actions mt-4">
-          <div className="flex items-center gap-2">
-            <div className="flex items-center mr-2">
-              <InfoIcon content="Deployment fee will be charged in ETH. Make sure you have enough ETH to cover the fee and gas costs." />
-            </div>
-            <Button
-              type="button"
-              onClick={simulateDeployment}
-              disabled={isSimulating || !isConnected}
-              variant="secondary"
-              className="bg-blue-600/20 hover:bg-blue-700/20 text-blue-400"
-            >
-              {isSimulating ? (
-                <>
-                  <span className="animate-spin mr-2">⟳</span>
-                  Analyzing...
-                </>
-              ) : (
-                'Test Deployment'
-              )}
-            </Button>
-            <Button 
-              type="submit"
-              disabled={!isConnected || loading || form.formState.isSubmitting}
-              className="form-button-primary"
-            >
-              {loading ? (
-                <>
-                  <Spinner className="w-4 h-4 mr-2" />
-                  Creating Token...
-                </>
-              ) : (
-                'Create Token'
-              )}
-            </Button>
-          </div>
-        </div>
-
-        <div className="mt-8">
-          <TokenPreview
-            name={form.watch("name")}
-            symbol={form.watch("symbol")}
-            initialSupply={form.watch("initialSupply").toString()}
-            maxSupply={form.watch("maxSupply").toString()}
-            distributionSegments={[
-              { name: 'Presale', amount: Number(form.watch("presalePercentage")), percentage: Number(form.watch("presalePercentage")), color: '#0088FE' },
-              { name: 'Liquidity', amount: Number(form.watch("liquidityPercentage")), percentage: Number(form.watch("liquidityPercentage")), color: '#00C49F' },
-              ...form.watch('wallets').map((wallet, index) => ({
-                name: wallet.name,
-                amount: Number(wallet.percentage),
-                percentage: Number(wallet.percentage),
-                color: COLORS[index % COLORS.length]
-              }))
-            ]}
-            totalAllocation={Number(form.watch("presalePercentage")) + Number(form.watch("liquidityPercentage")) + form.watch('wallets').reduce((sum, wallet) => sum + Number(wallet.percentage), 0)}
-          />
-        </div>
-      </form>
-
-      {/* Results Dialog */}
-      <Dialog 
-        open={showResults} 
-        onOpenChange={(open) => setShowResults(open)}
-      >
-        <DialogContent className="bg-gray-800 p-0">
-          <div className="p-6 max-w-4xl w-full">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-semibold text-white">Token Distribution Results</h3>
-              <button
-                onClick={() => setShowResults(false)}
-                className="text-gray-400 hover:text-gray-300"
+          <div className="form-actions mt-4">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center mr-2">
+                <InfoIcon content="Deployment fee will be charged in ETH. Make sure you have enough ETH to cover the fee and gas costs." />
+              </div>
+              <Button
+                type="button"
+                onClick={simulateDeployment}
+                disabled={isSimulating || !isConnected}
+                variant="secondary"
+                className="bg-blue-600/20 hover:bg-blue-700/20 text-blue-400"
               >
-                ×
-              </button>
+                {isSimulating ? (
+                  <>
+                    <span className="animate-spin mr-2">⟳</span>
+                    Analyzing...
+                  </>
+                ) : (
+                  'Test Deployment'
+                )}
+              </Button>
+              <Button 
+                type="submit"
+                disabled={!isConnected || loading || form.formState.isSubmitting}
+                className="form-button-primary"
+                onClick={() => {
+                  console.log('Submit button clicked');
+                  console.log('Form state:', {
+                    isDirty: form.formState.isDirty,
+                    isValid: form.formState.isValid,
+                    errors: form.formState.errors,
+                    isSubmitting: form.formState.isSubmitting,
+                    submitCount: form.formState.submitCount
+                  });
+                }}
+              >
+                {loading ? (
+                  <>
+                    <Spinner className="w-4 h-4 mr-2" />
+                    Creating Token...
+                  </>
+                ) : (
+                  'Create Token'
+                )}
+              </Button>
             </div>
-            <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-2">
+          </div>
+
+          <div className="mt-8">
+            <TokenPreview
+              name={form.watch("name")}
+              symbol={form.watch("symbol")}
+              initialSupply={form.watch("initialSupply").toString()}
+              maxSupply={form.watch("maxSupply").toString()}
+              distributionSegments={[
+                ...(form.watch("presaleEnabled") ? [{ name: 'Presale', amount: 5, percentage: 5, color: '#0088FE' }] : []),
+                { name: 'Liquidity', amount: Number(form.watch("liquidityPercentage")), percentage: Number(form.watch("liquidityPercentage")), color: '#00C49F' },
+                ...form.watch('wallets').map((wallet, index) => ({
+                  name: wallet.name,
+                  amount: Number(wallet.percentage),
+                  percentage: Number(wallet.percentage),
+                  color: COLORS[index % COLORS.length]
+                }))
+              ]}
+              totalAllocation={form.watch("presaleEnabled") ? 
+                (5 + Number(form.watch("liquidityPercentage")) + form.watch('wallets').reduce((sum, wallet) => sum + Number(wallet.percentage), 0)) :
+                (Number(form.watch("liquidityPercentage")) + form.watch('wallets').reduce((sum, wallet) => sum + Number(wallet.percentage), 0))
+              }
+            />
+          </div>
+        </form>
+      </Form>
+
+      {/* Dialogs */}
+      <Dialog open={showResults} onOpenChange={setShowResults}>
+        <DialogContent className="bg-gray-800 p-0">
+          <div className="p-6">
+            <h3 className="text-xl font-semibold text-white mb-4">Deployment Analysis</h3>
+            <div className="space-y-4">
               {simulationResults.map((result, index) => (
-                <div 
-                  key={index} 
-                  className={`bg-gray-900/50 rounded-lg p-3 border-l-2 ${
-                    result.status === 'error' ? 'border-red-500' : 
-                    result.status === 'warning' ? 'border-yellow-500' : 
-                    'border-green-500'
-                  }`}
-                >
-                  <div className="flex items-start gap-2">
-                    <div className={`mt-0.5 ${
-                      result.status === 'error' ? 'text-red-400' : 
-                      result.status === 'warning' ? 'text-yellow-400' : 
-                      'text-green-400'
+                <div key={index} className={`p-4 rounded-lg ${
+                  result.status === 'error' ? 'bg-red-900/20 border border-red-800/50' :
+                  result.status === 'warning' ? 'bg-yellow-900/20 border border-yellow-800/50' :
+                  'bg-green-900/20 border border-green-800/50'
+                }`}>
+                  <div className="flex items-start gap-3">
+                    <div className={`rounded-full p-1 ${
+                      result.status === 'error' ? 'bg-red-500/20 text-red-400' :
+                      result.status === 'warning' ? 'bg-yellow-500/20 text-yellow-400' :
+                      'bg-green-500/20 text-green-400'
                     }`}>
-                      {result.status === 'error' ? '✖' : result.status === 'warning' ? '⚠' : '✓'}
+                      {result.status === 'error' ? '✕' :
+                       result.status === 'warning' ? '!' : '✓'}
                     </div>
-                    <div className="flex-1">
-                      <h4 className="font-medium text-sm text-white">{result.category}</h4>
+                    <div>
+                      <h4 className="font-medium text-white">{result.category}</h4>
+                      <p className="text-gray-300 mt-1">{result.message}</p>
                       {result.details && (
-                        <ul className="mt-1 space-y-1">
+                        <ul className="mt-2 space-y-1">
                           {result.details.map((detail, i) => (
-                            <li key={i} className="text-xs text-gray-400">• {detail}</li>
+                            <li key={i} className="text-sm text-gray-400">• {detail}</li>
                           ))}
                         </ul>
                       )}
@@ -1444,25 +1672,15 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                 </div>
               ))}
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
-            <div className="border-t border-gray-700 mt-4 pt-4">
-              {simulationResults.some(r => r.status === 'error') ? (
-                <Alert variant="error">
-                  <h4 className="font-medium">⚠️ Deployment Not Recommended</h4>
-                  <p className="text-sm mt-1">Critical issues found. Please address the errors before proceeding.</p>
-                </Alert>
-              ) : simulationResults.some(r => r.status === 'warning') ? (
-                <Alert variant="warning">
-                  <h4 className="font-medium">⚠️ Deployment Possible with Caution</h4>
-                  <p className="text-sm mt-1">Consider addressing the warnings to improve your token's security and adoption potential.</p>
-                </Alert>
-              ) : (
-                <Alert variant="success">
-                  <h4 className="font-medium">✓ Ready for Deployment</h4>
-                  <p className="text-sm mt-1">All checks passed. Your token configuration follows best practices.</p>
-                </Alert>
-              )}
-            </div>
+      <Dialog open={showTokenomicsInfo} onOpenChange={setShowTokenomicsInfo}>
+        <DialogContent className="bg-gray-800 p-0">
+          <div className="p-6">
+            <h3 className="text-xl font-semibold text-white mb-4">Token Distribution Guide</h3>
+            {/* Add tokenomics guide content here */}
           </div>
         </DialogContent>
       </Dialog>
@@ -1471,196 +1689,12 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
 }
 
 const COLORS = [
-  '#0088FE', // Blue
-  '#00C49F', // Green
-  '#FFBB28', // Yellow
-  '#FF8042', // Orange
-  '#8884d8', // Purple
-  '#82ca9d', // Light Green
-  '#ffc658', // Light Yellow
-  '#ff7300', // Dark Orange
+  '#0088FE',
+  '#00C49F',
+  '#FFBB28',
+  '#FF8042',
+  '#8884D8',
+  '#82CA9D',
+  '#F66D44',
+  '#FABE0F',
 ];
-
-// Define vesting presets with mandatory presale and liquidity allocations
-const VESTING_PRESETS = {
-  standard: {
-    presalePercentage: 35,
-    liquidityPercentage: 35,
-    wallets: [
-      { 
-        walletName: 'Team', 
-        amount: 15, 
-        vestingEnabled: true,
-        vestingDuration: 365,
-        cliffDuration: 90,
-        vestingStartTime: getDefaultTimes().startTimeFormatted
-      },
-      { 
-        walletName: 'Marketing', 
-        amount: 10, 
-        vestingEnabled: true,
-        vestingDuration: 180,
-        cliffDuration: 30,
-        vestingStartTime: getDefaultTimes().startTimeFormatted
-      },
-      { 
-        walletName: 'Development', 
-        amount: 5, 
-        vestingEnabled: true,
-        vestingDuration: 365,
-        cliffDuration: 60,
-        vestingStartTime: getDefaultTimes().startTimeFormatted
-      }
-    ]
-  },
-  fair_launch: {
-    presalePercentage: 45,
-    liquidityPercentage: 35,
-    wallets: [
-      { 
-        walletName: 'Team', 
-        amount: 10, 
-        vestingEnabled: true,
-        vestingDuration: 365,
-        cliffDuration: 180,
-        vestingStartTime: getDefaultTimes().startTimeFormatted
-      },
-      { 
-        walletName: 'Marketing', 
-        amount: 5, 
-        vestingEnabled: true,
-        vestingDuration: 180,
-        cliffDuration: 30,
-        vestingStartTime: getDefaultTimes().startTimeFormatted
-      },
-      { 
-        walletName: 'Development', 
-        amount: 5, 
-        vestingEnabled: true,
-        vestingDuration: 365,
-        cliffDuration: 90,
-        vestingStartTime: getDefaultTimes().startTimeFormatted
-      }
-    ]
-  },
-  community: {
-    presalePercentage: 45,
-    liquidityPercentage: 35,
-    wallets: [
-      { 
-        walletName: 'Team', 
-        amount: 5, 
-        vestingEnabled: true,
-        vestingDuration: 365,
-        cliffDuration: 90,
-        vestingStartTime: getDefaultTimes().startTimeFormatted
-      },
-      { 
-        walletName: 'Marketing', 
-        amount: 10, 
-        vestingEnabled: true,
-        vestingDuration: 180,
-        cliffDuration: 30,
-        vestingStartTime: getDefaultTimes().startTimeFormatted
-      },
-      { 
-        walletName: 'Development', 
-        amount: 5, 
-        vestingEnabled: true,
-        vestingDuration: 365,
-        cliffDuration: 60,
-        vestingStartTime: getDefaultTimes().startTimeFormatted
-      }
-    ]
-  },
-  growth: {
-    presalePercentage: 35,
-    liquidityPercentage: 35,
-    wallets: [
-      { 
-        walletName: 'Team', 
-        amount: 12, 
-        vestingEnabled: true,
-        vestingDuration: 365,
-        cliffDuration: 180,
-        vestingStartTime: getDefaultTimes().startTimeFormatted
-      },
-      { 
-        walletName: 'Marketing', 
-        amount: 15, 
-        vestingEnabled: true,
-        vestingDuration: 180,
-        cliffDuration: 30,
-        vestingStartTime: getDefaultTimes().startTimeFormatted
-      },
-      { 
-        walletName: 'Development', 
-        amount: 3, 
-        vestingEnabled: true,
-        vestingDuration: 365,
-        cliffDuration: 90,
-        vestingStartTime: getDefaultTimes().startTimeFormatted
-      }
-    ]
-  },
-  bootstrap: {
-    presalePercentage: 40,
-    liquidityPercentage: 40,
-    wallets: [
-      { 
-        walletName: 'Team', 
-        amount: 8, 
-        vestingEnabled: true,
-        vestingDuration: 365,
-        cliffDuration: 180,
-        vestingStartTime: getDefaultTimes().startTimeFormatted
-      },
-      { 
-        walletName: 'Marketing', 
-        amount: 8, 
-        vestingEnabled: true,
-        vestingDuration: 180,
-        cliffDuration: 30,
-        vestingStartTime: getDefaultTimes().startTimeFormatted
-      },
-      { 
-        walletName: 'Development', 
-        amount: 4, 
-        vestingEnabled: true,
-        vestingDuration: 180,
-        cliffDuration: 60,
-        vestingStartTime: getDefaultTimes().startTimeFormatted
-      }
-    ]
-  },
-  governance: {
-    presalePercentage: 35,
-    liquidityPercentage: 35,
-    wallets: [
-      { 
-        walletName: 'Team', 
-        amount: 10, 
-        vestingEnabled: true,
-        vestingDuration: 365,
-        cliffDuration: 180,
-        vestingStartTime: getDefaultTimes().startTimeFormatted
-      },
-      { 
-        walletName: 'Treasury', 
-        amount: 12, 
-        vestingEnabled: true,
-        vestingDuration: 365,
-        cliffDuration: 90,
-        vestingStartTime: getDefaultTimes().startTimeFormatted
-      },
-      { 
-        walletName: 'Development', 
-        amount: 8, 
-        vestingEnabled: true,
-        vestingDuration: 180,
-        cliffDuration: 60,
-        vestingStartTime: getDefaultTimes().startTimeFormatted
-      }
-    ]
-  }
-};

@@ -196,29 +196,30 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
       'function pause() external',
       'function unpause() external',
       'function paused() view returns (bool)',
-      'function isPauser(address account) view returns (bool)',
-      'function addPauser(address account) external',
-      'function renouncePauser() external',
-      // Other existing functions...
-      'function updateBlacklist(address[] calldata addresses, bool status) external',
+      // Blacklist functions
+      'function setBlacklist(address account, bool status) external',
+      'function isBlacklisted(address account) view returns (bool)',
+      // Time lock functions
       'function setTimeLock(address account, uint256 unlockTime) external',
-      'function burn(uint256 amount) external',
+      'function getUnlockTime(address account) view returns (uint256)',
+      // Vesting functions
+      'function claimVestedTokens() external',
+      'function getVestedAmount(address wallet) view returns (uint256)',
+      'function getClaimedAmount(address wallet) view returns (uint256)',
+      'function getWalletAllocations() view returns (tuple(address wallet, uint256 percentage, bool vestingEnabled, uint256 vestingDuration, uint256 cliffDuration, uint256 vestingStartTime)[])',
       // Presale functions
-      'function presaleInfo() view returns (tuple(uint256 softCap, uint256 hardCap, uint256 minContribution, uint256 maxContribution, uint256 startTime, uint256 endTime, uint256 presaleRate, bool whitelistEnabled, bool finalized, uint256 totalContributed))',
-      'function updateWhitelist(address[] calldata addresses, bool status) external',
-      'function finalize() external',
-      'function getContributors() view returns (address[])',
-      'function getContributorCount() view returns (uint256)',
-      'function getContributorInfo(address) view returns (uint256 contribution, uint256 tokenAllocation, bool isWhitelisted)',
-      // Liquidity functions
-      'function liquidityInfo() view returns (tuple(uint256 percentage, uint256 lockDuration, uint256 unlockTime, bool locked))',
-      // Platform fee functions
-      'function platformFee() view returns (tuple(address recipient, uint256 totalTokens, bool vestingEnabled, uint256 vestingDuration, uint256 cliffDuration, uint256 vestingStart, uint256 tokensClaimed))',
-      'function createVestingSchedule(address beneficiary, uint256 totalAmount, uint256 startTime, uint256 cliffDuration, uint256 vestingDuration, bool revocable) external',
-      'function releaseVestedTokens() external',
-      'function revokeVesting(address beneficiary) external',
-      'function getVestingSchedule(address) view returns (uint256 totalAmount, uint256 startTime, uint256 cliffDuration, uint256 vestingDuration, uint256 releasedAmount, bool revocable, bool revoked, uint256 releasableAmount)',
-      'function hasVestingSchedule(address) view returns (bool)'
+      'function presaleRate() view returns (uint256)',
+      'function softCap() view returns (uint256)',
+      'function hardCap() view returns (uint256)',
+      'function minContribution() view returns (uint256)',
+      'function maxContribution() view returns (uint256)',
+      'function startTime() view returns (uint256)',
+      'function endTime() view returns (uint256)',
+      'function presalePercentage() view returns (uint256)',
+      'function liquidityPercentage() view returns (uint256)',
+      'function liquidityLockDuration() view returns (uint256)',
+      'function maxActivePresales() view returns (uint256)',
+      'function presaleEnabled() view returns (bool)'
     ], signer);
   };
 
@@ -250,23 +251,24 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
       const network = await externalProvider.getNetwork();
       const chainId = Number(network.chainId);
 
-      // Try multiple ways to get the factory address
+      // Use the factory address from props first, then fall back to hardcoded address for BSC Testnet
       let factoryV3Address = null;
       
-      // First try FACTORY_ADDRESSES
-      if (FACTORY_ADDRESSES.v3[chainId]) {
-        factoryV3Address = FACTORY_ADDRESSES.v3[chainId];
-        console.log("Got factory address from FACTORY_ADDRESSES:", factoryV3Address);
-      }
-      
-      // If not found, try getNetworkContractAddress with different keys
-      if (!factoryV3Address) {
-        const keys = ['FACTORY_ADDRESS_V3', 'factoryV3', 'factoryAddressV3'];
-        for (const key of keys) {
-          factoryV3Address = getNetworkContractAddress(chainId, key);
+      if (chainId === 97) { // BSC Testnet
+        factoryV3Address = '0xD9dF868977ef71e7B22256993AF730bDA613544F';
+        console.log("Using hardcoded BSC Testnet V3 Factory address:", factoryV3Address);
+      } else {
+        // For other networks, try FACTORY_ADDRESSES first
+        if (FACTORY_ADDRESSES.v3[chainId]) {
+          factoryV3Address = FACTORY_ADDRESSES.v3[chainId];
+          console.log("Got factory address from FACTORY_ADDRESSES:", factoryV3Address);
+        }
+        
+        // If not found, try getNetworkContractAddress
+        if (!factoryV3Address) {
+          factoryV3Address = getNetworkContractAddress(chainId, 'factoryAddressV3');
           if (factoryV3Address) {
-            console.log(`Got factory address using key ${key}:`, factoryV3Address);
-            break;
+            console.log("Got factory address from getNetworkContractAddress:", factoryV3Address);
           }
         }
       }

@@ -42,6 +42,9 @@ const nextConfig = {
     });
     return config;
   },
+  env: {
+    NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V3: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V3,
+  },
 }
 
 module.exports = nextConfig

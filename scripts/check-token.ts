@@ -1,58 +1,50 @@
-const hre = require("hardhat");
-const { ethers } = hre;
+const { ethers } = require("hardhat");
 
 async function main() {
-    console.log('\n=== Checking Token Status ===\n');
-    
+  try {
+    console.log("Checking token details...");
+
     const [deployer] = await ethers.getSigners();
-    console.log('Account:', deployer.address);
-    
-    const factoryAddress = "0xC1588c628615e4bBbA40De630ECa8Dd2DFCD2a9D";
-    console.log('Factory address:', factoryAddress);
-    
-    // Get the contract factory
-    const TokenFactory = await ethers.getContractFactory("TokenFactory_v2_DirectDEX_TwoStep");
-    const factory = TokenFactory.attach(factoryAddress);
-    
-    // Token addresses to check
-    const tokenAddresses = [
-        "0x2a9eb71954340aC02460d0C2bf22831b3c6F4E59",
-        "0x44CA548504505CA3258ddf412834C611BE30574f"
+    console.log("Using account:", deployer.address);
+
+    const tokenAddress = "0xfc063783de2d7fcdee029d460b3b7509ffe57947";
+    console.log("Checking token:", tokenAddress);
+
+    // Basic ERC20 interface
+    const abi = [
+      "function name() view returns (string)",
+      "function symbol() view returns (string)",
+      "function decimals() view returns (uint8)",
+      "function totalSupply() view returns (uint256)",
+      "function balanceOf(address) view returns (uint256)"
     ];
-    
-    // Check factory balance
-    const balance = await ethers.provider.getBalance(factoryAddress);
-    console.log('\nFactory balance:', ethers.formatEther(balance), 'ETH');
-    
-    // Check each token
-    for (const tokenAddress of tokenAddresses) {
-        console.log(`\nChecking token: ${tokenAddress}`);
-        
-        try {
-            // Get token info
-            const tokenInfo = await factory.getTokenInfo(tokenAddress);
-            console.log('Token info:', {
-                token: tokenInfo[0],
-                owner: tokenInfo[1],
-                isListed: tokenInfo[2],
-                dexName: tokenInfo[3],
-                creationTime: tokenInfo[4].toString(),
-                listingTime: tokenInfo[5].toString()
-            });
-            
-            // Check if token is listed
-            const isListed = await factory.isListed(tokenAddress);
-            console.log('Is listed:', isListed);
-            
-        } catch (error) {
-            console.error('Error checking token:', error);
-        }
-    }
+
+    const token = new ethers.Contract(tokenAddress, abi, deployer);
+
+    // Get token details
+    const name = await token.name();
+    const symbol = await token.symbol();
+    const decimals = await token.decimals();
+    const totalSupply = await token.totalSupply();
+    const balance = await token.balanceOf(deployer.address);
+
+    console.log("\nToken Details:");
+    console.log("-------------");
+    console.log("Name:", name);
+    console.log("Symbol:", symbol);
+    console.log("Decimals:", decimals);
+    console.log("Total Supply:", ethers.formatEther(totalSupply));
+    console.log("Your Balance:", ethers.formatEther(balance));
+
+  } catch (error) {
+    console.error("Error details:", error);
+    throw error;
+  }
 }
 
 main()
-    .then(() => process.exit(0))
-    .catch((error) => {
-        console.error(error);
-        process.exit(1);
-    }); 
+  .then(() => process.exit(0))
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  }); 
