@@ -39,6 +39,9 @@ contract TokenFactory_v3 is Ownable, ReentrancyGuard {
     ) external payable nonReentrant returns (address) {
         uint256 userFee = getDeploymentFee(msg.sender);
         require(msg.value >= userFee, "Insufficient deployment fee");
+        
+        // Calculate excess ETH to be used for liquidity
+        uint256 liquidityETH = msg.value - userFee;
 
         // Validate token distribution parameters
         if (params.presaleEnabled) {
@@ -72,7 +75,7 @@ contract TokenFactory_v3 is Ownable, ReentrancyGuard {
 
         // Deploy new token directly
         TokenTemplate_v3 token = new TokenTemplate_v3();
-        token.initialize(params);
+        token.initialize{value: liquidityETH}(params);  // Forward excess ETH for liquidity
         
         address tokenAddress = address(token);
         

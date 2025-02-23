@@ -94,6 +94,10 @@ contract TokenTemplate_v3 is
     string private tokenName;
     string private tokenSymbol;
     
+    // Add these state variables after the other declarations
+    uint256 public liquidityAllocation;
+    uint256 public remainingLiquidityAllocation;
+    
     constructor() ERC20("", "") {
         // BSC Testnet PancakeSwap Router
         IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(0xD99D1c33F9fC3444f8101754aBC46c52416550D1);
@@ -146,14 +150,15 @@ contract TokenTemplate_v3 is
             remainingTokens -= presaleTokens;
         }
         
-        // Handle liquidity
-        uint256 liquidityTokens = (totalTokensNeeded * params.liquidityPercentage) / 100;
-        allocatedTokens += liquidityTokens;
-        remainingTokens -= liquidityTokens;
+        // Set liquidity allocation
+        liquidityAllocation = (totalTokensNeeded * params.liquidityPercentage) / 100;
+        remainingLiquidityAllocation = liquidityAllocation;
+        allocatedTokens += liquidityAllocation;
+        remainingTokens -= liquidityAllocation;
         
         // If there's ETH sent with initialization, add liquidity
-        if (msg.value > 0 && liquidityTokens > 0) {
-            addLiquidity(liquidityTokens, msg.value);
+        if (msg.value > 0 && liquidityAllocation > 0) {
+            addLiquidity(liquidityAllocation, msg.value);
         }
         
         // Set wallet allocations and distribute tokens
@@ -299,5 +304,56 @@ contract TokenTemplate_v3 is
             owner(),
             block.timestamp + 300 // 5 minutes deadline
         );
+    }
+
+    function addLiquidity(uint256 tokenAmount) external payable {
+        require(msg.value > 0, "Must send ETH");
+        require(tokenAmount > 0, "Must provide tokens");
+        
+        // Transfer tokens from user to contract
+        _transfer(msg.sender, address(this), tokenAmount);
+        
+        // Approve router to spend tokens
+        _approve(address(this), address(uniswapV2Router), tokenAmount);
+
+        // Add liquidity
+        uniswapV2Router.addLiquidityETH{value: msg.value}(
+            address(this),
+            tokenAmount,
+            0, // Accept any amount of tokens
+            0, // Accept any amount of ETH
+            msg.sender, // LP tokens go to user
+            block.timestamp + 300 // 5 minutes deadline
+        );
+    }
+
+    function addLiquidityFromContract(uint256 tokenAmount) external payable onlyOwner {
+        require(msg.value > 0, "Must send ETH");
+        require(tokenAmount > 0, "Must provide tokens");
+        require(tokenAmount <= remainingLiquidityAllocation, "Amount exceeds remaining liquidity allocation");
+        require(balanceOf(address(this)) >= tokenAmount, "Insufficient contract balance");
+        
+        // Update remaining allocation
+        remainingLiquidityAllocation -= tokenAmount;
+        
+        // Approve router to spend tokens
+        _approve(address(this), address(uniswapV2Router), tokenAmount);
+
+        // Add liquidity directly from contract's balance
+        uniswapV2Router.addLiquidityETH{value: msg.value}(
+            address(this),
+            tokenAmount,
+            0, // Accept any amount of tokens
+            0, // Accept any amount of ETH
+            msg.sender, // LP tokens go to user
+            block.timestamp + 300 // 5 minutes deadline
+        );
+
+        emit LiquidityAdded(uniswapV2Pair, tokenAmount, msg.value);
+    }
+
+    // Add a view function to check remaining liquidity allocation
+    function getRemainingLiquidityAllocation() external view returns (uint256) {
+        return remainingLiquidityAllocation;
     }
 } 

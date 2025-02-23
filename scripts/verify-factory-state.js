@@ -11,7 +11,7 @@ async function main() {
   console.log("Checking factory state with account:", deployer.address);
 
   // Contract addresses
-  const factoryAddress = "0xD9dF868977ef71e7B22256993AF730bDA613544F";
+  const factoryAddress = "0xc932F77C5F38Cf7FA5f0728D34f1dD0517C4ae97";
   const rpcUrl = "https://data-seed-prebsc-1-s1.binance.org:8545";
   
   // Create provider

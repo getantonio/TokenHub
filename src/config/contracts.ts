@@ -40,7 +40,7 @@ export const contractAddresses: { [key: number]: ContractAddresses } = {
   97: { // BSC Testnet
     factoryAddress: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V1 || '',
     factoryAddressV2: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V2 || '',
-    factoryAddressV3: '0xD9dF868977ef71e7B22256993AF730bDA613544F',
+    factoryAddressV3: '0xc932F77C5F38Cf7FA5f0728D34f1dD0517C4ae97',
     dexListingFactory: process.env.NEXT_PUBLIC_BSCTESTNET_DEX_LISTING_FACTORY_ADDRESS || '',
     dexListingTemplate: process.env.NEXT_PUBLIC_BSCTESTNET_DEX_LISTING_TEMPLATE_ADDRESS || ''
   },
@@ -87,7 +87,7 @@ export function getNetworkContractAddress(chainId: number, contractType: string)
   
   // Special handling for BSC Testnet V3 Factory
   if (chainId === 97 && contractType === 'factoryAddressV3') {
-    const address = '0xD9dF868977ef71e7B22256993AF730bDA613544F';
+    const address = '0xc932F77C5F38Cf7FA5f0728D34f1dD0517C4ae97';
     console.log('Using hardcoded BSC Testnet V3 Factory address:', address);
     return address;
   }
@@ -171,7 +171,7 @@ export const FACTORY_ADDRESSES: Record<string, Record<number, string>> = {
     [ChainId.ARBITRUM_SEPOLIA]: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V3 || '',
     [ChainId.OPTIMISM_SEPOLIA]: process.env.NEXT_PUBLIC_OPSEPOLIA_FACTORY_ADDRESS_V3 || '',
     [ChainId.POLYGON_AMOY]: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V3 || '',
-    [ChainId.BSC_TESTNET]: '0xD9dF868977ef71e7B22256993AF730bDA613544F',
+    [ChainId.BSC_TESTNET]: '0xc932F77C5F38Cf7FA5f0728D34f1dD0517C4ae97',
     [ChainId.BSC_MAINNET]: process.env.NEXT_PUBLIC_BSC_FACTORY_ADDRESS_V3 || '',
   },
   dexListing: {

@@ -19,6 +19,8 @@ interface TokenParams {
   owner: `0x${string}`;
   enableBlacklist: boolean;
   enableTimeLock: boolean;
+  presaleEnabled: boolean;
+  maxActivePresales: number;
   presaleRate: bigint;
   softCap: bigint;
   hardCap: bigint;
@@ -37,8 +39,6 @@ interface TokenParams {
     cliffDuration: bigint;
     vestingStartTime: bigint;
   }[];
-  maxActivePresales: number;
-  presaleEnabled: boolean;
 }
 
 export function useTokenFactory() {
@@ -104,6 +104,14 @@ export function useTokenFactory() {
         hex: `0x${deploymentFee.toString(16)}`
       });
 
+      // Send only deployment fee
+      const totalValue = deploymentFee;
+      console.log('Total value to send:', {
+        wei: totalValue.toString(),
+        ether: Number(totalValue) / 1e18,
+        hex: `0x${totalValue.toString(16)}`
+      });
+
       // Get factory address
       const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddressV3');
       if (!factoryAddress) {
@@ -111,107 +119,13 @@ export function useTokenFactory() {
       }
       console.log('Using factory address:', factoryAddress);
 
-      // Convert durations to seconds
-      const SECONDS_PER_DAY = BigInt(86400);
-      const now = BigInt(Math.floor(Date.now() / 1000));
-
-      // Convert wallet allocations to contract format
-      const walletAllocations = params.walletAllocations.map(wallet => ({
-        wallet: wallet.wallet,
-        percentage: wallet.percentage,
-        vestingEnabled: wallet.vestingEnabled,
-        vestingDuration: wallet.vestingEnabled ? wallet.vestingDuration * SECONDS_PER_DAY : BigInt(0),
-        cliffDuration: wallet.vestingEnabled ? wallet.cliffDuration * SECONDS_PER_DAY : BigInt(0),
-        vestingStartTime: wallet.vestingEnabled ? wallet.vestingStartTime : BigInt(0)
-      }));
-
-      // Set contract parameters
-      const contractParams = {
-        name: params.name,
-        symbol: params.symbol,
-        initialSupply: params.initialSupply,
-        maxSupply: params.maxSupply,
-        owner: params.owner,
-        enableBlacklist: params.enableBlacklist,
-        enableTimeLock: params.enableTimeLock,
-        presaleRate: params.presaleEnabled ? parseEther(params.presaleRate.toString()) : BigInt(0),
-        softCap: params.presaleEnabled ? parseEther(params.softCap.toString()) : BigInt(0),
-        hardCap: params.presaleEnabled ? parseEther(params.hardCap.toString()) : BigInt(0),
-        minContribution: params.presaleEnabled ? parseEther(params.minContribution.toString()) : BigInt(0),
-        maxContribution: params.presaleEnabled ? parseEther(params.maxContribution.toString()) : BigInt(0),
-        startTime: params.presaleEnabled ? BigInt(params.startTime) : BigInt(0),
-        endTime: params.presaleEnabled ? BigInt(params.endTime) : BigInt(0),
-        presalePercentage: params.presaleEnabled ? 5 : 0,
-        liquidityPercentage: params.liquidityPercentage,
-        liquidityLockDuration: BigInt(365) * SECONDS_PER_DAY, // Set to 365 days
-        walletAllocations,
-        maxActivePresales: params.presaleEnabled ? 1 : 0,
-        presaleEnabled: params.presaleEnabled
-      };
-
-      // Calculate total percentage based on presale state
-      const totalPercentage = params.presaleEnabled ? 
-        (params.presalePercentage + params.liquidityPercentage) :
-        params.liquidityPercentage;
-      const totalWithWallets = totalPercentage + 
-        params.walletAllocations.reduce((sum: number, w: { percentage: number }) => sum + w.percentage, 0);
-
-      console.log('Presale configuration:', {
-        presaleEnabled: params.presaleEnabled,
-        presalePercentage: params.presalePercentage,
-        liquidityPercentage: params.liquidityPercentage,
-        totalPercentage,
-        totalWithWallets
-      });
-
-      if (totalWithWallets !== 100) {
-        throw new Error(
-          `Total percentage must be 100, got ${totalWithWallets}. ` +
-          `${params.presaleEnabled ? `Presale: ${params.presalePercentage}%, ` : ''}` +
-          `Liquidity: ${params.liquidityPercentage}%, ` +
-          `Wallets: ${params.walletAllocations.reduce((sum: number, w: { percentage: number }) => sum + w.percentage, 0)}%`
-        );
-      }
-
-      // Log the contract parameters
-      console.log('Contract parameters:', {
-        name: contractParams.name,
-        symbol: contractParams.symbol,
-        initialSupply: contractParams.initialSupply.toString(),
-        maxSupply: contractParams.maxSupply.toString(),
-        owner: contractParams.owner,
-        enableBlacklist: contractParams.enableBlacklist,
-        enableTimeLock: contractParams.enableTimeLock,
-        presaleEnabled: contractParams.presaleEnabled,
-        maxActivePresales: contractParams.maxActivePresales,
-        presaleRate: contractParams.presaleRate.toString(),
-        softCap: contractParams.softCap.toString(),
-        hardCap: contractParams.hardCap.toString(),
-        minContribution: contractParams.minContribution.toString(),
-        maxContribution: contractParams.maxContribution.toString(),
-        startTime: contractParams.startTime.toString(),
-        endTime: contractParams.endTime.toString(),
-        presalePercentage: contractParams.presalePercentage,
-        liquidityPercentage: contractParams.liquidityPercentage,
-        liquidityLockDuration: contractParams.liquidityLockDuration.toString(),
-        walletAllocations: contractParams.walletAllocations.map(w => ({
-          wallet: w.wallet,
-          percentage: w.percentage,
-          vestingEnabled: w.vestingEnabled,
-          vestingDuration: w.vestingDuration.toString(),
-          cliffDuration: w.cliffDuration.toString(),
-          vestingStartTime: w.vestingStartTime.toString()
-        })),
-        factoryAddress
-      });
-
       // Create the contract request
       const { request } = await publicClient.simulateContract({
         address: factoryAddress as `0x${string}`,
         abi: TokenFactoryV3ABI.abi,
         functionName: 'createToken',
-        args: [contractParams],
-        value: deploymentFee,
+        args: [params],
+        value: totalValue, // Send only deployment fee
       });
 
       // Execute the transaction

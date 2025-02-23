@@ -148,7 +148,7 @@ const VESTING_PRESETS: Record<string, VestingPreset> = {
   },
   growth: {
     presalePercentage: 5,
-    liquidityPercentage: 65, // 65% when presale enabled, 70% when disabled
+    liquidityPercentage: 60, // Reduced from 65% to 60%
     wallets: [
       {
         name: 'Team',
@@ -178,7 +178,7 @@ const VESTING_PRESETS: Record<string, VestingPreset> = {
   },
   bootstrap: {
     presalePercentage: 5,
-    liquidityPercentage: 60, // 60% when presale enabled, 65% when disabled
+    liquidityPercentage: 55, // Reduced from 60% to 55%
     wallets: [
       {
         name: 'Team',
@@ -208,7 +208,7 @@ const VESTING_PRESETS: Record<string, VestingPreset> = {
   },
   governance: {
     presalePercentage: 5,
-    liquidityPercentage: 60, // 60% when presale enabled, 65% when disabled
+    liquidityPercentage: 55, // Reduced from 60% to 55%
     wallets: [
       {
         name: 'Governance',
@@ -241,49 +241,42 @@ const VESTING_PRESETS: Record<string, VestingPreset> = {
 const formSchema = z.object({
   name: z.string()
     .min(1, "Name is required")
-    .refine(
-      (name) => name.length >= 3 && name.length <= 32,
-      "Name must be between 3 and 32 characters"
-    )
-    .refine(
-      (name) => /^[a-zA-Z0-9\s]+$/.test(name),
-      "Name can only contain letters, numbers, and spaces"
-    ),
+    .max(50, "Name must be less than 50 characters"),
   symbol: z.string()
     .min(1, "Symbol is required")
-    .refine(
-      (symbol) => /^[A-Z]{2,6}$/.test(symbol),
-      "Symbol must be 2-6 uppercase letters"
-    )
-    .refine(
-      (symbol) => !['ETH', 'BTC', 'BNB', 'USDT', 'USDC'].includes(symbol),
-      "Symbol is already in use by a major token"
-    ),
-  initialSupply: z.string().min(1, "Initial supply is required"),
-  maxSupply: z.string().min(1, "Max supply is required"),
-  owner: z.string().min(42, "Invalid owner address"),
+    .max(10, "Symbol must be less than 10 characters")
+    .refine(value => /^[A-Z0-9]+$/.test(value), "Symbol must be uppercase letters and numbers only"),
+  initialSupply: z.string()
+    .refine((val) => !isNaN(Number(val)), "Must be a valid number")
+    .refine((val) => Number(val) > 0, "Initial supply must be greater than 0"),
+  maxSupply: z.string()
+    .refine((val) => !isNaN(Number(val)), "Must be a valid number")
+    .refine((val) => Number(val) > 0, "Max supply must be greater than 0"),
+  owner: z.string()
+    .min(1, "Owner address is required")
+    .refine(value => /^0x[a-fA-F0-9]{40}$/.test(value), "Invalid address format"),
   enableBlacklist: z.boolean(),
   enableTimeLock: z.boolean(),
-  presaleEnabled: z.boolean().default(false),
-  maxActivePresales: z.number().min(0).optional(),
-  presaleRate: z.string().optional().nullable(),
-  softCap: z.string().optional().nullable(),
-  hardCap: z.string().optional().nullable(),
-  minContribution: z.string().optional().nullable(),
-  maxContribution: z.string().optional().nullable(),
-  startTime: z.number().optional().nullable(),
-  endTime: z.number().optional().nullable(),
-  presalePercentage: z.number().min(0).max(100),
-  liquidityPercentage: z.number().min(0).max(100),
-  liquidityLockDuration: z.number().min(1),
+  presaleEnabled: z.boolean(),
+  maxActivePresales: z.number(),
+  presaleRate: z.string().optional(),
+  softCap: z.string().optional(),
+  hardCap: z.string().optional(),
+  minContribution: z.string().optional(),
+  maxContribution: z.string().optional(),
+  startTime: z.number().optional(),
+  endTime: z.number().optional(),
+  presalePercentage: z.number(),
+  liquidityPercentage: z.number(),
+  liquidityLockDuration: z.number(),
   wallets: z.array(z.object({
-    name: z.string().min(1, "Name is required"),
-    address: z.string().min(42, "Invalid address"),
-    percentage: z.number().min(0).max(100),
+    name: z.string(),
+    address: z.string(),
+    percentage: z.number(),
     vestingEnabled: z.boolean(),
-    vestingDuration: z.number().min(0),
-    cliffDuration: z.number().min(0),
-    vestingStartTime: z.number().min(0)
+    vestingDuration: z.number(),
+    cliffDuration: z.number(),
+    vestingStartTime: z.number()
   })),
   multiPresaleConfig: z.object({
     presales: z.array(z.object({
@@ -299,44 +292,8 @@ const formSchema = z.object({
     }))
   }).optional()
 }).refine((data) => {
-  console.log('Validating presale times:', {
-    presaleEnabled: data.presaleEnabled,
-    startTime: data.startTime,
-    endTime: data.endTime
-  });
-  
-  // Only validate presale times if presale is enabled
-  if (data.presaleEnabled && data.startTime && data.endTime) {
-    const startDate = new Date(data.startTime);
-    const endDate = new Date(data.endTime);
-    return endDate > startDate;
-  }
-  return true;
-}, {
-  message: "End time must be after start time",
-  path: ["endTime"]
-})
-.refine((data) => {
-  console.log('Validating presale configuration:', {
-    presaleEnabled: data.presaleEnabled,
-    presaleRate: data.presaleRate,
-    softCap: data.softCap,
-    hardCap: data.hardCap,
-    minContribution: data.minContribution,
-    maxContribution: data.maxContribution
-  });
-  
-  // Only validate presale configuration if presale is enabled
   if (data.presaleEnabled) {
-    if (!data.presaleRate || !data.softCap || !data.hardCap || !data.minContribution || !data.maxContribution) {
-      return false;
-    }
-    const softCap = Number(data.softCap);
-    const hardCap = Number(data.hardCap);
-    const minContribution = Number(data.minContribution);
-    const maxContribution = Number(data.maxContribution);
-    
-    if (softCap >= hardCap || minContribution >= maxContribution) {
+    if (!data.startTime || !data.endTime || data.startTime >= data.endTime) {
       return false;
     }
   }
@@ -344,22 +301,24 @@ const formSchema = z.object({
 }, {
   message: "Invalid presale configuration",
   path: ["presaleRate"]
-})
-.refine((data) => {
-  // Calculate total percentage based on presale state
-  const totalPercentage = data.presaleEnabled ? 
-    (data.presalePercentage + data.liquidityPercentage) :
-    data.liquidityPercentage;
-  const totalWithWallets = totalPercentage + 
-    data.wallets.reduce((sum, wallet) => sum + wallet.percentage, 0);
-  
-  return totalWithWallets === 100;
-}, {
-  message: "Total allocation must be 100%",
-  path: ["liquidityPercentage"]
 });
 
 type FormData = z.infer<typeof formSchema>;
+
+function getDefaultTimes() {
+  const now = new Date();
+  const startTime = new Date(now.getTime() + 3600000); // 1 hour from now
+  const endTime = new Date(now.getTime() + 86400000);  // 24 hours from now
+  
+  return {
+    startTime: Math.floor(startTime.getTime() / 1000),
+    endTime: Math.floor(endTime.getTime() / 1000),
+    startTimeFormatted: startTime.toISOString().slice(0, 16),
+    endTimeFormatted: endTime.toISOString().slice(0, 16)
+  };
+}
+
+const defaultTimes = getDefaultTimes();
 
 const defaultValues: FormData = {
   name: "",
@@ -371,13 +330,13 @@ const defaultValues: FormData = {
   enableTimeLock: false,
   presaleEnabled: false,
   maxActivePresales: 0,
-  presaleRate: null,
-  softCap: null,
-  hardCap: null,
-  minContribution: null,
-  maxContribution: null,
-  startTime: null,
-  endTime: null,
+  presaleRate: "1000", // Default: 1000 tokens per BNB
+  softCap: "1", // Default: 1 BNB
+  hardCap: "10", // Default: 10 BNB
+  minContribution: "0.1", // Default: 0.1 BNB
+  maxContribution: "2", // Default: 2 BNB
+  startTime: defaultTimes.startTime,
+  endTime: defaultTimes.endTime,
   presalePercentage: 0,
   liquidityPercentage: 95,
   liquidityLockDuration: 365,
@@ -395,19 +354,6 @@ const defaultValues: FormData = {
   }
 };
 
-function getDefaultTimes() {
-  const now = new Date();
-  const startTime = new Date(now.getTime() + 3600000); // 1 hour from now
-  const endTime = new Date(now.getTime() + 86400000);  // 24 hours from now
-  
-  return {
-    startTime: Math.floor(startTime.getTime() / 1000),
-    endTime: Math.floor(endTime.getTime() / 1000),
-    startTimeFormatted: startTime.toISOString().slice(0, 16),
-    endTimeFormatted: endTime.toISOString().slice(0, 16)
-  };
-}
-
 export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenFormV3Props) {
   const { chainId } = useNetwork();
   const { address } = useAccount();
@@ -420,6 +366,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
   const [showResults, setShowResults] = useState(false);
   const [simulationResults, setSimulationResults] = useState<ValidationResult[]>([]);
   const [showTokenomicsInfo, setShowTokenomicsInfo] = useState(false);
+  const [showSimulationDialog, setShowSimulationDialog] = useState(false);
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -465,57 +412,46 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
     }
   }, [address, form]);
 
-  // Add handler for presale toggle
+  // Update the useEffect for presale toggle
   useEffect(() => {
     const presaleEnabled = form.watch('presaleEnabled');
-    const currentWallets = form.watch('wallets');
-    const totalWalletPercentage = currentWallets.reduce((sum, w) => sum + w.percentage, 0);
-
-    // Set presale percentage and maxActivePresales based on toggle
-    form.setValue('presalePercentage', presaleEnabled ? 5 : 0, { shouldValidate: true });
-    form.setValue('maxActivePresales', presaleEnabled ? 1 : 0);
-
-    // Adjust liquidity percentage based on presale state and wallets
-    const newLiquidity = presaleEnabled ? 
-      Math.min(95 - totalWalletPercentage, 90) : // Cap at 90% with presale
-      100 - totalWalletPercentage;  // Allow up to 100% without presale
     
-    form.setValue('liquidityPercentage', Math.max(0, newLiquidity), { shouldValidate: true });
-
-    // Force form validation
-    form.trigger(['presalePercentage', 'liquidityPercentage']);
-  }, [form.watch('presaleEnabled'), form.watch('wallets')]);
+    // Set presale percentage and trigger validation
+    form.setValue('presalePercentage', presaleEnabled ? 5 : 0, { 
+      shouldValidate: true,
+      shouldDirty: true,
+      shouldTouch: true 
+    });
+    
+    // Set other presale defaults
+    if (presaleEnabled) {
+      form.setValue('maxActivePresales', 1);
+      form.setValue('presaleRate', '1000');
+      form.setValue('softCap', '1');
+      form.setValue('hardCap', '10');
+      form.setValue('minContribution', '0.1');
+      form.setValue('maxContribution', '2');
+      form.setValue('startTime', defaultTimes.startTime);
+      form.setValue('endTime', defaultTimes.endTime);
+    }
+  }, [form.watch('presaleEnabled')]);
 
   const onSubmit = async (data: FormData) => {
     try {
       console.log('Form submission started', { data });
-      console.log('Form validation errors:', form.formState.errors);
-      console.log('Form values:', data);
 
-      // Add supply validation
-      if (Number(data.initialSupply) > 1e9 || Number(data.maxSupply) > 1e9) {
-        throw new Error('Token supply is too large. Please use a supply less than 1 billion.');
-      }
+      // Convert supply values to BigInt with 18 decimals
+      const initialSupply = parseUnits(data.initialSupply.toString(), 18);
+      const maxSupply = parseUnits(data.maxSupply.toString(), 18);
 
-      // Validate total percentage
-      const validationResult = validateDistribution(form);
-      if (validationResult.status === 'error') {
-        throw new Error(validationResult.message);
-      }
-
-      // Convert values to BigInt with proper decimals (reduce from 18 to 9 decimals for large supplies)
-      const decimals = Number(data.initialSupply) > 1e6 ? 9 : 18;
-      const initialSupply = parseUnits(data.initialSupply, decimals);
-      const maxSupply = parseUnits(data.maxSupply, decimals);
-      
-      // Prepare wallet allocations
+      // Convert wallet allocations to contract format
       const walletAllocations = data.wallets.map(wallet => ({
         wallet: wallet.address as `0x${string}`,
         percentage: wallet.percentage,
         vestingEnabled: wallet.vestingEnabled,
-        vestingDuration: wallet.vestingEnabled ? BigInt(wallet.vestingDuration) : BigInt(0),
-        cliffDuration: wallet.vestingEnabled ? BigInt(wallet.cliffDuration) : BigInt(0),
-        vestingStartTime: wallet.vestingEnabled ? BigInt(Math.floor(Date.now() / 1000) + (24 * 3600)) : BigInt(0)
+        vestingDuration: BigInt(wallet.vestingDuration * 24 * 60 * 60), // Convert days to seconds
+        cliffDuration: BigInt(wallet.cliffDuration * 24 * 60 * 60), // Convert days to seconds
+        vestingStartTime: BigInt(wallet.vestingStartTime)
       }));
 
       const params = {
@@ -913,7 +849,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
     ];
     
     setSimulationResults(validations);
-    setShowResults(true);
+    setShowSimulationDialog(true);
     setIsSimulating(false);
   };
 
@@ -1092,197 +1028,181 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
             )}
           </div>
 
-          {/* Hide presale configuration if presale is disabled */}
+          {/* Presale Configuration */}
           {form.watch("presaleEnabled") && (
             <div className="form-section bg-gray-800/50 rounded-lg p-4">
               <h3 className="text-lg font-medium text-white mb-2">Presale Configuration</h3>
               <div className="grid grid-cols-2 gap-3">
-                <div className="relative">
-                  <label htmlFor="presaleRate" className="text-sm text-white">Presale Rate</label>
-                  <div className="relative">
-                    <Input
-                      type="number"
-                      step="0.0000000001"
-                      placeholder="0.001"
-                      {...form.register("presaleRate", {
-                        required: "Presale rate is required",
-                        min: { value: 0.000000001, message: "Minimum rate is 0.000000001" },
-                        max: { value: 1, message: "Maximum rate is 1" },
-                        validate: {
-                          validNumber: (value) => value ? !isNaN(Number(value)) || "Please enter a valid number" : "Value is required",
-                          notZero: (value) => value ? Number(value) > 0 || "Rate must be greater than 0" : "Value is required"
-                        }
-                      })}
-                      className="form-input h-8 text-sm bg-gray-700 pr-16"
-                    />
-                    <div className="absolute inset-y-0 right-0 flex items-center pr-2">
-                      <span className="text-xs text-gray-400">
-                        {form.watch("presaleRate") && Number(form.watch("presaleRate")) > 0 
-                          ? `≈ ${(1 / Number(form.watch("presaleRate"))).toLocaleString(undefined, {maximumFractionDigits: 2})} tokens/ETH` 
-                          : ''}
-                      </span>
-                    </div>
-                  </div>
-                  {form.formState.errors.presaleRate && (
-                    <p className="text-xs text-red-400 mt-1">{form.formState.errors.presaleRate.message}</p>
-                  )}
-                </div>
-                
-                <div className="relative">
-                  <label htmlFor="softCap" className="text-sm text-white">Soft Cap (ETH)</label>
+                <div>
+                  <label className="text-sm text-white">Presale Allocation</label>
                   <Input
                     type="number"
-                    step="0.01"
-                    placeholder="1"
-                    {...form.register("softCap", {
-                      required: "Soft cap is required",
-                      min: { value: 0.01, message: "Minimum soft cap is 0.01 ETH" },
-                      validate: {
-                        validNumber: (value) => value ? !isNaN(Number(value)) || "Please enter a valid number" : "Value is required",
-                        notZero: (value) => value ? Number(value) > 0 || "Soft cap must be greater than 0" : "Value is required",
-                        lessThanHardCap: (value) => {
-                          if (!value) return "Value is required";
-                          const hardCap = form.watch("hardCap");
-                          return !hardCap || Number(value) <= Number(hardCap) || "Soft cap must be less than hard cap";
-                        }
-                      }
-                    })}
-                    className="form-input h-8 text-sm bg-gray-700"
+                    value="5"
+                    disabled
+                    className="form-input h-8 text-sm bg-gray-700/50 opacity-50"
                   />
-                  {form.formState.errors.softCap && (
-                    <p className="text-xs text-red-400 mt-1">{form.formState.errors.softCap.message}</p>
-                  )}
+                  <p className="text-xs text-gray-400 mt-1">Fixed 5% allocation</p>
                 </div>
                 
-                <div className="relative">
-                  <label htmlFor="hardCap" className="text-sm text-white">Hard Cap (ETH)</label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    placeholder="10"
-                    {...form.register("hardCap", {
-                      required: "Hard cap is required",
-                      min: { value: 0.01, message: "Minimum hard cap is 0.01 ETH" },
-                      validate: {
-                        validNumber: (value) => value ? !isNaN(Number(value)) || "Please enter a valid number" : "Value is required",
-                        notZero: (value) => value ? Number(value) > 0 || "Hard cap must be greater than 0" : "Value is required",
-                        greaterThanSoftCap: (value) => {
-                          if (!value) return "Value is required";
-                          const softCap = form.watch("softCap");
-                          return !softCap || Number(value) >= Number(softCap) || "Hard cap must be greater than soft cap";
-                        }
-                      }
-                    })}
-                    className="form-input h-8 text-sm bg-gray-700"
-                  />
-                  {form.formState.errors.hardCap && (
-                    <p className="text-xs text-red-400 mt-1">{form.formState.errors.hardCap.message}</p>
+                <FormField
+                  control={form.control}
+                  name="presaleRate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-white">Presale Rate (Tokens per BNB)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          placeholder="1000"
+                          className="h-8 text-sm bg-gray-700"
+                          {...field}
+                          value={field.value || ''}
+                        />
+                      </FormControl>
+                      <FormDescription className="text-gray-400 text-xs">
+                        Number of tokens per BNB in presale
+                      </FormDescription>
+                    </FormItem>
                   )}
-                </div>
-                
-                <div className="relative">
-                  <label htmlFor="minContribution" className="text-sm text-white">Min Contribution (ETH)</label>
-                  <Input
-                    type="number"
-                    step="0.001"
-                    placeholder="0.01"
-                    {...form.register("minContribution", {
-                      required: "Minimum contribution is required",
-                      min: { value: 0.001, message: "Minimum contribution must be at least 0.001 ETH" },
-                      validate: {
-                        validNumber: (value) => value ? !isNaN(Number(value)) || "Please enter a valid number" : "Value is required",
-                        notZero: (value) => value ? Number(value) > 0 || "Minimum contribution must be greater than 0" : "Value is required",
-                        lessThanMax: (value) => {
-                          if (!value) return "Value is required";
-                          const maxContribution = form.watch("maxContribution");
-                          return !maxContribution || Number(value) <= Number(maxContribution) || "Minimum contribution must be less than maximum contribution";
-                        }
-                      }
-                    })}
-                    className="form-input h-8 text-sm bg-gray-700"
-                  />
-                  {form.formState.errors.minContribution && (
-                    <p className="text-xs text-red-400 mt-1">{form.formState.errors.minContribution.message}</p>
-                  )}
-                </div>
-                
-                <div className="relative">
-                  <label htmlFor="maxContribution" className="text-sm text-white">Max Contribution (ETH)</label>
-                  <Input
-                    type="number"
-                    step="0.001"
-                    placeholder="1"
-                    {...form.register("maxContribution", {
-                      required: "Maximum contribution is required",
-                      min: { value: 0.001, message: "Maximum contribution must be at least 0.001 ETH" },
-                      validate: {
-                        validNumber: (value) => value ? !isNaN(Number(value)) || "Please enter a valid number" : "Value is required",
-                        notZero: (value) => value ? Number(value) > 0 || "Maximum contribution must be greater than 0" : "Value is required",
-                        greaterThanMin: (value) => {
-                          if (!value) return "Value is required";
-                          const minContribution = form.watch("minContribution");
-                          return !minContribution || Number(value) >= Number(minContribution) || "Maximum contribution must be greater than minimum contribution";
-                        },
-                        lessThanHardCap: (value) => {
-                          if (!value) return "Value is required";
-                          const hardCap = form.watch("hardCap");
-                          return !hardCap || Number(value) <= Number(hardCap) || "Maximum contribution must be less than hard cap";
-                        }
-                      }
-                    })}
-                    className="form-input h-8 text-sm bg-gray-700"
-                  />
-                  {form.formState.errors.maxContribution && (
-                    <p className="text-xs text-red-400 mt-1">{form.formState.errors.maxContribution.message}</p>
-                  )}
-                </div>
-              </div>
+                />
 
-              {/* Date/Time inputs in their own row */}
-              <div className="col-span-2 space-y-2">
-                <div>
-                  <label htmlFor="startTime" className="text-sm text-white">Start Time</label>
-                  <Input
-                    type="datetime-local"
-                    {...form.register("startTime", {
-                      required: "Start time is required",
-                      validate: {
-                        futureDate: (value) => {
-                          if (!value) return "Start time is required";
-                          const date = new Date(value);
-                          return date > new Date() || "Start time must be in the future";
-                        }
-                      }
-                    })}
-                    className="form-input h-8 text-sm bg-gray-700"
-                  />
-                  {form.formState.errors.startTime && (
-                    <p className="text-xs text-red-400 mt-1">{form.formState.errors.startTime.message}</p>
+                <FormField
+                  control={form.control}
+                  name="softCap"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-white">Soft Cap (BNB)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          placeholder="1"
+                          className="h-8 text-sm bg-gray-700"
+                          {...field}
+                          value={field.value || ''}
+                        />
+                      </FormControl>
+                      <FormDescription className="text-gray-400 text-xs">
+                        Minimum amount to raise
+                      </FormDescription>
+                    </FormItem>
                   )}
-                </div>
-                <div>
-                  <label htmlFor="endTime" className="text-sm text-white">End Time</label>
-                  <Input
-                    type="datetime-local"
-                    {...form.register("endTime", {
-                      required: "End time is required",
-                      validate: {
-                        afterStart: (value) => {
-                          if (!value) return "End time is required";
-                          const startTime = form.watch("startTime");
-                          if (!startTime) return true;
-                          const start = new Date(startTime);
-                          const end = new Date(value);
-                          return end > start || "End time must be after start time";
-                        }
-                      }
-                    })}
-                    className="form-input h-8 text-sm bg-gray-700"
-                  />
-                  {form.formState.errors.endTime && (
-                    <p className="text-xs text-red-400 mt-1">{form.formState.errors.endTime.message}</p>
+                />
+
+                <FormField
+                  control={form.control}
+                  name="hardCap"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-white">Hard Cap (BNB)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          placeholder="10"
+                          className="h-8 text-sm bg-gray-700"
+                          {...field}
+                          value={field.value || ''}
+                        />
+                      </FormControl>
+                      <FormDescription className="text-gray-400 text-xs">
+                        Maximum amount to raise
+                      </FormDescription>
+                    </FormItem>
                   )}
-                </div>
+                />
+
+                <FormField
+                  control={form.control}
+                  name="minContribution"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-white">Min Contribution (BNB)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          placeholder="0.1"
+                          className="h-8 text-sm bg-gray-700"
+                          {...field}
+                          value={field.value || ''}
+                        />
+                      </FormControl>
+                      <FormDescription className="text-gray-400 text-xs">
+                        Minimum contribution per wallet
+                      </FormDescription>
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="maxContribution"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-white">Max Contribution (BNB)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          placeholder="2"
+                          className="h-8 text-sm bg-gray-700"
+                          {...field}
+                          value={field.value || ''}
+                        />
+                      </FormControl>
+                      <FormDescription className="text-gray-400 text-xs">
+                        Maximum contribution per wallet
+                      </FormDescription>
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="startTime"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-white">Start Time</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="datetime-local"
+                          className="h-8 text-sm bg-gray-700"
+                          {...field}
+                          value={field.value ? new Date(field.value * 1000).toISOString().slice(0, 16) : ''}
+                          onChange={(e) => {
+                            const date = new Date(e.target.value);
+                            field.onChange(Math.floor(date.getTime() / 1000));
+                          }}
+                        />
+                      </FormControl>
+                      <FormDescription className="text-gray-400 text-xs">
+                        When the presale starts
+                      </FormDescription>
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="endTime"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-white">End Time</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="datetime-local"
+                          className="h-8 text-sm bg-gray-700"
+                          {...field}
+                          value={field.value ? new Date(field.value * 1000).toISOString().slice(0, 16) : ''}
+                          onChange={(e) => {
+                            const date = new Date(e.target.value);
+                            field.onChange(Math.floor(date.getTime() / 1000));
+                          }}
+                        />
+                      </FormControl>
+                      <FormDescription className="text-gray-400 text-xs">
+                        When the presale ends
+                      </FormDescription>
+                    </FormItem>
+                  )}
+                />
               </div>
             </div>
           )}
@@ -1365,7 +1285,6 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                     variant="ghost"
                     className="h-8 px-2 text-sm text-blue-400 hover:text-blue-300"
                     onClick={() => {
-                      // Using the Dialog component to show tokenomics info
                       setShowTokenomicsInfo(true);
                     }}
                   >
@@ -1532,169 +1451,112 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                 <div className="flex gap-2 mt-0.5">
                   <input
                     {...form.register(`wallets.${index}.address`)}
-                    placeholder="Address (0x...)"
-                    className="flex-1 bg-gray-700 text-text-primary rounded px-2 py-1 text-xs h-7"
+                    placeholder="Wallet Address"
+                    className="w-full bg-gray-700 text-text-primary rounded px-2 py-1 text-xs h-7"
                   />
                 </div>
-
-                {form.watch(`wallets.${index}.vestingEnabled`) && (
-                  <div className="flex gap-2 mt-0.5">
-                    <div className="flex-1 relative">
-                      <input
-                        type="number"
-                        {...form.register(`wallets.${index}.vestingDuration`)}
-                        placeholder="Vesting"
-                        className="w-full bg-gray-700 text-text-primary rounded px-2 py-1 text-xs h-7 pr-12"
-                      />
-                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">days</span>
-                    </div>
-                    <div className="flex-1 relative">
-                      <input
-                        type="number"
-                        {...form.register(`wallets.${index}.cliffDuration`)}
-                        placeholder="Cliff"
-                        className="w-full bg-gray-700 text-text-primary rounded px-2 py-1 text-xs h-7 pr-12"
-                      />
-                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">days</span>
-                    </div>
-                  </div>
-                )}
               </div>
             ))}
           </div>
 
-          <div className="form-actions mt-4">
-            <div className="flex items-center gap-2">
-              <div className="flex items-center mr-2">
-                <InfoIcon content="Deployment fee will be charged in ETH. Make sure you have enough ETH to cover the fee and gas costs." />
-              </div>
-              <Button
-                type="button"
-                onClick={simulateDeployment}
-                disabled={isSimulating || !isConnected}
-                variant="secondary"
-                className="bg-blue-600/20 hover:bg-blue-700/20 text-blue-400"
-              >
-                {isSimulating ? (
-                  <>
-                    <span className="animate-spin mr-2">⟳</span>
-                    Analyzing...
-                  </>
-                ) : (
-                  'Test Deployment'
-                )}
-              </Button>
-              <Button 
-                type="submit"
-                disabled={!isConnected || loading || form.formState.isSubmitting}
-                className="form-button-primary"
-                onClick={() => {
-                  console.log('Submit button clicked');
-                  console.log('Form state:', {
-                    isDirty: form.formState.isDirty,
-                    isValid: form.formState.isValid,
-                    errors: form.formState.errors,
-                    isSubmitting: form.formState.isSubmitting,
-                    submitCount: form.formState.submitCount
-                  });
-                }}
-              >
-                {loading ? (
-                  <>
-                    <Spinner className="w-4 h-4 mr-2" />
-                    Creating Token...
-                  </>
-                ) : (
-                  'Create Token'
-                )}
-              </Button>
-            </div>
-          </div>
-
-          <div className="mt-8">
-            <TokenPreview
-              name={form.watch("name")}
-              symbol={form.watch("symbol")}
-              initialSupply={form.watch("initialSupply").toString()}
-              maxSupply={form.watch("maxSupply").toString()}
-              distributionSegments={[
-                ...(form.watch("presaleEnabled") ? [{ name: 'Presale', amount: 5, percentage: 5, color: '#0088FE' }] : []),
-                { name: 'Liquidity', amount: Number(form.watch("liquidityPercentage")), percentage: Number(form.watch("liquidityPercentage")), color: '#00C49F' },
-                ...form.watch('wallets').map((wallet, index) => ({
-                  name: wallet.name,
-                  amount: Number(wallet.percentage),
-                  percentage: Number(wallet.percentage),
-                  color: COLORS[index % COLORS.length]
-                }))
-              ]}
-              totalAllocation={form.watch("presaleEnabled") ? 
-                (5 + Number(form.watch("liquidityPercentage")) + form.watch('wallets').reduce((sum, wallet) => sum + Number(wallet.percentage), 0)) :
-                (Number(form.watch("liquidityPercentage")) + form.watch('wallets').reduce((sum, wallet) => sum + Number(wallet.percentage), 0))
-              }
-            />
+          {/* Add Create Token Button */}
+          <div className="mt-6 flex justify-end gap-4">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={simulateDeployment}
+              className="w-40"
+              disabled={!isConnected || loading || isSimulating}
+            >
+              {isSimulating ? (
+                <>
+                  <Spinner className="mr-2 h-4 w-4" />
+                  Simulating...
+                </>
+              ) : (
+                'Simulate'
+              )}
+            </Button>
+            
+            <Button
+              type="submit"
+              variant="primary"
+              className="w-40 bg-blue-600 hover:bg-blue-700"
+              disabled={!isConnected || loading || !form.formState.isValid}
+            >
+              {loading ? (
+                <>
+                  <Spinner className="mr-2 h-4 w-4" />
+                  Creating...
+                </>
+              ) : (
+                'Create Token'
+              )}
+            </Button>
           </div>
         </form>
       </Form>
 
-      {/* Dialogs */}
-      <Dialog open={showResults} onOpenChange={setShowResults}>
-        <DialogContent className="bg-gray-800 p-0">
-          <div className="p-6">
-            <h3 className="text-xl font-semibold text-white mb-4">Deployment Analysis</h3>
-            <div className="space-y-4">
+      {/* Add Dialog for simulation results */}
+      <Dialog open={showSimulationDialog} onOpenChange={setShowSimulationDialog}>
+        <DialogContent className="max-w-2xl">
+          <div className="space-y-4">
+            <h2 className="text-xl font-semibold text-white">Deployment Simulation Results</h2>
+            <div className="space-y-2">
               {simulationResults.map((result, index) => (
-                <div key={index} className={`p-4 rounded-lg ${
-                  result.status === 'error' ? 'bg-red-900/20 border border-red-800/50' :
-                  result.status === 'warning' ? 'bg-yellow-900/20 border border-yellow-800/50' :
-                  'bg-green-900/20 border border-green-800/50'
-                }`}>
-                  <div className="flex items-start gap-3">
-                    <div className={`rounded-full p-1 ${
-                      result.status === 'error' ? 'bg-red-500/20 text-red-400' :
-                      result.status === 'warning' ? 'bg-yellow-500/20 text-yellow-400' :
-                      'bg-green-500/20 text-green-400'
-                    }`}>
-                      {result.status === 'error' ? '✕' :
-                       result.status === 'warning' ? '!' : '✓'}
-                    </div>
-                    <div>
-                      <h4 className="font-medium text-white">{result.category}</h4>
-                      <p className="text-gray-300 mt-1">{result.message}</p>
-                      {result.details && (
-                        <ul className="mt-2 space-y-1">
-                          {result.details.map((detail, i) => (
-                            <li key={i} className="text-sm text-gray-400">• {detail}</li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
+                <div
+                  key={index}
+                  className={`p-3 rounded-lg ${
+                    result.status === 'success'
+                      ? 'bg-green-900/50'
+                      : result.status === 'warning'
+                      ? 'bg-yellow-900/50'
+                      : 'bg-red-900/50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-white">{result.category}</span>
+                    <span
+                      className={
+                        result.status === 'success'
+                          ? 'text-green-400'
+                          : result.status === 'warning'
+                          ? 'text-yellow-400'
+                          : 'text-red-400'
+                      }
+                    >
+                      {result.message}
+                    </span>
                   </div>
+                  {result.details && (
+                    <ul className="mt-1 list-disc list-inside text-sm text-gray-300">
+                      {result.details.map((detail, i) => (
+                        <li key={i}>{detail}</li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
               ))}
             </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showTokenomicsInfo} onOpenChange={setShowTokenomicsInfo}>
-        <DialogContent className="bg-gray-800 p-0">
-          <div className="p-6">
-            <h3 className="text-xl font-semibold text-white mb-4">Token Distribution Guide</h3>
-            {/* Add tokenomics guide content here */}
+            <div className="flex justify-end gap-2 mt-4">
+              <Button variant="secondary" onClick={() => setShowSimulationDialog(false)}>
+                Close
+              </Button>
+              <Button 
+                variant="primary" 
+                className="bg-blue-600 hover:bg-blue-700"
+                onClick={() => {
+                  setShowSimulationDialog(false);
+                  form.handleSubmit(onSubmit)();
+                }}
+                disabled={simulationResults.some(r => r.status === 'error')}
+              >
+                Deploy Token
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
     </div>
   );
 }
-
-const COLORS = [
-  '#0088FE',
-  '#00C49F',
-  '#FFBB28',
-  '#FF8042',
-  '#8884D8',
-  '#82CA9D',
-  '#F66D44',
-  '#FABE0F',
-];

@@ -27,6 +27,7 @@ interface TokenInfo {
   symbol: string;
   totalSupply: string;
   owner: string;
+  pairAddress?: string;
   presaleInfo?: {
     softCap: string;
     hardCap: string;
@@ -52,6 +53,7 @@ interface TokenInfo {
     lockDuration: string;
     unlockTime: number;
     locked: boolean;
+    hasLiquidity?: boolean;
   };
   platformFee?: {
     recipient: string;
@@ -219,7 +221,17 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
       'function liquidityPercentage() view returns (uint256)',
       'function liquidityLockDuration() view returns (uint256)',
       'function maxActivePresales() view returns (uint256)',
-      'function presaleEnabled() view returns (bool)'
+      'function presaleEnabled() view returns (bool)',
+      // Liquidity functions
+      'function addLiquidity(uint256 tokenAmount) external payable',
+      'function addLiquidityFromContract(uint256 tokenAmount) external payable',
+      'function removeLiquidity(uint256 lpTokenAmount) external',
+      'function getLiquidityInfo() view returns (tuple(uint256 percentage, uint256 lockDuration, uint256 unlockTime, bool locked, bool hasLiquidity))',
+      'function uniswapV2Pair() view returns (address)',
+      'function uniswapV2Router() view returns (address)',
+      // Liquidity allocation functions
+      'function getRemainingLiquidityAllocation() view returns (uint256)',
+      'function liquidityAllocation() view returns (uint256)'
     ], signer);
   };
 
@@ -255,7 +267,7 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
       let factoryV3Address = null;
       
       if (chainId === 97) { // BSC Testnet
-        factoryV3Address = '0xD9dF868977ef71e7B22256993AF730bDA613544F';
+        factoryV3Address = '0xc932F77C5F38Cf7FA5f0728D34f1dD0517C4ae97';
         console.log("Using hardcoded BSC Testnet V3 Factory address:", factoryV3Address);
       } else {
         // For other networks, try FACTORY_ADDRESSES first
@@ -350,9 +362,17 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
               tokenContract.owner()
             ]);
 
+            let tokenInfo: TokenInfo = {
+              address: tokenAddress,
+              name,
+              symbol,
+              totalSupply: formatEther(totalSupply),
+              owner,
+              paused: await tokenContract.paused(),
+              createdAt: Date.now()
+            };
+
             // Get presale info with additional details
-            let presaleInfo;
-            let contributorInfo;
             try {
               const [info, contributorCount, contributors] = await Promise.all([
                 tokenContract.presaleInfo(),
@@ -373,7 +393,7 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
                 })
               );
 
-              presaleInfo = {
+              tokenInfo.presaleInfo = {
                 softCap: formatEther(info.softCap),
                 hardCap: formatEther(info.hardCap),
                 minContribution: formatEther(info.minContribution),
@@ -393,24 +413,56 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
             }
 
             // Try to get liquidity info
-            let liquidityInfo;
             try {
-              const info = await tokenContract.liquidityInfo();
-              liquidityInfo = {
-                percentage: info.percentage.toString(),
-                lockDuration: info.lockDuration.toString(),
-                unlockTime: Number(info.unlockTime),
-                locked: info.locked
-              };
+              const info = await tokenContract.getLiquidityInfo();
+              
+              // Get pair address first
+              const pair = await tokenContract.uniswapV2Pair();
+              tokenInfo.pairAddress = pair;
+              
+              // Then check if there's actual liquidity
+              if (pair) {
+                const pairContract = new Contract(pair, [
+                    'function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)'
+                ], signer);
+                
+                try {
+                  const reserves = await pairContract.getReserves();
+                  const hasLiquidity = reserves[0].gt(0) && reserves[1].gt(0);
+                  
+                  tokenInfo.liquidityInfo = {
+                      percentage: info.percentage.toString(),
+                      lockDuration: info.lockDuration.toString(),
+                      unlockTime: Number(info.unlockTime),
+                      locked: info.locked,
+                      hasLiquidity
+                  };
+                } catch (e) {
+                  console.log('Error getting reserves:', e);
+                  tokenInfo.liquidityInfo = {
+                      percentage: info.percentage.toString(),
+                      lockDuration: info.lockDuration.toString(),
+                      unlockTime: Number(info.unlockTime),
+                      locked: info.locked,
+                      hasLiquidity: false
+                  };
+                }
+              }
             } catch (e) {
-              console.log('No liquidity info for token:', tokenAddress);
+              console.log('Error getting liquidity info:', e);
+              // Even if getting liquidity info fails, try to get pair address
+              try {
+                const pair = await tokenContract.uniswapV2Pair();
+                tokenInfo.pairAddress = pair;
+              } catch (pairError) {
+                console.log('Failed to get pair address:', pairError);
+              }
             }
 
             // Try to get platform fee info
-            let platformFee;
             try {
               const info = await tokenContract.platformFee();
-              platformFee = {
+              tokenInfo.platformFee = {
                 recipient: info.recipient,
                 totalTokens: formatEther(info.totalTokens),
                 vestingEnabled: info.vestingEnabled,
@@ -424,12 +476,11 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
             }
 
             // Try to get vesting info
-            let vestingInfo;
             try {
               const hasVesting = await tokenContract.hasVestingSchedule(userAddress);
               if (hasVesting) {
                 const scheduleInfo = await tokenContract.getVestingSchedule(userAddress);
-                vestingInfo = {
+                tokenInfo.vestingInfo = {
                   hasVesting: true,
                   totalAmount: formatEther(scheduleInfo.totalAmount),
                   startTime: Number(scheduleInfo.startTime),
@@ -445,19 +496,7 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
               console.log('No vesting info for token:', tokenAddress);
             }
 
-            return {
-              address: tokenAddress,
-              name,
-              symbol,
-              totalSupply: formatEther(totalSupply),
-              owner,
-              presaleInfo,
-              liquidityInfo,
-              platformFee,
-              paused: await tokenContract.paused(),
-              vestingInfo,
-              createdAt: Date.now()
-            } as TokenInfo;
+            return tokenInfo;
           } catch (error) {
             console.error(`Error loading token ${tokenAddress}:`, error);
             return null;
@@ -704,6 +743,65 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
       toast({
         title: 'Error',
         description: 'Failed to finalize presale.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleAddLiquidity = async (tokenAddress: string) => {
+    try {
+      const signer = await externalProvider.getSigner();
+      const tokenContract = getTokenContract(tokenAddress, signer);
+      
+      // Get token info and remaining allocation
+      const [name, symbol, remainingAllocation] = await Promise.all([
+        tokenContract.name(),
+        tokenContract.symbol(),
+        tokenContract.getRemainingLiquidityAllocation()
+      ]);
+
+      // Format remaining allocation for display
+      const remainingAllocationFormatted = formatEther(remainingAllocation);
+
+      // Prompt for liquidity amount
+      const liquidityBNB = prompt(`Enter amount of BNB to add as liquidity for ${symbol}:`);
+      if (!liquidityBNB) return;
+
+      const maxTokens = remainingAllocationFormatted;
+      const tokenAmount = prompt(
+        `Enter amount of ${symbol} tokens to add as liquidity (max ${maxTokens} from liquidity allocation):`
+      );
+      if (!tokenAmount) return;
+
+      // Convert to Wei
+      const liquidityBNBWei = parseEther(liquidityBNB);
+      const tokenAmountWei = parseEther(tokenAmount);
+
+      // Verify amount is within allocation
+      if (tokenAmountWei > remainingAllocation) {
+        throw new Error(`Amount exceeds remaining liquidity allocation of ${remainingAllocationFormatted} ${symbol}`);
+      }
+
+      // Call the contract's addLiquidityFromContract function
+      console.log('Adding liquidity from contract allocation...');
+      const addLiquidityTx = await tokenContract.addLiquidityFromContract(tokenAmountWei, {
+        value: liquidityBNBWei
+      });
+
+      await addLiquidityTx.wait();
+      
+      toast({
+        title: 'Liquidity Added',
+        description: `Successfully added ${liquidityBNB} BNB and ${tokenAmount} ${symbol} as liquidity`
+      });
+      
+      // Refresh token info
+      loadTokens();
+    } catch (error: any) {
+      console.error('Error adding liquidity:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to add liquidity. Check console for details.',
         variant: 'destructive'
       });
     }
@@ -1176,6 +1274,60 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
                               )}
                             </div>
                       )}
+
+                      {/* Liquidity Management Section */}
+                      <div className="col-span-2">
+                        <h4 className="text-xs font-medium text-text-primary mb-1">Liquidity Management</h4>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleAddLiquidity(token.address)}
+                            className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+                          >
+                            Add Liquidity
+                          </button>
+                          {token.pairAddress && (
+                            <>
+                              <a
+                                href={`https://pancakeswap.finance/v2/add/TBNB/${token.address}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+                              >
+                                Add More Liquidity
+                              </a>
+                              <a
+                                href={`https://pancakeswap.finance/info/v2/pairs/${token.pairAddress}?chain=bscTestnet`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+                              >
+                                View Pair Info
+                              </a>
+                              <a
+                                href={`https://pancakeswap.finance/v2/swap?chain=bscTestnet&outputCurrency=${token.address}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+                              >
+                                Trade on PancakeSwap
+                              </a>
+                              <a
+                                href={`https://testnet.bscscan.com/address/${token.pairAddress}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+                              >
+                                View Pair Contract
+                              </a>
+                            </>
+                          )}
+                        </div>
+                        {token.pairAddress && (
+                          <div className="mt-2 text-xs text-text-secondary">
+                            <p>Pair Address: {token.pairAddress}</p>
+                          </div>
+                        )}
+                      </div>
                     </div>
                               </div>
                             )}
