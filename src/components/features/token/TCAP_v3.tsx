@@ -714,17 +714,24 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
         throw new Error('Factory address is not defined');
       }
 
-      console.log('Using factory address:', factoryAddress);
+      console.log('TCAP_v3 loadTokens: Using factory address:', {
+        factoryAddress,
+        chainId,
+        userAddress,
+        hasProvider: !!externalProvider,
+        signerNetwork: await signer.provider.getNetwork()
+      });
+
       const factory = new ethers.Contract(factoryAddress, [
-        "function getUserTokens(address) view returns (address[])",
+        "function getUserCreatedTokens(address) view returns (address[])",
         "function deploymentFee() view returns (uint256)",
         "function feeRecipient() view returns (address)",
         "function uniswapV2Router() view returns (address)"
       ], signer);
       
-      console.log('Getting user created tokens for:', userAddress);
-      const deployedTokens = await factory.getUserTokens(userAddress);
-      console.log('Deployed tokens:', deployedTokens);
+      console.log('TCAP_v3 loadTokens: Getting user created tokens for:', userAddress);
+      const deployedTokens = await factory.getUserCreatedTokens(userAddress);
+      console.log('TCAP_v3 loadTokens: Deployed tokens:', deployedTokens);
 
       const blockedTokens = getBlockedTokens();
       
@@ -783,7 +790,7 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
           return timeB - timeA;
         });
 
-      console.log('Loaded tokens:', loadedTokens);
+      console.log('TCAP_v3 loadTokens: Successfully loaded tokens:', loadedTokens);
       setTokens(loadedTokens);
     } catch (error: any) {
       console.error('TCAP_v3 Error loading tokens:', error);

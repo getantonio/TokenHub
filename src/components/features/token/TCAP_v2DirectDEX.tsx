@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import TokenFactoryV2DirectDEXABI from '@/contracts/abi/TokenFactory_v2_DirectDEX.json';
 import { contractAddresses } from '@/config/contracts';
+import { ethers } from 'ethers';
 
 interface Props {
   isConnected: boolean;
@@ -479,6 +480,124 @@ const TCAP_v2DirectDEX = forwardRef<TCAP_v2DirectDEXRef, Props>(({ isConnected, 
       ...prev,
       [field]: checked
     }));
+  };
+
+  const getLPTokenDetails = async (tokenAddress: string, signer: any): Promise<{
+    pairAddress: string;
+    lpBalance: string;
+    totalSupply: string;
+    reserves: {
+      token: string;
+      eth: string;
+    }
+  }> => {
+    const zeroAddr = "0x0000000000000000000000000000000000000000";
+    try {
+      // Updated Uniswap V2 Factory address for Sepolia
+      const UNISWAP_V2_FACTORY = '0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f';
+      const WETH_SEPOLIA = '0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14';
+      
+      console.log('Getting LP details for token:', tokenAddress);
+      console.log('Using Factory:', UNISWAP_V2_FACTORY);
+      console.log('Using WETH:', WETH_SEPOLIA);
+      
+      const userAddress = await signer.getAddress();
+      console.log('User address:', userAddress);
+
+      // Create factory contract with more detailed error logging
+      const factoryContract = new Contract(
+        UNISWAP_V2_FACTORY,
+        [
+          'function getPair(address tokenA, address tokenB) external view returns (address pair)',
+        ],
+        signer
+      );
+
+      // Get pair address with both token orderings
+      console.log('Checking pair (token, WETH)...');
+      let pairAddress = await factoryContract.getPair(tokenAddress, WETH_SEPOLIA);
+      console.log('First pair check result:', pairAddress);
+      
+      if (pairAddress === zeroAddr) {
+        console.log('Checking pair (WETH, token)...');
+        pairAddress = await factoryContract.getPair(WETH_SEPOLIA, tokenAddress);
+        console.log('Second pair check result:', pairAddress);
+      }
+
+      if (pairAddress === zeroAddr) {
+        console.log('No liquidity pair found for either ordering');
+        throw new Error('No liquidity pair found');
+      }
+
+      console.log('Found pair address:', pairAddress);
+
+      // Create pair contract with more detailed ABI
+      const pairContract = new Contract(
+        pairAddress,
+        [
+          'function token0() external view returns (address)',
+          'function token1() external view returns (address)',
+          'function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)',
+          'function totalSupply() external view returns (uint)',
+          'function balanceOf(address) external view returns (uint)',
+          'function decimals() external pure returns (uint8)',
+          'function symbol() external view returns (string)'
+        ],
+        signer
+      );
+
+      console.log('Getting pair details...');
+      
+      // Get all pair information in parallel with error handling
+      const [token0, token1, reserves, totalSupply, lpBalance, symbol] = await Promise.all([
+        pairContract.token0().catch(e => { console.error('Error getting token0:', e); throw e; }),
+        pairContract.token1().catch(e => { console.error('Error getting token1:', e); throw e; }),
+        pairContract.getReserves().catch(e => { console.error('Error getting reserves:', e); throw e; }),
+        pairContract.totalSupply().catch(e => { console.error('Error getting totalSupply:', e); throw e; }),
+        pairContract.balanceOf(userAddress).catch(e => { console.error('Error getting lpBalance:', e); throw e; }),
+        pairContract.symbol().catch(e => { console.error('Error getting symbol:', e); return 'UNI-V2'; })
+      ]);
+
+      console.log('Pair details:', {
+        token0,
+        token1,
+        reserves: reserves.map((r: bigint) => r.toString()),
+        totalSupply: totalSupply.toString(),
+        lpBalance: lpBalance.toString(),
+        symbol
+      });
+
+      // Determine which token is which
+      const isToken0 = tokenAddress.toLowerCase() === token0.toLowerCase();
+      const tokenReserve = isToken0 ? reserves[0] : reserves[1];
+      const ethReserve = isToken0 ? reserves[1] : reserves[0];
+
+      console.log('Formatted values:', {
+        tokenReserve: formatEther(tokenReserve),
+        ethReserve: formatEther(ethReserve)
+      });
+
+      return {
+        pairAddress,
+        lpBalance: formatEther(lpBalance),
+        totalSupply: formatEther(totalSupply),
+        reserves: {
+          token: formatEther(tokenReserve),
+          eth: formatEther(ethReserve)
+        }
+      };
+    } catch (error) {
+      console.error('Error getting LP details:', error);
+      return {
+        pairAddress: zeroAddr,
+        lpBalance: '0',
+        totalSupply: '0',
+        reserves: {
+          token: '0',
+          eth: '0'
+        }
+      };
+    }
   };
 
   return (

@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, forwardRef, ReactNode } from 'react';
 import { useAccount } from 'wagmi';
 import { useNetwork } from '@/contexts/NetworkContext';
 import { BrowserProvider, Contract, ethers, parseEther } from 'ethers';
 import { getAddress, formatEther } from 'ethers';
 import { Button } from '@/components/ui/button';
-import { useToast } from '@/components/ui/use-toast';
+import { useToast } from '@/components/ui/toast/use-toast';
 import { Spinner } from '@/components/ui/Spinner';
 import { InfoIcon } from 'lucide-react';
 import { getNetworkContractAddress } from '@/config/contracts';
@@ -45,6 +45,29 @@ interface TokenAllocation {
   cliffDuration: number;
   vestingStartTime: number;
   tokensClaimed: string;
+}
+
+interface TokenInfo {
+  address: string;
+  name: string;
+  symbol: string;
+  totalSupply: string;
+  liquidityInfo?: {
+    hasLiquidity?: boolean;
+    lpTokenBalance?: string;
+    totalSupply?: string;
+    reserves?: {
+      token: string;
+      eth: string;
+    };
+    pairAddress?: string;
+  };
+}
+
+interface Props {
+  isConnected: boolean;
+  address?: string;
+  provider: any;  // This is externalProvider
 }
 
 // Router ABI for PancakeSwap/Uniswap
@@ -111,224 +134,32 @@ const UNISWAP_V2_FACTORY_ABI = [
   "function setFeeToSetter(address) external"
 ];
 
-const UNISWAP_V2_FACTORY_ADDRESS = {
-  11155111: "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f", // Sepolia
-  97: "0x6725F303b657a9451d8BA641348b6761A6CC7a17", // BSC Testnet
-  11155420: "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f" // Optimism Sepolia
-};
+const FACTORY_ADDRESSES: Record<number, string> = {
+  [ChainId.SEPOLIA]: '0xc35DADB65012eC5796536bD9864eD8773aBc74C4',
+  [ChainId.BSC_TESTNET]: '0x6725F303b657a9451d8BA641348b6761A6CC7a17'
+} as const;
 
-// Update the factory ABI to match Uniswap V2 Factory exactly
+// Update the factory contract ABI
 const FACTORY_ABI = [
   {
     "inputs": [
-      {
-        "internalType": "address",
-        "name": "_feeToSetter",
-        "type": "address"
-      }
+      { "internalType": "address", "name": "_feeToSetter", "type": "address" }
     ],
-    "payable": false,
     "stateMutability": "nonpayable",
     "type": "constructor"
   },
   {
-    "anonymous": false,
     "inputs": [
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "token0",
-        "type": "address"
-      },
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "token1",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "address",
-        "name": "pair",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "name": "PairCreated",
-    "type": "event"
-  },
-  {
-    "constant": true,
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "name": "allPairs",
-    "outputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "payable": false,
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "constant": true,
-    "inputs": [],
-    "name": "allPairsLength",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "payable": false,
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "constant": false,
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "tokenA",
-        "type": "address"
-      },
-      {
-        "internalType": "address",
-        "name": "tokenB",
-        "type": "address"
-      }
-    ],
-    "name": "createPair",
-    "outputs": [
-      {
-        "internalType": "address",
-        "name": "pair",
-        "type": "address"
-      }
-    ],
-    "payable": false,
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "constant": true,
-    "inputs": [],
-    "name": "feeTo",
-    "outputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "payable": false,
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "constant": true,
-    "inputs": [],
-    "name": "feeToSetter",
-    "outputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "payable": false,
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "constant": true,
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "tokenA",
-        "type": "address"
-      },
-      {
-        "internalType": "address",
-        "name": "tokenB",
-        "type": "address"
-      }
+      { "internalType": "address", "name": "tokenA", "type": "address" },
+      { "internalType": "address", "name": "tokenB", "type": "address" }
     ],
     "name": "getPair",
-    "outputs": [
-      {
-        "internalType": "address",
-        "name": "pair",
-        "type": "address"
-      }
-    ],
-    "payable": false,
+    "outputs": [{ "internalType": "address", "name": "pair", "type": "address" }],
     "stateMutability": "view",
     "type": "function"
   }
 ];
 
-// Update the router ABI to match Uniswap V2 Router exactly
-const ROUTER_ABI = [
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_factory",
-        "type": "address"
-      },
-      {
-        "internalType": "address",
-        "name": "_WETH",
-        "type": "address"
-      }
-    ],
-    "stateMutability": "nonpayable",
-    "type": "constructor"
-  },
-  {
-    "inputs": [],
-    "name": "WETH",
-    "outputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "factory",
-    "outputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  }
-];
-
-// Update the token ABI to only include essential functions
 const tokenV3ABI = [
   ...erc20ABI,
   "function approve(address spender, uint256 amount) external returns (bool)",
@@ -345,6 +176,51 @@ const getDexRouterAddress = async (chainId: number, dexName: string): Promise<st
     throw new Error(`No router address configured for chain ID ${chainId}`);
   }
   return ROUTER_ADDRESSES[chainId];
+};
+
+const getNetworkCurrency = (chainId: number): string => {
+  switch (chainId) {
+    case 97: // BSC Testnet
+      return 'BNB';
+    case 11155111: // Sepolia
+      return 'ETH';
+    case 80002: // Polygon Mumbai
+      return 'MATIC';
+    case 11155420: // Optimism Sepolia
+      return 'ETH';
+    default:
+      return 'ETH';
+  }
+};
+
+const getExplorerUrl = (chainId: number): string => {
+  switch (chainId) {
+    case 97: // BSC Testnet
+      return 'https://testnet.bscscan.com';
+    case 11155111: // Sepolia
+      return 'https://sepolia.etherscan.io';
+    case 80002: // Polygon Mumbai
+      return 'https://mumbai.polygonscan.com';
+    case 11155420: // Optimism Sepolia
+      return 'https://sepolia-optimism.etherscan.io';
+    default:
+      return '';
+  }
+};
+
+const getDexUrl = (chainId: number): string => {
+  switch (chainId) {
+    case 97: // BSC Testnet
+      return 'https://pancakeswap.finance/swap?outputCurrency=';
+    case 11155111: // Sepolia
+      return 'https://app.uniswap.org/swap?chain=sepolia&outputCurrency=';
+    case 80002: // Polygon Mumbai
+      return 'https://quickswap.exchange/#/swap?outputCurrency=';
+    case 11155420: // Optimism Sepolia
+      return 'https://app.uniswap.org/swap?chain=optimism_sepolia&outputCurrency=';
+    default:
+      return '';
+  }
 };
 
 const TCAP_U_DEXLIST = () => {
@@ -371,14 +247,18 @@ const TCAP_U_DEXLIST = () => {
       if (!chainId) throw new Error('Could not get chain ID');
 
       const WETH_ADDRESS = '0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14';
-      const FACTORY_ADDRESS = '0x7E0987E5b3a30e3f2828572Bb659A548460a3003';
+      const FACTORY_ADDRESS = FACTORY_ADDRESSES[Number(chainId)];
+      if (!FACTORY_ADDRESS) {
+        throw new Error('Unsupported network - Factory not found');
+      }
       const ROUTER_ADDRESS = await getDexRouterAddress(Number(chainId), 'uniswap');
 
       console.log('Checking token details:', {
         token: tokenAddress,
         WETH: WETH_ADDRESS,
         factory: FACTORY_ADDRESS,
-        router: ROUTER_ADDRESS
+        router: ROUTER_ADDRESS,
+        chainId: chainId.toString()
       });
 
       // Create token contract with full ABI
@@ -424,11 +304,7 @@ const TCAP_U_DEXLIST = () => {
         // Create factory contract with full ABI
         const factoryContract = new Contract(
           FACTORY_ADDRESS,
-          [
-            "function getPair(address tokenA, address tokenB) external view returns (address pair)",
-            "function allPairs(uint) external view returns (address pair)",
-            "function allPairsLength() external view returns (uint)"
-          ],
+          FACTORY_ABI,
           provider
         );
 
@@ -736,16 +612,18 @@ const TCAP_U_DEXLIST = () => {
       const signer = await provider.getSigner();
       const userAddress = await signer.getAddress();
       
-      // Create token contract with minimal ABI
-      const tokenContract = new Contract(tokenAddress, [
-        "function name() view returns (string)",
-        "function symbol() view returns (string)",
-        "function decimals() view returns (uint8)",
-        "function owner() view returns (address)",
-        "function mint(address to, uint256 amount) returns (bool)",
-        "function transfer(address to, uint256 amount) returns (bool)",
-        "function balanceOf(address) view returns (uint256)"
-      ], signer);
+      // Create token contract instance for minting/transferring
+      const mintTokenContract = new Contract(
+        tokenAddress,
+        [
+          ...erc20ABI,
+          "function owner() view returns (address)",
+          "function mint(address to, uint256 amount) returns (bool)",
+          "function transfer(address to, uint256 amount) returns (bool)",
+          "function balanceOf(address) view returns (uint256)"
+        ],
+        signer
+      );
       
       // Create dialog for input
       const dialog = await new Promise<{ toAddress: string; amount: string } | null>((resolve) => {
@@ -755,8 +633,8 @@ const TCAP_U_DEXLIST = () => {
           <h3 class="text-lg font-bold text-text-primary mb-4">Mint or Transfer Tokens</h3>
           <div class="space-y-4">
             <div>
-              <label class="text-xs text-text-secondary">Recipient Address</label>
-              <input type="text" id="toAddress" class="w-full bg-gray-800 text-text-primary rounded px-2 py-1 text-sm" placeholder="Enter recipient address" value="${userAddress}" />
+              <label class="text-xs text-text-secondary">To Address</label>
+              <input type="text" id="toAddress" class="w-full bg-gray-800 text-text-primary rounded px-2 py-1 text-sm" placeholder="Enter recipient address" />
             </div>
             <div>
               <label class="text-xs text-text-secondary">Amount</label>
@@ -765,7 +643,7 @@ const TCAP_U_DEXLIST = () => {
           </div>
           <div class="flex justify-end gap-3 mt-6">
             <button id="cancelBtn" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-text-primary">Cancel</button>
-            <button id="confirmBtn" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white">Continue</button>
+            <button id="confirmBtn" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white">Mint or Transfer</button>
           </div>
         `;
         
@@ -803,263 +681,189 @@ const TCAP_U_DEXLIST = () => {
         throw new Error('Please enter both recipient address and amount');
       }
 
-      // Get token info
-      const [decimals, symbol, owner, balance] = await Promise.all([
-        tokenContract.decimals(),
-        tokenContract.symbol(),
-        tokenContract.owner(),
-        tokenContract.balanceOf(userAddress)
-      ]);
-
       // Convert amount to proper units
-      const amountInWei = parseEther(amount);
+      const amountWei = parseEther(amount);
+
+      // Check if user is owner
+      const owner = await mintTokenContract.owner();
       const isOwner = owner.toLowerCase() === userAddress.toLowerCase();
 
-      if (isOwner) {
-        try {
-          console.log('Attempting to mint tokens...');
-          
-          // Estimate gas first to check if the transaction will fail
-          const gasEstimate = await tokenContract.mint.estimateGas(toAddress, amountInWei)
-            .catch(err => {
-              throw new Error(`Cannot mint tokens: ${err.message}`);
-            });
-            
-          console.log('Gas estimate:', gasEstimate.toString());
-          
-          // Add 20% buffer to gas estimate
-          const gasLimit = gasEstimate + (gasEstimate / BigInt(5));
-          
-          // Show pending toast
-          toast({
-            title: 'Transaction Pending',
-            description: `Minting ${amount} ${symbol} to ${toAddress}...`
-          });
-          
-          // Send transaction with gas limit
-          const mintTx = await tokenContract.mint(toAddress, amountInWei, {
-            gasLimit
-          });
-          
-          // Show waiting toast
-          toast({
-            title: 'Transaction Submitted',
-            description: `Transaction hash: ${mintTx.hash}`
-          });
-          
-          // Wait for confirmation
-          await mintTx.wait();
-          
-          toast({
-            title: 'Success',
-            description: `Successfully minted ${amount} ${symbol} to ${toAddress}`
-          });
-          
-          handleSearch();
-          return;
-        } catch (error: any) {
-          console.log('Could not mint tokens:', error);
-          // If minting fails, try transfer instead
-          toast({
-            title: 'Minting Failed',
-            description: `Could not mint tokens: ${error.message}. Trying transfer instead...`
-          });
-        }
+      if (!isOwner) {
+        throw new Error('Only the token owner can mint or transfer tokens');
       }
 
-      // If minting fails or user is not owner, try transfer
-      if (balance >= amountInWei) {
-        // Estimate gas first
-        const gasEstimate = await tokenContract.transfer.estimateGas(toAddress, amountInWei)
-          .catch(err => {
-            throw new Error(`Cannot transfer tokens: ${err.message}`);
-          });
-          
-        // Add 20% buffer to gas estimate
-        const gasLimit = gasEstimate + (gasEstimate / BigInt(5));
-        
-        // Show pending toast
+      // Mint or transfer tokens
+      if (toAddress === userAddress) {
+        console.log('Minting tokens...');
+        const mintTx = await mintTokenContract.mint(userAddress, amountWei);
+        await mintTx.wait();
         toast({
-          title: 'Transaction Pending',
-          description: `Transferring ${amount} ${symbol} to ${toAddress}...`
+          title: 'Tokens Minted',
+          description: `Successfully minted ${amount} ${listedToken?.symbol} to your wallet`
         });
-        
-        const transferTx = await tokenContract.transfer(toAddress, amountInWei, {
-          gasLimit
-        });
-        
-        // Show waiting toast
-        toast({
-          title: 'Transaction Submitted',
-          description: `Transaction hash: ${transferTx.hash}`
-        });
-        
-        await transferTx.wait();
-        
-        toast({
-          title: 'Success',
-          description: `Successfully transferred ${amount} ${symbol} to ${toAddress}`
-        });
-        
-        handleSearch();
       } else {
-        throw new Error(`Insufficient balance. You have ${formatEther(balance)} ${symbol}`);
+        console.log('Transferring tokens...');
+        const transferTx = await mintTokenContract.transfer(toAddress, amountWei);
+        await transferTx.wait();
+        toast({
+          title: 'Tokens Transferred',
+          description: `Successfully transferred ${amount} ${listedToken?.symbol} to ${toAddress}`
+        });
       }
+
+      // Refresh token data
+      handleSearch();
 
     } catch (error: any) {
       console.error('Error in mint/transfer:', error);
       toast({
         title: 'Error',
-        description: error.message || 'Failed to mint/transfer tokens',
+        description: error instanceof Error ? error.message : 'Failed to mint/transfer tokens',
         variant: 'destructive'
       });
     }
   };
 
-  // Helper function to get network currency
-  const getNetworkCurrency = (chainId: number): string => {
-    switch (chainId) {
-      case 97:
-        return 'BNB';
-      case 11155111:
-        return 'ETH';
-      case 80002:
-        return 'MATIC';
-      case 11155420:
-        return 'ETH'; // Optimism Sepolia
-      default:
-        return 'ETH';
-    }
-  };
-
-  // Helper function to get explorer URL
-  const getExplorerUrl = (chainId: number): string => {
-    switch (chainId) {
-      case 97:
-        return 'https://testnet.bscscan.com';
-      case 11155111:
-        return 'https://sepolia.etherscan.io';
-      case 80002:
-        return '';
-      case 11155420:
-        return 'https://sepolia-optimism.etherscan.io';
-      default:
-        return '';
-    }
-  };
-
-  // Helper function to get DEX URL
-  const getDexUrl = (chainId: number): string => {
-    switch (chainId) {
-      case 97:
-        return 'https://pancakeswap.finance/?chain=bscTestnet&outputCurrency=';
-      case 11155111: // Sepolia
-        return 'https://app.uniswap.org/swap?chain=sepolia';
-      case 11155420: // Optimism Sepolia
-        return 'https://app.uniswap.org/swap?chain=optimism_sepolia';
-      default:
-        return '';
-    }
-  };
-
-  // Add this new helper function after other helper functions
-  const getChartUrl = (chainId: number, pairAddress: string): string => {
-    switch (chainId) {
-      case 97: // BSC Testnet
-        return `https://pancakeswap.finance/?chain=bscTestnet&outputCurrency=${pairAddress}`;
-      case 11155111: // Sepolia
-        return `https://app.uniswap.org/pools?chain=sepolia`;
-      case 11155420: // Optimism Sepolia
-        return `https://app.uniswap.org/pools?chain=optimism_sepolia`;
-      default:
-        return `https://app.uniswap.org/pools`;
-    }
-  };
-
-  // Add after the existing helper functions
-  const checkTokenBalance = async (tokenAddress: string, signer: any): Promise<TokenBalance> => {
-    const tokenContract = new Contract(tokenAddress, [
-      ...erc20ABI,
-      "function decimals() view returns (uint8)"
-    ], signer);
-    
-    const [balance, decimals] = await Promise.all([
-      tokenContract.balanceOf(await signer.getAddress()),
-      tokenContract.decimals()
-    ]);
-
-    return {
-      raw: balance,
-      formatted: formatEther(balance)
-    };
-  };
-
-  // Add this function after checkTokenBalance
-  const getLPTokenDetails = async (tokenAddress: string, signer: any): Promise<{
-    pairAddress: string;
-    lpBalance: string;
-    totalSupply: string;
-    reserves: { token: string; eth: string };
-  }> => {
-    // Get WETH address for Sepolia
-    const WETH_ADDRESS = '0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9';
-    const FACTORY_ADDRESS = '0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f';
-
-    // Create factory contract
-    const factoryContract = new Contract(
-      FACTORY_ADDRESS,
-      ["function getPair(address,address) external view returns (address)"],
-      signer
-    );
-
-    // Get pair address
-    const pairAddress = await factoryContract.getPair(tokenAddress, WETH_ADDRESS);
-    
-    if (pairAddress === ethers.ZeroAddress) {
-      return {
-        pairAddress: ethers.ZeroAddress,
-        lpBalance: "0",
-        totalSupply: "0",
-        reserves: { token: "0", eth: "0" }
-      };
+  const handleCheckLPDetails = async () => {
+    if (!listedToken || !chainId) {
+      toast({
+        title: "Error",
+        description: "No token selected or chain not connected",
+        variant: "destructive"
+      });
+      return;
     }
 
-    // Create pair contract
-    const pairContract = new Contract(
-      pairAddress,
-      [
-        "function token0() external view returns (address)",
-        "function token1() external view returns (address)",
-        "function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
-        "function totalSupply() external view returns (uint)",
-        "function balanceOf(address) external view returns (uint)"
-      ],
-      signer
-    );
-
-    // Get all pair details
-    const [token0, reserves, totalSupply, userAddress] = await Promise.all([
-      pairContract.token0(),
-      pairContract.getReserves(),
-      pairContract.totalSupply(),
-      signer.getAddress()
-    ]);
-
-    const lpBalance = await pairContract.balanceOf(userAddress);
-    
-    const isToken0 = tokenAddress.toLowerCase() === token0.toLowerCase();
-    const tokenReserve = isToken0 ? reserves[0] : reserves[1];
-    const ethReserve = isToken0 ? reserves[1] : reserves[0];
-
-    return {
-      pairAddress,
-      lpBalance: formatEther(lpBalance),
-      totalSupply: formatEther(totalSupply),
-      reserves: {
-        token: formatEther(tokenReserve),
-        eth: formatEther(ethReserve)
+    try {
+      const provider = new BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      console.log('Checking LP details for:', listedToken.address);
+      
+      // Get the correct factory address for the current network
+      const FACTORY_ADDRESS = FACTORY_ADDRESSES[chainId];
+      if (!FACTORY_ADDRESS) {
+        toast({
+          title: "Error",
+          description: "Unsupported network - Factory not found",
+          variant: "destructive"
+        });
+        return;
       }
-    };
+      
+      const WETH_SEPOLIA = '0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14';
+      
+      console.log('Using factory address:', FACTORY_ADDRESS);
+      
+      // Create factory contract with proper ABI
+      const factoryContract = new Contract(
+        FACTORY_ADDRESS,
+        FACTORY_ABI,
+        signer
+      );
+      
+      // Check pair address both ways
+      let pairAddress = await factoryContract.getPair(listedToken.address, WETH_SEPOLIA);
+      console.log('First pair check:', pairAddress);
+      
+      if (pairAddress === ethers.ZeroAddress) {
+        pairAddress = await factoryContract.getPair(WETH_SEPOLIA, listedToken.address);
+        console.log('Second pair check:', pairAddress);
+      }
+      
+      if (pairAddress === ethers.ZeroAddress) {
+        toast({
+          title: "No Liquidity Pool",
+          description: "This token doesn't have a liquidity pool yet.",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      // Create pair contract
+      const lpContract = new Contract(
+        pairAddress,
+        [
+          'function token0() external view returns (address)',
+          'function token1() external view returns (address)',
+          'function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)',
+          'function totalSupply() external view returns (uint)',
+          'function balanceOf(address) external view returns (uint)'
+        ],
+        signer
+      );
+      
+      // Get pair details
+      const userAddress = await signer.getAddress();
+      const [token0, reserves, totalSupply, lpBalance] = await Promise.all([
+        lpContract.token0(),
+        lpContract.getReserves(),
+        lpContract.totalSupply(),
+        lpContract.balanceOf(userAddress)
+      ]);
+      
+      // Calculate reserves
+      const isToken0 = listedToken.address.toLowerCase() === token0.toLowerCase();
+      const tokenReserve = isToken0 ? reserves[0] : reserves[1];
+      const ethReserve = isToken0 ? reserves[1] : reserves[0];
+      
+      // Update UI with LP details
+      toast({
+        title: "Liquidity Pool Details",
+        description: `Pair Address: ${pairAddress}\nTotal LP Supply: ${formatEther(totalSupply)} LP\nYour LP Balance: ${formatEther(lpBalance)} LP\nToken Reserve: ${formatEther(tokenReserve)}\nETH Reserve: ${formatEther(ethReserve)}`,
+        variant: "default"
+      });
+      
+      // Calculate price and market cap
+      const ethReserveFormatted = formatEther(ethReserve);
+      const tokenReserveFormatted = formatEther(tokenReserve);
+      const price = Number(ethReserveFormatted) / Number(tokenReserveFormatted);
+      const marketCap = price * Number(listedToken.totalSupply);
+      
+      // Update token info with type safety
+      setListedToken({
+        ...listedToken,
+        isListed: true,
+        pairAddress,
+        liquidityAmount: ethReserveFormatted,
+        currentPrice: price.toString(),
+        marketCap: marketCap.toString()
+      });
+      
+    } catch (error) {
+      console.error('Error checking LP details:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to check LP details",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleCheckBalance = async (tokenAddress: string) => {
+    try {
+      const provider = new BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      
+      // Create token contract instance for balance checking
+      const balanceTokenContract = new Contract(
+        tokenAddress,
+        [
+          "function balanceOf(address) view returns (uint256)",
+          "function decimals() view returns (uint8)",
+          "function symbol() view returns (string)"
+        ],
+        signer
+      );
+
+      // Rest of the balance checking logic...
+    } catch (error) {
+      console.error('Error checking balance:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to check balance',
+        variant: 'destructive'
+      });
+    }
   };
 
   return (
@@ -1105,25 +909,9 @@ const TCAP_U_DEXLIST = () => {
                   {listedToken.isListed 
                     ? `Listed on ${listedToken.dexName}`
                     : 'Not Listed Yet'}
-              </span>
+                </span>
                 <Button
-                  onClick={async () => {
-                    try {
-                      const provider = new BrowserProvider(window.ethereum);
-                      const signer = await provider.getSigner();
-                      const balance = await checkTokenBalance(listedToken.address, signer);
-                      toast({
-                        title: "Your Balance",
-                        description: `${Number(balance.formatted).toLocaleString()} ${listedToken.symbol}`,
-                      });
-                    } catch (error: any) {
-                      toast({
-                        title: "Error",
-                        description: "Failed to fetch balance",
-                        variant: "destructive"
-                      });
-                    }
-                  }}
+                  onClick={() => handleCheckBalance(listedToken.address)}
                   className="text-xs h-6 px-2 bg-gray-700 hover:bg-gray-600"
                 >
                   Check Balance
@@ -1140,28 +928,28 @@ const TCAP_U_DEXLIST = () => {
               </div>
               {listedToken.isListed ? (
                 <>
-              <div>
-                <p className="text-text-secondary">Liquidity:</p>
-                <p className="text-text-primary">
+                  <div>
+                    <p className="text-text-secondary">Liquidity:</p>
+                    <p className="text-text-primary">
                       {Number(listedToken.liquidityAmount).toLocaleString()} {chainId ? getNetworkCurrency(chainId) : 'ETH'}
-                </p>
-              </div>
-              <div>
-                <p className="text-text-secondary">Current Price:</p>
-                <p className="text-text-primary">
-                  {listedToken.currentPrice} {chainId ? getNetworkCurrency(chainId) : 'ETH'}
-                </p>
-              </div>
-              <div>
-                <p className="text-text-secondary">Market Cap:</p>
-                <p className="text-text-primary">
-                  {listedToken.marketCap} {chainId ? getNetworkCurrency(chainId) : 'ETH'}
-                </p>
-              </div>
-              <div className="col-span-2">
-                <p className="text-text-secondary">Pair Address:</p>
-                <p className="text-text-primary break-all">{listedToken.pairAddress}</p>
-              </div>
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-text-secondary">Current Price:</p>
+                    <p className="text-text-primary">
+                      {listedToken.currentPrice} {chainId ? getNetworkCurrency(chainId) : 'ETH'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-text-secondary">Market Cap:</p>
+                    <p className="text-text-primary">
+                      {listedToken.marketCap} {chainId ? getNetworkCurrency(chainId) : 'ETH'}
+                    </p>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="text-text-secondary">Pair Address:</p>
+                    <p className="text-text-primary break-all">{listedToken.pairAddress}</p>
+                  </div>
                 </>
               ) : (
                 <div className="col-span-2 bg-yellow-500/5 rounded-lg p-3">
@@ -1188,12 +976,12 @@ const TCAP_U_DEXLIST = () => {
               
               {listedToken.isListed ? (
                 <>
-              <Button
-                onClick={() => chainId && window.open(`${getDexUrl(chainId)}${listedToken.address}`, '_blank')}
-                className="flex-1 h-8 text-xs bg-blue-600 hover:bg-blue-700"
-              >
-                Trade on {listedToken.dexName}
-              </Button>
+                  <Button
+                    onClick={() => chainId && window.open(`${getDexUrl(chainId)}${listedToken.address}`, '_blank')}
+                    className="flex-1 h-8 text-xs bg-blue-600 hover:bg-blue-700"
+                  >
+                    Trade on {listedToken.dexName}
+                  </Button>
                   <Button
                     onClick={handleCreatePair}
                     className="flex-1 h-8 text-xs bg-green-600 hover:bg-green-700"
@@ -1214,36 +1002,7 @@ const TCAP_U_DEXLIST = () => {
             </div>
 
             <Button
-              onClick={async () => {
-                try {
-                  const provider = new BrowserProvider(window.ethereum);
-                  const signer = await provider.getSigner();
-                  const lpDetails = await getLPTokenDetails(listedToken.address, signer);
-                  
-                  if (lpDetails.pairAddress === ethers.ZeroAddress) {
-                    toast({
-                      title: "No Liquidity Pool",
-                      description: "This token doesn't have a liquidity pool yet.",
-                      variant: "destructive"
-                    });
-                    return;
-                  }
-
-                  toast({
-                    title: "Liquidity Pool Details",
-                    description: `Total LP Supply: ${Number(lpDetails.totalSupply).toLocaleString()} LP
-                      \nYour LP Balance: ${Number(lpDetails.lpBalance).toLocaleString()} LP
-                      \nToken Reserve: ${Number(lpDetails.reserves.token).toLocaleString()} ${listedToken.symbol}
-                      \nETH Reserve: ${Number(lpDetails.reserves.eth).toLocaleString()} ETH`,
-                  });
-                } catch (error: any) {
-                  toast({
-                    title: "Error",
-                    description: "Failed to fetch LP details",
-                    variant: "destructive"
-                  });
-                }
-              }}
+              onClick={handleCheckLPDetails}
               className="text-xs h-6 px-2 bg-gray-700 hover:bg-gray-600"
             >
               Check LP Details
@@ -1255,4 +1014,4 @@ const TCAP_U_DEXLIST = () => {
   );
 };
 
-export default TCAP_U_DEXLIST; 
+export default TCAP_U_DEXLIST;

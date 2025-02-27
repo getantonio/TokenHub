@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, forwardRef, ReactNode } from 'react';
 import { useNetwork } from '@contexts/NetworkContext';
 import { useToast } from '@/components/ui/use-toast';
 import TokenPreview from '@components/features/token/TokenPreview';
@@ -28,6 +28,7 @@ import {
   FormMessage
 } from "@/components/ui/form";
 import { Switch } from "@/components/ui/switch";
+import { getNetworkCurrency } from '@/utils/network';
 
 interface TokenFormV3Props {
   isConnected: boolean;
@@ -346,15 +347,15 @@ const defaultValues: FormData = {
   enableTimeLock: false,
   presaleEnabled: false,
   maxActivePresales: 0,
-  presaleRate: "1000", // Default: 1000 tokens per BNB
-  softCap: "1", // Default: 1 BNB
-  hardCap: "10", // Default: 10 BNB
-  minContribution: "0.1", // Default: 0.1 BNB
-  maxContribution: "2", // Default: 2 BNB
+  presaleRate: "1000", // Default: 1000 tokens per network currency
+  softCap: "1", // Default: 1 network currency
+  hardCap: "10", // Default: 10 network currency
+  minContribution: "0.1", // Default: 0.1 network currency
+  maxContribution: "2", // Default: 2 network currency
   startTime: defaultTimes.startTime,
   endTime: defaultTimes.endTime,
   presalePercentage: 5,
-  liquidityPercentage: 65, // Increased from 35% to 65%
+  liquidityPercentage: 65,
   liquidityLockDuration: 365,
   wallets: [{
     name: "Team",
@@ -550,11 +551,13 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
 
       // Calculate total percentage
       const totalPercentage = Math.floor(Number(data.liquidityPercentage)) + 
-        walletAllocations.reduce((sum, w) => sum + w.percentage, 0);
+        walletAllocations.reduce((sum, w) => sum + w.percentage, 0) +
+        (data.presaleEnabled ? Math.floor(Number(data.presalePercentage)) : 0);
 
       // Validate total percentage equals 100%
       if (totalPercentage !== 100) {
         throw new Error(`Total percentage must be 100%. Current breakdown:\n` +
+          `${data.presaleEnabled ? `Presale: ${data.presalePercentage}%\n` : ''}` +
           `Liquidity: ${data.liquidityPercentage}%\n` +
           `Wallets: ${walletAllocations.map(w => `${w.percentage}%`).join(', ')}\n` +
           `Total: ${totalPercentage}%`);
@@ -814,10 +817,10 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
       status: 'success',
       message: 'Valid presale configuration',
       details: [
-        `Soft Cap: ${softCap} ETH`,
-        `Hard Cap: ${hardCap} ETH`,
-        `Min Contribution: ${minContribution} ETH`,
-        `Max Contribution: ${maxContribution} ETH`
+        `Soft Cap: ${softCap} {getNetworkCurrency(chainId)}`,
+        `Hard Cap: ${hardCap} {getNetworkCurrency(chainId)}`,
+        `Min Contribution: ${minContribution} {getNetworkCurrency(chainId)}`,
+        `Max Contribution: ${maxContribution} {getNetworkCurrency(chainId)}`
       ]
     };
   };
@@ -872,27 +875,14 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
   const validateDistribution = (form: UseFormReturn<FormData>): ValidationResult => {
     const values = form.getValues();
     const presaleEnabled = values.presaleEnabled;
-    const presalePercentage = presaleEnabled ? values.presalePercentage : 0;
-    const liquidityPercentage = values.liquidityPercentage || 0;
+    const presalePercentage = presaleEnabled ? Number(values.presalePercentage) || 0 : 0;
+    const liquidityPercentage = Number(values.liquidityPercentage) || 0;
     const wallets = values.wallets || [];
-    const walletPercentages = wallets.reduce((sum: number, w: { percentage: number }) => sum + (w.percentage || 0), 0);
+    const walletPercentages = wallets.reduce((sum: number, w: { percentage: number }) => sum + (Number(w.percentage) || 0), 0);
     const totalPercentage = presalePercentage + liquidityPercentage + walletPercentages;
 
-    // When presale is enabled, liquidity percentage must be 0
+    // When presale is enabled, validate presale configuration
     if (presaleEnabled) {
-      if (liquidityPercentage !== 0) {
-        return {
-          category: 'Distribution',
-          message: 'Liquidity percentage must be 0 when presale is enabled',
-          details: [
-            'When presale is enabled:',
-            '- Liquidity percentage must be 0',
-            '- Presale percentage must be greater than 0',
-            `Current liquidity: ${liquidityPercentage}%`
-          ],
-          status: 'error'
-        };
-      }
       if (presalePercentage <= 0) {
         return {
           category: 'Distribution',
@@ -904,32 +894,19 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
           status: 'error'
         };
       }
-    } else {
-      // When presale is disabled, presale percentage must be 0 and liquidity must be greater than 0
-      if (presalePercentage !== 0) {
-        return {
-          category: 'Distribution',
-          message: 'Presale percentage must be 0 when presale is disabled',
-          details: [
-            'When presale is disabled:',
-            '- Presale percentage must be 0',
-            '- Liquidity percentage must be greater than 0',
-            `Current presale: ${presalePercentage}%`
-          ],
-          status: 'error'
-        };
-      }
-      if (liquidityPercentage <= 0) {
-        return {
-          category: 'Distribution',
-          message: 'Invalid liquidity percentage',
-          details: [
-            'Liquidity percentage must be greater than 0 when presale is disabled',
-            `Current: ${liquidityPercentage}%`
-          ],
-          status: 'error'
-        };
-      }
+    }
+
+    // Validate liquidity percentage
+    if (!presaleEnabled && liquidityPercentage < 25) {
+      return {
+        category: 'Distribution',
+        message: 'Low liquidity percentage',
+        details: [
+          'Recommended minimum liquidity is 25%',
+          `Current: ${liquidityPercentage}%`
+        ],
+        status: 'warning'
+      };
     }
 
     // When liquidity is less than 100%, require at least one wallet
@@ -951,10 +928,11 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
         category: 'Distribution',
         message: 'Total distribution must equal 100%',
         details: [
-          `Presale: ${presalePercentage}%`,
+          ...(presaleEnabled ? [`Presale: ${presalePercentage}%`] : []),
           `Liquidity: ${liquidityPercentage}%`,
           `Wallets: ${walletPercentages}%`,
-          `Total: ${totalPercentage}%`
+          `Total: ${totalPercentage}%`,
+          'Required: 100%'
         ],
         status: 'error'
       };
@@ -964,7 +942,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
       category: 'Distribution',
       message: 'Distribution percentages are valid',
       details: [
-        `Presale: ${presalePercentage}%`,
+        ...(presaleEnabled ? [`Presale: ${presalePercentage}%`] : []),
         `Liquidity: ${liquidityPercentage}%`,
         `Wallets: ${walletPercentages}%`,
         'Total: 100%'
@@ -1263,7 +1241,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                   name="presaleRate"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-white">Presale Rate (Tokens per BNB)</FormLabel>
+                      <FormLabel className="text-white">Presale Rate (Tokens per {getNetworkCurrency(chainId)})</FormLabel>
                       <FormControl>
                         <Input
                           type="number"
@@ -1274,7 +1252,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                         />
                       </FormControl>
                       <FormDescription className="text-gray-400 text-xs">
-                        Number of tokens per BNB in presale
+                        Number of tokens per {getNetworkCurrency(chainId)} in presale
                       </FormDescription>
                     </FormItem>
                   )}
@@ -1285,7 +1263,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                   name="softCap"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-white">Soft Cap (BNB)</FormLabel>
+                      <FormLabel className="text-white">Soft Cap ({getNetworkCurrency(chainId)})</FormLabel>
                       <FormControl>
                         <Input
                           type="number"
@@ -1307,7 +1285,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                   name="hardCap"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-white">Hard Cap (BNB)</FormLabel>
+                      <FormLabel className="text-white">Hard Cap ({getNetworkCurrency(chainId)})</FormLabel>
                       <FormControl>
                         <Input
                           type="number"
@@ -1329,7 +1307,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                   name="minContribution"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-white">Min Contribution (BNB)</FormLabel>
+                      <FormLabel className="text-white">Min Contribution ({getNetworkCurrency(chainId)})</FormLabel>
                       <FormControl>
                         <Input
                           type="number"
@@ -1351,7 +1329,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                   name="maxContribution"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-white">Max Contribution (BNB)</FormLabel>
+                      <FormLabel className="text-white">Max Contribution ({getNetworkCurrency(chainId)})</FormLabel>
                       <FormControl>
                         <Input
                           type="number"
@@ -1406,12 +1384,12 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                               const newDate = new Date(currentValue);
                               newDate.setHours(hours, minutes);
                               const timestamp = Math.floor(newDate.getTime() / 1000);
-                              field.onChange(timestamp);
                               
-                              // Update end time if necessary
-                              const endTime = form.getValues('endTime');
-                              if (!endTime || timestamp >= endTime) {
-                                form.setValue('endTime', timestamp + 86400);
+                              const startTime = form.getValues('startTime');
+                              if (startTime && timestamp <= startTime) {
+                                field.onChange(startTime + 86400);
+                              } else {
+                                field.onChange(timestamp);
                               }
                             }}
                           />
@@ -1497,7 +1475,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                     <div className="grid grid-cols-2 gap-3">
                       <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <label className="text-xs text-gray-400">Soft Cap</label>
+                          <label className="text-xs text-gray-400">Soft Cap ({getNetworkCurrency(chainId)})</label>
                           <Input
                             {...form.register(`multiPresaleConfig.presales.${index}.softCap`)}
                             type="number"
@@ -1506,7 +1484,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                           />
                         </div>
                         <div>
-                          <label className="text-xs text-gray-400">Hard Cap</label>
+                          <label className="text-xs text-gray-400">Hard Cap ({getNetworkCurrency(chainId)})</label>
                           <Input
                             {...form.register(`multiPresaleConfig.presales.${index}.hardCap`)}
                             type="number"
@@ -1517,7 +1495,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <label className="text-xs text-gray-400">Rate</label>
+                          <label className="text-xs text-gray-400">Rate (Tokens per {getNetworkCurrency(chainId)})</label>
                           <Input
                             {...form.register(`multiPresaleConfig.presales.${index}.presaleRate`)}
                             type="number"

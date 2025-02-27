@@ -75,44 +75,18 @@ function getNetworkName(chainId: number): string {
 }
 
 export function getNetworkContractAddress(chainId: number, contractType: string): string {
-  // Add more detailed debugging
-  console.log('Detailed Contract Resolution:', {
-    chainId,
-    contractType,
-    directEnvValue: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V3,
-    fromContractAddresses: contractAddresses[chainId]?.factoryAddressV3,
-    fromFactoryAddresses: FACTORY_ADDRESSES.v3[chainId],
-    allEnvVars: Object.keys(process.env).filter(key => key.includes('FACTORY')),
-    allContractAddresses: contractAddresses,
-    allFactoryAddresses: FACTORY_ADDRESSES
-  });
-
-  // Check if we're in development
-  console.log('Environment Check:', {
-    NODE_ENV: process.env.NODE_ENV,
-    NEXT_PUBLIC_VERCEL_ENV: process.env.NEXT_PUBLIC_VERCEL_ENV,
-    VERCEL_ENV: process.env.VERCEL_ENV
-  });
-  
   const networkName = getNetworkName(chainId).toUpperCase();
   
-  // Enhanced debugging
-  console.log('Environment Variables Debug:', {
-    NODE_ENV: process.env.NODE_ENV,
-    allEnvKeys: Object.keys(process.env).filter(key => key.includes('NEXT_PUBLIC')),
-    sepoliaV3Direct: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V3,
-    chainId,
-    networkName,
-    contractType,
-  });
-  
-  // For Sepolia V3 factory, use direct access if dynamic access fails
-  if (chainId === 11155111 && contractType.toLowerCase().includes('v3')) {
-    const directValue = process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V3;
-    if (directValue) {
-      console.log('Using direct access for Sepolia V3:', directValue);
-      return directValue;
-    }
+  // Enhanced debugging for BSC Testnet
+  if (chainId === 97) {
+    console.log('BSC Testnet Contract Resolution:', {
+      chainId,
+      networkName,
+      contractType,
+      bscTestnetV3Direct: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V3,
+      allEnvKeys: Object.keys(process.env).filter(key => key.includes('BSCTESTNET')),
+      allFactoryKeys: Object.keys(process.env).filter(key => key.includes('FACTORY')),
+    });
   }
   
   let envKey = '';
@@ -138,8 +112,17 @@ export function getNetworkContractAddress(chainId: number, contractType: string)
     envKey,
     value,
     exists: envKey in process.env,
-    directAccess: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V3
+    directBscTestnetCheck: chainId === 97 ? process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V3 : null
   });
+
+  // Special handling for BSC Testnet V3
+  if (chainId === 97 && contractType === 'factoryAddressV3') {
+    const bscTestnetV3 = process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V3;
+    if (bscTestnetV3) {
+      console.log('Using BSC Testnet V3 address:', bscTestnetV3);
+      return bscTestnetV3;
+    }
+  }
   
   // Return the value directly for dexListingFactory
   if (contractType === 'dexListingFactory') {
@@ -151,19 +134,19 @@ export function getNetworkContractAddress(chainId: number, contractType: string)
     case 'factoryV1':
     case 'factoryAddress':
     case 'factoryAddressV1':
-      return value || process.env[`NEXT_PUBLIC_${networkName}_FACTORY_ADDRESS_V1`] || '';
+      return process.env[`NEXT_PUBLIC_${networkName}_FACTORY_ADDRESS_V1`] || '';
     case 'factoryV2':
     case 'factoryAddressV2':
     case 'FACTORY_ADDRESS_V2':
-      return value || process.env[`NEXT_PUBLIC_${networkName}_FACTORY_ADDRESS_V2`] || '';
+      return process.env[`NEXT_PUBLIC_${networkName}_FACTORY_ADDRESS_V2`] || '';
     case 'factoryV3':
     case 'factoryAddressV3':
     case 'FACTORY_ADDRESS_V3':
-      // Try direct access for Sepolia V3 as a fallback
-      if (chainId === 11155111) {
-        return value || process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V3 || '';
+      // Direct check for BSC Testnet V3
+      if (chainId === 97) {
+        return process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V3 || '';
       }
-      return value || process.env[`NEXT_PUBLIC_${networkName}_FACTORY_ADDRESS_V3`] || '';
+      return process.env[`NEXT_PUBLIC_${networkName}_FACTORY_ADDRESS_V3`] || '';
     case 'dexListingTemplate':
       return process.env[`NEXT_PUBLIC_${networkName}_DEX_LISTING_TEMPLATE_ADDRESS`] || '';
     case 'factoryAddressV2DirectDEX_Make':
