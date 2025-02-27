@@ -100,7 +100,7 @@ contract TokenTemplate_v3 is
     event Unpaused();
 
     IUniswapV2Router02 public immutable uniswapV2Router;
-    address public immutable uniswapV2Pair;
+    address public uniswapV2Pair;
     
     string private tokenName;
     string private tokenSymbol;
@@ -108,14 +108,11 @@ contract TokenTemplate_v3 is
     uint256 public liquidityAllocation;
     uint256 public remainingLiquidityAllocation;
     
-    constructor() ERC20("", "") {
-        // BSC Testnet PancakeSwap Router
-        IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(0xD99D1c33F9fC3444f8101754aBC46c52416550D1);
-        uniswapV2Router = _uniswapV2Router;
+    constructor(address _router) ERC20("", "") {
+        require(_router != address(0), "Invalid router address");
         
-        // Create pair
-        uniswapV2Pair = IUniswapV2Factory(_uniswapV2Router.factory())
-            .createPair(address(this), _uniswapV2Router.WETH());
+        // Initialize router
+        uniswapV2Router = IUniswapV2Router02(_router);
     }
 
     function initialize(
@@ -159,10 +156,6 @@ contract TokenTemplate_v3 is
         remainingLiquidityAllocation = liquidityAllocation;
         allocatedTokens += liquidityAllocation;
         remainingTokens -= liquidityAllocation;
-        
-        if (msg.value > 0 && liquidityAllocation > 0) {
-            addLiquidity(liquidityAllocation, msg.value);
-        }
         
         // Optimized wallet allocation handling
         if (params.walletAllocations.length > 0) {
@@ -344,6 +337,12 @@ contract TokenTemplate_v3 is
         require(tokenAmount > 0, "Must provide tokens");
         require(tokenAmount <= remainingLiquidityAllocation, "Amount exceeds remaining liquidity allocation");
         require(balanceOf(address(this)) >= tokenAmount, "Insufficient contract balance");
+        
+        // Create pair if it doesn't exist yet
+        if (uniswapV2Pair == address(0)) {
+            uniswapV2Pair = IUniswapV2Factory(uniswapV2Router.factory())
+                .createPair(address(this), uniswapV2Router.WETH());
+        }
         
         remainingLiquidityAllocation -= tokenAmount;
         _approve(address(this), address(uniswapV2Router), tokenAmount);

@@ -15,6 +15,7 @@ import { InfoIcon } from "lucide-react";
 import { CopyIcon } from "lucide-react";
 import { Switch } from '@/components/ui/switch';
 import Image from 'next/image';
+import { ChainId } from '@/types/chain';
 
 interface TokenDetails {
   address: string;
@@ -772,12 +773,11 @@ function TokenListingProcess() {
   // Helper function to get DEX router address
   const getDexRouterAddress = (chainId: number): string => {
     const ROUTER_ADDRESSES: { [key: number]: string } = {
-      11155111: '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D', // Uniswap V2 Router on Sepolia
-      97: '0xD99D1c33F9fC3444f8101754aBC46c52416550D1', // PancakeSwap Router on BSC Testnet
-      80002: '0x5d41c10ad6592e39fae96c932a699c6daaa8cf1c', // QuickSwap Router on Polygon Amoy (fixed checksum)
-      11155420: '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D', // Uniswap V2 Router on Optimism Sepolia
+      [ChainId.SEPOLIA]: '0xC532a74256D3Db42D0Bf7a0400fEFDbad7694008',
+      [ChainId.BSC_TESTNET]: '0xD99D1c33F9fC3444f8101754aBC46c52416550D1',
+      [ChainId.OPTIMISM_SEPOLIA]: '0xC532a74256D3Db42D0Bf7a0400fEFDbad7694008'
     };
-    
+
     const address = ROUTER_ADDRESSES[chainId];
     if (!address) {
       throw new Error(`No router address configured for chain ID ${chainId}`);

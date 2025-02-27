@@ -7,7 +7,7 @@ import { Spinner } from '@/components/ui/Spinner';
 import { useTokenFactory } from '@/hooks/useTokenFactory';
 import { useAccount, usePublicClient } from 'wagmi';
 import TokenFactory_v3 from '@contracts/abi/TokenFactory_v3.json';
-import { FACTORY_ADDRESSES } from '@config/contracts';
+import { FACTORY_ADDRESSES, getNetworkContractAddress } from '@config/contracts';
 import * as z from 'zod';
 import { addDays } from 'date-fns';
 import { parseEther, parseUnits } from 'viem';
@@ -275,8 +275,12 @@ const formSchema = z.object({
   liquidityLockDuration: z.number(),
   wallets: z.array(z.object({
     name: z.string(),
-    address: z.string(),
-    percentage: z.number(),
+    address: z.string()
+      .min(1, "Wallet address is required")
+      .refine(value => /^0x[a-fA-F0-9]{40}$/.test(value), "Invalid address format"),
+    percentage: z.number()
+      .min(1, "Percentage must be at least 1%")
+      .max(60, "Percentage cannot exceed 60%"),
     vestingEnabled: z.boolean(),
     vestingDuration: z.number(),
     cliffDuration: z.number(),
@@ -333,10 +337,10 @@ function getDefaultTimes() {
 const defaultTimes = getDefaultTimes();
 
 const defaultValues: FormData = {
-  name: "",
-  symbol: "",
-  initialSupply: "",
-  maxSupply: "",
+  name: "Anthony",
+  symbol: "ANT",
+  initialSupply: "1000000",
+  maxSupply: "2000000",
   owner: "",
   enableBlacklist: false,
   enableTimeLock: false,
@@ -398,9 +402,57 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
-    defaultValues,
-    mode: "onChange",
-    shouldUnregister: false
+    defaultValues: {
+      name: "Anthony",
+      symbol: "ANT",
+      initialSupply: "1000000",
+      maxSupply: "2000000",
+      owner: address || "",
+      enableBlacklist: false,
+      enableTimeLock: false,
+      presaleEnabled: false,
+      maxActivePresales: 0,
+      presaleRate: "0",
+      softCap: "0",
+      hardCap: "0",
+      minContribution: "0",
+      maxContribution: "0",
+      startTime: 0,
+      endTime: 0,
+      presalePercentage: 0,
+      liquidityPercentage: 60,
+      liquidityLockDuration: 365,
+      wallets: [
+        {
+          name: "Wallet 1",
+          address: address || "",
+          percentage: 20,
+          vestingEnabled: false,
+          vestingDuration: 365,
+          cliffDuration: 90,
+          vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+        },
+        {
+          name: "Wallet 2",
+          address: address || "",
+          percentage: 10,
+          vestingEnabled: false,
+          vestingDuration: 365,
+          cliffDuration: 90,
+          vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+        },
+        {
+          name: "Wallet 3",
+          address: address || "",
+          percentage: 10,
+          vestingEnabled: false,
+          vestingDuration: 365,
+          cliffDuration: 90,
+          vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+        }
+      ]
+    },
+    mode: "onChange"
   });
 
   useEffect(() => {
@@ -470,37 +522,43 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
     try {
       console.log('Form submission started', { data });
 
+      // Debug factory address resolution
+      if (!chainId) {
+        throw new Error('Chain ID not available');
+      }
+      const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddressV3');
+      console.log('Factory Address Debug:', {
+        chainId,
+        factoryAddress,
+        envValue: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V3,
+        allFactoryKeys: Object.keys(process.env).filter(key => key.includes('FACTORY')),
+      });
+
       // Convert supply values to BigInt with 18 decimals
       const initialSupply = parseUnits(data.initialSupply.toString(), 18);
       const maxSupply = parseUnits(data.maxSupply.toString(), 18);
 
       // Convert wallet allocations to contract format
-      const walletAllocations = data.wallets.map(wallet => {
-        // Calculate vesting start time as Unix timestamp in seconds
-        const vestingStartTime = wallet.vestingEnabled ? 
-          // If vesting is enabled, use the specified start time or default to 24 hours from now
-          BigInt(wallet.vestingStartTime || Math.floor(Date.now() / 1000) + (24 * 3600)) :
-          // If vesting is disabled, use 0
-          BigInt(0);
+      const walletAllocations = data.wallets.map(wallet => ({
+        wallet: wallet.address as `0x${string}`,
+        percentage: Math.floor(Number(wallet.percentage)),
+        vestingEnabled: wallet.vestingEnabled || false,
+        vestingDuration: wallet.vestingEnabled ? BigInt(wallet.vestingDuration * 24 * 60 * 60) : BigInt(0),
+        cliffDuration: wallet.vestingEnabled ? BigInt(wallet.cliffDuration * 24 * 60 * 60) : BigInt(0),
+        vestingStartTime: wallet.vestingEnabled ? BigInt(wallet.vestingStartTime) : BigInt(0)
+      }));
 
-        // Convert durations from days to seconds
-        const vestingDuration = wallet.vestingEnabled ?
-          BigInt(wallet.vestingDuration * 24 * 60 * 60) : // Convert days to seconds
-          BigInt(0);
+      // Calculate total percentage
+      const totalPercentage = Math.floor(Number(data.liquidityPercentage)) + 
+        walletAllocations.reduce((sum, w) => sum + w.percentage, 0);
 
-        const cliffDuration = wallet.vestingEnabled ?
-          BigInt(wallet.cliffDuration * 24 * 60 * 60) : // Convert days to seconds
-          BigInt(0);
-
-        return {
-          wallet: wallet.address as `0x${string}`,
-          percentage: wallet.percentage,
-          vestingEnabled: wallet.vestingEnabled,
-          vestingDuration,
-          cliffDuration,
-          vestingStartTime
-        };
-      });
+      // Validate total percentage equals 100%
+      if (totalPercentage !== 100) {
+        throw new Error(`Total percentage must be 100%. Current breakdown:\n` +
+          `Liquidity: ${data.liquidityPercentage}%\n` +
+          `Wallets: ${walletAllocations.map(w => `${w.percentage}%`).join(', ')}\n` +
+          `Total: ${totalPercentage}%`);
+      }
 
       const params = {
         name: data.name,
@@ -508,33 +566,25 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
         initialSupply,
         maxSupply,
         owner: data.owner as `0x${string}`,
-        enableBlacklist: data.enableBlacklist,
-        enableTimeLock: data.enableTimeLock,
-        presaleEnabled: data.presaleEnabled,
-        maxActivePresales: data.presaleEnabled ? 1 : 0,
-        presaleRate: data.presaleEnabled ? parseUnits(data.presaleRate?.toString() || '1000', 18) : BigInt(0),
-        softCap: data.presaleEnabled ? parseUnits(data.softCap?.toString() || '1', 18) : BigInt(0),
-        hardCap: data.presaleEnabled ? parseUnits(data.hardCap?.toString() || '10', 18) : BigInt(0),
-        minContribution: data.presaleEnabled ? parseUnits(data.minContribution?.toString() || '0.1', 18) : BigInt(0),
-        maxContribution: data.presaleEnabled ? parseUnits(data.maxContribution?.toString() || '2', 18) : BigInt(0),
-        startTime: data.presaleEnabled ? BigInt(data.startTime || Math.floor(Date.now() / 1000) + 3600) : BigInt(0),
-        endTime: data.presaleEnabled ? BigInt(data.endTime || Math.floor(Date.now() / 1000) + 86400) : BigInt(0),
-        presalePercentage: data.presaleEnabled ? data.presalePercentage : 0,
-        liquidityPercentage: data.liquidityPercentage,
-        liquidityLockDuration: BigInt(Math.min(data.liquidityLockDuration, 365) * 24 * 60 * 60), // Convert days to seconds
+        enableBlacklist: data.enableBlacklist || false,
+        enableTimeLock: data.enableTimeLock || false,
+        presaleEnabled: data.presaleEnabled || false,
+        maxActivePresales: data.maxActivePresales || 0,
+        presaleRate: BigInt(0),
+        softCap: BigInt(0),
+        hardCap: BigInt(0),
+        minContribution: BigInt(0),
+        maxContribution: BigInt(0),
+        startTime: BigInt(0),
+        endTime: BigInt(0),
+        presalePercentage: data.presaleEnabled ? Math.floor(Number(data.presalePercentage)) : 0,
+        liquidityPercentage: Math.floor(Number(data.liquidityPercentage)),
+        liquidityLockDuration: BigInt(Math.min(data.liquidityLockDuration || 30, 365) * 24 * 60 * 60),
         walletAllocations
       };
 
-      // Validate total percentage equals 100%
-      const totalPercentage = params.presalePercentage + params.liquidityPercentage + 
-        walletAllocations.reduce((sum, w) => sum + w.percentage, 0);
-      
-      if (totalPercentage !== 100) {
-        throw new Error(`Total percentage must be 100%. Current total: ${totalPercentage}%`);
-      }
-
       console.log('Submitting with params:', params);
-      const tx = await createToken(params);
+      await createToken(params);
       
       if (onSuccess) {
         onSuccess();
@@ -548,15 +598,24 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
   };
 
   const addWallet = () => {
+    if (!address) {
+      toast({
+        title: "Error",
+        description: "Please connect your wallet first",
+        variant: "destructive"
+      });
+      return;
+    }
+
     const now = Math.floor(Date.now() / 1000);
     const newWallet = {
       name: '',
-      address: address || '',
+      address: address,
       percentage: 0,
       vestingEnabled: false,
-      vestingDuration: 365, // Default to 1 year
-      cliffDuration: 90, // Default to 3 months
-      vestingStartTime: now + (24 * 3600) // Start 24 hours from now
+      vestingDuration: 365,
+      cliffDuration: 90,
+      vestingStartTime: now + (24 * 3600)
     };
     
     form.setValue('wallets', [...form.getValues('wallets'), newWallet]);
@@ -812,68 +871,104 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
 
   const validateDistribution = (form: UseFormReturn<FormData>): ValidationResult => {
     const values = form.getValues();
-    let totalPercentage = 0;
+    const presaleEnabled = values.presaleEnabled;
+    const presalePercentage = presaleEnabled ? values.presalePercentage : 0;
+    const liquidityPercentage = values.liquidityPercentage || 0;
+    const wallets = values.wallets || [];
+    const walletPercentages = wallets.reduce((sum: number, w: { percentage: number }) => sum + (w.percentage || 0), 0);
+    const totalPercentage = presalePercentage + liquidityPercentage + walletPercentages;
 
-    // Add presale percentage if enabled
-    if (values.presaleEnabled) {
-      totalPercentage += values.presalePercentage;
+    // When presale is enabled, liquidity percentage must be 0
+    if (presaleEnabled) {
+      if (liquidityPercentage !== 0) {
+        return {
+          category: 'Distribution',
+          message: 'Liquidity percentage must be 0 when presale is enabled',
+          details: [
+            'When presale is enabled:',
+            '- Liquidity percentage must be 0',
+            '- Presale percentage must be greater than 0',
+            `Current liquidity: ${liquidityPercentage}%`
+          ],
+          status: 'error'
+        };
+      }
+      if (presalePercentage <= 0) {
+        return {
+          category: 'Distribution',
+          message: 'Invalid presale percentage',
+          details: [
+            'Presale percentage must be greater than 0 when presale is enabled',
+            `Current: ${presalePercentage}%`
+          ],
+          status: 'error'
+        };
+      }
+    } else {
+      // When presale is disabled, presale percentage must be 0 and liquidity must be greater than 0
+      if (presalePercentage !== 0) {
+        return {
+          category: 'Distribution',
+          message: 'Presale percentage must be 0 when presale is disabled',
+          details: [
+            'When presale is disabled:',
+            '- Presale percentage must be 0',
+            '- Liquidity percentage must be greater than 0',
+            `Current presale: ${presalePercentage}%`
+          ],
+          status: 'error'
+        };
+      }
+      if (liquidityPercentage <= 0) {
+        return {
+          category: 'Distribution',
+          message: 'Invalid liquidity percentage',
+          details: [
+            'Liquidity percentage must be greater than 0 when presale is disabled',
+            `Current: ${liquidityPercentage}%`
+          ],
+          status: 'error'
+        };
+      }
     }
 
-    // Add liquidity percentage
-    totalPercentage += values.liquidityPercentage;
-
-    // Add wallet percentages
-    const walletPercentages = values.wallets?.reduce((sum, wallet) => sum + (wallet.percentage || 0), 0) || 0;
-    totalPercentage += walletPercentages;
-
-    // Validate total equals 100%
-    if (totalPercentage !== 100) {
+    // When liquidity is less than 100%, require at least one wallet
+    if (liquidityPercentage < 100 && wallets.length === 0) {
       return {
-        category: 'distribution',
-        message: `Total allocation must equal 100%. Current total: ${totalPercentage}%`,
+        category: 'Distribution',
+        message: 'At least one wallet allocation is required when liquidity is less than 100%',
         details: [
-          `Presale: ${values.presaleEnabled ? values.presalePercentage : 0}%`,
-          `Liquidity: ${values.liquidityPercentage}%`,
-          `Wallets: ${walletPercentages}%`
+          `Liquidity: ${liquidityPercentage}%`,
+          'Add a wallet allocation for the remaining tokens'
         ],
         status: 'error'
       };
     }
 
-    // Validate liquidity percentage
-    if (values.liquidityPercentage < 25) {
+    // Total percentage must equal 100%
+    if (totalPercentage !== 100) {
       return {
-        category: 'distribution',
-        message: 'Liquidity percentage must be at least 25%',
+        category: 'Distribution',
+        message: 'Total distribution must equal 100%',
+        details: [
+          `Presale: ${presalePercentage}%`,
+          `Liquidity: ${liquidityPercentage}%`,
+          `Wallets: ${walletPercentages}%`,
+          `Total: ${totalPercentage}%`
+        ],
         status: 'error'
       };
-    }
-
-    // Validate presale percentage if enabled
-    if (values.presaleEnabled && (values.presalePercentage < 1 || values.presalePercentage > 95)) {
-      return {
-        category: 'distribution',
-        message: 'Presale percentage must be between 1% and 95% when enabled',
-        status: 'error'
-      };
-    }
-
-    // Validate each wallet percentage
-    if (values.wallets?.length > 0) {
-      for (const wallet of values.wallets) {
-        if (!wallet.percentage || wallet.percentage < 1 || wallet.percentage > 60) {
-          return {
-            category: 'distribution',
-            message: 'Each wallet allocation must be between 1% and 60%',
-            status: 'error'
-          };
-        }
-      }
     }
 
     return {
-      category: 'distribution',
+      category: 'Distribution',
       message: 'Distribution percentages are valid',
+      details: [
+        `Presale: ${presalePercentage}%`,
+        `Liquidity: ${liquidityPercentage}%`,
+        `Wallets: ${walletPercentages}%`,
+        'Total: 100%'
+      ],
       status: 'success'
     };
   };
@@ -1037,7 +1132,12 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                     <FormControl>
                       <Switch
                         checked={field.value}
-                        onCheckedChange={field.onChange}
+                        onCheckedChange={(checked) => {
+                          field.onChange(checked);
+                          if (!checked) {
+                            form.setValue("presalePercentage", 0);
+                          }
+                        }}
                       />
                     </FormControl>
                   </FormItem>
@@ -1682,6 +1782,11 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                     placeholder="Wallet Address"
                     className="flex-1 bg-gray-700 text-text-primary rounded px-2 py-1 text-xs h-7"
                   />
+                  {form.formState.errors.wallets?.[index]?.address && (
+                    <p className="text-xs text-red-400 mt-1">
+                      {form.formState.errors.wallets[index].address?.message}
+                    </p>
+                  )}
                 </div>
 
                 {/* Vesting Configuration - Only show when vesting is enabled */}
@@ -1724,7 +1829,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
               variant="secondary"
               onClick={simulateDeployment}
               className="w-40"
-              disabled={!isConnected || loading || isSimulating}
+              disabled={!isConnected || isSimulating}
             >
               {isSimulating ? (
                 <>
@@ -1740,7 +1845,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
               type="submit"
               variant="primary"
               className="w-40 bg-blue-600 hover:bg-blue-700"
-              disabled={!isConnected || loading || !form.formState.isValid}
+              disabled={!isConnected || loading}
             >
               {loading ? (
                 <>

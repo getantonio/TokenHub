@@ -24,6 +24,17 @@ const config = {
       confirmations: 3,     // Wait for 3 confirmations
       networkCheckTimeout: 100000,
       timeoutBlocks: 200
+    },
+    sepolia: {
+      url: process.env.SEPOLIA_RPC_URL || "https://rpc.sepolia.org",
+      chainId: 11155111,
+      accounts: [process.env.PRIVATE_KEY || ""],
+      gasPrice: "auto",
+      gas: "auto",
+      timeout: 180000,      // 3 minutes
+      confirmations: 2,     // Wait for 2 confirmations
+      networkCheckTimeout: 100000,
+      timeoutBlocks: 200
     }
   },
   solidity: {
@@ -42,7 +53,8 @@ const config = {
   },
   etherscan: {
     apiKey: {
-      bscTestnet: process.env.BSCSCAN_API_KEY
+      bscTestnet: process.env.BSCSCAN_API_KEY,
+      sepolia: process.env.ETHERSCAN_API_KEY
     }
   },
   sourcify: {

@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { parseEther } from 'viem';
 import { usePublicClient, useWalletClient, useChainId } from 'wagmi';
-import TokenFactoryV3ABI from '@contracts/abi/TokenFactory_v3.json';
+import TokenFactoryV3EnhancedABI from '@contracts/artifacts/src/contracts/TokenFactory_v3_Enhanced.sol/TokenFactory_v3_Enhanced.json';
 import { FACTORY_ADDRESSES } from '@/config/contracts';
 import { ChainId } from '@/types/chain';
 import { Abi, PublicClient, WalletClient } from 'viem';
@@ -51,90 +51,82 @@ export function useTokenFactory() {
     if (!publicClient || !chainId) throw new Error('Client not initialized');
     
     const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddressV3');
+    console.log('Factory Address Resolution:', {
+      chainId,
+      factoryAddress,
+      envValue: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V3,
+      allEnvKeys: Object.keys(process.env).filter(key => key.includes('FACTORY')),
+    });
+    
     if (!factoryAddress) throw new Error('Factory not deployed on this network');
 
     console.log('Getting deployment fee from factory:', factoryAddress);
     
     return await publicClient.readContract({
       address: factoryAddress as `0x${string}`,
-      abi: TokenFactoryV3ABI.abi,
+      abi: TokenFactoryV3EnhancedABI.abi,
       functionName: 'deploymentFee'
     }) as bigint;
   };
 
   const createToken = async (params: TokenParams) => {
-    if (!publicClient || !chainId || !walletClient) {
-      throw new Error('Wallet not connected');
-    }
+    if (!publicClient || !walletClient || !chainId) throw new Error('Client not initialized');
+    
+    // Enhanced debugging for factory address resolution
+    const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddressV3');
+    console.log('Token Creation Factory Resolution:', {
+      chainId,
+      factoryAddress,
+      envDirect: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V3,
+      envKeys: Object.keys(process.env).filter(key => key.includes('FACTORY')),
+      factoryAddressesV3: FACTORY_ADDRESSES.v3,
+      params
+    });
 
-    try {
-      console.log('Creating token with params:', {
+    if (!factoryAddress) throw new Error('Factory not deployed on this network');
+
+    // Get deployment fee
+    const deploymentFee = await getDeploymentFee();
+    console.log('Deployment fee:', deploymentFee.toString());
+
+    // Prepare contract call
+    const { request } = await publicClient.simulateContract({
+      address: factoryAddress as `0x${string}`,
+      abi: TokenFactoryV3EnhancedABI.abi,
+      functionName: 'createToken',
+      args: [{
         name: params.name,
         symbol: params.symbol,
-        initialSupply: params.initialSupply.toString(),
-        maxSupply: params.maxSupply.toString(),
+        initialSupply: params.initialSupply,
+        maxSupply: params.maxSupply,
         owner: params.owner,
         enableBlacklist: params.enableBlacklist,
         enableTimeLock: params.enableTimeLock,
         presaleEnabled: params.presaleEnabled,
         maxActivePresales: params.maxActivePresales,
-        presaleRate: params.presaleRate.toString(),
-        softCap: params.softCap.toString(),
-        hardCap: params.hardCap.toString(),
-        minContribution: params.minContribution.toString(),
-        maxContribution: params.maxContribution.toString(),
-        startTime: params.startTime.toString(),
-        endTime: params.endTime.toString(),
+        presaleRate: params.presaleRate,
+        softCap: params.softCap,
+        hardCap: params.hardCap,
+        minContribution: params.minContribution,
+        maxContribution: params.maxContribution,
+        startTime: params.startTime,
+        endTime: params.endTime,
         presalePercentage: params.presalePercentage,
         liquidityPercentage: params.liquidityPercentage,
-        liquidityLockDuration: params.liquidityLockDuration.toString(),
-        walletAllocations: params.walletAllocations.map(w => ({
-          ...w,
-          vestingDuration: w.vestingDuration.toString(),
-          cliffDuration: w.cliffDuration.toString(),
-          vestingStartTime: w.vestingStartTime.toString()
-        }))
-      });
+        liquidityLockDuration: params.liquidityLockDuration,
+        walletAllocations: params.walletAllocations
+      }],
+      value: deploymentFee,
+      account: address
+    });
 
-      // Get deployment fee
-      const deploymentFee = await getDeploymentFee();
-      console.log('Deployment Fee:', {
-        wei: deploymentFee.toString(),
-        ether: Number(deploymentFee) / 1e18,
-        hex: `0x${deploymentFee.toString(16)}`
-      });
+    console.log('Contract call request:', request);
 
-      // Send only deployment fee
-      const totalValue = deploymentFee;
-      console.log('Total value to send:', {
-        wei: totalValue.toString(),
-        ether: Number(totalValue) / 1e18,
-        hex: `0x${totalValue.toString(16)}`
-      });
+    // Execute the transaction
+    const hash = await walletClient.writeContract(request);
+    console.log('Transaction hash:', hash);
 
-      // Get factory address
-      const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddressV3');
-      if (!factoryAddress) {
-        throw new Error('Factory not deployed on this network');
-      }
-      console.log('Using factory address:', factoryAddress);
-
-      // Create the contract request
-      const { request } = await publicClient.simulateContract({
-        address: factoryAddress as `0x${string}`,
-        abi: TokenFactoryV3ABI.abi,
-        functionName: 'createToken',
-        args: [params],
-        value: totalValue, // Send only deployment fee
-      });
-
-      // Execute the transaction
-      const hash = await walletClient.writeContract(request);
-      return hash;
-    } catch (error) {
-      console.error('Error details:', error);
-      throw error;
-    }
+    return hash;
   };
 
   return {

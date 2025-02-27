@@ -9,7 +9,7 @@ contract TokenFactory_v3 is Ownable, ReentrancyGuard {
     string public constant VERSION = "3.0.0";
     
     // Contract state variables
-    uint256 public deploymentFee = 0.001 ether; // 0.001 BNB for testnet
+    uint256 public deploymentFee = 0.001 ether; // 0.001 ETH for testnet
     address[] public deployedTokens;
     
     // Enhanced user token tracking
@@ -19,6 +19,9 @@ contract TokenFactory_v3 is Ownable, ReentrancyGuard {
     
     // Fee management
     mapping(address => uint256) public customDeploymentFees;
+
+    // Router address for new tokens
+    address public immutable routerAddress;
     
     // Events
     event TokenCreated(
@@ -30,7 +33,9 @@ contract TokenFactory_v3 is Ownable, ReentrancyGuard {
     event DeploymentFeeUpdated(uint256 newFee);
     event CustomDeploymentFeeSet(address indexed user, uint256 fee);
 
-    constructor() {
+    constructor(address _router) {
+        require(_router != address(0), "Invalid router address");
+        routerAddress = _router;
         _transferOwnership(msg.sender);
     }
 
@@ -43,16 +48,18 @@ contract TokenFactory_v3 is Ownable, ReentrancyGuard {
         // Calculate excess ETH to be used for liquidity
         uint256 liquidityETH = msg.value - userFee;
 
-        // Validate token distribution parameters
+        // Validate token distribution parameters based on presale mode
         if (params.presaleEnabled) {
             require(params.presalePercentage > 0, "Presale percentage must be > 0");
+            require(params.liquidityPercentage == 0, "Liquidity percentage must be 0 when presale is enabled");
             require(params.maxActivePresales > 0, "Max active presales must be > 0");
+        } else {
+            require(params.presalePercentage == 0, "Presale percentage must be 0 when presale is disabled");
+            require(params.liquidityPercentage > 0, "Liquidity percentage must be > 0 when presale is disabled");
         }
-        require(params.liquidityPercentage > 0, "Liquidity percentage must be > 0");
         
-        // Calculate total percentage
-        uint256 totalPercentage = params.presaleEnabled ? params.presalePercentage : 0;
-        totalPercentage += params.liquidityPercentage;
+        // Calculate total percentage based on mode
+        uint256 totalPercentage = params.presaleEnabled ? params.presalePercentage : params.liquidityPercentage;
         
         // Validate wallet allocations if present
         if (params.walletAllocations.length > 0) {
@@ -68,14 +75,14 @@ contract TokenFactory_v3 is Ownable, ReentrancyGuard {
                 totalPercentage += params.walletAllocations[i].percentage;
             }
         } else {
-            require(totalPercentage == 100, "Presale and liquidity must total 100% when no additional wallets");
+            require(totalPercentage == 100, "Total percentage must be 100% when no additional wallets");
         }
 
         require(totalPercentage == 100, "Total percentage must be 100");
 
         // Deploy new token directly
-        TokenTemplate_v3 token = new TokenTemplate_v3();
-        token.initialize{value: liquidityETH}(params);  // Forward excess ETH for liquidity
+        TokenTemplate_v3 token = new TokenTemplate_v3(routerAddress);
+        token.initialize{value: 0}(params);  // No need to send ETH for liquidity at creation
         
         address tokenAddress = address(token);
         
@@ -84,6 +91,12 @@ contract TokenFactory_v3 is Ownable, ReentrancyGuard {
         userCreatedTokens[msg.sender].push(tokenAddress);
         isUserToken[msg.sender][tokenAddress] = true;
         tokenCreator[tokenAddress] = msg.sender;
+
+        // Return excess ETH if any
+        if (liquidityETH > 0) {
+            (bool success, ) = msg.sender.call{value: liquidityETH}("");
+            require(success, "Failed to return excess ETH");
+        }
 
         emit TokenCreated(tokenAddress, msg.sender, params.name, params.symbol);
         return tokenAddress;

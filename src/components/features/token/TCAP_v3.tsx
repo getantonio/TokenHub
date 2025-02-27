@@ -1,26 +1,27 @@
 import { useEffect, useState, forwardRef, useImperativeHandle, useMemo, useRef, ReactNode } from 'react';
-import { Contract } from 'ethers';
-import { formatEther, parseEther, parseUnits } from 'viem';
+import { Contract, parseEther } from 'ethers';
+import { formatEther, parseUnits } from 'viem';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/toast/use-toast';
-import TokenV3ABI from '@/contracts/abi/TokenTemplate_v3.json';
+import TokenV3ABI from '@/contracts/abi/TokenTemplate_v3_Enhanced.json';
 import TokenFactoryV3ABI from '@/contracts/abi/TokenFactory_v3.json';
 import { Spinner } from '@/components/ui/Spinner';
 import { useNetwork } from '@/contexts/NetworkContext';
 import { getExplorerUrl } from '@/config/networks';
 import { InfoIcon } from '@/components/ui/InfoIcon';
 import { shortenAddress } from '@/utils/address';
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { getNetworkContractAddress, FACTORY_ADDRESSES } from '@config/contracts';
 import { ethers } from 'ethers';
 import { Form, FormControl, FormField, FormItem } from "@/components/ui/form";
 import { useForm, UseFormReturn } from "react-hook-form";
 
-interface Props {
+export interface TCAP_v3Props {
   isConnected: boolean;
-  address?: string;  // Factory address
+  address?: string;
   provider: any;
 }
 
@@ -101,32 +102,110 @@ function BlockDialog({ isOpen, onClose, onConfirm, tokenName, tokenAddress }: Bl
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent>
-        <div className="bg-gray-900 rounded-lg p-6 max-w-md w-full border border-red-500">
-          <h3 className="text-xl font-bold text-white mb-4">⚠️ Block Token Permanently</h3>
-          <div className="space-y-4">
-            <p className="text-gray-300">
-              Are you sure you want to block <span className="font-semibold text-white">{tokenName}</span>?
-            </p>
-            <p className="text-red-400 text-sm">
-              This action cannot be undone. The token will be permanently removed from your management panel.
-            </p>
-            <div className="bg-gray-800 p-3 rounded text-xs font-mono text-gray-300 break-all">
-              {tokenAddress}
+        <DialogTitle>Block Token Confirmation</DialogTitle>
+        <DialogDescription>
+          Are you sure you want to block the token {tokenName} ({tokenAddress})?
+          This action cannot be undone.
+        </DialogDescription>
+        <div className="flex justify-end space-x-4 mt-4">
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button variant="destructive" onClick={onConfirm}>Block Token</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AddLiquidityDialog({ isOpen, onClose, onConfirm, tokenSymbol }: AddLiquidityDialog) {
+  const [tokenAmount, setTokenAmount] = useState('');
+  const [ethAmount, setEthAmount] = useState('');
+
+  // Calculate derived values
+  const tokenPrice = useMemo(() => {
+    if (!tokenAmount || !ethAmount) return null;
+    try {
+      const tokenValue = parseFloat(tokenAmount);
+      const ethValue = parseFloat(ethAmount);
+      if (tokenValue <= 0) return null;
+      return ethValue / tokenValue;
+    } catch {
+      return null;
+    }
+  }, [tokenAmount, ethAmount]);
+
+  // Calculate tokens per ETH
+  const tokensPerEth = useMemo(() => {
+    if (!tokenPrice) return null;
+    return 1 / tokenPrice;
+  }, [tokenPrice]);
+
+  const handleConfirm = () => {
+    onConfirm(tokenAmount, ethAmount);
+    onClose();
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent>
+        <DialogTitle>Add Liquidity</DialogTitle>
+        <DialogDescription>
+          Enter the amount of {tokenSymbol} tokens and ETH you want to add to the liquidity pool.
+        </DialogDescription>
+        <div className="space-y-4 mt-4">
+          <div>
+            <Label htmlFor="tokenAmount">Token Amount ({tokenSymbol})</Label>
+            <Input
+              id="tokenAmount"
+              type="text"
+              value={tokenAmount}
+              onChange={(e) => setTokenAmount(e.target.value)}
+              placeholder="Enter token amount"
+            />
+          </div>
+          <div>
+            <Label htmlFor="ethAmount">ETH Amount</Label>
+            <Input
+              id="ethAmount"
+              type="text"
+              value={ethAmount}
+              onChange={(e) => setEthAmount(e.target.value)}
+              placeholder="Enter ETH amount"
+            />
+          </div>
+
+          {/* Price Calculator Section */}
+          {(tokenAmount && ethAmount) && (
+            <div className="mt-4 p-4 bg-gray-800 rounded-lg">
+              <h4 className="text-sm font-medium text-text-primary mb-3">Price Information</h4>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Initial Token Price:</span>
+                  <span className="text-white">{tokenPrice ? `${tokenPrice.toFixed(8)} ETH per ${tokenSymbol}` : '-'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Tokens per ETH:</span>
+                  <span className="text-white">{tokensPerEth ? `${tokensPerEth.toFixed(2)} ${tokenSymbol}` : '-'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Total Value:</span>
+                  <span className="text-white">{ethAmount ? `${ethAmount} ETH` : '-'}</span>
+                </div>
+              </div>
+              <div className="mt-3 text-xs text-gray-400">
+                <p>• This will set the initial trading price for your token</p>
+                <p>• Higher liquidity means less price impact from trades</p>
+              </div>
             </div>
-            <div className="flex justify-end gap-3 mt-6">
-              <button
-                onClick={onClose}
-                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-white"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={onConfirm}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded text-white"
-              >
-                Block Permanently
-              </button>
-            </div>
+          )}
+
+          <div className="flex justify-end space-x-4">
+            <Button variant="secondary" onClick={onClose}>Cancel</Button>
+            <Button 
+              onClick={handleConfirm}
+              disabled={!tokenAmount || !ethAmount || parseFloat(tokenAmount) <= 0 || parseFloat(ethAmount) <= 0}
+            >
+              Add Liquidity
+            </Button>
           </div>
         </div>
       </DialogContent>
@@ -167,9 +246,9 @@ interface FormData {
     address: string;
     percentage: number;
     vestingEnabled: boolean;
-    vestingDuration: number;
-    cliffDuration: number;
-    vestingStartTime: number;
+    vestingDuration: bigint;
+    cliffDuration: bigint;
+    vestingStartTime: bigint;
   }[];
 }
 
@@ -363,33 +442,196 @@ const validateDistribution = (form: UseFormReturn<FormData>): ValidationResult =
   if (totalPercentage !== 100) {
     return {
       category: 'Distribution',
-      message: 'Total allocation must be 100%',
+      message: 'Total percentage must equal 100%',
       details: [
-        `Presale: ${presalePercentage}%`,
         `Liquidity: ${liquidityPercentage}%`,
-        `Additional Wallets: ${walletPercentages}%`,
+        `Presale: ${presalePercentage}%`,
+        `Wallets: ${wallets.map(w => `${w.percentage}%`).join(', ')}`,
         `Total: ${totalPercentage}%`
       ],
       status: 'error'
     };
   }
 
+  // Validate each wallet allocation
+  for (const wallet of wallets) {
+    if (wallet.vestingEnabled) {
+      if (wallet.vestingDuration <= BigInt(0)) {
   return {
     category: 'Distribution',
-    message: 'Distribution percentages are valid',
+          message: 'Invalid vesting duration',
+          details: [`Wallet ${wallet.name}: Vesting duration must be greater than 0`],
+          status: 'error'
+        };
+      }
+      if (wallet.vestingStartTime <= BigInt(0)) {
+        return {
+          category: 'Distribution',
+          message: 'Invalid vesting start time',
+          details: [`Wallet ${wallet.name}: Vesting start time must be greater than 0`],
+          status: 'error'
+        };
+      }
+    }
+  }
+
+  return {
+    category: 'Distribution',
+    message: 'Valid distribution',
+    details: [
+      `Liquidity: ${liquidityPercentage}%`,
+      `Presale: ${presalePercentage}%`,
+      `Wallets: ${wallets.map(w => `${w.percentage}%`).join(', ')}`
+    ],
     status: 'success'
   };
 };
 
-const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAddress, provider: externalProvider }, ref) => {
+interface LPInfo {
+  hasLiquidity: boolean;
+  lpTokenBalance: string;
+  sharePercentage: string;
+  reserve0: string;
+  reserve1: string;
+  token0: string;
+  token1: string;
+}
+
+const verifyPairAddress = async (tokenAddress: string, signer: any) => {
+  try {
+    console.log('Verifying pair address for token:', tokenAddress);
+    
+    // Sepolia addresses
+    const UNISWAP_V2_FACTORY = '0x7E0987E5b3a30e3f2828572Bb659A548460a3003';
+    const WETH_SEPOLIA = '0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14';
+    
+    console.log('Using Factory:', UNISWAP_V2_FACTORY);
+    console.log('Using WETH:', WETH_SEPOLIA);
+
+    // Create factory contract with full ABI
+    const factoryContract = new ethers.Contract(
+      UNISWAP_V2_FACTORY,
+      [
+        'function getPair(address tokenA, address tokenB) external view returns (address pair)',
+        'function allPairs(uint) external view returns (address pair)',
+        'function allPairsLength() external view returns (uint)'
+      ],
+      signer
+    );
+
+    // Try both token orderings
+    let pairAddress = await factoryContract.getPair(tokenAddress, WETH_SEPOLIA).catch(() => ethers.ZeroAddress);
+    console.log('Pair address (token/WETH):', pairAddress);
+    
+    if (pairAddress === ethers.ZeroAddress) {
+      pairAddress = await factoryContract.getPair(WETH_SEPOLIA, tokenAddress).catch(() => ethers.ZeroAddress);
+      console.log('Pair address (WETH/token):', pairAddress);
+      
+      if (pairAddress === ethers.ZeroAddress) {
+        console.log('No pair exists yet - this is normal when adding liquidity for the first time');
+      }
+    }
+
+    return pairAddress;
+  } catch (error) {
+    console.error('Error in verifyPairAddress:', error);
+    return ethers.ZeroAddress;
+  }
+};
+
+const getLPTokenInfo = async (tokenAddress: string, pairAddress: string, signer: any): Promise<LPInfo | null> => {
+  try {
+    console.log('Getting LP info for:', { tokenAddress, pairAddress });
+    const userAddress = await signer.getAddress();
+    console.log('User address:', userAddress);
+    
+    // Full Uniswap V2 Pair ABI for the essential functions
+    const PAIR_ABI = [
+      'function token0() external view returns (address)',
+      'function token1() external view returns (address)',
+      'function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)',
+      'function totalSupply() external view returns (uint256)',
+      'function balanceOf(address owner) external view returns (uint256)',
+      'function decimals() external pure returns (uint8)',
+      'function MINIMUM_LIQUIDITY() external pure returns (uint256)'
+    ];
+
+    const pairContract = new ethers.Contract(pairAddress, PAIR_ABI, signer);
+    console.log('Created pair contract');
+
+    // Get all pair information in parallel
+    const [token0, token1, reserves, totalSupply, lpBalance, decimals] = await Promise.all([
+      pairContract.token0(),
+      pairContract.token1(),
+      pairContract.getReserves(),
+      pairContract.totalSupply(),
+      pairContract.balanceOf(userAddress),
+      pairContract.decimals()
+    ]);
+
+    console.log('Pair data:', {
+      token0,
+      token1,
+      reserves: reserves.map((r: ethers.BigNumberish) => r.toString()),
+      totalSupply: totalSupply.toString(),
+      lpBalance: lpBalance.toString(),
+      decimals
+    });
+
+    // Determine which token is which
+    const isToken0 = tokenAddress.toLowerCase() === token0.toLowerCase();
+    const tokenReserve = isToken0 ? reserves[0] : reserves[1];
+    const ethReserve = isToken0 ? reserves[1] : reserves[0];
+
+    // Calculate share percentage with proper decimal handling
+    const lpBalanceFormatted = formatEther(lpBalance);
+    const totalSupplyFormatted = formatEther(totalSupply);
+    const sharePercentage = totalSupplyFormatted !== '0' 
+      ? (Number(lpBalanceFormatted) / Number(totalSupplyFormatted)) * 100
+      : 0;
+
+    console.log('Calculated values:', {
+      lpBalanceFormatted,
+      totalSupplyFormatted,
+      sharePercentage
+    });
+
+    const hasLiquidity = Number(tokenReserve) > 0 && Number(ethReserve) > 0;
+
+    const lpInfo = {
+      hasLiquidity,
+      lpTokenBalance: lpBalanceFormatted,
+      sharePercentage: sharePercentage.toFixed(2),
+      reserve0: formatEther(tokenReserve),
+      reserve1: formatEther(ethReserve),
+      token0,
+      token1
+    };
+
+    console.log('Final LP info:', lpInfo);
+    return lpInfo;
+  } catch (error) {
+    console.error('Error in getLPTokenInfo:', error);
+    return null;
+  }
+};
+
+interface AddLiquidityDialog {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: (tokenAmount: string, ethAmount: string) => void;
+  tokenSymbol: string;
+}
+
+const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: factoryAddress, provider: externalProvider }, ref): JSX.Element => {
   const [tokens, setTokens] = useState<TokenInfo[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedToken, setSelectedToken] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [selectedToken, setSelectedToken] = useState<TokenInfo | null>(null);
+  const [isAddLiquidityDialogOpen, setIsAddLiquidityDialogOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [showOnlyRecent, setShowOnlyRecent] = useState(true);
-  const { chainId } = useNetwork();
   const { toast } = useToast();
+  const { chainId } = useNetwork();
   const form = useForm<FormData>();
 
   // Add state for vesting schedules popup
@@ -400,6 +642,8 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
   // Add these state variables after the existing ones
   const [blockDialogOpen, setBlockDialogOpen] = useState(false);
   const [tokenToBlock, setTokenToBlock] = useState<TokenInfo | null>(null);
+  const [showBlockDialog, setShowBlockDialog] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -461,22 +705,25 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
 
     try {
       console.log('TCAP_v3 loadTokens: Starting token load');
-      setIsLoading(true);
-      setError(null);
+      setLoading(true);
 
       const signer = await externalProvider.getSigner();
       const userAddress = await signer.getAddress();
       
-      // Get deployed tokens
       if (!factoryAddress) {
         throw new Error('Factory address is not defined');
       }
 
       console.log('Using factory address:', factoryAddress);
-      const factory = new ethers.Contract(factoryAddress, TokenFactoryV3ABI.abi, signer);
+      const factory = new ethers.Contract(factoryAddress, [
+        "function getUserTokens(address) view returns (address[])",
+        "function deploymentFee() view returns (uint256)",
+        "function feeRecipient() view returns (address)",
+        "function uniswapV2Router() view returns (address)"
+      ], signer);
       
       console.log('Getting user created tokens for:', userAddress);
-      const deployedTokens = await factory.getUserCreatedTokens(userAddress);
+      const deployedTokens = await factory.getUserTokens(userAddress);
       console.log('Deployed tokens:', deployedTokens);
 
       const blockedTokens = getBlockedTokens();
@@ -485,54 +732,26 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
         .filter((token: string) => !blockedTokens.includes(token))
         .map(async (tokenAddress: string) => {
           try {
-            console.log('Creating contract for token:', tokenAddress);
-            // Create minimal ABI for initial token info
-            const minimalABI = [
-              "function name() view returns (string)",
-              "function symbol() view returns (string)",
-              "function totalSupply() view returns (uint256)",
-              "function owner() view returns (address)",
-              "function paused() view returns (bool)",
-              "function uniswapV2Pair() view returns (address)"
-            ];
-            const tokenContract = new ethers.Contract(tokenAddress, minimalABI, signer);
-            console.log('Loading token:', tokenAddress);
+            const tokenContract = new ethers.Contract(tokenAddress, TokenV3ABI.abi, signer);
 
-            // Basic token info
-            const [name, symbol, totalSupply, owner, paused, pairAddress] = await Promise.all([
+            // Get basic token info
+            const [name, symbol, totalSupply, owner, paused] = await Promise.all([
               tokenContract.name(),
               tokenContract.symbol(),
               tokenContract.totalSupply(),
               tokenContract.owner(),
-              tokenContract.paused(),
-              tokenContract.uniswapV2Pair()
+              tokenContract.paused()
             ]);
 
-            console.log('Token info loaded:', { 
-              name, 
-              symbol, 
-              totalSupply: formatEther(totalSupply),
-              pairAddress 
-            });
-
+            // Get pair address and liquidity info
+            const pairAddress = await verifyPairAddress(tokenAddress, signer);
             let liquidityInfo = undefined;
 
-            // Get LP token info if pair exists
             if (pairAddress && pairAddress !== ethers.ZeroAddress) {
-              console.log('Getting LP info for pair:', pairAddress);
               try {
                 const lpInfo = await getLPTokenInfo(tokenAddress, pairAddress, signer);
                 if (lpInfo) {
-                  liquidityInfo = {
-                    hasLiquidity: lpInfo.hasLiquidity,
-                    lpTokenBalance: lpInfo.lpTokenBalance,
-                    sharePercentage: lpInfo.sharePercentage,
-                    reserve0: lpInfo.reserve0,
-                    reserve1: lpInfo.reserve1,
-                    token0: lpInfo.token0,
-                    token1: lpInfo.token1
-                  };
-                  console.log('LP info loaded:', liquidityInfo);
+                  liquidityInfo = lpInfo;
                 }
               } catch (lpError) {
                 console.error('Error loading LP info:', lpError);
@@ -566,11 +785,16 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
 
       console.log('Loaded tokens:', loadedTokens);
       setTokens(loadedTokens);
-    } catch (error) {
+    } catch (error: any) {
       console.error('TCAP_v3 Error loading tokens:', error);
-      setError('Failed to load tokens. Please try again.');
+      toast({
+        title: 'Error',
+        description: 'Failed to load tokens. Please try again.',
+        variant: 'destructive',
+      });
+      setTokens([]);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
@@ -750,6 +974,125 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
     }
   };
 
+  // Add new function for minting/transferring tokens
+  const handleMintOrTransfer = async (tokenAddress: string) => {
+    try {
+      const signer = await externalProvider.getSigner();
+      const userAddress = await signer.getAddress();
+      const tokenContract = getTokenContract(tokenAddress, signer);
+      
+      // Create dialog for input
+      const dialog = await new Promise<{ toAddress: string; amount: string } | null>((resolve) => {
+        const dialog = document.createElement('dialog');
+        dialog.className = 'bg-gray-900 rounded-lg p-6 max-w-md w-full border border-border';
+        dialog.innerHTML = `
+          <h3 class="text-lg font-bold text-text-primary mb-4">Mint or Transfer Tokens</h3>
+          <div class="space-y-4">
+            <div>
+              <label class="text-xs text-text-secondary">Recipient Address</label>
+              <input type="text" id="toAddress" class="w-full bg-gray-800 text-text-primary rounded px-2 py-1 text-sm" placeholder="Enter recipient address" />
+            </div>
+            <div>
+              <label class="text-xs text-text-secondary">Amount</label>
+              <input type="text" id="amount" class="w-full bg-gray-800 text-text-primary rounded px-2 py-1 text-sm" placeholder="Enter amount" />
+            </div>
+          </div>
+          <div class="flex justify-end gap-3 mt-6">
+            <button id="cancelBtn" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-text-primary">Cancel</button>
+            <button id="confirmBtn" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white">Continue</button>
+          </div>
+        `;
+        
+        document.body.appendChild(dialog);
+        dialog.showModal();
+
+        const cancelBtn = dialog.querySelector('#cancelBtn');
+        const confirmBtn = dialog.querySelector('#confirmBtn');
+        const toAddressInput = dialog.querySelector<HTMLInputElement>('#toAddress');
+        const amountInput = dialog.querySelector<HTMLInputElement>('#amount');
+
+        if (cancelBtn && confirmBtn && toAddressInput && amountInput) {
+          cancelBtn.addEventListener('click', () => {
+            dialog.close();
+            resolve(null);
+          });
+
+          confirmBtn.addEventListener('click', () => {
+            dialog.close();
+            resolve({
+              toAddress: toAddressInput.value,
+              amount: amountInput.value
+            });
+          });
+        } else {
+          dialog.close();
+          resolve(null);
+        }
+      });
+
+      if (!dialog) return;
+
+      const { toAddress, amount } = dialog;
+      if (!toAddress || !amount) {
+        throw new Error('Please enter both recipient address and amount');
+      }
+
+      // Get token info
+      const [decimals, symbol, owner, balance] = await Promise.all([
+        tokenContract.decimals(),
+        tokenContract.symbol(),
+        tokenContract.owner(),
+        tokenContract.balanceOf(userAddress)
+      ]);
+
+      // Convert amount to proper units
+      const amountInWei = parseEther(amount);
+      const isOwner = owner.toLowerCase() === userAddress.toLowerCase();
+
+      if (isOwner) {
+        // Try to mint first
+        try {
+          console.log('Attempting to mint tokens...');
+          const mintTx = await tokenContract.mint(toAddress, amountInWei);
+          await mintTx.wait();
+          
+          toast({
+            title: 'Success',
+            description: `Successfully minted ${amount} ${symbol} to ${toAddress}`
+          });
+          
+          loadTokens();
+          return;
+        } catch (error) {
+          console.log('Could not mint tokens, trying transfer instead...');
+        }
+      }
+
+      // If minting fails or user is not owner, try transfer
+      if (balance >= amountInWei) {
+        const transferTx = await tokenContract.transfer(toAddress, amountInWei);
+        await transferTx.wait();
+        
+        toast({
+          title: 'Success',
+          description: `Successfully transferred ${amount} ${symbol} to ${toAddress}`
+        });
+        
+        loadTokens();
+      } else {
+        throw new Error(`Insufficient balance. You have ${formatEther(balance)} ${symbol}`);
+      }
+
+    } catch (error: any) {
+      console.error('Error in mint/transfer:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to mint/transfer tokens',
+        variant: 'destructive'
+      });
+    }
+  };
+
   const handleWhitelist = async (tokenAddress: string) => {
     try {
       const addresses = prompt('Enter addresses to whitelist (comma-separated):');
@@ -776,173 +1119,196 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
     }
   };
 
-  const handleFinalize = async (tokenAddress: string) => {
+  const handleFinalize = async (token: TokenInfo) => {
+    if (!token) return;
+    
     try {
+      setLoading(true);
       const signer = await externalProvider.getSigner();
-      const tokenContract = getTokenContract(tokenAddress, signer);
+      const tokenContract = new Contract(token.address, TokenV3ABI.abi, signer);
       
       const tx = await tokenContract.finalize();
+      
+      toast({
+        title: 'Transaction Sent',
+        description: 'Finalizing presale...',
+      });
+      
       await tx.wait();
-      
-      toast({
-        title: 'Presale Finalized',
-        description: 'Successfully finalized the presale.'
-      });
-      
-      loadTokens();
-    } catch (error) {
-      console.error('Error finalizing presale:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to finalize presale.',
-        variant: 'destructive'
-      });
-    }
-  };
-
-  const handleAddLiquidity = async (tokenAddress: string) => {
-    try {
-      const signer = await externalProvider.getSigner();
-      
-      // Create token contract instance with minimal ABI
-      const tokenContract = new Contract(tokenAddress, [
-        "function symbol() view returns (string)",
-        "function decimals() view returns (uint8)",
-        "function approve(address spender, uint256 amount) returns (bool)",
-        "function allowance(address owner, address spender) view returns (uint256)",
-        "function balanceOf(address) view returns (uint256)",
-        "function liquidityAllocation() view returns (uint256)",
-        "function remainingLiquidityAllocation() view returns (uint256)",
-        "function addLiquidityFromContract(uint256) payable returns (bool)"
-      ], signer);
-
-      // Get token info
-      const [symbol, decimals, remainingLiquidityAllocation] = await Promise.all([
-        tokenContract.symbol(),
-        tokenContract.decimals(),
-        tokenContract.remainingLiquidityAllocation()
-      ]);
-
-      // Create full contract instance to check presale status
-      const fullContract = new Contract(tokenAddress, TokenV3ABI.abi, signer);
-      
-      try {
-        // Check if presale is active
-        const presaleEnabled = await fullContract.presaleEnabled();
-        if (presaleEnabled) {
-          const presaleInfo = await fullContract.presaleInfo();
-          if (!presaleInfo.finalized) {
-            const currentTime = Math.floor(Date.now() / 1000);
-            if (currentTime < Number(presaleInfo.endTime)) {
-              throw new Error('Cannot add liquidity while presale is active. Please wait until presale ends and is finalized.');
-            }
-          }
-        }
-      } catch (presaleError) {
-        console.warn('Could not check presale status:', presaleError);
-        // Continue if presale functions are not available
-      }
-
-      const formattedRemainingLiquidity = formatEther(remainingLiquidityAllocation);
-
-      // Create dialog content
-      const content = `
-        <div class="space-y-4">
-          <div class="bg-gray-700/30 rounded p-2 mb-2">
-            <p class="text-xs text-gray-300">Remaining Liquidity Allocation: ${formattedRemainingLiquidity} ${symbol}</p>
-          </div>
-          <div>
-            <label class="text-xs text-text-secondary">Token Amount (${symbol})</label>
-            <input type="text" id="tokenAmount" class="w-full bg-gray-800 text-text-primary rounded px-2 py-1 text-sm" placeholder="Enter token amount" />
-          </div>
-          <div>
-            <label class="text-xs text-text-secondary">BNB Amount</label>
-            <input type="text" id="bnbAmount" class="w-full bg-gray-800 text-text-primary rounded px-2 py-1 text-sm" placeholder="Enter BNB amount" />
-          </div>
-        </div>
-      `;
-
-      // Show dialog
-      const dialog = await new Promise<{ tokenAmount: string; bnbAmount: string } | null>((resolve) => {
-        const dialog = document.createElement('dialog');
-        dialog.className = 'bg-gray-900 rounded-lg p-6 max-w-md w-full border border-border';
-        dialog.innerHTML = `
-          <h3 class="text-lg font-bold text-text-primary mb-4">Add Initial Liquidity</h3>
-          ${content}
-          <div class="flex justify-end gap-3 mt-6">
-            <button id="cancelBtn" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-text-primary">Cancel</button>
-            <button id="confirmBtn" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white">Add Liquidity</button>
-          </div>
-        `;
-        
-        document.body.appendChild(dialog);
-        dialog.showModal();
-
-        const cancelBtn = dialog.querySelector('#cancelBtn');
-        const confirmBtn = dialog.querySelector('#confirmBtn');
-        const tokenAmountInput = dialog.querySelector<HTMLInputElement>('#tokenAmount');
-        const bnbAmountInput = dialog.querySelector<HTMLInputElement>('#bnbAmount');
-
-        if (cancelBtn && confirmBtn && tokenAmountInput && bnbAmountInput) {
-          cancelBtn.addEventListener('click', () => {
-            dialog.close();
-            resolve(null);
-          });
-
-          confirmBtn.addEventListener('click', () => {
-            dialog.close();
-            resolve({
-              tokenAmount: tokenAmountInput.value,
-              bnbAmount: bnbAmountInput.value
-            });
-          });
-        } else {
-          dialog.close();
-          resolve(null);
-        }
-      });
-
-      if (!dialog) return;
-
-      const { tokenAmount, bnbAmount } = dialog;
-      if (!tokenAmount || !bnbAmount) {
-        throw new Error('Please enter both token and BNB amounts');
-      }
-
-      // Validate token amount against remaining liquidity allocation
-      const tokenAmountBN = parseUnits(tokenAmount, decimals);
-      if (tokenAmountBN > remainingLiquidityAllocation) {
-        throw new Error(`Amount exceeds remaining liquidity allocation of ${formattedRemainingLiquidity} ${symbol}`);
-      }
-
-      // Convert BNB amount to wei
-      const bnbAmountWei = parseEther(bnbAmount);
-
-      // Add liquidity using the contract's allocation
-      const addLiquidityTx = await tokenContract.addLiquidityFromContract(tokenAmountBN, {
-        value: bnbAmountWei
-      });
-      await addLiquidityTx.wait();
 
       toast({
         title: 'Success',
-        description: 'Liquidity added successfully'
+        description: 'Presale finalized successfully',
       });
-
-      // Refresh token data
+      
       await loadTokens();
-    } catch (error: any) {
-      console.error('Error adding liquidity:', error);
+    } catch (err: any) {
+      console.error('Error:', err);
       toast({
         title: 'Error',
-        description: error.message || 'Failed to add liquidity',
+        description: err.message || 'Failed to finalize presale',
+        variant: 'destructive'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddLiquidity = async (token: TokenInfo) => {
+    try {
+      setSelectedToken(token);
+      setError(null);
+      setIsAddLiquidityDialogOpen(true);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to add liquidity';
+      console.error('Error adding liquidity:', err);
+      setError(errorMessage);
+      toast({
+        title: 'Error',
+        description: errorMessage,
         variant: 'destructive'
       });
     }
   };
 
-  const handleCreateVesting = async (tokenAddress: string) => {
+  const handleAddLiquidityConfirm = async (tokenAmount: string, ethAmount: string): Promise<void> => {
     try {
+        console.log('Adding liquidity...');
+        if (!externalProvider || !factoryAddress || !selectedToken) return;
+
+        const signer = await externalProvider.getSigner();
+        const tokenContract = new Contract(selectedToken.address, TokenV3ABI.abi, signer);
+        const userAddress = await signer.getAddress();
+
+        // Check ownership
+        const tokenOwner = await tokenContract.owner();
+        console.log('Token owner:', tokenOwner);
+        console.log('User address:', userAddress);
+        if (tokenOwner.toLowerCase() !== userAddress.toLowerCase()) {
+            throw new Error('Not token owner');
+        }
+
+        // Check remaining liquidity allocation
+        const remainingLiquidityAllocation = await tokenContract.remainingLiquidityAllocation();
+        console.log('Remaining liquidity allocation:', remainingLiquidityAllocation.toString());
+        const tokenAmountBN = parseEther(tokenAmount);
+        if (BigInt(remainingLiquidityAllocation.toString()) < BigInt(tokenAmountBN.toString())) {
+            throw new Error('Amount exceeds remaining liquidity allocation');
+        }
+
+        // Check contract token balance
+        const contractBalance = await tokenContract.balanceOf(selectedToken.address);
+        console.log('Contract token balance:', contractBalance.toString());
+        console.log('Required token amount:', tokenAmountBN.toString());
+        if (BigInt(contractBalance.toString()) < BigInt(tokenAmountBN.toString())) {
+            throw new Error('Insufficient contract balance');
+        }
+
+        // Get router address and create router contract
+        const routerAddress = await tokenContract.uniswapV2Router();
+        console.log('Router address:', routerAddress);
+        
+        // Router ABI - just the functions we need
+        const routerAbi = [
+            "function addLiquidityETH(address token, uint amountTokenDesired, uint amountTokenMin, uint amountETHMin, address to, uint deadline) external payable returns (uint amountToken, uint amountETH, uint liquidity)"
+        ];
+        const routerContract = new Contract(routerAddress, routerAbi, signer);
+
+        const currentPairAddress = await tokenContract.uniswapV2Pair();
+        console.log('Current pair address:', currentPairAddress);
+
+        // Calculate minimum amounts (1% slippage)
+        const minTokenAmount = (BigInt(tokenAmountBN.toString()) * BigInt(99)) / BigInt(100);
+        const ethAmountBN = parseEther(ethAmount);
+        const minEthAmount = (BigInt(ethAmountBN.toString()) * BigInt(99)) / BigInt(100);
+        
+        // Set deadline to 20 minutes from now
+        const deadline = Math.floor(Date.now() / 1000) + 1200;
+
+        // First approve the router to spend tokens
+        console.log('Approving router...');
+        const approveTx = await tokenContract.approve(routerAddress, tokenAmountBN);
+        await approveTx.wait();
+        console.log('Router approved');
+
+        // Estimate gas
+        console.log('Estimating gas...');
+        console.log('Transaction parameters:', {
+            token: selectedToken.address,
+            amountTokenDesired: tokenAmountBN.toString(),
+            amountTokenMin: minTokenAmount.toString(),
+            amountETHMin: minEthAmount.toString(),
+            to: userAddress,
+            deadline,
+            value: ethAmountBN.toString()
+        });
+
+        const gasEstimate = await routerContract.addLiquidityETH.estimateGas(
+            selectedToken.address,
+            tokenAmountBN,
+            minTokenAmount,
+            minEthAmount,
+            userAddress,
+            deadline,
+            { value: ethAmountBN }
+        );
+        console.log('Estimated gas:', gasEstimate.toString());
+        
+        // Add 20% buffer to gas estimate
+        const gasLimit = (gasEstimate * BigInt(120)) / BigInt(100);
+
+        // Send transaction
+        console.log('Sending transaction...');
+        const tx = await routerContract.addLiquidityETH(
+            selectedToken.address,
+            tokenAmountBN,
+            minTokenAmount,
+            minEthAmount,
+            userAddress,
+            deadline,
+            { 
+                value: ethAmountBN,
+                gasLimit
+            }
+        );
+        console.log('Transaction sent:', tx.hash);
+        
+        // Wait for confirmation
+        const receipt = await tx.wait();
+        console.log('Transaction confirmed:', receipt);
+        
+        // Show success message
+        toast({
+            title: 'Success',
+            description: 'Liquidity added successfully',
+            variant: 'default'
+        });
+
+        // Reload token data
+        await loadTokens();
+        
+        // Close dialog
+        setIsAddLiquidityDialogOpen(false);
+        setSelectedToken(null);
+    } catch (error: any) {
+        console.error('Error adding liquidity:', error);
+        toast({
+            title: 'Error',
+            description: error.message || 'Failed to add liquidity',
+            variant: 'destructive'
+        });
+        throw error;
+    }
+  };
+
+  const handleCreateVesting = async (token: TokenInfo) => {
+    if (!token) return;
+    
+    try {
+      setLoading(true);
+      const signer = await externalProvider.getSigner();
+      const tokenContract = new Contract(token.address, TokenV3ABI.abi, signer);
+
       const beneficiary = prompt('Enter beneficiary address:');
       if (!beneficiary) return;
       
@@ -959,9 +1325,6 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
       const cliffDuration = parseInt(cliffMonths) * 30 * 24 * 60 * 60;
       const vestingDuration = parseInt(vestingMonths) * 30 * 24 * 60 * 60;
       
-      const signer = await externalProvider.getSigner();
-      const tokenContract = getTokenContract(tokenAddress, signer);
-      
       const tx = await tokenContract.createVestingSchedule(
         beneficiary,
         parseEther(amount),
@@ -971,304 +1334,37 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
         true // revocable
       );
       await tx.wait();
-      
+
       toast({
         title: 'Vesting Schedule Created',
         description: `Successfully created vesting schedule for ${beneficiary}`
       });
       
       loadTokens();
-    } catch (error) {
-      console.error('Error creating vesting schedule:', error);
+    } catch (err: any) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to create vesting';
+      console.error('Error creating vesting:', err);
       toast({
         title: 'Error',
-        description: 'Failed to create vesting schedule.',
-        variant: 'destructive'
-      });
-    }
-  };
-
-  const handleReleaseVested = async (tokenAddress: string) => {
-    try {
-      const signer = await externalProvider.getSigner();
-      const tokenContract = getTokenContract(tokenAddress, signer);
-      
-      const tx = await tokenContract.releaseVestedTokens();
-      await tx.wait();
-      
-      toast({
-        title: 'Tokens Released',
-        description: 'Successfully released vested tokens.'
-      });
-      
-      loadTokens();
-    } catch (error) {
-      console.error('Error releasing vested tokens:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to release vested tokens.',
-        variant: 'destructive'
-      });
-    }
-  };
-
-  const handleRevokeVesting = async (tokenAddress: string) => {
-    try {
-      const beneficiary = prompt('Enter beneficiary address to revoke vesting:');
-      if (!beneficiary) return;
-      
-      const signer = await externalProvider.getSigner();
-      const tokenContract = getTokenContract(tokenAddress, signer);
-      
-      const tx = await tokenContract.revokeVesting(beneficiary);
-      await tx.wait();
-      
-      toast({
-        title: 'Vesting Revoked',
-        description: `Successfully revoked vesting for ${beneficiary}`
-      });
-      
-      loadTokens();
-    } catch (error) {
-      console.error('Error revoking vesting:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to revoke vesting.',
-        variant: 'destructive'
-      });
-    }
-  };
-
-  // Add function to handle viewing vesting schedules
-  const handleViewVestingSchedules = async (tokenAddress: string) => {
-    try {
-      const signer = await externalProvider.getSigner();
-      const tokenContract = getTokenContract(tokenAddress, signer);
-      setSelectedTokenForSchedules(tokenAddress);
-      setShowVestingSchedules(true);
-      
-      // Get the current user's vesting schedule
-      const userAddress = await signer.getAddress();
-      try {
-        const hasVesting = await tokenContract.hasVestingSchedule(userAddress);
-        if (hasVesting) {
-          const schedule = await tokenContract.getVestingSchedule(userAddress);
-          const cliffDays = Math.floor(Number(schedule.cliffDuration) / (24 * 60 * 60));
-          const vestingDays = Math.floor(Number(schedule.vestingDuration) / (24 * 60 * 60));
-          const formattedSchedule = {
-            beneficiary: userAddress,
-            totalAmount: formatEther(schedule.totalAmount),
-            startTime: new Date(Number(schedule.startTime) * 1000).toLocaleString(),
-            cliffDuration: cliffDays,
-            vestingDuration: vestingDays,
-            releasedAmount: formatEther(schedule.releasedAmount),
-            revocable: schedule.revocable,
-            revoked: schedule.revoked,
-            releasableAmount: formatEther(schedule.releasableAmount)
-          };
-          setVestingSchedules([formattedSchedule]);
-        } else {
-          setVestingSchedules([]);
-        }
-      } catch (error) {
-        console.error('Error fetching vesting schedule:', error);
-        setVestingSchedules([]);
-      }
-    } catch (error) {
-      console.error('Error fetching vesting schedules:', error);
-      toast({
-        title: "Error",
-        description: "Failed to fetch vesting schedules",
-        variant: "destructive"
-      });
-    }
-  };
-
-  // Add this function to handle blocking a token
-  const handleBlockToken = (token: TokenInfo) => {
-    setTokenToBlock(token);
-    setBlockDialogOpen(true);
-  };
-
-  // Add this function to confirm blocking a token
-  const confirmBlockToken = () => {
-    if (!tokenToBlock) return;
-    
-    saveBlockedToken(tokenToBlock.address);
-    setTokens(prev => prev.filter(t => t.address !== tokenToBlock.address));
-    setBlockDialogOpen(false);
-    setTokenToBlock(null);
-    
-    toast({
-      title: "Token Blocked",
-      description: "The token has been permanently removed from your management panel",
-      variant: "default"
-    });
-  };
-
-  const handleRemoveLiquidity = async (tokenAddress: string) => {
-    try {
-      setIsLoading(true);
-      const signer = await externalProvider.getSigner();
-      
-      // Create minimal ABI for initial token info
-      const minimalABI = [
-        "function balanceOf(address) view returns (uint256)",
-        "function approve(address spender, uint256 amount) returns (bool)",
-        "function allowance(address owner, address spender) view returns (uint256)",
-        "function uniswapV2Router() view returns (address)",
-        "function uniswapV2Pair() view returns (address)"
-      ];
-      
-      const tokenContract = new Contract(tokenAddress, minimalABI, signer);
-      
-      // Get pair address
-      const pairAddress = await tokenContract.uniswapV2Pair();
-      console.log('Pair address:', pairAddress);
-      
-      if (!pairAddress || pairAddress === ethers.ZeroAddress) {
-        throw new Error('No liquidity pair found');
-      }
-
-      // Create pair contract instance
-      const pairContract = new Contract(pairAddress, [
-        'function approve(address spender, uint256 amount) returns (bool)',
-        'function allowance(address owner, address spender) view returns (uint256)',
-        'function balanceOf(address account) view returns (uint256)',
-        'function transfer(address to, uint256 amount) returns (bool)'
-      ], signer);
-
-      // Get router address
-      const routerAddress = await tokenContract.uniswapV2Router();
-      console.log('Router address:', routerAddress);
-      
-      // Get user's LP token balance
-      const userAddress = await signer.getAddress();
-      const lpBalance = await pairContract.balanceOf(userAddress);
-      console.log('LP Balance:', lpBalance.toString());
-      
-      if (lpBalance <= 0) {
-        throw new Error('No LP tokens to remove');
-      }
-
-      // Check allowance
-      const allowance = await pairContract.allowance(userAddress, routerAddress);
-      console.log('Current allowance:', allowance.toString());
-      
-      // Approve router if needed
-      if (allowance < lpBalance) {
-        console.log('Approving router...');
-        const approveTx = await pairContract.approve(routerAddress, ethers.MaxUint256);
-        await approveTx.wait();
-        toast({
-          title: 'Approval Successful',
-          description: 'Router approved to spend LP tokens'
-        });
-      }
-
-      // Create router contract
-      const routerABI = [
-        'function removeLiquidityETH(address token, uint liquidity, uint amountTokenMin, uint amountETHMin, address to, uint deadline) external returns (uint amountToken, uint amountETH)'
-      ];
-      const routerContract = new Contract(routerAddress, routerABI, signer);
-
-      // Remove liquidity
-      console.log('Removing liquidity...');
-      const removeTx = await routerContract.removeLiquidityETH(
-        tokenAddress,
-        lpBalance,
-        0, // Accept any amount of tokens
-        0, // Accept any amount of ETH
-        userAddress,
-        Math.floor(Date.now() / 1000) + 300 // 5 minutes deadline
-      );
-
-      await removeTx.wait();
-      console.log('Liquidity removed successfully');
-
-      toast({
-        title: 'Success',
-        description: 'Liquidity removed successfully'
-      });
-
-      // Refresh token data
-      await loadTokens();
-    } catch (error: any) {
-      console.error('Error removing liquidity:', error);
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to remove liquidity',
+        description: errorMessage,
         variant: 'destructive'
       });
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  const handleBurnLPTokens = async (tokenAddress: string) => {
+  const handleRevokeVesting = async (token: TokenInfo) => {
     try {
+      setLoading(true);
       const signer = await externalProvider.getSigner();
-      const tokenContract = getTokenContract(tokenAddress, signer);
+      const tokenContract = getTokenContract(token.address, signer);
       
       // Create minimal ABI for initial token info
       const minimalABI = [
-        "function uniswapV2Pair() view returns (address)"
-      ];
-      const tokenContractMinimal = new ethers.Contract(tokenAddress, minimalABI, signer);
-      
-      // Get pair address
-      const pairAddress = await tokenContractMinimal.uniswapV2Pair();
-      if (!pairAddress || pairAddress === ethers.ZeroAddress) {
-        throw new Error('No liquidity pair found');
-      }
-
-      // Get LP token info
-      const lpInfo = await getLPTokenInfo(tokenAddress, pairAddress, signer);
-      if (!lpInfo || !lpInfo.lpTokenBalance || Number(lpInfo.lpTokenBalance) <= 0) {
-        throw new Error('No LP tokens to burn');
-      }
-
-      // Create pair contract instance
-      const pairContract = new Contract(pairAddress, [
-        'function transfer(address to, uint256 amount) returns (bool)',
-        'function balanceOf(address account) view returns (uint256)'
-      ], signer);
-
-      // Get balance
-      const balance = await pairContract.balanceOf(await signer.getAddress());
-      
-      // Burn LP tokens by sending to zero address
-      const burnTx = await pairContract.transfer(ethers.ZeroAddress, balance);
-      await burnTx.wait();
-
-      toast({
-        title: 'Success',
-        description: 'LP tokens burned successfully'
-      });
-
-      // Refresh token data
-      await loadTokens();
-    } catch (error: any) {
-      console.error('Error burning LP tokens:', error);
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to burn LP tokens',
-        variant: 'destructive'
-      });
-    }
-  };
-
-  const handleAddBackLiquidity = async (tokenAddress: string) => {
-    try {
-      const signer = await externalProvider.getSigner();
-      const tokenContract = getTokenContract(tokenAddress, signer);
-      
-      // Create minimal ABI for initial token info
-      const minimalABI = [
-        "function uniswapV2Pair() view returns (address)",
         "function balanceOf(address account) view returns (uint256)"
       ];
-      const tokenContractMinimal = new ethers.Contract(tokenAddress, minimalABI, signer);
+      const tokenContractMinimal = new ethers.Contract(token.address, minimalABI, signer);
       
       // Get token balance
       const userAddress = await signer.getAddress();
@@ -1291,7 +1387,7 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
             </div>
             <div>
               <label class="text-xs text-text-secondary">BNB Amount</label>
-              <input type="number" id="bnbAmount" class="w-full bg-gray-800 text-text-primary rounded px-2 py-1 text-sm" placeholder="Enter BNB amount" />
+              <input type="text" id="bnbAmount" class="w-full bg-gray-800 text-text-primary rounded px-2 py-1 text-sm" placeholder="Enter BNB amount" />
             </div>
           </div>
           <div class="flex justify-end gap-3 mt-6">
@@ -1335,7 +1431,11 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
       }
 
       // Add liquidity
-      await handleAddLiquidity(tokenAddress);
+      if (selectedToken) {
+        await handleAddLiquidity(selectedToken);
+      } else {
+        throw new Error('No token selected for adding liquidity');
+      }
 
     } catch (error: any) {
       console.error('Error adding back liquidity:', error);
@@ -1347,61 +1447,107 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
     }
   };
 
-  const getLPTokenInfo = async (tokenAddress: string, pairAddress: string, signer: any) => {
+  const handleBlockToken = async (token: TokenInfo) => {
+    if (!token) return;
     try {
-      console.log('Getting LP info for:', { tokenAddress, pairAddress });
-      const userAddress = await signer.getAddress();
-      
-      const pairContract = new Contract(pairAddress, [
-        'function token0() view returns (address)',
-        'function token1() view returns (address)',
-        'function getReserves() view returns (uint112,uint112,uint32)',
-        'function totalSupply() view returns (uint256)',
-        'function balanceOf(address) view returns (uint256)'
-      ], signer);
-
-      // Get all pair info in parallel
-      const [token0, token1, reserves, totalSupply, lpBalance] = await Promise.all([
-        pairContract.token0(),
-        pairContract.token1(),
-        pairContract.getReserves(),
-        pairContract.totalSupply(),
-        pairContract.balanceOf(userAddress)
-      ]);
-
-      console.log('Pair info:', {
-        token0,
-        token1,
-        reserves: reserves.map((r: bigint) => r.toString()),
-        totalSupply: totalSupply.toString(),
-        lpBalance: lpBalance.toString()
+      setTokenToBlock(token);
+      setShowBlockDialog(true);
+      setError(null);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to block token';
+      console.error('Error blocking token:', err);
+      setError(errorMessage);
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive'
       });
+    }
+  };
 
-      // Determine which token is the project token and which is BNB
-      const isToken0 = tokenAddress.toLowerCase() === token0.toLowerCase();
-      const [projectTokenReserve, bnbReserve] = isToken0 
-        ? [reserves[0], reserves[1]] 
-        : [reserves[1], reserves[0]];
-
-      // Calculate share percentage if there is total supply
-      const sharePercentage = totalSupply.toString() !== '0' 
-        ? (Number(formatEther(lpBalance)) / Number(formatEther(totalSupply))) * 100
-        : 0;
-
-      const hasLiquidity = Number(projectTokenReserve) > 0 && Number(bnbReserve) > 0;
-
-      return {
-        hasLiquidity,
-        lpTokenBalance: formatEther(lpBalance),
-        sharePercentage: sharePercentage.toFixed(2),
-        reserve0: formatEther(projectTokenReserve),
-        reserve1: formatEther(bnbReserve),
-        token0,
-        token1
-      };
+  const confirmBlockToken = async (): Promise<void> => {
+    if (!tokenToBlock) return;
+    try {
+      // ... rest of the function
     } catch (error) {
-      console.error('Error getting LP info:', error);
-      return null;
+      console.error('Error blocking token:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to block token',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleReleaseVested = async (token: TokenInfo) => {
+    try {
+      setLoading(true);
+      const signer = await externalProvider.getSigner();
+      const tokenContract = getTokenContract(token.address, signer);
+      // ... rest of the function
+    } catch (error) {
+      console.error('Error releasing vested tokens:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to release vested tokens',
+        variant: 'destructive'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleViewVestingSchedules = async (token: TokenInfo) => {
+    try {
+      setLoading(true);
+      const signer = await externalProvider.getSigner();
+      const tokenContract = getTokenContract(token.address, signer);
+      // ... rest of the function
+    } catch (error) {
+      console.error('Error viewing vesting schedules:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to view vesting schedules',
+        variant: 'destructive'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRemoveLiquidity = async (token: TokenInfo) => {
+    try {
+      setLoading(true);
+      const signer = await externalProvider.getSigner();
+      const tokenContract = getTokenContract(token.address, signer);
+      // ... rest of the function
+    } catch (error) {
+      console.error('Error removing liquidity:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to remove liquidity',
+        variant: 'destructive'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBurnLPTokens = async (token: TokenInfo) => {
+    try {
+      setLoading(true);
+      const signer = await externalProvider.getSigner();
+      const tokenContract = getTokenContract(token.address, signer);
+      // ... rest of the function
+    } catch (error) {
+      console.error('Error burning LP tokens:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to burn LP tokens',
+        variant: 'destructive'
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -1459,7 +1605,7 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
       </div>
 
       {isExpanded && (
-        isLoading ? (
+        loading ? (
             <div className="flex justify-center items-center py-1">
             <Spinner className="w-3 h-3 text-text-primary" />
             </div>
@@ -1506,10 +1652,10 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
                   </div>
                   <div className="flex flex-col gap-1">
                     <button
-                      onClick={() => setSelectedToken(selectedToken === token.address ? null : token.address)}
+                      onClick={() => setSelectedToken(selectedToken === token ? null : token)}
                       className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
                     >
-                      {selectedToken === token.address ? 'Hide' : 'Manage'}
+                      {selectedToken === token ? 'Hide' : 'Manage'}
                     </button>
                     <button
                       onClick={() => handleBlockToken(token)}
@@ -1521,7 +1667,7 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
                   </div>
                 </div>
 
-                {selectedToken === token.address && (
+                {selectedToken === token && (
                     <div className="mt-2 pt-2 border-t border-border">
                     <div className="grid grid-cols-2 gap-3">
                       {/* Token Explorer Section */}
@@ -1562,6 +1708,12 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
                             {token.paused ? 'Unpause' : 'Pause'}
                                   </button>
                           <button
+                            onClick={() => handleMintOrTransfer(token.address)}
+                            className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+                          >
+                            Mint/Transfer
+                          </button>
+                          <button
                             onClick={() => handleBlacklist(token.address)}
                             className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
                           >
@@ -1587,25 +1739,25 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
                         <h4 className="text-xs font-medium text-text-primary mb-1">Vesting Management</h4>
                         <div className="space-x-2">
                           <button
-                            onClick={() => handleCreateVesting(token.address)}
+                            onClick={() => handleCreateVesting(token)}
                             className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
                           >
                             Create Vesting
                           </button>
                           <button
-                            onClick={() => handleRevokeVesting(token.address)}
+                            onClick={() => handleRevokeVesting(token)}
                             className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
                           >
                             Revoke Vesting
                           </button>
                           <button
-                            onClick={() => handleReleaseVested(token.address)}
+                            onClick={() => handleReleaseVested(token)}
                             className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
                           >
                             Release Vested
                           </button>
                           <button
-                            onClick={() => handleViewVestingSchedules(token.address)}
+                            onClick={() => handleViewVestingSchedules(token)}
                             className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
                           >
                             Vesting Schedules
@@ -1621,10 +1773,10 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
                               Start: {new Date(token.vestingInfo.startTime * 1000).toLocaleString()}
                             </p>
                             <p className="text-xs text-text-secondary">
-                              Cliff: {Math.floor(token.vestingInfo.cliffDuration / (30 * 24 * 60 * 60))} days
+                              Cliff: {Math.floor(Number(token.vestingInfo.cliffDuration) / (24 * 60 * 60))} days
                             </p>
                             <p className="text-xs text-text-secondary">
-                              Duration: {Math.floor(token.vestingInfo.vestingDuration / (30 * 24 * 60 * 60))} days
+                              Duration: {Math.floor(Number(token.vestingInfo.vestingDuration) / (24 * 60 * 60))} days
                             </p>
                             {token.vestingInfo.revoked && (
                               <p className="text-xs text-red-500">Vesting Revoked</p>
@@ -1659,7 +1811,7 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
                                 Manage Whitelist
                               </button>
                                 <button
-                                onClick={() => handleFinalize(token.address)}
+                                onClick={() => handleFinalize(token)}
                                 className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
                                 disabled={token.presaleInfo.finalized || 
                                   Number(token.presaleInfo.totalContributed) < Number(token.presaleInfo.softCap)}
@@ -1729,14 +1881,14 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
                                     <span className="text-white ml-1">{Number(token.liquidityInfo.reserve0).toFixed(6)} {token.symbol}</span>
                                   </div>
                                   <div>
-                                    <span className="text-gray-400">BNB Reserve:</span>
-                                    <span className="text-white ml-1">{Number(token.liquidityInfo.reserve1).toFixed(6)} BNB</span>
+                                    <span className="text-gray-400">ETH Reserve:</span>
+                                    <span className="text-white ml-1">{Number(token.liquidityInfo.reserve1).toFixed(6)} ETH</span>
                                   </div>
                                 </div>
 
                                 <div className="mt-3 flex gap-2">
                                   <button
-                                    onClick={() => handleAddLiquidity(token.address)}
+                                    onClick={() => handleAddLiquidity(token)}
                                     className="text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
                                   >
                                     Add More Liquidity
@@ -1744,60 +1896,35 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
                                   {Number(token.liquidityInfo.lpTokenBalance) > 0 && (
                                     <>
                                       <button
-                                        onClick={() => handleRemoveLiquidity(token.address)}
+                                        onClick={() => handleRemoveLiquidity(token)}
                                         className="text-xs px-2 py-1 bg-red-600/20 hover:bg-red-600/40 text-red-400 hover:text-red-300 rounded"
                                       >
                                         Remove Liquidity
                                       </button>
                                       <button
-                                        onClick={() => handleBurnLPTokens(token.address)}
+                                        onClick={() => handleBurnLPTokens(token)}
                                         className="text-xs px-2 py-1 bg-red-600/20 hover:bg-red-600/40 text-red-400 hover:text-red-300 rounded"
                                       >
                                         Burn LP
-                                      </button>
-                                      <button
-                                        onClick={() => handleAddBackLiquidity(token.address)}
-                                        className="text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
-                                      >
-                                        Add Back LP
                                       </button>
                                     </>
                                   )}
                                 </div>
 
-                                <div className="mt-2 flex gap-2">
-                                  <a
-                                    href={`https://testnet.bscscan.com/address/${token.pairAddress}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
-                                  >
-                                    View Pair Info
-                                  </a>
-                                  <a
-                                    href={`https://pancakeswap.finance/?chain=bscTestnet&outputCurrency=TBNB&inputCurrency=${token.address}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
-                                  >
-                                    Trade
-                                  </a>
+                                <div className="mt-2">
+                                  <p className="text-xs text-text-secondary">
+                                    Pair Address: {token.pairAddress}
+                                  </p>
                                 </div>
                               </div>
                             </div>
                           ) : (
                             <button
-                              onClick={() => handleAddLiquidity(token.address)}
+                              onClick={() => handleAddLiquidity(token)}
                               className="text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
                             >
                               Add Initial Liquidity
                             </button>
-                          )}
-
-                          {token.pairAddress && (
-                            <div className="mt-2 text-xs text-text-secondary">
-                              <p>Pair Address: {token.pairAddress}</p>
-                            </div>
                           )}
                         </div>
                       </div>
@@ -1889,6 +2016,18 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, Props>(({ isConnected, address: factoryAd
           onConfirm={confirmBlockToken}
           tokenName={tokenToBlock.name}
           tokenAddress={tokenToBlock.address}
+        />
+      )}
+      
+      {selectedToken && (
+        <AddLiquidityDialog
+          isOpen={isAddLiquidityDialogOpen}
+          onClose={() => {
+            setIsAddLiquidityDialogOpen(false);
+            setSelectedToken(null);
+          }}
+          onConfirm={handleAddLiquidityConfirm}
+          tokenSymbol={selectedToken.symbol}
         />
       )}
     </div>

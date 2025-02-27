@@ -40,7 +40,7 @@ export const contractAddresses: { [key: number]: ContractAddresses } = {
   97: { // BSC Testnet
     factoryAddress: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V1 || '',
     factoryAddressV2: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V2 || '',
-    factoryAddressV3: '0x822406674Abcf53A7814422AA49756fe69383546',
+    factoryAddressV3: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V3 || '',
     dexListingFactory: process.env.NEXT_PUBLIC_BSCTESTNET_DEX_LISTING_FACTORY_ADDRESS || '',
     dexListingTemplate: process.env.NEXT_PUBLIC_BSCTESTNET_DEX_LISTING_TEMPLATE_ADDRESS || ''
   },
@@ -75,21 +75,44 @@ function getNetworkName(chainId: number): string {
 }
 
 export function getNetworkContractAddress(chainId: number, contractType: string): string {
+  // Add more detailed debugging
+  console.log('Detailed Contract Resolution:', {
+    chainId,
+    contractType,
+    directEnvValue: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V3,
+    fromContractAddresses: contractAddresses[chainId]?.factoryAddressV3,
+    fromFactoryAddresses: FACTORY_ADDRESSES.v3[chainId],
+    allEnvVars: Object.keys(process.env).filter(key => key.includes('FACTORY')),
+    allContractAddresses: contractAddresses,
+    allFactoryAddresses: FACTORY_ADDRESSES
+  });
+
+  // Check if we're in development
+  console.log('Environment Check:', {
+    NODE_ENV: process.env.NODE_ENV,
+    NEXT_PUBLIC_VERCEL_ENV: process.env.NEXT_PUBLIC_VERCEL_ENV,
+    VERCEL_ENV: process.env.VERCEL_ENV
+  });
+  
   const networkName = getNetworkName(chainId).toUpperCase();
   
-  // Log input parameters
-  console.log('Getting contract address for:', {
+  // Enhanced debugging
+  console.log('Environment Variables Debug:', {
+    NODE_ENV: process.env.NODE_ENV,
+    allEnvKeys: Object.keys(process.env).filter(key => key.includes('NEXT_PUBLIC')),
+    sepoliaV3Direct: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V3,
     chainId,
     networkName,
     contractType,
-    env: process.env
   });
   
-  // Special handling for BSC Testnet V3 Factory
-  if (chainId === 97 && contractType === 'factoryAddressV3') {
-    const address = '0x822406674Abcf53A7814422AA49756fe69383546';
-    console.log('Using hardcoded BSC Testnet V3 Factory address:', address);
-    return address;
+  // For Sepolia V3 factory, use direct access if dynamic access fails
+  if (chainId === 11155111 && contractType.toLowerCase().includes('v3')) {
+    const directValue = process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V3;
+    if (directValue) {
+      console.log('Using direct access for Sepolia V3:', directValue);
+      return directValue;
+    }
   }
   
   let envKey = '';
@@ -110,12 +133,12 @@ export function getNetworkContractAddress(chainId: number, contractType: string)
   // Get the value from environment
   const value = process.env[envKey];
   
-  // Log the environment variable details
-  console.log('Environment variable details:', {
+  // Enhanced logging for debugging
+  console.log('Factory lookup details:', {
     envKey,
     value,
     exists: envKey in process.env,
-    allKeys: Object.keys(process.env).filter(key => key.includes(networkName))
+    directAccess: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V3
   });
   
   // Return the value directly for dexListingFactory
@@ -136,6 +159,10 @@ export function getNetworkContractAddress(chainId: number, contractType: string)
     case 'factoryV3':
     case 'factoryAddressV3':
     case 'FACTORY_ADDRESS_V3':
+      // Try direct access for Sepolia V3 as a fallback
+      if (chainId === 11155111) {
+        return value || process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V3 || '';
+      }
       return value || process.env[`NEXT_PUBLIC_${networkName}_FACTORY_ADDRESS_V3`] || '';
     case 'dexListingTemplate':
       return process.env[`NEXT_PUBLIC_${networkName}_DEX_LISTING_TEMPLATE_ADDRESS`] || '';
@@ -171,7 +198,7 @@ export const FACTORY_ADDRESSES: Record<string, Record<number, string>> = {
     [ChainId.ARBITRUM_SEPOLIA]: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V3 || '',
     [ChainId.OPTIMISM_SEPOLIA]: process.env.NEXT_PUBLIC_OPSEPOLIA_FACTORY_ADDRESS_V3 || '',
     [ChainId.POLYGON_AMOY]: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V3 || '',
-    [ChainId.BSC_TESTNET]: '0x822406674Abcf53A7814422AA49756fe69383546',
+    [ChainId.BSC_TESTNET]: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V3 || '',
     [ChainId.BSC_MAINNET]: process.env.NEXT_PUBLIC_BSC_FACTORY_ADDRESS_V3 || '',
   },
   dexListing: {

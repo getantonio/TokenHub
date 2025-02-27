@@ -1,5 +1,11 @@
 const path = require('path');
 
+// Debug environment variables
+console.log('Next.js Config Environment Variables:', {
+  NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V3: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V3,
+  ENV_KEYS: Object.keys(process.env).filter(key => key.includes('FACTORY'))
+});
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -41,10 +47,7 @@ const nextConfig = {
       loader: 'ignore-loader',
     });
     return config;
-  },
-  env: {
-    NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V3: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V3,
-  },
+  }
 }
 
 module.exports = nextConfig
