@@ -1642,7 +1642,21 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
   const confirmBlockToken = async (): Promise<void> => {
     if (!tokenToBlock) return;
     try {
-      // ... rest of the function
+      // Save the token address to blocked tokens list
+      saveBlockedToken(tokenToBlock.address);
+      
+      // Remove token from the state
+      setTokens(tokens.filter(t => t.address !== tokenToBlock.address));
+      
+      // Close dialog and reset state
+      setShowBlockDialog(false);
+      setTokenToBlock(null);
+      
+      toast({
+        title: 'Token Blocked',
+        description: `Token ${tokenToBlock.name} has been blocked and won't be shown anymore.`,
+        variant: 'default'
+      });
     } catch (error) {
       console.error('Error blocking token:', error);
       toast({

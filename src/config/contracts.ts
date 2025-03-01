@@ -134,6 +134,9 @@ export function getNetworkContractAddress(chainId: number, contractType: string)
       console.log('Using BSC Testnet V3 address:', bscTestnetV3);
       return bscTestnetV3;
     }
+    
+    // Fallback value for BSC Testnet V3
+    return '0x631B224FeA79e2af00D8A891e9e21E7a9f63CfC7';
   }
   
   // Return the value directly for dexListingFactory
@@ -158,11 +161,22 @@ export function getNetworkContractAddress(chainId: number, contractType: string)
       if (chainId === 11155111) {
         const sepoliaV3 = process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V3;
         console.log('Using Sepolia V3 address:', sepoliaV3);
-        return sepoliaV3 || '';
+        // Provide fallback for Sepolia V3
+        return sepoliaV3 || '0x704d0B1237373D466bc22635c076456f3afD7C11';
       }
       // Direct check for BSC Testnet V3
       if (chainId === 97) {
-        return process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V3 || '';
+        return process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V3 || '0x631B224FeA79e2af00D8A891e9e21E7a9f63CfC7';
+      }
+      // Fallbacks for other networks
+      if (chainId === 421614) { // Arbitrum Sepolia
+        return process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V3 || '0x4768734d10DCdfB8131eF6b942627557bDd754Eb';
+      }
+      if (chainId === 11155420) { // Optimism Sepolia
+        return process.env.NEXT_PUBLIC_OPSEPOLIA_FACTORY_ADDRESS_V3 || '0x4768734d10DCdfB8131eF6b942627557bDd754Eb';
+      }
+      if (chainId === 80002) { // Polygon Amoy
+        return process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V3 || '0x631B224FeA79e2af00D8A891e9e21E7a9f63CfC7';
       }
       return process.env[`NEXT_PUBLIC_${networkName}_FACTORY_ADDRESS_V3`] || '';
     case 'dexListingTemplate':
