@@ -1343,20 +1343,114 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
         const approveTx = await tokenContract.approve(routerAddr, tokenAmountBN);
         await approveTx.wait();
         console.log('Router approval complete');
-        const tx = await tokenContract.addLiquidity(
-            tokenAmountBN,
-            ethAmountBN,
-            {
-                value: ethAmountBN,
-                gasLimit: 5000000 // Increased gas limit to be safe
+        
+        // Call the addLiquidity function with the correct parameter structure
+        // The contract function expects (tokenAmount, ethAmount) with value in the tx options
+        try {
+            // OPTION 1: Use the token contract's addLiquidity function
+            console.log('Using token contract method: addLiquidity');
+            
+            // Check for the existence of the addLiquidity function on the contract
+            const isAddLiquiditySupported = await tokenContract.hasFunction?.("addLiquidity") || 
+                tokenContract.interface?.hasFunction?.("addLiquidity") || 
+                Object.keys(tokenContract.functions).includes("addLiquidity(uint256,uint256)");
+                
+            console.log("addLiquidity function supported by contract:", isAddLiquiditySupported);
+            
+            // Use a shorter deadline (5 minutes instead of 20)
+            const deadline = Math.floor(Date.now() / 1000) + 300;
+            
+            // Try with explicit parameter names to avoid confusion
+            const tx = await tokenContract.addLiquidity(
+                tokenAmountBN,
+                ethAmountBN,
+                {
+                    value: ethAmountBN,
+                    gasLimit: 5000000 // Increased gas limit to be safe
+                }
+            );
+            console.log('Transaction sent:', tx.hash);
+            
+            // Wait for confirmation
+            const receipt = await tx.wait();
+            console.log('Transaction confirmed:', receipt);
+        } catch (error) {
+            console.error('Error using token contract addLiquidity:', error);
+            
+            // OPTION 2: Try using the router directly if option 1 fails
+            console.log('Trying alternative approach using router directly...');
+            
+            try {
+                // Fresh approval to ensure the router can spend the tokens
+                const freshApprovalTx = await tokenContract.approve(routerAddr, ethers.MaxUint256);
+                await freshApprovalTx.wait();
+                console.log('Renewed router approval complete with max allowance');
+                
+                // Create router contract with full function signature to ensure correct encoding
+                const routerContract = new Contract(
+                    routerAddr,
+                    [
+                        "function addLiquidityETH(address token, uint256 amountTokenDesired, uint256 amountTokenMin, uint256 amountETHMin, address to, uint256 deadline) external payable returns (uint256 amountToken, uint256 amountETH, uint256 liquidity)",
+                        "function WETH() external pure returns (address)"
+                    ],
+                    signer
+                );
+                
+                // Get WETH address from router to verify we're using the right router
+                const wethAddress = await routerContract.WETH();
+                console.log('WETH address from router:', wethAddress);
+                
+                // Use a shorter deadline (5 minutes)
+                const deadline = Math.floor(Date.now() / 1000) + 300;
+                
+                // Try with very low (but not zero) min amounts
+                const minTokenAmount = BigInt(1);  // Accept any non-zero amount of tokens
+                const minETHAmount = BigInt(1);    // Accept any non-zero amount of ETH
+                
+                console.log('Sending router transaction with params:', {
+                    token: selectedToken.address,
+                    amountTokenDesired: formatEther(tokenAmountBN),
+                    amountTokenMin: formatEther(minTokenAmount),
+                    amountETHMin: formatEther(minETHAmount),
+                    to: userAddress,
+                    deadline: deadline,
+                    value: formatEther(ethAmountBN)
+                });
+                
+                const tx = await routerContract.addLiquidityETH(
+                    selectedToken.address,
+                    tokenAmountBN,
+                    minTokenAmount,
+                    minETHAmount,
+                    userAddress,
+                    deadline,
+                    { 
+                        value: ethAmountBN,
+                        gasLimit: 6000000  // Increased gas limit even more for safety
+                    }
+                );
+                
+                console.log('Router transaction sent:', tx.hash);
+                const receipt = await tx.wait();
+                console.log('Router transaction confirmed:', receipt);
+            } catch (routerError: unknown) {
+                console.error('Error using router directly:', routerError);
+                
+                // Get error message safely with type checking
+                let errorMessage = 'unknown error';
+                if (routerError instanceof Error) {
+                    errorMessage = routerError.message;
+                } else if (typeof routerError === 'string') {
+                    errorMessage = routerError;
+                } else if (routerError && typeof routerError === 'object' && 'message' in routerError) {
+                    errorMessage = String((routerError as { message: unknown }).message);
+                }
+                
+                // If both methods fail, throw a more descriptive error
+                throw new Error(`Failed to add liquidity: ${errorMessage}`);
             }
-        );
-        console.log('Transaction sent:', tx.hash);
-        
-        // Wait for confirmation
-        const receipt = await tx.wait();
-        console.log('Transaction confirmed:', receipt);
-        
+        }
+
         // Show success message
         toast({
             title: 'Success',
