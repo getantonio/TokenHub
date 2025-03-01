@@ -812,17 +812,19 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
       };
     }
 
-    return {
+    const validationMessages = {
       category: 'Presale Configuration',
-      status: 'success',
+      status: 'success' as const,
       message: 'Valid presale configuration',
       details: [
-        `Soft Cap: ${softCap} {getNetworkCurrency(chainId)}`,
-        `Hard Cap: ${hardCap} {getNetworkCurrency(chainId)}`,
-        `Min Contribution: ${minContribution} {getNetworkCurrency(chainId)}`,
-        `Max Contribution: ${maxContribution} {getNetworkCurrency(chainId)}`
+        `Soft Cap: ${softCap} ${chainId ? getNetworkCurrency(chainId) : 'ETH'}`,
+        `Hard Cap: ${hardCap} ${chainId ? getNetworkCurrency(chainId) : 'ETH'}`,
+        `Min Contribution: ${minContribution} ${chainId ? getNetworkCurrency(chainId) : 'ETH'}`,
+        `Max Contribution: ${maxContribution} ${chainId ? getNetworkCurrency(chainId) : 'ETH'}`
       ]
     };
+
+    return validationMessages;
   };
 
   const validateVesting = (): ValidationResult => {
@@ -1241,7 +1243,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                   name="presaleRate"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-white">Presale Rate (Tokens per {getNetworkCurrency(chainId)})</FormLabel>
+                      <FormLabel className="text-white">Presale Rate (Tokens per {chainId ? getNetworkCurrency(chainId) : 'ETH'})</FormLabel>
                       <FormControl>
                         <Input
                           type="number"
@@ -1252,7 +1254,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                         />
                       </FormControl>
                       <FormDescription className="text-gray-400 text-xs">
-                        Number of tokens per {getNetworkCurrency(chainId)} in presale
+                        Number of tokens per {chainId ? getNetworkCurrency(chainId) : 'ETH'} in presale
                       </FormDescription>
                     </FormItem>
                   )}
@@ -1263,7 +1265,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                   name="softCap"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-white">Soft Cap ({getNetworkCurrency(chainId)})</FormLabel>
+                      <FormLabel className="text-white">Soft Cap ({chainId ? getNetworkCurrency(chainId) : 'ETH'})</FormLabel>
                       <FormControl>
                         <Input
                           type="number"
@@ -1274,7 +1276,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                         />
                       </FormControl>
                       <FormDescription className="text-gray-400 text-xs">
-                        Minimum amount to raise
+                        Minimum amount of {chainId ? getNetworkCurrency(chainId) : 'ETH'} to raise
                       </FormDescription>
                     </FormItem>
                   )}
@@ -1285,7 +1287,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                   name="hardCap"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-white">Hard Cap ({getNetworkCurrency(chainId)})</FormLabel>
+                      <FormLabel className="text-white">Hard Cap ({chainId ? getNetworkCurrency(chainId) : 'ETH'})</FormLabel>
                       <FormControl>
                         <Input
                           type="number"
@@ -1296,7 +1298,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                         />
                       </FormControl>
                       <FormDescription className="text-gray-400 text-xs">
-                        Maximum amount to raise
+                        Maximum amount of {chainId ? getNetworkCurrency(chainId) : 'ETH'} to raise
                       </FormDescription>
                     </FormItem>
                   )}
@@ -1307,7 +1309,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                   name="minContribution"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-white">Min Contribution ({getNetworkCurrency(chainId)})</FormLabel>
+                      <FormLabel className="text-white">Min Contribution ({chainId ? getNetworkCurrency(chainId) : 'ETH'})</FormLabel>
                       <FormControl>
                         <Input
                           type="number"
@@ -1318,7 +1320,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                         />
                       </FormControl>
                       <FormDescription className="text-gray-400 text-xs">
-                        Minimum contribution per wallet
+                        Minimum amount of {chainId ? getNetworkCurrency(chainId) : 'ETH'} that can be invested
                       </FormDescription>
                     </FormItem>
                   )}
@@ -1329,7 +1331,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                   name="maxContribution"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-white">Max Contribution ({getNetworkCurrency(chainId)})</FormLabel>
+                      <FormLabel className="text-white">Max Contribution ({chainId ? getNetworkCurrency(chainId) : 'ETH'})</FormLabel>
                       <FormControl>
                         <Input
                           type="number"
@@ -1340,7 +1342,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                         />
                       </FormControl>
                       <FormDescription className="text-gray-400 text-xs">
-                        Maximum contribution per wallet
+                        Maximum amount of {chainId ? getNetworkCurrency(chainId) : 'ETH'} that can be invested
                       </FormDescription>
                     </FormItem>
                   )}
@@ -1475,7 +1477,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                     <div className="grid grid-cols-2 gap-3">
                       <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <label className="text-xs text-gray-400">Soft Cap ({getNetworkCurrency(chainId)})</label>
+                          <label className="text-xs text-gray-400">Soft Cap ({chainId ? getNetworkCurrency(chainId) : 'ETH'})</label>
                           <Input
                             {...form.register(`multiPresaleConfig.presales.${index}.softCap`)}
                             type="number"
@@ -1484,7 +1486,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                           />
                         </div>
                         <div>
-                          <label className="text-xs text-gray-400">Hard Cap ({getNetworkCurrency(chainId)})</label>
+                          <label className="text-xs text-gray-400">Hard Cap ({chainId ? getNetworkCurrency(chainId) : 'ETH'})</label>
                           <Input
                             {...form.register(`multiPresaleConfig.presales.${index}.hardCap`)}
                             type="number"
@@ -1495,7 +1497,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <label className="text-xs text-gray-400">Rate (Tokens per {getNetworkCurrency(chainId)})</label>
+                          <label className="text-xs text-gray-400">Rate (Tokens per {chainId ? getNetworkCurrency(chainId) : 'ETH'})</label>
                           <Input
                             {...form.register(`multiPresaleConfig.presales.${index}.presaleRate`)}
                             type="number"

@@ -672,13 +672,19 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
     console.log('TCAP_v3 useEffect triggered with:', {
       isConnected,
       factoryAddress,
+      chainId,
       hasProvider: !!externalProvider
     });
     
     if (isConnected && factoryAddress && externalProvider) {
+      // Load tokens initially, but not on every network change
+      // The user can click the refresh button to reload after network changes
       loadTokens();
     }
   }, [isConnected, factoryAddress, externalProvider]);
+  
+  // Don't include chainId in the dependency array to prevent automatic reload on network changes
+  // which can cause errors if the page doesn't fully reload
 
   const getTokenContract = (tokenAddress: string, signer: any) => {
     return new Contract(tokenAddress, TokenV3ABI.abi, signer);
@@ -707,6 +713,8 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
       console.log('TCAP_v3 loadTokens: Starting token load');
       setLoading(true);
 
+      // Factory address validation
+
       const signer = await externalProvider.getSigner();
       const userAddress = await signer.getAddress();
       
@@ -714,26 +722,80 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
         throw new Error('Factory address is not defined');
       }
 
+      // Validate we're on the correct network - always use the network from the provider
+      let signerChainId: number;
+      try {
+        const network = await signer.provider.getNetwork();
+        signerChainId = Number(network.chainId);
+        
+        // If the network has changed since component mounted
+        if (signerChainId !== chainId) {
+          console.log(`TCAP_v3 loadTokens: Network changed from ${chainId} to ${signerChainId}`);
+          toast({
+            title: 'Network Changed',
+            description: 'Please refresh the page to sync with your current network',
+            variant: 'default',
+          });
+          setLoading(false);
+          return;
+        }
+      } catch (error) {
+        console.error('TCAP_v3 loadTokens: Error getting network:', error);
+        toast({
+          title: 'Network Error',
+          description: 'Unable to determine current network. Please refresh the page.',
+          variant: 'destructive',
+        });
+        setLoading(false);
+        return;
+      }
+      
       console.log('TCAP_v3 loadTokens: Using factory address:', {
         factoryAddress,
-        chainId,
+        chainId: signerChainId,
         userAddress,
-        hasProvider: !!externalProvider,
-        signerNetwork: await signer.provider.getNetwork()
+        hasProvider: !!externalProvider
       });
 
-      const factory = new ethers.Contract(factoryAddress, [
-        "function getUserCreatedTokens(address) view returns (address[])",
-        "function deploymentFee() view returns (uint256)",
-        "function feeRecipient() view returns (address)",
-        "function uniswapV2Router() view returns (address)"
-      ], signer);
-      
-      console.log('TCAP_v3 loadTokens: Getting user created tokens for:', userAddress);
-      const deployedTokens = await factory.getUserCreatedTokens(userAddress);
-      console.log('TCAP_v3 loadTokens: Deployed tokens:', deployedTokens);
-
       const blockedTokens = getBlockedTokens();
+      let deployedTokens: string[] = [];
+      
+      try {
+        // Create contract interface with BOTH function names that might be used
+        const factory = new ethers.Contract(factoryAddress, [
+          "function getUserCreatedTokens(address) view returns (address[])",
+          "function getUserTokens(address) view returns (address[])",  // This is the actual function name in the contract
+          "function deploymentFee() view returns (uint256)",
+          "function feeRecipient() view returns (address)",
+          "function uniswapV2Router() view returns (address)"
+        ], signer);
+        
+        console.log('TCAP_v3 loadTokens: Getting user created tokens for:', userAddress);
+        
+        // Try both function names (the contract in Sepolia uses getUserTokens instead of getUserCreatedTokens)
+        try {
+          deployedTokens = await factory.getUserCreatedTokens(userAddress);
+          console.log('TCAP_v3 loadTokens: Successfully called getUserCreatedTokens');
+        } catch (e) {
+          console.log('TCAP_v3 loadTokens: getUserCreatedTokens failed, trying getUserTokens instead');
+          deployedTokens = await factory.getUserTokens(userAddress);
+          console.log('TCAP_v3 loadTokens: Successfully called getUserTokens');
+        }
+        
+        console.log('TCAP_v3 loadTokens: Deployed tokens:', deployedTokens);
+      } catch (contractError) {
+        console.error('Error calling getUserCreatedTokens:', contractError);
+        
+        toast({
+          title: 'Contract Error',
+          description: 'Failed to load tokens from the factory contract. Please try again later.',
+          variant: 'destructive',
+        });
+        
+        setTokens([]);
+        setLoading(false);
+        return;
+      }
       
       const tokenPromises = deployedTokens
         .filter((token: string) => !blockedTokens.includes(token))
@@ -782,16 +844,26 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
           }
         });
 
-      const loadedTokens = (await Promise.all(tokenPromises))
-        .filter((token): token is TokenInfo => token !== null)
-        .sort((a, b) => {
-          const timeA = a.createdAt || 0;
-          const timeB = b.createdAt || 0;
-          return timeB - timeA;
-        });
+      // Process token results
+      const results = await Promise.all(tokenPromises);
+      const validTokens: TokenInfo[] = [];
+      
+      // Filter and convert to TokenInfo array
+      for (const token of results) {
+        if (token !== null) {
+          validTokens.push(token as TokenInfo);
+        }
+      }
+      
+      // Sort by creation time
+      validTokens.sort((a, b) => {
+        const timeA = a.createdAt || 0;
+        const timeB = b.createdAt || 0;
+        return timeB - timeA;
+      });
 
-      console.log('TCAP_v3 loadTokens: Successfully loaded tokens:', loadedTokens);
-      setTokens(loadedTokens);
+      console.log('TCAP_v3 loadTokens: Successfully loaded tokens:', validTokens);
+      setTokens(validTokens);
     } catch (error: any) {
       console.error('TCAP_v3 Error loading tokens:', error);
       toast({
@@ -1232,50 +1304,51 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
         // Set deadline to 20 minutes from now
         const deadline = Math.floor(Date.now() / 1000) + 1200;
 
-        // First approve the router to spend tokens
-        console.log('Approving router...');
-        const approveTx = await tokenContract.approve(routerAddress, tokenAmountBN);
-        await approveTx.wait();
-        console.log('Router approved');
-
-        // Estimate gas
-        console.log('Estimating gas...');
+        console.log('Calling token contract addLiquidity function...');
         console.log('Transaction parameters:', {
-            token: selectedToken.address,
-            amountTokenDesired: tokenAmountBN.toString(),
-            amountTokenMin: minTokenAmount.toString(),
-            amountETHMin: minEthAmount.toString(),
-            to: userAddress,
-            deadline,
+            tokenAmount: tokenAmountBN.toString(),
+            ethAmount: ethAmountBN.toString(),
             value: ethAmountBN.toString()
         });
 
-        const gasEstimate = await routerContract.addLiquidityETH.estimateGas(
-            selectedToken.address,
-            tokenAmountBN,
-            minTokenAmount,
-            minEthAmount,
-            userAddress,
-            deadline,
-            { value: ethAmountBN }
-        );
-        console.log('Estimated gas:', gasEstimate.toString());
-        
-        // Add 20% buffer to gas estimate
-        const gasLimit = (gasEstimate * BigInt(120)) / BigInt(100);
-
-        // Send transaction
+        // Use the token contract's addLiquidity function with properly encoded arguments
         console.log('Sending transaction...');
-        const tx = await routerContract.addLiquidityETH(
-            selectedToken.address,
+        
+        // Get contract information
+        console.log('Getting contract information...');
+        const [remainingLiqAlloc, tokenBalance, routerAddr] = await Promise.all([
+            tokenContract.remainingLiquidityAllocation(),
+            tokenContract.balanceOf(selectedToken.address),
+            tokenContract.uniswapV2Router()
+        ]);
+        
+        console.log('Contract details:', {
+            remainingLiquidityAllocation: remainingLiqAlloc.toString(),
+            tokenBalance: tokenBalance.toString(),
+            routerAddress: routerAddr
+        });
+        
+        // Check if contract has the needed tokens
+        if (BigInt(tokenBalance.toString()) < BigInt(tokenAmountBN.toString())) {
+            throw new Error(`Contract doesn't have enough tokens. Has: ${formatEther(tokenBalance)} Needs: ${formatEther(tokenAmountBN)}`);
+        }
+        
+        // Check if within remaining allocation
+        if (BigInt(remainingLiqAlloc.toString()) < BigInt(tokenAmountBN.toString())) {
+            throw new Error(`Amount exceeds remaining liquidity allocation. Max: ${formatEther(remainingLiqAlloc)}`);
+        }
+        
+        // First approve the router directly (which may be needed in some implementations)
+        console.log('Approving router to spend tokens...');
+        const approveTx = await tokenContract.approve(routerAddr, tokenAmountBN);
+        await approveTx.wait();
+        console.log('Router approval complete');
+        const tx = await tokenContract.addLiquidity(
             tokenAmountBN,
-            minTokenAmount,
-            minEthAmount,
-            userAddress,
-            deadline,
-            { 
+            ethAmountBN,
+            {
                 value: ethAmountBN,
-                gasLimit
+                gasLimit: 5000000 // Increased gas limit to be safe
             }
         );
         console.log('Transaction sent:', tx.hash);

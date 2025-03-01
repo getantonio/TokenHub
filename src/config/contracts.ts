@@ -77,6 +77,18 @@ function getNetworkName(chainId: number): string {
 export function getNetworkContractAddress(chainId: number, contractType: string): string {
   const networkName = getNetworkName(chainId).toUpperCase();
   
+  // Enhanced debugging for Sepolia
+  if (chainId === 11155111) {
+    console.log('Sepolia Contract Resolution:', {
+      chainId,
+      networkName,
+      contractType,
+      sepoliaV3Direct: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V3,
+      allEnvKeys: Object.keys(process.env).filter(key => key.includes('SEPOLIA')),
+      allFactoryKeys: Object.keys(process.env).filter(key => key.includes('FACTORY')),
+    });
+  }
+  
   // Enhanced debugging for BSC Testnet
   if (chainId === 97) {
     console.log('BSC Testnet Contract Resolution:', {
@@ -142,6 +154,12 @@ export function getNetworkContractAddress(chainId: number, contractType: string)
     case 'factoryV3':
     case 'factoryAddressV3':
     case 'FACTORY_ADDRESS_V3':
+      // Direct check for Sepolia V3
+      if (chainId === 11155111) {
+        const sepoliaV3 = process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V3;
+        console.log('Using Sepolia V3 address:', sepoliaV3);
+        return sepoliaV3 || '';
+      }
       // Direct check for BSC Testnet V3
       if (chainId === 97) {
         return process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V3 || '';
