@@ -34,6 +34,27 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       }
     }
 
+    // Add error event listener for Ethereum provider if available
+    if (typeof window !== 'undefined' && window.ethereum) {
+      const handleEthereumError = (error: any) => {
+        console.error('Ethereum provider error:', error);
+      };
+      
+      window.ethereum.on('error', handleEthereumError);
+      
+      // Also listen for chain change events
+      const handleChainChanged = (chainId: string) => {
+        console.log('Chain changed to:', parseInt(chainId, 16));
+      };
+      
+      window.ethereum.on('chainChanged', handleChainChanged);
+      
+      return () => {
+        window.ethereum?.removeListener('error', handleEthereumError);
+        window.ethereum?.removeListener('chainChanged', handleChainChanged);
+      };
+    }
+
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);

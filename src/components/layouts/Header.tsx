@@ -3,12 +3,50 @@ import { useNetwork } from '@contexts/NetworkContext';
 import Link from 'next/link';
 import { cn } from '@utils/cn';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { NetworkSwitcher } from '@/components/common/NetworkSwitcher';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 
 interface HeaderProps {
   className?: string;
 }
 
 export function Header({ className }: HeaderProps) {
+  const [networkSwitchFailed, setNetworkSwitchFailed] = useState(false);
+  const { chainId } = useNetwork();
+
+  // Add event listener for network switch failures
+  useEffect(() => {
+    const checkWalletErrors = () => {
+      if (window.ethereum) {
+        const originalRequest = window.ethereum.request;
+        
+        // Override the request method to catch network switching errors
+        window.ethereum.request = async function(...args: any[]) {
+          try {
+            const result = await originalRequest.apply(this, args);
+            
+            // If this was a network switch attempt, reset the failure state
+            if (args[0]?.method === 'wallet_switchEthereumChain') {
+              setNetworkSwitchFailed(false);
+            }
+            
+            return result;
+          } catch (error: any) {
+            // Track network switching failures
+            if (args[0]?.method === 'wallet_switchEthereumChain' || 
+                args[0]?.method === 'wallet_addEthereumChain') {
+              console.error('Network switch error:', error);
+              setNetworkSwitchFailed(true);
+            }
+            throw error;
+          }
+        };
+      }
+    };
+    
+    checkWalletErrors();
+  }, []);
+
   return (
     <header className={cn('relative z-50 bg-background-secondary border-b border-border py-1', className)}>
       <nav className="container mx-auto px-4">
@@ -21,6 +59,29 @@ export function Header({ className }: HeaderProps) {
           </div>
 
           <div className="flex items-center space-x-4">
+            {/* Network troubleshooter dialog */}
+            {networkSwitchFailed && (
+              <Dialog>
+                <DialogTrigger asChild>
+                  <button className="px-3 py-1.5 text-sm font-medium bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-md transition-colors duration-200">
+                    Network Issues?
+                  </button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[425px] bg-gray-900 text-white border-gray-700">
+                  <DialogHeader>
+                    <DialogTitle className="text-white">Switch Network</DialogTitle>
+                  </DialogHeader>
+                  <div className="py-4">
+                    <p className="mb-4 text-sm text-gray-300">
+                      If you're having trouble switching networks with your wallet, you can try using
+                      this alternative network selector.
+                    </p>
+                    <NetworkSwitcher />
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
+
             <ConnectButton.Custom>
               {({
                 account,
@@ -59,7 +120,10 @@ export function Header({ className }: HeaderProps) {
                       return (
                         <div className="flex items-center gap-3">
                           <button
-                            onClick={openChainModal}
+                            onClick={() => {
+                              console.log('Opening chain modal, current chain:', chain);
+                              openChainModal();
+                            }}
                             className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 rounded-md transition-colors duration-200"
                           >
                             {chain.hasIcon && chain.iconUrl && (

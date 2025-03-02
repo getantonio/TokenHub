@@ -24,6 +24,23 @@ console.log('Available networks:', {
   projectId: projectId.slice(0, 6) + '...' // Only log part of the project ID for security
 });
 
+// Add wallet detection helper
+const detectWallet = () => {
+  if (typeof window !== 'undefined') {
+    if (window.ethereum) {
+      console.log('Detected wallet provider:', {
+        isMetaMask: window.ethereum.isMetaMask,
+        isCoinbaseWallet: window.ethereum.isCoinbaseWallet,
+      });
+    } else {
+      console.log('No wallet provider detected in window.ethereum');
+    }
+  }
+};
+
+// Call detection on load
+setTimeout(detectWallet, 1000);
+
 // Customize Arbitrum Sepolia settings
 const customArbitrumSepolia = {
   ...arbitrumSepolia,

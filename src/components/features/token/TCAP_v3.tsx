@@ -116,7 +116,15 @@ function BlockDialog({ isOpen, onClose, onConfirm, tokenName, tokenAddress }: Bl
   );
 }
 
-function AddLiquidityDialog({ isOpen, onClose, onConfirm, tokenSymbol }: AddLiquidityDialog) {
+interface AddLiquidityDialog {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: (tokenAmount: string, ethAmount: string) => void;
+  tokenSymbol: string;
+  tokenTotalSupply?: string;
+}
+
+function AddLiquidityDialog({ isOpen, onClose, onConfirm, tokenSymbol, tokenTotalSupply }: AddLiquidityDialog) {
   const [tokenAmount, setTokenAmount] = useState('');
   const [ethAmount, setEthAmount] = useState('');
 
@@ -148,55 +156,80 @@ function AddLiquidityDialog({ isOpen, onClose, onConfirm, tokenSymbol }: AddLiqu
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent>
         <DialogTitle>Add Liquidity</DialogTitle>
-        <DialogDescription>
+        <DialogDescription className="text-gray-300">
           Enter the amount of {tokenSymbol} tokens and ETH you want to add to the liquidity pool.
         </DialogDescription>
         <div className="space-y-4 mt-4">
           <div>
-            <Label htmlFor="tokenAmount">Token Amount ({tokenSymbol})</Label>
+            <Label htmlFor="tokenAmount" className="text-gray-200">Token Amount ({tokenSymbol})</Label>
             <Input
               id="tokenAmount"
               type="text"
               value={tokenAmount}
               onChange={(e) => setTokenAmount(e.target.value)}
               placeholder="Enter token amount"
+              className="text-gray-200"
             />
           </div>
           <div>
-            <Label htmlFor="ethAmount">ETH Amount</Label>
+            <Label htmlFor="ethAmount" className="text-gray-200">ETH Amount</Label>
             <Input
               id="ethAmount"
               type="text"
               value={ethAmount}
               onChange={(e) => setEthAmount(e.target.value)}
               placeholder="Enter ETH amount"
+              className="text-gray-200"
             />
           </div>
 
-          {/* Price Calculator Section */}
-          {(tokenAmount && ethAmount) && (
-            <div className="mt-4 p-4 bg-gray-800 rounded-lg">
-              <h4 className="text-sm font-medium text-text-primary mb-3">Price Information</h4>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Initial Token Price:</span>
-                  <span className="text-white">{tokenPrice ? `${tokenPrice.toFixed(8)} ETH per ${tokenSymbol}` : '-'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Tokens per ETH:</span>
-                  <span className="text-white">{tokensPerEth ? `${tokensPerEth.toFixed(2)} ${tokenSymbol}` : '-'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Total Value:</span>
-                  <span className="text-white">{ethAmount ? `${ethAmount} ETH` : '-'}</span>
-                </div>
+          {/* Enhanced Price Calculator Section */}
+          <div className="mt-4 p-4 bg-gray-800 rounded-lg">
+            <h4 className="text-sm font-medium text-gray-200 mb-3">Liquidity Price Calculator</h4>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-400">Initial Token Price:</span>
+                <span className="text-gray-200">{tokenPrice ? `${tokenPrice.toFixed(8)} ETH per ${tokenSymbol}` : '-'}</span>
               </div>
-              <div className="mt-3 text-xs text-gray-400">
-                <p>• This will set the initial trading price for your token</p>
-                <p>• Higher liquidity means less price impact from trades</p>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Tokens per ETH:</span>
+                <span className="text-gray-200">{tokensPerEth ? `${tokensPerEth.toFixed(2)} ${tokenSymbol}` : '-'}</span>
               </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">ETH per Token:</span>
+                <span className="text-gray-200">{tokenPrice ? `${tokenPrice.toFixed(8)} ETH` : '-'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Total Value:</span>
+                <span className="text-gray-200">{ethAmount ? `${ethAmount} ETH` : '-'}</span>
+              </div>
+              {tokenAmount && ethAmount && (
+                <div className="mt-2 pt-2 border-t border-gray-700">
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Market Cap (Est.):</span>
+                    <span className="text-gray-200">
+                      {tokenPrice && tokenTotalSupply 
+                        ? `${(Number(tokenTotalSupply) / 1e18 * tokenPrice).toFixed(4)} ETH` 
+                        : '-'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Price Impact (1 ETH):</span>
+                    <span className="text-gray-200">
+                      {ethAmount && tokenAmount 
+                        ? `${(1 / parseFloat(ethAmount) * 100).toFixed(2)}%` 
+                        : '-'}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
+            <div className="mt-3 text-xs text-gray-400">
+              <p>• This will set the initial trading price for your token</p>
+              <p>• Higher liquidity means less price impact from trades</p>
+              <p>• The price is determined by the ratio of tokens to ETH</p>
+            </div>
+          </div>
 
           <div className="flex justify-end space-x-4">
             <Button variant="secondary" onClick={onClose}>Cancel</Button>
@@ -616,13 +649,6 @@ const getLPTokenInfo = async (tokenAddress: string, pairAddress: string, signer:
   }
 };
 
-interface AddLiquidityDialog {
-  isOpen: boolean;
-  onClose: () => void;
-  onConfirm: (tokenAmount: string, ethAmount: string) => void;
-  tokenSymbol: string;
-}
-
 const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: factoryAddress, provider: externalProvider }, ref): JSX.Element => {
   const [tokens, setTokens] = useState<TokenInfo[]>([]);
   const [loading, setLoading] = useState(false);
@@ -642,7 +668,6 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
   // Add these state variables after the existing ones
   const [blockDialogOpen, setBlockDialogOpen] = useState(false);
   const [tokenToBlock, setTokenToBlock] = useState<TokenInfo | null>(null);
-  const [showBlockDialog, setShowBlockDialog] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
   const containerRef = useRef<HTMLDivElement>(null);
@@ -1625,7 +1650,7 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
     if (!token) return;
     try {
       setTokenToBlock(token);
-      setShowBlockDialog(true);
+      setBlockDialogOpen(true); // Use blockDialogOpen state instead of showBlockDialog
       setError(null);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to block token';
@@ -1649,7 +1674,7 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
       setTokens(tokens.filter(t => t.address !== tokenToBlock.address));
       
       // Close dialog and reset state
-      setShowBlockDialog(false);
+      setBlockDialogOpen(false);
       setTokenToBlock(null);
       
       toast({
@@ -1664,6 +1689,9 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
         description: 'Failed to block token',
         variant: 'destructive'
       });
+      // Make sure to close the dialog even in case of error
+      setBlockDialogOpen(false);
+      setTokenToBlock(null);
     }
   };
 
@@ -2194,18 +2222,16 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
       </Dialog>
 
       {/* Add the block dialog */}
-      {tokenToBlock && (
-        <BlockDialog
-          isOpen={blockDialogOpen}
-          onClose={() => {
-            setBlockDialogOpen(false);
-            setTokenToBlock(null);
-          }}
-          onConfirm={confirmBlockToken}
-          tokenName={tokenToBlock.name}
-          tokenAddress={tokenToBlock.address}
-        />
-      )}
+      <BlockDialog
+        isOpen={blockDialogOpen}
+        onClose={() => {
+          setBlockDialogOpen(false);
+          setTokenToBlock(null);
+        }}
+        onConfirm={confirmBlockToken}
+        tokenName={tokenToBlock?.name || ''}
+        tokenAddress={tokenToBlock?.address || ''}
+      />
       
       {selectedToken && (
         <AddLiquidityDialog
@@ -2216,6 +2242,7 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
           }}
           onConfirm={handleAddLiquidityConfirm}
           tokenSymbol={selectedToken.symbol}
+          tokenTotalSupply={selectedToken.totalSupply}
         />
       )}
     </div>
