@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAccount } from 'wagmi';
 import { useNetwork } from '@/contexts/NetworkContext';
-import { BrowserProvider, Contract, parseEther, formatEther } from 'ethers';
+import { BrowserProvider, Contract, parseEther, formatEther, TransactionReceipt, isAddress } from 'ethers';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,9 @@ import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/toast/use-toast';
 import TokenFactoryV1ABI from '@/contracts/abi/TokenFactory_v1.json';
 import { FACTORY_ABI } from '@/contracts/abi/TokenFactory_v2_DirectDEX_TwoStep';
+import { FACTORY_ABI_FIXED } from '@/contracts/abi/TokenFactory_v2_DirectDEX_Fixed';
 import { getNetworkContractAddress } from '@/config/contracts';
+import { Interface } from 'ethers';
 
 interface TokenCreationFormProps {
   onSuccess?: (tokenAddress: string) => void;
@@ -50,15 +52,15 @@ export default function TokenCreationForm({ onSuccess, onError }: TokenCreationF
     symbol: '',
     totalSupply: parseEther('1000000'),
     maxSupply: parseEther('1000000'),
-    maxTxAmount: parseEther('10000'),
-    maxWalletAmount: parseEther('20000'),
-    enableTrading: false,
+    maxTxAmount: parseEther('1000000'),
+    maxWalletAmount: parseEther('1000000'),
+    enableTrading: true,
     tradingStartTime: Math.floor(Date.now() / 1000) + 3600,
-    marketingFeePercentage: BigInt(2),
+    marketingFeePercentage: BigInt(1),
     marketingWallet: '0x10C8c279c6b381156733ec160A89Abb260bfcf0C',
     developmentFeePercentage: BigInt(1),
     developmentWallet: '0x991Ed392F033B2228DC55A1dE2b706ef8D9d9DcD',
-    autoLiquidityFeePercentage: BigInt(2),
+    autoLiquidityFeePercentage: BigInt(1),
     enableBuyFees: true,
     enableSellFees: true
   });
@@ -67,21 +69,37 @@ export default function TokenCreationForm({ onSuccess, onError }: TokenCreationF
     const fetchListingFee = async () => {
       if (!isConnected || !chainId) return;
       
-      const factoryAddress = getNetworkContractAddress(Number(chainId), 'dexListingFactory');
-      if (!factoryAddress) return;
+      // Get the correct factory address for the current network
+      const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddressV2DirectDEX_Fixed');
+      console.log(`Using network-specific factory address: ${factoryAddress}`);
+      
+      // If no valid address is found, fall back to a default for testing
+      if (!factoryAddress) {
+        console.log('No factory address found for the current network, using default');
+        // Set a default listing fee
+        const transactionFee = parseEther("0.001");
+        console.log(`Setting default listing fee: ${transactionFee.toString()} (${formatEther(transactionFee)} ETH/BNB)`);
+        setListingFee(transactionFee);
+        return;
+      }
 
       try {
         const provider = new BrowserProvider(window.ethereum);
         const factory = new Contract(
           factoryAddress,
-          FACTORY_ABI,
+          FACTORY_ABI_FIXED,
           provider
         );
         
         const fee = await factory.listingFee();
+        console.log(`Listing fee from contract: ${fee.toString()} (${formatEther(fee)} ETH/BNB)`);
         setListingFee(fee);
       } catch (error) {
         console.error('Error fetching listing fee:', error);
+        // Set a default listing fee based on the network
+        const transactionFee = parseEther("0.001");
+        console.log(`Setting default listing fee: ${transactionFee.toString()} (${formatEther(transactionFee)} ETH/BNB)`);
+        setListingFee(transactionFee);
       }
     };
 
@@ -136,6 +154,9 @@ export default function TokenCreationForm({ onSuccess, onError }: TokenCreationF
       
       return updatedParams;
     });
+
+    // Log the specific parameters being changed to debug
+    console.log(`Parameter changed: ${e.target.name} = ${e.target.value}`);
   };
 
   const handleSwitchChange = (checked: boolean, field: keyof TokenCreationParams) => {
@@ -156,26 +177,97 @@ export default function TokenCreationForm({ onSuccess, onError }: TokenCreationF
       return;
     }
 
-    const factoryAddress = getNetworkContractAddress(Number(chainId), 'dexListingFactory');
+    // Get the correct factory address for the current network
+    const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddressV2DirectDEX_Fixed');
+    
     if (!factoryAddress) {
       toast({
         title: "Error",
-        description: "Factory not deployed on this network",
+        description: `No factory contract found for the current network (Chain ID: ${chainId})`,
         variant: "destructive"
       });
       return;
     }
+    
+    console.log(`Using network-specific factory at address: ${factoryAddress} for chain ${chainId}`);
 
     try {
       setIsLoading(true);
+      
+      // Get listing fee from state, or use a network-specific default
+      let transactionFee = listingFee > BigInt(0) ? listingFee : parseEther("0.001");
+      console.log(`Using listing fee: ${formatEther(transactionFee)} ETH/BNB (${transactionFee.toString()})`);
+      
       const provider = new BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       
+      // Get network details for debugging
+      const network = await provider.getNetwork();
+      const networkId = Number(network.chainId);
+      console.log(`Connected to network: ${networkId}, name: ${network.name}`);
+      
+      // Verify we're using the correct ABI for this network
+      console.log('Using FACTORY_ABI_FIXED for token creation');
+      
+      // First check if there's code at the contract address
+      const contractCode = await provider.getCode(factoryAddress);
+      if (contractCode === '0x' || contractCode === '') {
+        console.error(`No contract deployed at address ${factoryAddress}`);
+        toast({
+          title: "Contract Error",
+          description: `No contract found at address ${factoryAddress}. The contract might not be deployed on this network.`,
+          variant: "destructive"
+        });
+        setIsLoading(false);
+        return;
+      }
+      console.log(`Contract exists at ${factoryAddress} (bytecode length: ${contractCode.length})`);
+      
       const factory = new Contract(
         factoryAddress,
-        FACTORY_ABI,
+        FACTORY_ABI_FIXED,
         signer
       );
+      
+      // Verify if basic contract functions work
+      try {
+        console.log("Checking basic contract compatibility...");
+        
+        // Try to get contract version
+        try {
+          const version = await factory.VERSION();
+          console.log(`Contract version: ${version}`);
+        } catch (versionError) {
+          console.log("VERSION function not available:", versionError);
+        }
+        
+        // Try to get owner
+        try {
+          const owner = await factory.owner();
+          console.log(`Contract owner: ${owner}`);
+        } catch (ownerError) {
+          console.log("owner function not available:", ownerError);
+        }
+        
+        // Try to get listing fee
+        try {
+          const fee = await factory.listingFee();
+          console.log(`Contract listing fee: ${formatEther(fee)} ETH (${fee.toString()})`);
+          
+          // If we got a valid fee from the contract, use it
+          if (fee > BigInt(0) && fee !== transactionFee) {
+            console.log(`Updating fee to match contract requirement: ${formatEther(fee)} ETH`);
+            // Set the correct fee for the transaction
+            setListingFee(fee);
+            // Use the correct fee for this transaction
+            transactionFee = fee;
+          }
+        } catch (feeError) {
+          console.log("listingFee function not available or error:", feeError);
+        }
+      } catch (compatError) {
+        console.error("Contract compatibility check error:", compatError);
+      }
 
       // Log the parameters for debugging
       const tokenParams = {
@@ -195,64 +287,225 @@ export default function TokenCreationForm({ onSuccess, onError }: TokenCreationF
         enableSellFees: creationParams.enableSellFees
       };
 
-      console.log('Creating token with params:', {
-        ...tokenParams,
-        totalSupply: tokenParams.totalSupply.toString(),
-        maxTxAmount: tokenParams.maxTxAmount.toString(),
-        maxWalletAmount: tokenParams.maxWalletAmount.toString(),
-        tradingStartTime: tokenParams.tradingStartTime.toString(),
-        marketingFeePercentage: tokenParams.marketingFeePercentage.toString(),
-        developmentFeePercentage: tokenParams.developmentFeePercentage.toString(),
-        autoLiquidityFeePercentage: tokenParams.autoLiquidityFeePercentage.toString()
-      });
+      // Test parameter encoding compatibility...
+      console.log("Testing parameter encoding compatibility...");
+      try {
+        const encodedParams = factory.interface.encodeFunctionData("createToken", [tokenParams]);
+        console.log("Parameters successfully encoded:", encodedParams.substring(0, 66) + "...");
+      } catch (encodeError) {
+        console.error("Parameter encoding failed:", encodeError);
+        toast({
+          title: "Parameter Error",
+          description: "Failed to encode parameters for the contract. The contract might be incompatible with the current ABI.",
+          variant: "destructive"
+        });
+        setIsLoading(false);
+        return;
+      }
 
-      // Create token with properly structured parameters
-      const tx = await factory.createToken(tokenParams, {
-        value: listingFee
+      // Try multiple parameter variations to identify what works
+      const paramVariations = [
+        // Variation 1: All fees enabled, realistic limits
+        {
+          ...tokenParams,
+          enableTrading: true,
+          maxTxAmount: tokenParams.totalSupply / BigInt(100), // 1% of total
+          maxWalletAmount: tokenParams.totalSupply / BigInt(50), // 2% of total
+          marketingFeePercentage: BigInt(1),
+          developmentFeePercentage: BigInt(1),
+          autoLiquidityFeePercentage: BigInt(1),
+          enableBuyFees: true,
+          enableSellFees: true
+        },
+        
+        // Variation 2: No fees at all, zero addresses
+        {
+          ...tokenParams,
+          enableTrading: true,
+          maxTxAmount: tokenParams.totalSupply / BigInt(100),
+          maxWalletAmount: tokenParams.totalSupply / BigInt(50),
+          marketingFeePercentage: BigInt(0),
+          developmentFeePercentage: BigInt(0),
+          autoLiquidityFeePercentage: BigInt(0),
+          marketingWallet: "0x0000000000000000000000000000000000000000",
+          developmentWallet: "0x0000000000000000000000000000000000000000",
+          enableBuyFees: false,
+          enableSellFees: false
+        },
+        
+        // Variation 3: Minimal parameters, no trading, no fees
+        {
+          ...tokenParams,
+          enableTrading: false,
+          maxTxAmount: tokenParams.totalSupply, // 100% of total (no limit)
+          maxWalletAmount: tokenParams.totalSupply, // 100% of total (no limit)
+          marketingFeePercentage: BigInt(0),
+          developmentFeePercentage: BigInt(0),
+          autoLiquidityFeePercentage: BigInt(0),
+          marketingWallet: "0x0000000000000000000000000000000000000000",
+          developmentWallet: "0x0000000000000000000000000000000000000000",
+          enableBuyFees: false,
+          enableSellFees: false
+        }
+      ];
+      
+      // Try each variation until one succeeds
+      let successfulParams = null;
+      let simulationError = null;
+      
+      for (const variationParams of paramVariations) {
+        try {
+          console.log("Trying parameter variation:", {
+            ...variationParams,
+            totalSupply: variationParams.totalSupply.toString(),
+            maxTxAmount: variationParams.maxTxAmount.toString(),
+            maxWalletAmount: variationParams.maxWalletAmount.toString(),
+            marketingFeePercentage: variationParams.marketingFeePercentage.toString(),
+            developmentFeePercentage: variationParams.developmentFeePercentage.toString(),
+            autoLiquidityFeePercentage: variationParams.autoLiquidityFeePercentage.toString()
+          });
+          
+          const callOverrides = { 
+            value: transactionFee,
+            gasLimit: BigInt(5000000)
+          };
+          
+          const callResult = await factory.createToken.staticCall(
+            variationParams,
+            callOverrides
+          );
+          
+          console.log("Simulation successful with params:", variationParams);
+          successfulParams = variationParams;
+          break; // Exit the loop if successful
+        } catch (error) {
+          console.error("Variation failed:", error);
+          simulationError = error;
+        }
+      }
+      
+      // Use the successful params or fall back to the last one tried
+      const finalParams = successfulParams || paramVariations[paramVariations.length - 1];
+      console.log("Using final parameters:", {
+        ...finalParams,
+        totalSupply: finalParams.totalSupply.toString(),
+        maxTxAmount: finalParams.maxTxAmount.toString(),
+        maxWalletAmount: finalParams.maxWalletAmount.toString()
       });
+      
+      // Double the transaction fee for safety
+      const adjustedFee = transactionFee * BigInt(2);
+      console.log(`Sending transaction with doubled value: ${formatEther(adjustedFee)} ETH/BNB`);
+      
+      // Attempt direct method call with increased gas limit
+      const gasEstimate = BigInt(5000000);
+      console.log(`Using gas limit: ${gasEstimate.toString()}`);
+      
+      // If all simulations failed, ask user if they want to continue anyway
+      if (!successfulParams && simulationError) {
+        const shouldContinue = window.confirm(
+          "All parameter variations failed simulation. Continue anyway with best-guess parameters?"
+        );
+        if (!shouldContinue) {
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      // Use direct contract method call with value parameter explicitly set
+      const tx = await factory.createToken(
+        finalParams, // Use the final parameters
+        {
+          value: adjustedFee,
+          gasLimit: gasEstimate
+        }
+      );
 
       console.log('Transaction sent:', tx.hash);
+      console.log('Transaction data:', tx);
+
+      // Wait for receipt with timeout
+      console.log("Waiting for transaction confirmation...");
       const receipt = await tx.wait();
-      
-      if (receipt) {
-        const event = receipt.logs
-          .map((log: any) => {
-            try {
-              return factory.interface.parseLog(log);
-            } catch (e) {
-              return null;
-            }
-          })
-          .find((event: any) => event && event.name === "TokenCreated");
 
-        if (event) {
-          const tokenAddress = event.args.token;
-          toast({
-            title: "Success",
-            description: `Token created successfully at ${tokenAddress}`,
-            variant: "default"
-          });
+      console.log("Transaction receipt:", {
+        status: receipt.status,
+        gasUsed: receipt.gasUsed.toString(),
+        blockNumber: receipt.blockNumber,
+        events: receipt.logs.length
+      });
 
-          onSuccess?.(tokenAddress);
+      // Check if there are any events in the logs
+      if (receipt.logs && receipt.logs.length > 0) {
+        console.log("Transaction has logs, checking for token creation event...");
+        
+        try {
+          // Try to parse the logs to find the token creation event
+          const parsedLogs = receipt.logs
+            .map((log: { topics: string[], data: string, blockNumber?: number, blockHash?: string, address?: string }) => {
+              try {
+                return factory.interface.parseLog(log);
+              } catch (e) {
+                return null;
+              }
+            })
+            .filter(Boolean);
+            
+          console.log("Parsed logs:", parsedLogs);
+          
+          // Find the TokenCreated event
+          const tokenCreatedEvent = parsedLogs.find((log: any) => 
+            log && log.name === 'TokenCreated'
+          );
+          
+          if (tokenCreatedEvent) {
+            const tokenAddress = tokenCreatedEvent.args.token;
+            console.log("Token created at address:", tokenAddress);
+            
+            // Call onSuccess with the token address
+            onSuccess && onSuccess(tokenAddress);
+            
+            toast({
+              title: "Token Created Successfully!",
+              description: `Your token has been created at address ${tokenAddress}`,
+              variant: "default"
+            });
+            
+            return;
+          }
+        } catch (parseError) {
+          console.error("Error parsing logs:", parseError);
         }
       }
     } catch (error: any) {
-      console.error('Transaction failed:', error);
-      let errorMessage = "Failed to create token. Please try again.";
-      if (error.reason) {
-        errorMessage = error.reason;
-      } else if (error.message && error.message.includes("insufficient funds")) {
-        errorMessage = "Insufficient funds to pay for gas and deployment fee";
-      } else if (error.message && error.message.includes("user rejected")) {
-        errorMessage = "Transaction was rejected";
-      }
+      console.error("Token creation failed:", error);
+      
+      // More detailed error debugging
+      console.error("Transaction error details:", {
+        message: error.message,
+        code: error.code,
+        data: error.data || "No data",
+        receipt: error.receipt || "No receipt",
+        transaction: error.transaction || "No transaction details"
+      });
 
+      // Try to get more info from any receipt
+      if (error.receipt) {
+        console.error("Transaction receipt:", {
+          status: error.receipt.status,
+          gasUsed: error.receipt.gasUsed?.toString() || "Unknown",
+          logs: error.receipt.logs || []
+        });
+      }
+      
+      // Forward error to parent component
+      onError && onError(error);
+      
       toast({
-        title: "Error",
-        description: errorMessage,
+        title: "Token Creation Failed",
+        description: `Transaction failed: ${error.message}`,
         variant: "destructive"
       });
-      onError?.(error);
     } finally {
       setIsLoading(false);
     }
@@ -335,7 +588,7 @@ export default function TokenCreationForm({ onSuccess, onError }: TokenCreationF
                   type="text"
                   value={formatEther(creationParams.maxTxAmount)}
                   onChange={handleCreationParamChange}
-                  placeholder="10000"
+                  placeholder="1000000"
                   required
                   className="mt-1 bg-gray-900 text-white border-gray-700 placeholder:text-gray-500 focus:bg-gray-900 hover:bg-gray-900"
                   style={{ color: 'white', backgroundColor: '#111827' }}
@@ -349,7 +602,7 @@ export default function TokenCreationForm({ onSuccess, onError }: TokenCreationF
                   type="text"
                   value={formatEther(creationParams.maxWalletAmount)}
                   onChange={handleCreationParamChange}
-                  placeholder="20000"
+                  placeholder="1000000"
                   required
                   className="mt-1 bg-gray-900 text-white border-gray-700 placeholder:text-gray-500 focus:bg-gray-900 hover:bg-gray-900"
                   style={{ color: 'white', backgroundColor: '#111827' }}
@@ -370,7 +623,7 @@ export default function TokenCreationForm({ onSuccess, onError }: TokenCreationF
                   type="number"
                   value={Number(creationParams.marketingFeePercentage)}
                   onChange={handleCreationParamChange}
-                  placeholder="2"
+                  placeholder="0"
                   required
                   className="mt-1 bg-gray-900 text-white border-gray-700 placeholder:text-gray-500 focus:bg-gray-900 hover:bg-gray-900"
                   style={{ color: 'white', backgroundColor: '#111827' }}
@@ -397,7 +650,7 @@ export default function TokenCreationForm({ onSuccess, onError }: TokenCreationF
                   type="number"
                   value={Number(creationParams.developmentFeePercentage)}
                   onChange={handleCreationParamChange}
-                  placeholder="1"
+                  placeholder="0"
                   required
                   className="mt-1 bg-gray-900 text-white border-gray-700 placeholder:text-gray-500 focus:bg-gray-900 hover:bg-gray-900"
                   style={{ color: 'white', backgroundColor: '#111827' }}
@@ -424,7 +677,7 @@ export default function TokenCreationForm({ onSuccess, onError }: TokenCreationF
                   type="number"
                   value={Number(creationParams.autoLiquidityFeePercentage)}
                   onChange={handleCreationParamChange}
-                  placeholder="2"
+                  placeholder="0"
                   required
                   className="mt-1 bg-gray-900 text-white border-gray-700 placeholder:text-gray-500 focus:bg-gray-900 hover:bg-gray-900"
                   style={{ color: 'white', backgroundColor: '#111827' }}

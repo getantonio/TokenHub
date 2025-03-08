@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast/use-toast';
 import { Spinner } from '@/components/ui/Spinner';
 import { InfoIcon } from 'lucide-react';
-import { getNetworkContractAddress } from '@/config/contracts';
+import { getNetworkContractAddress, FACTORY_ADDRESSES_V2_DIRECT_DEX_FIXED } from '@/config/contracts';
 import { Input } from '@/components/ui/input';
 import { ChainId } from '@/types/chain';
 
@@ -114,12 +114,11 @@ const erc20ABI = [
 ];
 
 // Update factory ABI to match the actual contract functions
-const factoryV2DirectDEXABI = [
-  "function getDeployedTokens() external view returns (address[])",
-  "function tokenInfo(address) external view returns (tuple(address token, address owner, bool isListed, string dexName, uint256 creationTime, uint256 listingTime))",
+const factoryV2DirectDEXFixedABI = [
+  "function tokenInfo(address) external view returns (tuple(address token, address owner, bool isListed, uint256 creationTime, uint256 listingTime))",
   "function isListed(address token) external view returns (bool)",
-  "function getSupportedDEXes() external view returns (string[])",
-  "function getDEXRouter(string) external view returns (tuple(string name, address router, bool isActive))"
+  "function getTokenInfo(address token) external view returns (tuple(address token, address owner, bool isListed, uint256 creationTime, uint256 listingTime))",
+  "function defaultRouter() external view returns (address)"
 ];
 
 // Add Uniswap V2 Factory ABI and address
@@ -134,10 +133,15 @@ const UNISWAP_V2_FACTORY_ABI = [
   "function setFeeToSetter(address) external"
 ];
 
-const FACTORY_ADDRESSES: Record<number, string> = {
-  [ChainId.SEPOLIA]: '0xc35DADB65012eC5796536bD9864eD8773aBc74C4',
-  [ChainId.BSC_TESTNET]: '0x6725F303b657a9451d8BA641348b6761A6CC7a17'
+// Update the router addresses to match the v3 config
+const ROUTER_ADDRESSES: Record<number, string> = {
+  [ChainId.SEPOLIA]: '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D', // Uniswap V2 Router on Sepolia
+  [ChainId.BSC_TESTNET]: '0xD99D1c33F9fC3444f8101754aBC46c52416550D1', // PancakeSwap Router on BSC Testnet
+  // Add other network router addresses as needed
 } as const;
+
+// Update the factory addresses to match our newly deployed fixed contract
+const FACTORY_ADDRESSES_V2_DIRECT_DEX = FACTORY_ADDRESSES_V2_DIRECT_DEX_FIXED;
 
 // Update the factory contract ABI
 const FACTORY_ABI = [
@@ -166,15 +170,11 @@ const tokenV3ABI = [
   "function allowance(address owner, address spender) view returns (uint256)"
 ];
 
-const ROUTER_ADDRESSES: Record<number, string> = {
-  [ChainId.SEPOLIA]: '0xC532a74256D3Db42D0Bf7a0400fEFDbad7694008',
-  [ChainId.BSC_TESTNET]: '0xD99D1c33F9fC3444f8101754aBC46c52416550D1'
-} as const;
-
 const getDexRouterAddress = async (chainId: number, dexName: string): Promise<string> => {
   if (!ROUTER_ADDRESSES[chainId]) {
     throw new Error(`No router address configured for chain ID ${chainId}`);
   }
+  // Always return the network's default router address
   return ROUTER_ADDRESSES[chainId];
 };
 
@@ -223,6 +223,39 @@ const getDexUrl = (chainId: number): string => {
   }
 };
 
+// Add getFactoryAddressV2DirectDEX function 
+const getFactoryAddressV2DirectDEX = (chainId: number): string => {
+  if (!FACTORY_ADDRESSES_V2_DIRECT_DEX[chainId]) {
+    throw new Error(`No v2 Direct DEX factory address configured for chain ID ${chainId}`);
+  }
+  return FACTORY_ADDRESSES_V2_DIRECT_DEX[chainId];
+};
+
+// Add a function to get the V2 DirectDEX Fixed factory address
+const getFactoryAddressV2DirectDEXFixed = (chainId: number): string => {
+  // First try to get it from our constant
+  if (FACTORY_ADDRESSES_V2_DIRECT_DEX_FIXED[chainId]) {
+    return FACTORY_ADDRESSES_V2_DIRECT_DEX_FIXED[chainId];
+  }
+  
+  // If not found in the constant, try the contract resolution system
+  return getNetworkContractAddress(chainId, 'factoryAddressV2DirectDEX_Fixed');
+};
+
+// Add a special handling function for Direct DEX Factory Fixed addresses
+function getDirectDEXFactoryAddress(chainId: number): string {
+  if (chainId === ChainId.SEPOLIA) {
+    console.log("Using hardcoded Sepolia Direct DEX factory address");
+    return '0xF78Facc20c24735066B2c962B6Fa58d4234Ed8F3';
+  } else if (chainId === ChainId.BSC_TESTNET) {
+    console.log("Using hardcoded BSC Testnet Direct DEX factory address");
+    return '0xE1469497243ce0A7f5d26f81c34E9eFA5975569b'; // New dedicated address
+  }
+  
+  // If not a known network, try to use the address from context or return null
+  return FACTORY_ADDRESSES_V2_DIRECT_DEX_FIXED[chainId] || '';
+}
+
 const TCAP_U_DEXLIST = () => {
   const { isConnected } = useAccount();
   const { chainId } = useNetwork();
@@ -243,178 +276,151 @@ const TCAP_U_DEXLIST = () => {
       const provider = new BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
 
-      const chainId = await provider.getNetwork().then(network => network.chainId);
-      if (!chainId) throw new Error('Could not get chain ID');
+      const networkId = await provider.getNetwork().then(network => Number(network.chainId));
+      if (!networkId) throw new Error('Could not get network ID');
 
-      const WETH_ADDRESS = '0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14';
-      const FACTORY_ADDRESS = FACTORY_ADDRESSES[Number(chainId)];
-      if (!FACTORY_ADDRESS) {
-        throw new Error('Unsupported network - Factory not found');
+      // Get the appropriate WETH address for the current network
+      let WETH_ADDRESS;
+      if (networkId === ChainId.SEPOLIA) {
+        WETH_ADDRESS = '0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14'; // Sepolia WETH
+      } else if (networkId === ChainId.BSC_TESTNET) {
+        WETH_ADDRESS = '0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd'; // BSC Testnet WBNB
+      } else {
+        throw new Error(`Unsupported network: ${networkId}`);
       }
-      const ROUTER_ADDRESS = await getDexRouterAddress(Number(chainId), 'uniswap');
 
-      console.log('Checking token details:', {
-        token: tokenAddress,
-        WETH: WETH_ADDRESS,
-        factory: FACTORY_ADDRESS,
-        router: ROUTER_ADDRESS,
-        chainId: chainId.toString()
-      });
+      // Get the factory address for the current network - use our special handler for guaranteed address
+      const FACTORY_ADDRESS = getDirectDEXFactoryAddress(networkId);
+      console.log(`Using factory address for network ${networkId}: ${FACTORY_ADDRESS}`);
+      if (!FACTORY_ADDRESS) {
+        throw new Error(`No v2 DirectDEX Fixed factory address found for network ID ${networkId}`);
+      }
 
-      // Create token contract with full ABI
-      const tokenContract = new Contract(
-        tokenAddress,
-        [
-          ...erc20ABI,
-          "function owner() view returns (address)",
-          "function approve(address spender, uint256 amount) external returns (bool)",
-          "function allowance(address owner, address spender) view returns (uint256)"
-        ],
-        provider
-      );
+      // Get the router address
+      const routerAddress = await getDexRouterAddress(networkId, "");
 
-      // Get token details
-      const [name, symbol, decimals, totalSupply, userBalance] = await Promise.all([
-        tokenContract.name(),
-        tokenContract.symbol(),
-        tokenContract.decimals(),
-        tokenContract.totalSupply(),
-        tokenContract.balanceOf(await signer.getAddress())
-      ]);
+      // Create contracts
+      const tokenContract = new Contract(tokenAddress, erc20ABI, signer);
+      const factoryContract = new Contract(FACTORY_ADDRESS, factoryV2DirectDEXFixedABI, signer);
+      const routerContract = new Contract(routerAddress, routerABI, signer);
 
-      console.log('Token details:', {
-        name,
-        symbol,
-        decimals,
-        totalSupply: formatEther(totalSupply),
-        userBalance: formatEther(userBalance)
-      });
+      // Fetch token info
+      const tokenInfo = await factoryContract.getTokenInfo(tokenAddress);
+      if (!tokenInfo || tokenInfo.token === "0x0000000000000000000000000000000000000000") {
+        throw new Error("Token not found in factory");
+      }
 
-      // Initialize variables
-      let pairAddress = ethers.ZeroAddress;
-      let tokenReserve = "0";
-      let ethReserve = "0";
-      let totalLPSupply = "0";
-      let userLPBalance = "0";
-      let sharePercentage = "0";
-      let token0Address = "";
-      let token1Address = "";
+      // Fetch DEX router info if token is listed
+      let pairAddress = "0x0000000000000000000000000000000000000000";
+      let reserves = { token: "0", eth: "0" };
+      let lpTokenBalance = "0";
+      let pairTotalSupply = "0";
 
       try {
-        // Create factory contract with full ABI
-        const factoryContract = new Contract(
-          FACTORY_ADDRESS,
-          FACTORY_ABI,
-          provider
-        );
+        const [name, symbol, decimals, tokenTotalSupply] = await Promise.all([
+          tokenContract.name(),
+          tokenContract.symbol(),
+          tokenContract.decimals(),
+          tokenContract.totalSupply()
+        ]);
 
-        // Try both token orderings
-        console.log('Checking token/WETH pair...');
-        pairAddress = await factoryContract.getPair(tokenAddress, WETH_ADDRESS);
-        console.log('Pair address (token/WETH):', pairAddress);
-        
-        if (pairAddress === ethers.ZeroAddress) {
-          console.log('Checking WETH/token pair...');
-          pairAddress = await factoryContract.getPair(WETH_ADDRESS, tokenAddress);
-          console.log('Pair address (WETH/token):', pairAddress);
-        }
-
-        // Only try to get reserves if we found a valid pair
-        if (pairAddress && pairAddress !== ethers.ZeroAddress) {
-          console.log('Found valid pair address:', pairAddress);
+        // Only fetch pair data if token is listed
+        if (tokenInfo.isListed) {
+          // Get router address directly from the factory
+          const routerAddress = await factoryContract.defaultRouter();
+          const router = new Contract(routerAddress, routerABI, signer);
+          const factoryAddress = await router.factory();
+          const uniswapFactory = new Contract(factoryAddress, UNISWAP_V2_FACTORY_ABI, signer);
           
-          const pairContract = new Contract(pairAddress, [
-            "function token0() external view returns (address)",
-            "function token1() external view returns (address)",
-            "function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
-            "function totalSupply() external view returns (uint)",
-            "function balanceOf(address) external view returns (uint)"
-          ], provider);
-
-          // Get all pair details
-          const [token0, token1, reserves, lpSupply, lpBalance] = await Promise.all([
-            pairContract.token0(),
-            pairContract.token1(),
-            pairContract.getReserves(),
-            pairContract.totalSupply(),
-            pairContract.balanceOf(await signer.getAddress())
-          ]);
-
-          token0Address = token0;
-          token1Address = token1;
-
-          console.log('Pair details:', {
-            token0,
-            token1,
-            reserves: reserves.map((r: ethers.BigNumberish) => formatEther(r)),
-            lpSupply: formatEther(lpSupply),
-            lpBalance: formatEther(lpBalance)
-          });
-
-          const isToken0 = tokenAddress.toLowerCase() === token0.toLowerCase();
-          tokenReserve = formatEther(isToken0 ? reserves[0] : reserves[1]);
-          ethReserve = formatEther(isToken0 ? reserves[1] : reserves[0]);
-          totalLPSupply = formatEther(lpSupply);
-          userLPBalance = formatEther(lpBalance);
-          sharePercentage = lpSupply > 0 ? (Number(lpBalance) * 100 / Number(lpSupply)).toFixed(4) : '0';
+          // Get pair address
+          pairAddress = await uniswapFactory.getPair(tokenAddress, WETH_ADDRESS);
+          
+          if (pairAddress && pairAddress !== "0x0000000000000000000000000000000000000000") {
+            // Get reserves
+            const pairContract = new Contract(pairAddress, pairABI, signer);
+            const [token0, reserves0, pairSupply, lpBalance] = await Promise.all([
+              pairContract.token0(),
+              pairContract.getReserves(),
+              pairContract.totalSupply(),
+              pairContract.balanceOf(await signer.getAddress())
+            ]);
+            
+            pairTotalSupply = pairSupply.toString();
+            lpTokenBalance = lpBalance.toString();
+            
+            // Determine which reserve is token and which is ETH
+            const isToken0 = token0.toLowerCase() === tokenAddress.toLowerCase();
+            reserves = {
+              token: isToken0 ? reserves0[0].toString() : reserves0[1].toString(),
+              eth: isToken0 ? reserves0[1].toString() : reserves0[0].toString()
+            };
+          }
         }
-      } catch (pairError) {
-        console.error('Error checking pair:', pairError);
-        // Continue with the token info even if pair check fails
+
+        // Calculate current price if listed and has liquidity
+        let currentPrice = "0";
+        let marketCap = "0";
+        let dexName = "Unknown DEX";
+
+        // Get DEX name based on network
+        if (networkId === ChainId.SEPOLIA) {
+          dexName = "UniswapV2";
+        } else if (networkId === ChainId.BSC_TESTNET) {
+          dexName = "PancakeSwap";
+        }
+
+        if (tokenInfo.isListed && reserves.token !== "0" && reserves.eth !== "0") {
+          const tokenReserve = ethers.getBigInt(reserves.token);
+          const ethReserve = ethers.getBigInt(reserves.eth);
+          if (tokenReserve !== ethers.getBigInt("0")) {
+            // Use String-based BigInt construction for compatibility with older JavaScript versions
+            const scalingFactor = ethers.getBigInt("1000000000000000000"); // 10^18
+            currentPrice = formatEther(ethReserve * scalingFactor / tokenReserve);
+            marketCap = (parseFloat(formatEther(tokenTotalSupply)) * parseFloat(currentPrice)).toFixed(6);
+          }
+        }
+
+        // Add to listed tokens
+        const formattedToken: ListedToken = {
+          address: tokenAddress,
+          name: name,
+          symbol: symbol,
+          factoryVersion: "v2 Direct DEX Fixed",
+          isListed: tokenInfo.isListed,
+          creationTime: Number(tokenInfo.creationTime),
+          listingTime: Number(tokenInfo.listingTime),
+          dexName: dexName,
+          pairAddress: pairAddress,
+          totalSupply: formatEther(tokenTotalSupply),
+          liquidityAmount: reserves.token !== "0" ? formatEther(reserves.token) : "0",
+          listingPrice: "0", // Not stored in contract
+          currentPrice: currentPrice,
+          marketCap: marketCap
+        };
+
+        setListedToken(formattedToken);
+        // Update tokens list if not already present
+        setTokens(prevTokens => {
+          const exists = prevTokens.some(t => t.address.toLowerCase() === tokenAddress.toLowerCase());
+          if (!exists) {
+            return [formattedToken, ...prevTokens];
+          }
+          return prevTokens.map(t => t.address.toLowerCase() === tokenAddress.toLowerCase() ? formattedToken : t);
+        });
+
+      } catch (err) {
+        console.error("Error fetching token details:", err);
+        throw new Error(`Failed to fetch token details: ${err instanceof Error ? err.message : String(err)}`);
       }
 
-      // Set token info based on whether we found liquidity
-      const hasLiquidity = pairAddress !== ethers.ZeroAddress && Number(ethReserve) > 0;
-      const tokenInfo = {
-        address: tokenAddress,
-        name,
-        symbol,
-        factoryVersion: "v2",
-        isListed: hasLiquidity,
-        creationTime: 0,
-        listingTime: 0,
-        dexName: "Uniswap V2",
-        pairAddress,
-        totalSupply: formatEther(totalSupply),
-        liquidityAmount: ethReserve,
-        listingPrice: hasLiquidity ? (Number(ethReserve) / Number(tokenReserve)).toFixed(18) : "0",
-        currentPrice: hasLiquidity ? (Number(ethReserve) / Number(tokenReserve)).toFixed(18) : "0",
-        marketCap: hasLiquidity ? 
-          (Number(formatEther(totalSupply)) * Number(ethReserve) / Number(tokenReserve)).toFixed(2) : "0"
-      };
-
-      console.log('Final token info:', tokenInfo);
-      setListedToken(tokenInfo);
-
-      // Show appropriate toast message
-      if (hasLiquidity) {
-        toast({
-          title: "Liquidity Pool Found",
-          description: `Pair Address: ${pairAddress}
-            \nToken Reserve: ${Number(tokenReserve).toFixed(4)} ${symbol}
-            \nETH Reserve: ${Number(ethReserve).toFixed(4)} ETH
-            \nLP Balance: ${userLPBalance} LP tokens (${sharePercentage}% of pool)
-            \nToken0: ${token0Address}
-            \nToken1: ${token1Address}`,
-        });
-      } else {
-        toast({
-          title: "Token Found",
-          description: `${name} (${symbol}) - Total Supply: ${Number(formatEther(totalSupply)).toLocaleString()} ${symbol}
-            \nYour Balance: ${Number(formatEther(userBalance)).toFixed(4)} ${symbol}
-            \nNo liquidity pair has been created yet.`,
-        });
-      }
-
-    } catch (error: any) {
-      console.error('Error checking token:', error);
-      setError(error.message || 'Failed to check token');
+    } catch (err) {
+      console.error("Search error:", err);
+      setError(err instanceof Error ? err.message : String(err));
       toast({
-        title: "Error",
-        description: error.message || 'Failed to check token',
+        title: "Search Failed",
+        description: err instanceof Error ? err.message : String(err),
         variant: "destructive"
       });
-      setListedToken(null);
     } finally {
       setIsLoading(false);
     }
@@ -740,7 +746,7 @@ const TCAP_U_DEXLIST = () => {
       console.log('Checking LP details for:', listedToken.address);
       
       // Get the correct factory address for the current network
-      const FACTORY_ADDRESS = FACTORY_ADDRESSES[chainId];
+      const FACTORY_ADDRESS = FACTORY_ADDRESSES_V2_DIRECT_DEX[chainId];
       if (!FACTORY_ADDRESS) {
         toast({
           title: "Error",
@@ -867,149 +873,96 @@ const TCAP_U_DEXLIST = () => {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex gap-2">
-        <Input
-          placeholder="Enter token address"
-          value={tokenAddress}
-          onChange={(e) => setTokenAddress(e.target.value)}
-          className="flex-1 bg-gray-900 text-white border-gray-700 px-4 py-2 h-10"
-        />
-        <Button
-          onClick={handleSearch}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-6 h-10"
-          disabled={isLoading || !tokenAddress}
-        >
-          {isLoading ? <Spinner /> : 'Load Token'}
-        </Button>
-      </div>
-
-      {listedToken && (
-        <div className="p-4 bg-background-secondary rounded-lg border border-border hover:border-blue-500 transition-colors">
-          <div className="space-y-3">
-            <div className="flex justify-between items-start">
+    <div className="w-full">
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col space-y-1.5">
+          <h2 className="text-xl font-semibold">Token Lookup</h2>
+          <p className="text-sm text-muted-foreground">
+            Enter a token address to view its details and liquidity pool information.
+          </p>
+        </div>
+        
+        <div className="flex gap-2">
+          <Input
+            placeholder="Enter token address"
+            value={tokenAddress}
+            onChange={(e) => setTokenAddress(e.target.value)}
+            className="flex-grow"
+          />
+          <Button 
+            onClick={handleSearch}
+            disabled={isLoading || !tokenAddress}
+          >
+            {isLoading ? <Spinner className="h-4 w-4" /> : "Search"}
+          </Button>
+        </div>
+        
+        {error && (
+          <div className="bg-destructive/15 p-3 rounded-md text-destructive flex items-start gap-2">
+            <InfoIcon className="h-5 w-5 shrink-0 mt-0.5" />
+            <div>{error}</div>
+          </div>
+        )}
+        
+        {listedToken && (
+          <div className="border rounded-lg p-4 space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <h4 className="font-medium text-text-primary">{listedToken.name} ({listedToken.symbol})</h4>
-                <div className="flex items-center gap-2 mt-1">
-                  <p className="text-sm text-text-secondary break-all">{listedToken.address}</p>
-                  <button
-                    onClick={() => navigator.clipboard.writeText(listedToken.address)}
-                    className="text-blue-400 hover:text-blue-300"
-                  >
-                    <InfoIcon className="h-3 w-3" />
-                  </button>
+                <h3 className="font-semibold text-lg">{listedToken.name} ({listedToken.symbol})</h3>
+                <div className="mt-2 space-y-1 text-sm">
+                  <p><span className="font-medium">Token Address:</span> {listedToken.address}</p>
+                  <p><span className="font-medium">Total Supply:</span> {parseFloat(listedToken.totalSupply).toLocaleString()} {listedToken.symbol}</p>
+                  <p><span className="font-medium">Factory Version:</span> {listedToken.factoryVersion}</p>
+                  <p><span className="font-medium">Created:</span> {new Date(listedToken.creationTime * 1000).toLocaleString()}</p>
                 </div>
               </div>
-              <div className="flex flex-col items-end gap-2">
-                <span className={`px-2 py-1 rounded text-sm ${
-                  listedToken.isListed 
-                    ? 'bg-green-600/10 text-green-400'
-                    : 'bg-yellow-600/10 text-yellow-400'
-                }`}>
-                  {listedToken.isListed 
-                    ? `Listed on ${listedToken.dexName}`
-                    : 'Not Listed Yet'}
-                </span>
-                <Button
-                  onClick={() => handleCheckBalance(listedToken.address)}
-                  className="text-xs h-6 px-2 bg-gray-700 hover:bg-gray-600"
-                >
-                  Check Balance
-                </Button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4 text-sm">
+              
               <div>
-                <p className="text-text-secondary">Total Supply:</p>
-                <p className="text-text-primary">
-                  {Number(listedToken.totalSupply).toLocaleString()} {listedToken.symbol}
-                </p>
-              </div>
-              {listedToken.isListed ? (
-                <>
-                  <div>
-                    <p className="text-text-secondary">Liquidity:</p>
-                    <p className="text-text-primary">
-                      {Number(listedToken.liquidityAmount).toLocaleString()} {chainId ? getNetworkCurrency(chainId) : 'ETH'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-text-secondary">Current Price:</p>
-                    <p className="text-text-primary">
-                      {listedToken.currentPrice} {chainId ? getNetworkCurrency(chainId) : 'ETH'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-text-secondary">Market Cap:</p>
-                    <p className="text-text-primary">
-                      {listedToken.marketCap} {chainId ? getNetworkCurrency(chainId) : 'ETH'}
-                    </p>
-                  </div>
-                  <div className="col-span-2">
-                    <p className="text-text-secondary">Pair Address:</p>
-                    <p className="text-text-primary break-all">{listedToken.pairAddress}</p>
-                  </div>
-                </>
-              ) : (
-                <div className="col-span-2 bg-yellow-500/5 rounded-lg p-3">
-                  <p className="text-yellow-400 text-sm">This token has not been listed on {listedToken.dexName} yet.</p>
-                  <p className="text-yellow-400/80 text-xs mt-1">No liquidity pair has been created.</p>
+                <h3 className="font-semibold text-lg">Liquidity Information</h3>
+                <div className="mt-2 space-y-1 text-sm">
+                  <p><span className="font-medium">Listed:</span> {listedToken.isListed ? 'Yes' : 'No'}</p>
+                  {listedToken.isListed && (
+                    <>
+                      <p><span className="font-medium">DEX:</span> {listedToken.dexName}</p>
+                      <p><span className="font-medium">Listed At:</span> {new Date(listedToken.listingTime * 1000).toLocaleString()}</p>
+                      <p><span className="font-medium">Pair Address:</span> {listedToken.pairAddress}</p>
+                      <p><span className="font-medium">Liquidity:</span> {parseFloat(listedToken.liquidityAmount).toLocaleString()} {listedToken.symbol}</p>
+                      <p><span className="font-medium">Current Price:</span> {parseFloat(listedToken.currentPrice).toFixed(8)} {chainId ? getNetworkCurrency(chainId) : 'ETH'}</p>
+                      <p><span className="font-medium">Market Cap:</span> {parseFloat(listedToken.marketCap).toLocaleString()} {chainId ? getNetworkCurrency(chainId) : 'ETH'}</p>
+                    </>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
-
-            <div className="flex flex-wrap gap-2 pt-2">
+            
+            <div className="pt-4 flex flex-wrap gap-2">
               <Button
-                onClick={() => chainId && window.open(`${getExplorerUrl(chainId)}/token/${listedToken.address}`, '_blank')}
-                className="flex-1 h-8 text-xs bg-gray-700 hover:bg-gray-600"
+                variant="secondary"
+                onClick={() => {
+                  if (chainId) {
+                    window.open(`${getExplorerUrl(chainId)}/address/${listedToken.address}`, '_blank');
+                  }
+                }}
               >
                 View on Explorer
               </Button>
               
-              <Button
-                onClick={() => handleMintOrTransfer(listedToken.address)}
-                className="flex-1 h-8 text-xs bg-gray-700 hover:bg-gray-600"
-              >
-                Mint/Transfer
-              </Button>
-              
-              {listedToken.isListed ? (
-                <>
-                  <Button
-                    onClick={() => chainId && window.open(`${getDexUrl(chainId)}${listedToken.address}`, '_blank')}
-                    className="flex-1 h-8 text-xs bg-blue-600 hover:bg-blue-700"
-                  >
-                    Trade on {listedToken.dexName}
-                  </Button>
-                  <Button
-                    onClick={handleCreatePair}
-                    className="flex-1 h-8 text-xs bg-green-600 hover:bg-green-700"
-                    disabled={isLoading}
-                  >
-                    Add More Liquidity
-                  </Button>
-                </>
-              ) : (
+              {listedToken.isListed && (
                 <Button
-                  onClick={handleCreatePair}
-                  className="flex-1 h-8 text-xs bg-blue-600 hover:bg-blue-700"
-                  disabled={isLoading}
+                  variant="secondary"
+                  onClick={() => {
+                    if (chainId) {
+                      window.open(`${getDexUrl(chainId)}${listedToken.address}`, '_blank');
+                    }
+                  }}
                 >
-                  {isLoading ? <Spinner className="w-4 h-4" /> : 'Create Liquidity Pair'}
+                  Trade on {listedToken.dexName}
                 </Button>
               )}
             </div>
-
-            <Button
-              onClick={handleCheckLPDetails}
-              className="text-xs h-6 px-2 bg-gray-700 hover:bg-gray-600"
-            >
-              Check LP Details
-            </Button>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };

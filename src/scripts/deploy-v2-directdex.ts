@@ -1,6 +1,6 @@
 import { ethers } from 'hardhat';
 import '@nomicfoundation/hardhat-ethers';
-import { TokenFactory_v2_DirectDEX_TwoStep } from '../../typechain-types';
+import { TokenFactory_v2_DirectDEX_Fixed } from '../../typechain-types';
 
 async function main() {
     try {
@@ -9,16 +9,16 @@ async function main() {
         console.log("Account balance:", (await deployer.provider.getBalance(deployer.address)).toString());
         console.log("Nonce:", await deployer.getNonce());
 
-        // Deploy TokenFactory_v2_DirectDEX first
-        console.log("\nDeploying TokenFactory_v2_DirectDEX...");
-        const TokenFactory = await ethers.getContractFactory("TokenFactory_v2_DirectDEX_TwoStep");
+        // Deploy TokenFactory_v2_DirectDEX_Fixed first
+        console.log("\nDeploying TokenFactory_v2_DirectDEX_Fixed...");
+        const TokenFactory = await ethers.getContractFactory("TokenFactory_v2_DirectDEX_Fixed");
         const tokenFactory = (await TokenFactory.deploy(
             ethers.parseEther("0.01")  // 0.01 ETH listing fee
-        )) as TokenFactory_v2_DirectDEX_TwoStep;
+        )) as TokenFactory_v2_DirectDEX_Fixed;
 
         await tokenFactory.waitForDeployment();
         const factoryAddress = await tokenFactory.getAddress();
-        console.log("TokenFactory_v2_DirectDEX deployed to:", factoryAddress);
+        console.log("TokenFactory_v2_DirectDEX_Fixed deployed to:", factoryAddress);
 
         // Deploy TokenTemplate_v2DirectDEX
         console.log("\nDeploying TokenTemplate_v2DirectDEX...");
@@ -46,14 +46,8 @@ async function main() {
         const tokenTemplateAddress = await tokenTemplate.getAddress();
         console.log("TokenTemplate_v2DirectDEX deployed to:", tokenTemplateAddress);
 
-        // Add Uniswap V2 as supported DEX
-        console.log("\nAdding Uniswap V2 as supported DEX...");
-        const addDexTx = await tokenFactory.addDEX(
-            "uniswap-test",
-            "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D" // Uniswap V2 Router
-        );
-        await addDexTx.wait();
-        console.log("Added Uniswap V2 as supported DEX");
+        // The TokenFactory_v2_DirectDEX_Fixed contract doesn't have an addDEX method
+        // It uses the defaultRouter set in the constructor instead
 
         // Verify the deployment
         console.log("\nDeployment Summary:");
