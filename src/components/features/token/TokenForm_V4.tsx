@@ -139,7 +139,14 @@ const tooltips = {
     maxSupply: "The maximum amount of tokens that can ever exist. Set to 0 for unlimited supply."
   },
   tax: {
-    dynamicTax: "Automatically adjust tax rates based on trading volume and market conditions.",
+    dynamicTax: `A tax is a percentage fee taken from each transaction.
+
+Dynamic tax means this fee can automatically adjust based on trading conditions:
+
+• Higher volume = Lower tax
+• Lower volume = Higher tax
+
+This helps prevent price manipulation and encourages healthy trading.`,
     baseBuyTax: "The standard tax rate applied to buy transactions.",
     baseSellTax: "The standard tax rate applied to sell transactions.",
     maxTaxRate: "The highest possible tax rate when dynamic tax is enabled.",

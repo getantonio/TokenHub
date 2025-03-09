@@ -36,7 +36,7 @@ export function InfoTooltip({ content, className = "" }: InfoTooltipProps) {
             </svg>
           </button>
         </TooltipTrigger>
-        <TooltipContent side="right">
+        <TooltipContent side="right" className="whitespace-normal max-w-[300px]">
           {content}
         </TooltipContent>
       </TooltipRoot>
