@@ -1,0 +1,349 @@
+{
+  "_format": "hh-sol-artifact-1",
+  "contractName": "IV4DistributionModule",
+  "sourceName": "src/contracts/interfaces/IV4DistributionModule.sol",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "wallet",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "amount",
+          "type": "uint256"
+        },
+        {
+          "internalType": "string",
+          "name": "label",
+          "type": "string"
+        },
+        {
+          "internalType": "bool",
+          "name": "locked",
+          "type": "bool"
+        },
+        {
+          "internalType": "uint256",
+          "name": "unlockTime",
+          "type": "uint256"
+        }
+      ],
+      "name": "addAllocation",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "success",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address[]",
+          "name": "wallets",
+          "type": "address[]"
+        },
+        {
+          "internalType": "uint256[]",
+          "name": "amounts",
+          "type": "uint256[]"
+        },
+        {
+          "internalType": "string[]",
+          "name": "labels",
+          "type": "string[]"
+        },
+        {
+          "internalType": "bool[]",
+          "name": "lockStatus",
+          "type": "bool[]"
+        },
+        {
+          "internalType": "uint256[]",
+          "name": "unlockTimes",
+          "type": "uint256[]"
+        }
+      ],
+      "name": "addMultipleAllocations",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "success",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "presetId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "totalSupply",
+          "type": "uint256"
+        }
+      ],
+      "name": "applyPreset",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "success",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "executeDistribution",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "success",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "getAllAllocations",
+      "outputs": [
+        {
+          "components": [
+            {
+              "internalType": "address",
+              "name": "wallet",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "amount",
+              "type": "uint256"
+            },
+            {
+              "internalType": "string",
+              "name": "label",
+              "type": "string"
+            },
+            {
+              "internalType": "bool",
+              "name": "locked",
+              "type": "bool"
+            },
+            {
+              "internalType": "uint256",
+              "name": "unlockTime",
+              "type": "uint256"
+            }
+          ],
+          "internalType": "struct IV4DistributionModule.Allocation[]",
+          "name": "allocations",
+          "type": "tuple[]"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "wallet",
+          "type": "address"
+        }
+      ],
+      "name": "getAllocation",
+      "outputs": [
+        {
+          "components": [
+            {
+              "internalType": "address",
+              "name": "wallet",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "amount",
+              "type": "uint256"
+            },
+            {
+              "internalType": "string",
+              "name": "label",
+              "type": "string"
+            },
+            {
+              "internalType": "bool",
+              "name": "locked",
+              "type": "bool"
+            },
+            {
+              "internalType": "uint256",
+              "name": "unlockTime",
+              "type": "uint256"
+            }
+          ],
+          "internalType": "struct IV4DistributionModule.Allocation",
+          "name": "allocation",
+          "type": "tuple"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "getAvailablePresets",
+      "outputs": [
+        {
+          "internalType": "uint256[]",
+          "name": "presetIds",
+          "type": "uint256[]"
+        },
+        {
+          "internalType": "string[]",
+          "name": "presetNames",
+          "type": "string[]"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "presetId",
+          "type": "uint256"
+        }
+      ],
+      "name": "getPresetDetails",
+      "outputs": [
+        {
+          "internalType": "uint256[]",
+          "name": "walletRatios",
+          "type": "uint256[]"
+        },
+        {
+          "internalType": "string[]",
+          "name": "labels",
+          "type": "string[]"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "tokenAddress",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "owner",
+          "type": "address"
+        }
+      ],
+      "name": "initialize",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "wallet",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "amount",
+          "type": "uint256"
+        },
+        {
+          "internalType": "string",
+          "name": "label",
+          "type": "string"
+        },
+        {
+          "internalType": "bool",
+          "name": "locked",
+          "type": "bool"
+        },
+        {
+          "internalType": "uint256",
+          "name": "unlockTime",
+          "type": "uint256"
+        }
+      ],
+      "name": "modifyAllocation",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "success",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "wallet",
+          "type": "address"
+        }
+      ],
+      "name": "removeAllocation",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "success",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "wallet",
+          "type": "address"
+        }
+      ],
+      "name": "unlockTokens",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "success",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x",
+  "deployedBytecode": "0x",
+  "linkReferences": {},
+  "deployedLinkReferences": {}
+}

@@ -74,7 +74,8 @@ contract V4TokenBase is
     ) public initializer {
         __ERC20_init(name_, symbol_);
         __Pausable_init();
-        __Ownable_init(owner_);
+        __Ownable_init();
+        _transferOwnership(owner_);
         
         if (initialSupply > 0) {
             _mint(owner_, initialSupply);
@@ -224,5 +225,10 @@ contract V4TokenBase is
         super._beforeTokenTransfer(from, to, amount);
         
         require(!paused(), "V4TokenBase: token transfer while paused");
+    }
+    
+    // Override transferOwnership to satisfy both interfaces
+    function transferOwnership(address newOwner) public override(OwnableUpgradeable, IV4TokenBase) onlyOwner {
+        super.transferOwnership(newOwner);
     }
 } 

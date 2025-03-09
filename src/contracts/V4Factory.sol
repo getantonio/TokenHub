@@ -8,6 +8,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "./interfaces/IV4TokenBase.sol";
 import "./V4TokenBase.sol";
 import "./V4SecurityModule.sol";
+import "./V4DistributionModule.sol";
 
 /**
  * @title V4Factory
@@ -17,10 +18,12 @@ contract V4Factory is Ownable {
     // Implementation addresses
     address public tokenImplementation;
     address public securityModuleImplementation;
+    address public distributionModuleImplementation;
     
     // Beacon contracts for upgrades
     UpgradeableBeacon public tokenBeacon;
     UpgradeableBeacon public securityModuleBeacon;
+    UpgradeableBeacon public distributionModuleBeacon;
     
     // Token registry
     mapping(address => bool) public isV4Token;
@@ -37,18 +40,23 @@ contract V4Factory is Ownable {
      * @dev Initialize the factory with implementation contracts
      * @param owner_ The owner of the factory
      */
-    constructor(address owner_) Ownable(owner_) {
+    constructor(address owner_) {
+        _transferOwnership(owner_);
+        
         // Deploy implementations
         tokenImplementation = address(new V4TokenBase());
         securityModuleImplementation = address(new V4SecurityModule());
+        distributionModuleImplementation = address(new V4DistributionModule());
         
         // Create beacons
         tokenBeacon = new UpgradeableBeacon(tokenImplementation);
         securityModuleBeacon = new UpgradeableBeacon(securityModuleImplementation);
+        distributionModuleBeacon = new UpgradeableBeacon(distributionModuleImplementation);
         
         // Transfer beacon ownership to the factory owner
         tokenBeacon.transferOwnership(owner_);
         securityModuleBeacon.transferOwnership(owner_);
+        distributionModuleBeacon.transferOwnership(owner_);
     }
     
     /**
@@ -57,20 +65,22 @@ contract V4Factory is Ownable {
      * @param symbol Token symbol
      * @param initialSupply Initial supply to mint
      * @param owner Owner of the new token
+     * @param includeDistribution Whether to include the distribution module
      * @return tokenAddress Address of the newly created token
      */
     function createToken(
         string memory name,
         string memory symbol,
         uint256 initialSupply,
-        address owner
+        address owner,
+        bool includeDistribution
     ) external returns (address tokenAddress) {
         // Create a new token proxy
         bytes memory tokenData = abi.encodeWithSelector(
             V4TokenBase.initialize.selector,
             name,
             symbol,
-            initialSupply,
+            includeDistribution ? 0 : initialSupply, // If using distribution, don't mint initially
             address(this) // Factory temporarily owns the token for setup
         );
         
@@ -94,6 +104,23 @@ contract V4Factory is Ownable {
         
         // Add security module to token
         IV4TokenBase(tokenAddress).addModule(securityModuleAddress, securityData);
+        
+        // Create distribution module if requested
+        if (includeDistribution) {
+            bytes memory distributionData = abi.encode(owner);
+            
+            BeaconProxy distributionModuleProxy = new BeaconProxy(
+                address(distributionModuleBeacon),
+                ""
+            );
+            address distributionModuleAddress = address(distributionModuleProxy);
+            
+            // Initialize the distribution module
+            V4DistributionModule(distributionModuleAddress).initialize(tokenAddress, owner);
+            
+            // Add distribution module to token
+            IV4TokenBase(tokenAddress).addModule(distributionModuleAddress, distributionData);
+        }
         
         // Transfer token ownership to the security module
         V4TokenBase(tokenAddress).transferOwnership(securityModuleAddress);
@@ -129,6 +156,18 @@ contract V4Factory is Ownable {
         securityModuleImplementation = newImplementation;
         
         emit ImplementationUpgraded(newImplementation, "SECURITY_MODULE");
+    }
+    
+    /**
+     * @dev Upgrade the distribution module implementation
+     * @param newImplementation Address of the new implementation
+     */
+    function upgradeDistributionModuleImplementation(address newImplementation) external onlyOwner {
+        require(newImplementation != address(0), "V4Factory: implementation cannot be zero address");
+        distributionModuleBeacon.upgradeTo(newImplementation);
+        distributionModuleImplementation = newImplementation;
+        
+        emit ImplementationUpgraded(newImplementation, "DISTRIBUTION_MODULE");
     }
     
     /**

@@ -38,7 +38,6 @@ contract V4SecurityModule is
     // Events
     event OwnershipTransferProposed(bytes32 indexed proposalId, address indexed proposedOwner);
     event OwnershipTransferConfirmed(bytes32 indexed proposalId, address indexed signer);
-    event OwnershipTransferred(address indexed oldOwner, address indexed newOwner);
     event SignerAdded(address indexed signer);
     event SignerRemoved(address indexed signer);
     event ThresholdChanged(uint256 oldThreshold, uint256 newThreshold);
@@ -66,14 +65,14 @@ contract V4SecurityModule is
      * @param owner Address of the initial owner
      */
     function initialize(address tokenAddress, address owner) public override initializer {
-        __Ownable_init(owner);
+        __Ownable_init();
+        _transferOwnership(owner);
         
         require(tokenAddress != address(0), "V4SecurityModule: token address cannot be zero");
         _token = tokenAddress;
         
-        // Add the owner as the first signer
         _signers.add(owner);
-        _threshold = 1; // Default to 1 signature required
+        _threshold = 1;
     }
     
     /**
@@ -247,9 +246,9 @@ contract V4SecurityModule is
     /**
      * @dev Check if an address is a signer
      * @param account Address to check
-     * @return isSigner Whether the address is a signer
+     * @return Whether the address is a signer
      */
-    function isSigner(address account) external view override returns (bool isSigner) {
+    function isSigner(address account) external view override returns (bool) {
         return _signers.contains(account);
     }
     

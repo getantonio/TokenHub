@@ -1,0 +1,74 @@
+{
+  "_format": "hh-sol-artifact-1",
+  "contractName": "IV4Module",
+  "sourceName": "src/contracts/interfaces/IV4Module.sol",
+  "abi": [
+    {
+      "inputs": [],
+      "name": "getModuleType",
+      "outputs": [
+        {
+          "internalType": "bytes32",
+          "name": "moduleType",
+          "type": "bytes32"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "getToken",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "tokenAddress",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "tokenAddress",
+          "type": "address"
+        },
+        {
+          "internalType": "bytes",
+          "name": "data",
+          "type": "bytes"
+        }
+      ],
+      "name": "initialize",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes4",
+          "name": "functionSig",
+          "type": "bytes4"
+        }
+      ],
+      "name": "supportsFunction",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "hasFunction",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x",
+  "deployedBytecode": "0x",
+  "linkReferences": {},
+  "deployedLinkReferences": {}
+}
