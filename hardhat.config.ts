@@ -35,6 +35,17 @@ const config = {
       confirmations: 2,     // Wait for 2 confirmations
       networkCheckTimeout: 100000,
       timeoutBlocks: 200
+    },
+    amoy: {
+      url: process.env.POLYGON_AMOY_RPC_URL || "https://polygon-amoy.infura.io/v3/",
+      chainId: 80002,
+      accounts: [process.env.PRIVATE_KEY || ""],
+      gasPrice: "auto",
+      gas: "auto",
+      timeout: 180000,      // 3 minutes
+      confirmations: 2,     // Wait for 2 confirmations
+      networkCheckTimeout: 100000,
+      timeoutBlocks: 200
     }
   },
   solidity: {
@@ -54,8 +65,19 @@ const config = {
   etherscan: {
     apiKey: {
       bscTestnet: process.env.BSCSCAN_API_KEY,
-      sepolia: process.env.ETHERSCAN_API_KEY
-    }
+      sepolia: process.env.ETHERSCAN_API_KEY,
+      amoy: process.env.POLYGONSCAN_API_KEY
+    },
+    customChains: [
+      {
+        network: "amoy",
+        chainId: 80002,
+        urls: {
+          apiURL: "https://api-testnet.polygonscan.com/api",
+          browserURL: "https://testnet.polygonscan.com"
+        }
+      }
+    ]
   },
   sourcify: {
     enabled: true

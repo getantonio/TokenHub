@@ -79,6 +79,7 @@ export default function V3() {
             <TokenForm_v3 
               isConnected={isConnected}
               onSuccess={handleSuccess}
+              externalProvider={provider}
             />
             
             <TCAP_v3 

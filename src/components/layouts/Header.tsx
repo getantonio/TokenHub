@@ -4,7 +4,39 @@ import Link from 'next/link';
 import { cn } from '@utils/cn';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { NetworkSwitcher } from '@/components/common/NetworkSwitcher';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
+
+// Define an interface for the network data
+interface Network {
+  id: number;
+  name: string;
+  color: string;
+}
+
+// Network color mapping
+const networkColors: Record<number | string, string> = {
+  1: 'bg-blue-500',       // Ethereum Mainnet
+  5: 'bg-yellow-500',     // Goerli
+  11155111: 'bg-purple-500', // Sepolia
+  80001: 'bg-green-500',  // Polygon Mumbai
+  80002: 'bg-green-600',  // Polygon Amoy
+  137: 'bg-purple-600',   // Polygon Mainnet
+  97: 'bg-yellow-600',    // BSC Testnet
+  56: 'bg-yellow-400',    // BSC Mainnet
+  'default': 'bg-gray-500'  // Unknown networks
+};
+
+// Network name mapping
+const networkNames: Record<number, string> = {
+  1: 'Ethereum Mainnet',
+  5: 'Goerli Testnet',
+  11155111: 'Sepolia Testnet',
+  80001: 'Polygon Mumbai',
+  80002: 'Polygon Amoy',
+  137: 'Polygon Mainnet',
+  97: 'BSC Testnet',
+  56: 'BSC Mainnet',
+};
 
 interface HeaderProps {
   className?: string;
@@ -13,6 +45,22 @@ interface HeaderProps {
 export function Header({ className }: HeaderProps) {
   const [networkSwitchFailed, setNetworkSwitchFailed] = useState(false);
   const { chainId } = useNetwork();
+  
+  // Store the active wallet network data for display
+  const [activeWalletNetwork, setActiveWalletNetwork] = useState<Network | null>(null);
+
+  // When the chainId changes, update the active wallet network
+  useEffect(() => {
+    if (chainId) {
+      setActiveWalletNetwork({
+        id: chainId,
+        name: networkNames[chainId] || `Network ${chainId}`,
+        color: networkColors[chainId] || networkColors['default']
+      });
+    } else {
+      setActiveWalletNetwork(null);
+    }
+  }, [chainId]);
 
   // Add event listener for network switch failures
   useEffect(() => {
@@ -67,10 +115,25 @@ export function Header({ className }: HeaderProps) {
                     Network Issues?
                   </button>
                 </DialogTrigger>
-                <DialogContent className="sm:max-w-[425px] bg-gray-900 text-white border-gray-700">
+                <DialogContent className="sm:max-w-[425px] bg-gray-900 text-white border-gray-700" aria-describedby="network-selection-description">
                   <DialogHeader>
-                    <DialogTitle className="text-white">Switch Network</DialogTitle>
+                    <DialogTitle>Select Network</DialogTitle>
                   </DialogHeader>
+                  <DialogDescription id="network-selection-description" className="text-gray-400">
+                    Choose the blockchain network you want to connect to.
+                  </DialogDescription>
+                  
+                  {/* Wallet network indicator - shown only when a network is connected */}
+                  {activeWalletNetwork && (
+                    <div className="mb-4 p-3 border border-gray-700 rounded-md bg-gray-800">
+                      <h3 className="text-sm font-medium text-gray-300 mb-1">Current Wallet Network</h3>
+                      <div className="flex items-center">
+                        <div className={`w-2 h-2 rounded-full ${activeWalletNetwork.color} mr-2`}></div>
+                        <span className="text-sm text-white">{activeWalletNetwork.name}</span>
+                      </div>
+                    </div>
+                  )}
+                  
                   <div className="py-4">
                     <p className="mb-4 text-sm text-gray-300">
                       If you're having trouble switching networks with your wallet, you can try using

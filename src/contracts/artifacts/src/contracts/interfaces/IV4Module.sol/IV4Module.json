@@ -9,11 +9,11 @@
       "outputs": [
         {
           "internalType": "bytes32",
-          "name": "moduleType",
+          "name": "",
           "type": "bytes32"
         }
       ],
-      "stateMutability": "view",
+      "stateMutability": "pure",
       "type": "function"
     },
     {
@@ -22,7 +22,7 @@
       "outputs": [
         {
           "internalType": "address",
-          "name": "tokenAddress",
+          "name": "",
           "type": "address"
         }
       ],
@@ -59,11 +59,11 @@
       "outputs": [
         {
           "internalType": "bool",
-          "name": "hasFunction",
+          "name": "",
           "type": "bool"
         }
       ],
-      "stateMutability": "view",
+      "stateMutability": "pure",
       "type": "function"
     }
   ],

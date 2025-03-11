@@ -1,16 +1,14 @@
 import { useState, useEffect, useRef, forwardRef, ReactNode } from 'react';
-import { useNetwork } from '@contexts/NetworkContext';
+import { useChainId, useAccount, usePublicClient, useWalletClient } from 'wagmi';
 import { useToast } from '@/components/ui/use-toast';
 import TokenPreview from '@components/features/token/TokenPreview';
 import { InfoIcon } from '@/components/ui/InfoIcon';
 import { Spinner } from '@/components/ui/Spinner';
 import { useTokenFactory } from '@/hooks/useTokenFactory';
-import { useAccount, usePublicClient } from 'wagmi';
-import TokenFactory_v3 from '@contracts/abi/TokenFactory_v3.json';
 import { FACTORY_ADDRESSES, getNetworkContractAddress } from '@config/contracts';
 import * as z from 'zod';
 import { addDays } from 'date-fns';
-import { parseEther, parseUnits } from 'viem';
+import { parseEther, parseUnits, formatEther } from 'ethers';
 import { useForm, UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Input } from "@/components/ui/input";
@@ -29,11 +27,16 @@ import {
 } from "@/components/ui/form";
 import { Switch } from "@/components/ui/switch";
 import { getNetworkCurrency } from '@/utils/network';
+import { ethers } from 'ethers';
+import { TokenFactory_v3_ABI } from '@/contracts/abi/TokenFactory_v3';
+import { TokenTemplate_v3_ABI } from '@/contracts/abi/TokenTemplate_v3';
+import { Contract, BrowserProvider, Log } from 'ethers';
 
 interface TokenFormV3Props {
   isConnected: boolean;
-  onSuccess?: () => void;
+  onSuccess?: (tokenAddress: string) => void;
   onError?: (error: any) => void;
+  externalProvider?: any;
 }
 
 interface ValidationResult {
@@ -63,7 +66,7 @@ interface TokenParams {
   presalePercentage: number;
   liquidityPercentage: number;
   liquidityLockDuration: bigint;
-  walletAllocations: {
+  wallets: {
     wallet: `0x${string}`;
     percentage: number;
     vestingEnabled: boolean;
@@ -387,9 +390,14 @@ const defaultValues: FormData = {
   }
 };
 
-export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenFormV3Props) {
-  const { chainId } = useNetwork();
-  const { address } = useAccount();
+const TokenForm_v3: React.FC<TokenFormV3Props> = ({ 
+  isConnected, 
+  onSuccess, 
+  onError,
+  externalProvider 
+}) => {
+  const chainId = useChainId();
+  const { address: account } = useAccount();
   const publicClient = usePublicClient();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -400,6 +408,9 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
   const [simulationResults, setSimulationResults] = useState<ValidationResult[]>([]);
   const [showTokenomicsInfo, setShowTokenomicsInfo] = useState(false);
   const [showSimulationDialog, setShowSimulationDialog] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [txHash, setTxHash] = useState<string | null>(null);
+  const tcapRef = useRef<{ loadTokens: () => void } | null>(null);
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -408,7 +419,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
       symbol: "ANT",
       initialSupply: "1000000",
       maxSupply: "2000000",
-      owner: address || "",
+      owner: account || "",
       enableBlacklist: false,
       enableTimeLock: false,
       presaleEnabled: false,
@@ -426,7 +437,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
       wallets: [
         {
           name: "Wallet 1",
-          address: address || "",
+          address: account || "",
           percentage: 20,
           vestingEnabled: false,
           vestingDuration: 365,
@@ -435,7 +446,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
         },
         {
           name: "Wallet 2",
-          address: address || "",
+          address: account || "",
           percentage: 10,
           vestingEnabled: false,
           vestingDuration: 365,
@@ -444,7 +455,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
         },
         {
           name: "Wallet 3",
-          address: address || "",
+          address: account || "",
           percentage: 10,
           vestingEnabled: false,
           vestingDuration: 365,
@@ -482,16 +493,16 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
   }, [form]);
 
   useEffect(() => {
-    if (address) {
-      console.log('Setting owner address:', address);
-      form.setValue('owner', address);
+    if (account) {
+      console.log('Setting owner address:', account);
+      form.setValue('owner', account);
       const currentWallets = form.getValues('wallets');
       form.setValue('wallets', currentWallets.map(wallet => ({
         ...wallet,
-        address
+        address: account
       })));
     }
-  }, [address, form]);
+  }, [account, form]);
 
   // Update the useEffect for presale toggle
   useEffect(() => {
@@ -523,56 +534,45 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
     try {
       console.log('Form submission started', { data });
 
-      // Debug factory address resolution
-      if (!chainId) {
-        throw new Error('Chain ID not available');
-      }
-      const factoryAddress = getNetworkContractAddress(chainId, 'factoryAddressV3');
-      console.log('Factory Address Debug:', {
-        chainId,
-        factoryAddress,
-        envValue: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V3,
-        allFactoryKeys: Object.keys(process.env).filter(key => key.includes('FACTORY')),
-      });
-
-      // Convert supply values to BigInt with 18 decimals
-      const initialSupply = parseUnits(data.initialSupply.toString(), 18);
-      const maxSupply = parseUnits(data.maxSupply.toString(), 18);
-
-      // Convert wallet allocations to contract format
-      const walletAllocations = data.wallets.map(wallet => ({
-        wallet: wallet.address as `0x${string}`,
-        percentage: Math.floor(Number(wallet.percentage)),
-        vestingEnabled: wallet.vestingEnabled || false,
-        vestingDuration: wallet.vestingEnabled ? BigInt(wallet.vestingDuration * 24 * 60 * 60) : BigInt(0),
-        cliffDuration: wallet.vestingEnabled ? BigInt(wallet.cliffDuration * 24 * 60 * 60) : BigInt(0),
-        vestingStartTime: wallet.vestingEnabled ? BigInt(wallet.vestingStartTime) : BigInt(0)
-      }));
-
-      // Calculate total percentage
-      const totalPercentage = Math.floor(Number(data.liquidityPercentage)) + 
-        walletAllocations.reduce((sum, w) => sum + w.percentage, 0) +
-        (data.presaleEnabled ? Math.floor(Number(data.presalePercentage)) : 0);
-
-      // Validate total percentage equals 100%
-      if (totalPercentage !== 100) {
-        throw new Error(`Total percentage must be 100%. Current breakdown:\n` +
-          `${data.presaleEnabled ? `Presale: ${data.presalePercentage}%\n` : ''}` +
-          `Liquidity: ${data.liquidityPercentage}%\n` +
-          `Wallets: ${walletAllocations.map(w => `${w.percentage}%`).join(', ')}\n` +
-          `Total: ${totalPercentage}%`);
+      if (!account || typeof chainId !== 'number') {
+        toast({
+          title: 'Error',
+          description: 'Please connect your wallet first',
+          variant: 'destructive',
+        });
+        return;
       }
 
-      const params = {
+      setLoading(true);
+
+      // Create ethers provider and signer
+      const provider = new BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      
+      // For Polygon Amoy testnet, we use a hardcoded address
+      const tokenFactoryAddress = chainId === 80002 
+        ? '0xc9dE01F826649bbB1A54d2A00Ce91D046791AdE1'
+        : getNetworkContractAddress(chainId, 'factoryAddressV3');
+      
+      console.log('Using factory address:', tokenFactoryAddress);
+
+      const factory = new Contract(tokenFactoryAddress, TokenFactory_v3_ABI, signer);
+      
+      // Get deployment fee
+      const deploymentFee = await factory.deploymentFee();
+      console.log('Deployment fee:', formatEther(deploymentFee), 'ETH');
+
+      // Prepare token parameters
+      const tokenParams = {
         name: data.name,
         symbol: data.symbol,
-        initialSupply,
-        maxSupply,
+        initialSupply: parseEther(data.initialSupply.toString()),
+        maxSupply: parseEther(data.maxSupply.toString()),
         owner: data.owner as `0x${string}`,
-        enableBlacklist: data.enableBlacklist || false,
-        enableTimeLock: data.enableTimeLock || false,
-        presaleEnabled: data.presaleEnabled || false,
-        maxActivePresales: data.maxActivePresales || 0,
+        enableBlacklist: data.enableBlacklist,
+        enableTimeLock: data.enableTimeLock,
+        presaleEnabled: false,
+        maxActivePresales: 0,
         presaleRate: BigInt(0),
         softCap: BigInt(0),
         hardCap: BigInt(0),
@@ -580,28 +580,68 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
         maxContribution: BigInt(0),
         startTime: BigInt(0),
         endTime: BigInt(0),
-        presalePercentage: data.presaleEnabled ? Math.floor(Number(data.presalePercentage)) : 0,
-        liquidityPercentage: Math.floor(Number(data.liquidityPercentage)),
-        liquidityLockDuration: BigInt(Math.min(data.liquidityLockDuration || 30, 365) * 24 * 60 * 60),
-        walletAllocations
+        presalePercentage: 0,
+        liquidityPercentage: 100,
+        liquidityLockDuration: BigInt(2592000), // 30 days in seconds
+        walletAllocations: []
       };
 
-      console.log('Submitting with params:', params);
-      await createToken(params);
+      console.log('Creating token with parameters:', tokenParams);
+
+      // Create token with proper parameters
+      const tx = await factory.createToken(tokenParams, {
+        value: deploymentFee
+      });
+
+      toast({
+        title: 'Transaction Sent',
+        description: 'Creating your token...',
+      });
+
+      const receipt = await tx.wait();
       
-      if (onSuccess) {
-        onSuccess();
+      // Get token address from events
+      const tokenCreatedEvent = receipt.logs
+        .map((log: Log) => {
+          try {
+            return factory.interface.parseLog(log);
+          } catch (e) {
+            return null;
+          }
+        })
+        .find((event: { name: string } | null) => event && event.name === 'TokenCreated');
+
+      if (tokenCreatedEvent) {
+        const tokenAddress = tokenCreatedEvent.args.token;
+        
+        toast({
+          title: 'Success',
+          description: 'Token created successfully!',
+        });
+
+        // Reset form
+        form.reset();
+        
+        // Refresh token list if TCAP component is available
+        if (tcapRef.current) {
+          tcapRef.current.loadTokens();
+        }
       }
-    } catch (error) {
+
+    } catch (error: any) {
       console.error('Error creating token:', error);
-      if (onError) {
-        onError(error);
-      }
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to create token',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
   const addWallet = () => {
-    if (!address) {
+    if (!account) {
       toast({
         title: "Error",
         description: "Please connect your wallet first",
@@ -613,7 +653,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
     const now = Math.floor(Date.now() / 1000);
     const newWallet = {
       name: '',
-      address: address,
+      address: account,
       percentage: 0,
       vestingEnabled: false,
       vestingDuration: 365,
@@ -649,7 +689,7 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
     // Set wallets with correct percentages and vesting schedules
     form.setValue('wallets', presetConfig.wallets.map(wallet => ({
       name: wallet.name,
-      address: address || '0x0000000000000000000000000000000000000000',
+      address: account || '0x0000000000000000000000000000000000000000',
       percentage: wallet.percentage,
       vestingEnabled: wallet.vestingEnabled,
       vestingDuration: wallet.vestingDuration,
@@ -1842,10 +1882,10 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
 
       {/* Add Dialog for simulation results */}
       <Dialog open={showSimulationDialog} onOpenChange={setShowSimulationDialog}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl" aria-describedby="simulation-results-description">
           <div className="space-y-4">
             <h2 className="text-xl font-semibold text-white">Deployment Simulation Results</h2>
-            <div className="space-y-2">
+            <div id="simulation-results-description" className="space-y-2">
               {simulationResults.map((result, index) => (
                 <div
                   key={index}
@@ -1903,3 +1943,5 @@ export default function TokenForm_V3({ isConnected, onSuccess, onError }: TokenF
     </div>
   );
 }
+
+export default TokenForm_v3;

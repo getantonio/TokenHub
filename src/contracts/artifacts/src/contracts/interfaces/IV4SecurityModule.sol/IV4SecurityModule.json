@@ -15,7 +15,7 @@
       "outputs": [
         {
           "internalType": "bool",
-          "name": "success",
+          "name": "",
           "type": "bool"
         }
       ],
@@ -34,7 +34,7 @@
       "outputs": [
         {
           "internalType": "bool",
-          "name": "success",
+          "name": "",
           "type": "bool"
         }
       ],
@@ -47,7 +47,7 @@
       "outputs": [
         {
           "internalType": "bool",
-          "name": "success",
+          "name": "",
           "type": "bool"
         }
       ],
@@ -60,7 +60,7 @@
       "outputs": [
         {
           "internalType": "bool",
-          "name": "success",
+          "name": "",
           "type": "bool"
         }
       ],
@@ -73,7 +73,7 @@
       "outputs": [
         {
           "internalType": "address[]",
-          "name": "signers",
+          "name": "",
           "type": "address[]"
         }
       ],
@@ -86,29 +86,11 @@
       "outputs": [
         {
           "internalType": "uint256",
-          "name": "threshold",
+          "name": "",
           "type": "uint256"
         }
       ],
       "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "tokenAddress",
-          "type": "address"
-        },
-        {
-          "internalType": "address",
-          "name": "owner",
-          "type": "address"
-        }
-      ],
-      "name": "initialize",
-      "outputs": [],
-      "stateMutability": "nonpayable",
       "type": "function"
     },
     {
@@ -123,7 +105,7 @@
       "outputs": [
         {
           "internalType": "bool",
-          "name": "isSigner",
+          "name": "",
           "type": "bool"
         }
       ],
@@ -142,7 +124,7 @@
       "outputs": [
         {
           "internalType": "bytes32",
-          "name": "proposalId",
+          "name": "",
           "type": "bytes32"
         }
       ],
@@ -161,7 +143,7 @@
       "outputs": [
         {
           "internalType": "bool",
-          "name": "success",
+          "name": "",
           "type": "bool"
         }
       ],
@@ -180,7 +162,7 @@
       "outputs": [
         {
           "internalType": "bool",
-          "name": "success",
+          "name": "",
           "type": "bool"
         }
       ],

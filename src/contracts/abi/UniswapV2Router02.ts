@@ -1,0 +1,2 @@
+import UniswapV2Router02Json from '../artifacts/@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol/IUniswapV2Router02.json';
+export const UniswapV2Router02_ABI = UniswapV2Router02Json.abi; 

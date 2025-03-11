@@ -17,18 +17,18 @@ interface IV4Module {
      * @dev Get the type of this module
      * @return moduleType Type identifier for this module
      */
-    function getModuleType() external view returns (bytes32 moduleType);
+    function getModuleType() external pure returns (bytes32);
     
     /**
      * @dev Check if this module has a specific function
      * @param functionSig Function signature to check for
      * @return hasFunction Whether the module implements the function
      */
-    function supportsFunction(bytes4 functionSig) external view returns (bool hasFunction);
+    function supportsFunction(bytes4 functionSig) external pure returns (bool);
     
     /**
      * @dev Get the token this module is attached to
      * @return tokenAddress Address of the token
      */
-    function getToken() external view returns (address tokenAddress);
+    function getToken() external view returns (address);
 } 

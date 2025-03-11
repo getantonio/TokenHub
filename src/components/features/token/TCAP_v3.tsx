@@ -1,13 +1,11 @@
 import { useEffect, useState, forwardRef, useImperativeHandle, useMemo, useRef, ReactNode } from 'react';
 import { Contract, parseEther } from 'ethers';
-import { formatEther, parseUnits } from 'viem';
+import { formatEther, parseUnits, formatUnits } from 'viem';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/toast/use-toast';
-import TokenV3ABI from '@/contracts/abi/TokenTemplate_v3_Enhanced.json';
-import TokenFactoryV3ABI from '@/contracts/abi/TokenFactory_v3.json';
 import { Spinner } from '@/components/ui/Spinner';
 import { useNetwork } from '@/contexts/NetworkContext';
 import { getExplorerUrl } from '@/config/networks';
@@ -18,6 +16,15 @@ import { getNetworkContractAddress, FACTORY_ADDRESSES } from '@config/contracts'
 import { ethers } from 'ethers';
 import { Form, FormControl, FormField, FormItem } from "@/components/ui/form";
 import { useForm, UseFormReturn } from "react-hook-form";
+import { TokenTemplate_v3_ABI } from '@/contracts/abi/TokenTemplate_v3';
+import { UniswapV2Router02_ABI } from '@/contracts/abi/UniswapV2Router02';
+import TokenFactoryV3ABI from '@/contracts/abi/TokenFactory_v3.json';
+import TokenV3ABI from '@/contracts/abi/TokenTemplate_v3_Enhanced.json';
+import TokenTemplate_v3 from '@/contracts/artifacts/src/contracts/TokenTemplate_v3.sol/TokenTemplate_v3.json';
+import IUniswapV2Router02 from '@/contracts/artifacts/@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol/IUniswapV2Router02.json';
+import { BrowserProvider } from 'ethers';
+import { Log } from 'ethers';
+import { TokenFactory_v3_ABI } from '@/contracts/abi/TokenFactory_v3';
 
 export interface TCAP_v3Props {
   isConnected: boolean;
@@ -101,13 +108,12 @@ interface BlockDialogProps {
 function BlockDialog({ isOpen, onClose, onConfirm, tokenName, tokenAddress }: BlockDialogProps) {
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent>
-        <DialogTitle>Block Token Confirmation</DialogTitle>
-        <DialogDescription>
-          Are you sure you want to block the token {tokenName} ({tokenAddress})?
-          This action cannot be undone.
+      <DialogContent className="sm:max-w-[425px]" aria-describedby="block-dialog-description">
+        <DialogTitle>Block Token</DialogTitle>
+        <DialogDescription id="block-dialog-description">
+          Are you sure you want to block {tokenName}? This action cannot be undone.
         </DialogDescription>
-        <div className="flex justify-end space-x-4 mt-4">
+        <div className="mt-4 flex justify-end gap-3">
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
           <Button variant="destructive" onClick={onConfirm}>Block Token</Button>
         </div>
@@ -119,14 +125,42 @@ function BlockDialog({ isOpen, onClose, onConfirm, tokenName, tokenAddress }: Bl
 interface AddLiquidityDialog {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (tokenAmount: string, ethAmount: string) => void;
+  onConfirm: (data: { tokenAmount: string; ethAmount: string }) => void;
   tokenSymbol: string;
   tokenTotalSupply?: string;
+  selectedToken: TokenInfo;
+  externalProvider: any;
 }
 
-function AddLiquidityDialog({ isOpen, onClose, onConfirm, tokenSymbol, tokenTotalSupply }: AddLiquidityDialog) {
+function AddLiquidityDialog({ 
+  isOpen, 
+  onClose, 
+  onConfirm, 
+  tokenSymbol, 
+  tokenTotalSupply, 
+  selectedToken,
+  externalProvider 
+}: AddLiquidityDialog) {
   const [tokenAmount, setTokenAmount] = useState('');
   const [ethAmount, setEthAmount] = useState('');
+  const [remainingAllocation, setRemainingAllocation] = useState<string>('0');
+
+  // Fetch remaining allocation when dialog opens
+  useEffect(() => {
+    if (isOpen && selectedToken) {
+      const fetchAllocation = async () => {
+        try {
+          const signer = await externalProvider.getSigner();
+          const tokenContract = new Contract(selectedToken.address, TokenV3ABI.abi, signer);
+          const remaining = await tokenContract.remainingLiquidityAllocation();
+          setRemainingAllocation(formatEther(remaining));
+        } catch (error) {
+          console.error('Error fetching remaining allocation:', error);
+        }
+      };
+      fetchAllocation();
+    }
+  }, [isOpen, selectedToken]);
 
   // Calculate derived values
   const tokenPrice = useMemo(() => {
@@ -148,98 +182,51 @@ function AddLiquidityDialog({ isOpen, onClose, onConfirm, tokenSymbol, tokenTota
   }, [tokenPrice]);
 
   const handleConfirm = () => {
-    onConfirm(tokenAmount, ethAmount);
-    onClose();
+    onConfirm({ tokenAmount, ethAmount });
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-[425px]" aria-describedby="add-liquidity-dialog-description">
         <DialogTitle>Add Liquidity</DialogTitle>
-        <DialogDescription className="text-gray-300">
-          Enter the amount of {tokenSymbol} tokens and ETH you want to add to the liquidity pool.
+        <DialogDescription id="add-liquidity-dialog-description">
+          Add liquidity to create a trading pair with {tokenSymbol}. Enter the amount of tokens and ETH you want to provide.
         </DialogDescription>
-        <div className="space-y-4 mt-4">
-          <div>
-            <Label htmlFor="tokenAmount" className="text-gray-200">Token Amount ({tokenSymbol})</Label>
-            <Input
-              id="tokenAmount"
-              type="text"
-              value={tokenAmount}
-              onChange={(e) => setTokenAmount(e.target.value)}
-              placeholder="Enter token amount"
-              className="text-gray-200"
-            />
+        
+        <div className="mt-4 space-y-2">
+          <div className="text-sm text-blue-400">
+            Available token allocation: {remainingAllocation} {tokenSymbol}
           </div>
-          <div>
-            <Label htmlFor="ethAmount" className="text-gray-200">ETH Amount</Label>
-            <Input
-              id="ethAmount"
-              type="text"
-              value={ethAmount}
-              onChange={(e) => setEthAmount(e.target.value)}
-              placeholder="Enter ETH amount"
-              className="text-gray-200"
-            />
-          </div>
-
-          {/* Enhanced Price Calculator Section */}
-          <div className="mt-4 p-4 bg-gray-800 rounded-lg">
-            <h4 className="text-sm font-medium text-gray-200 mb-3">Liquidity Price Calculator</h4>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-400">Initial Token Price:</span>
-                <span className="text-gray-200">{tokenPrice ? `${tokenPrice.toFixed(8)} ETH per ${tokenSymbol}` : '-'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Tokens per ETH:</span>
-                <span className="text-gray-200">{tokensPerEth ? `${tokensPerEth.toFixed(2)} ${tokenSymbol}` : '-'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">ETH per Token:</span>
-                <span className="text-gray-200">{tokenPrice ? `${tokenPrice.toFixed(8)} ETH` : '-'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Total Value:</span>
-                <span className="text-gray-200">{ethAmount ? `${ethAmount} ETH` : '-'}</span>
-              </div>
-              {tokenAmount && ethAmount && (
-                <div className="mt-2 pt-2 border-t border-gray-700">
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Market Cap (Est.):</span>
-                    <span className="text-gray-200">
-                      {tokenPrice && tokenTotalSupply 
-                        ? `${(Number(tokenTotalSupply) / 1e18 * tokenPrice).toFixed(4)} ETH` 
-                        : '-'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Price Impact (1 ETH):</span>
-                    <span className="text-gray-200">
-                      {ethAmount && tokenAmount 
-                        ? `${(1 / parseFloat(ethAmount) * 100).toFixed(2)}%` 
-                        : '-'}
-                    </span>
-                  </div>
-                </div>
-              )}
+          
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="tokenAmount" className="text-gray-300">Token Amount ({tokenSymbol})</Label>
+              <Input
+                id="tokenAmount"
+                type="text"
+                value={tokenAmount}
+                onChange={(e) => setTokenAmount(e.target.value)}
+                placeholder="Enter token amount"
+                className="bg-gray-800 border-gray-700 text-gray-100 placeholder-gray-500"
+              />
             </div>
-            <div className="mt-3 text-xs text-gray-400">
-              <p>• This will set the initial trading price for your token</p>
-              <p>• Higher liquidity means less price impact from trades</p>
-              <p>• The price is determined by the ratio of tokens to ETH</p>
+            <div>
+              <Label htmlFor="ethAmount" className="text-gray-300">ETH Amount</Label>
+              <Input
+                id="ethAmount"
+                type="text"
+                value={ethAmount}
+                onChange={(e) => setEthAmount(e.target.value)}
+                placeholder="Enter ETH amount"
+                className="bg-gray-800 border-gray-700 text-gray-100 placeholder-gray-500"
+              />
             </div>
           </div>
+        </div>
 
-          <div className="flex justify-end space-x-4">
-            <Button variant="secondary" onClick={onClose}>Cancel</Button>
-            <Button 
-              onClick={handleConfirm}
-              disabled={!tokenAmount || !ethAmount || parseFloat(tokenAmount) <= 0 || parseFloat(ethAmount) <= 0}
-            >
-              Add Liquidity
-            </Button>
-          </div>
+        <div className="mt-4 flex justify-end gap-3">
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button variant="default" onClick={handleConfirm}>Add Liquidity</Button>
         </div>
       </DialogContent>
     </Dialog>
@@ -1275,228 +1262,142 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
     }
   };
 
-  const handleAddLiquidityConfirm = async (tokenAmount: string, ethAmount: string): Promise<void> => {
+  const handleAddLiquidityConfirm = async ({ tokenAmount, ethAmount }: { tokenAmount: string; ethAmount: string }) => {
     try {
-        console.log('Adding liquidity...');
-        if (!externalProvider || !factoryAddress || !selectedToken) return;
+      setLoading(true);
+      
+      if (!selectedToken || !chainId) {
+        throw new Error('Token or chain not selected');
+      }
 
-        const signer = await externalProvider.getSigner();
-        const tokenContract = new Contract(selectedToken.address, TokenV3ABI.abi, signer);
-        const userAddress = await signer.getAddress();
+      const signer = await externalProvider.getSigner();
+      const userAddress = await signer.getAddress();
+      const tokenContract = getTokenContract(selectedToken.address, signer);
 
-        // Check ownership
-        const tokenOwner = await tokenContract.owner();
-        console.log('Token owner:', tokenOwner);
-        console.log('User address:', userAddress);
-        if (tokenOwner.toLowerCase() !== userAddress.toLowerCase()) {
-            throw new Error('Not token owner');
+      // Convert amounts to BigInt with proper decimals
+      const tokenAmountBN = parseUnits(tokenAmount, 18);
+      const ethAmountBN = parseUnits(ethAmount, 18);
+
+      console.log('Attempting to add liquidity:', {
+        token: selectedToken.address,
+        tokenSymbol: selectedToken.symbol,
+        tokenAmount,
+        ethAmount,
+        tokenAmountBN: tokenAmountBN.toString(),
+        ethAmountBN: ethAmountBN.toString()
+      });
+
+      // Check remaining liquidity allocation
+      const remainingLiquidity = await tokenContract.remainingLiquidityAllocation();
+      console.log('Remaining liquidity allocation:', remainingLiquidity.toString());
+
+      if (tokenAmountBN > remainingLiquidity) {
+        throw new Error('Amount exceeds remaining liquidity allocation');
+      }
+
+      // Check if user is owner
+      const owner = await tokenContract.owner();
+      const isOwner = owner.toLowerCase() === userAddress.toLowerCase();
+
+      // Check token balance and mint if needed
+      const balance = await tokenContract.balanceOf(userAddress);
+      console.log('Current token balance:', balance.toString());
+
+      if (balance < tokenAmountBN && isOwner) {
+        console.log('Minting additional tokens...');
+        const mintTx = await tokenContract.mint(userAddress, tokenAmountBN);
+        await mintTx.wait();
+        console.log('Tokens minted successfully');
+      }
+
+      // Verify that user has sufficient tokens
+      const finalBalance = await tokenContract.balanceOf(userAddress);
+      if (finalBalance < tokenAmountBN) {
+        throw new Error(`Insufficient token balance. You have ${formatUnits(finalBalance, 18)} ${selectedToken.symbol} but need ${tokenAmount}`);
+      }
+
+      console.log('Ready to add liquidity - Understanding contract requirements:');
+      console.log('1. Contract expects tokens to be transferred FROM the caller during execution');
+      console.log('2. Contract needs ETH to be sent as msg.value');
+      
+      // Create a minimal ABI with just the function we need
+      const minimumAbi = [
+        "function addLiquidity(uint256 tokenAmount) external payable",
+        "function approve(address spender, uint256 amount) external returns (bool)",
+        "function balanceOf(address account) external view returns (uint256)"
+      ];
+      
+      const simpleContract = new ethers.Contract(selectedToken.address, minimumAbi, signer);
+      
+      // First, ensure approval for the contract to use tokens
+      console.log('Ensuring token approval...');
+      const approvalTx = await simpleContract.approve(selectedToken.address, tokenAmountBN);
+      await approvalTx.wait();
+      console.log('Token approval confirmed');
+      
+      // Now call the addLiquidity function with ETH as value
+      console.log('Calling addLiquidity with correct parameters...');
+      
+      // The contract will:
+      // 1. Transfer tokens from the caller during execution
+      // 2. Approve the router to use these tokens
+      // 3. Call the router with the ETH value
+      
+      const addLiquidityTx = await simpleContract.addLiquidity(
+        tokenAmountBN,  // Token amount parameter
+        {
+          value: ethAmountBN,  // ETH sent with transaction
+          gasLimit: 3000000     // Gas limit
         }
+      );
+      
+      console.log('Transaction sent:', addLiquidityTx.hash);
+      
+      // Wait for transaction to be mined
+      const receipt = await addLiquidityTx.wait();
+      console.log('Transaction receipt:', receipt);
+      
+      if (receipt.status === 0) {
+        throw new Error('Transaction failed - The execution was reverted on the blockchain');
+      }
+      
+      toast({
+        title: 'Success',
+        description: 'Liquidity added successfully',
+      });
 
-        // Check remaining liquidity allocation
-        const remainingLiquidityAllocation = await tokenContract.remainingLiquidityAllocation();
-        console.log('Remaining liquidity allocation:', remainingLiquidityAllocation.toString());
-        const tokenAmountBN = parseEther(tokenAmount);
-        if (BigInt(remainingLiquidityAllocation.toString()) < BigInt(tokenAmountBN.toString())) {
-            throw new Error('Amount exceeds remaining liquidity allocation');
-        }
-
-        // Check contract token balance
-        const contractBalance = await tokenContract.balanceOf(selectedToken.address);
-        console.log('Contract token balance:', contractBalance.toString());
-        console.log('Required token amount:', tokenAmountBN.toString());
-        if (BigInt(contractBalance.toString()) < BigInt(tokenAmountBN.toString())) {
-            throw new Error('Insufficient contract balance');
-        }
-
-        // Get router address and create router contract
-        const routerAddress = await tokenContract.uniswapV2Router();
-        console.log('Router address:', routerAddress);
-        
-        // Router ABI - just the functions we need
-        const routerAbi = [
-            "function addLiquidityETH(address token, uint amountTokenDesired, uint amountTokenMin, uint amountETHMin, address to, uint deadline) external payable returns (uint amountToken, uint amountETH, uint liquidity)"
-        ];
-        const routerContract = new Contract(routerAddress, routerAbi, signer);
-
-        const currentPairAddress = await tokenContract.uniswapV2Pair();
-        console.log('Current pair address:', currentPairAddress);
-
-        // Calculate minimum amounts (1% slippage)
-        const minTokenAmount = (BigInt(tokenAmountBN.toString()) * BigInt(99)) / BigInt(100);
-        const ethAmountBN = parseEther(ethAmount);
-        const minEthAmount = (BigInt(ethAmountBN.toString()) * BigInt(99)) / BigInt(100);
-        
-        // Set deadline to 20 minutes from now
-        const deadline = Math.floor(Date.now() / 1000) + 1200;
-
-        console.log('Calling token contract addLiquidity function...');
-        console.log('Transaction parameters:', {
-            tokenAmount: tokenAmountBN.toString(),
-            ethAmount: ethAmountBN.toString(),
-            value: ethAmountBN.toString()
-        });
-
-        // Use the token contract's addLiquidity function with properly encoded arguments
-        console.log('Sending transaction...');
-        
-        // Get contract information
-        console.log('Getting contract information...');
-        const [remainingLiqAlloc, tokenBalance, routerAddr] = await Promise.all([
-            tokenContract.remainingLiquidityAllocation(),
-            tokenContract.balanceOf(selectedToken.address),
-            tokenContract.uniswapV2Router()
-        ]);
-        
-        console.log('Contract details:', {
-            remainingLiquidityAllocation: remainingLiqAlloc.toString(),
-            tokenBalance: tokenBalance.toString(),
-            routerAddress: routerAddr
-        });
-        
-        // Check if contract has the needed tokens
-        if (BigInt(tokenBalance.toString()) < BigInt(tokenAmountBN.toString())) {
-            throw new Error(`Contract doesn't have enough tokens. Has: ${formatEther(tokenBalance)} Needs: ${formatEther(tokenAmountBN)}`);
-        }
-        
-        // Check if within remaining allocation
-        if (BigInt(remainingLiqAlloc.toString()) < BigInt(tokenAmountBN.toString())) {
-            throw new Error(`Amount exceeds remaining liquidity allocation. Max: ${formatEther(remainingLiqAlloc)}`);
-        }
-        
-        // First approve the router directly (which may be needed in some implementations)
-        console.log('Approving router to spend tokens...');
-        const approveTx = await tokenContract.approve(routerAddr, tokenAmountBN);
-        await approveTx.wait();
-        console.log('Router approval complete');
-        
-        // Call the addLiquidity function with the correct parameter structure
-        // The contract function expects (tokenAmount, ethAmount) with value in the tx options
-        try {
-            // OPTION 1: Use the token contract's addLiquidity function
-            console.log('Using token contract method: addLiquidity');
-            
-            // Check for the existence of the addLiquidity function on the contract
-            const isAddLiquiditySupported = await tokenContract.hasFunction?.("addLiquidity") || 
-                tokenContract.interface?.hasFunction?.("addLiquidity") || 
-                Object.keys(tokenContract.functions).includes("addLiquidity(uint256,uint256)");
-                
-            console.log("addLiquidity function supported by contract:", isAddLiquiditySupported);
-            
-            // Use a shorter deadline (5 minutes instead of 20)
-            const deadline = Math.floor(Date.now() / 1000) + 300;
-            
-            // Try with explicit parameter names to avoid confusion
-            const tx = await tokenContract.addLiquidity(
-                tokenAmountBN,
-                ethAmountBN,
-                {
-                    value: ethAmountBN,
-                    gasLimit: 5000000 // Increased gas limit to be safe
-                }
-            );
-            console.log('Transaction sent:', tx.hash);
-            
-            // Wait for confirmation
-            const receipt = await tx.wait();
-            console.log('Transaction confirmed:', receipt);
-        } catch (error) {
-            console.error('Error using token contract addLiquidity:', error);
-            
-            // OPTION 2: Try using the router directly if option 1 fails
-            console.log('Trying alternative approach using router directly...');
-            
-            try {
-                // Fresh approval to ensure the router can spend the tokens
-                const freshApprovalTx = await tokenContract.approve(routerAddr, ethers.MaxUint256);
-                await freshApprovalTx.wait();
-                console.log('Renewed router approval complete with max allowance');
-                
-                // Create router contract with full function signature to ensure correct encoding
-                const routerContract = new Contract(
-                    routerAddr,
-                    [
-                        "function addLiquidityETH(address token, uint256 amountTokenDesired, uint256 amountTokenMin, uint256 amountETHMin, address to, uint256 deadline) external payable returns (uint256 amountToken, uint256 amountETH, uint256 liquidity)",
-                        "function WETH() external pure returns (address)"
-                    ],
-                    signer
-                );
-                
-                // Get WETH address from router to verify we're using the right router
-                const wethAddress = await routerContract.WETH();
-                console.log('WETH address from router:', wethAddress);
-                
-                // Use a shorter deadline (5 minutes)
-                const deadline = Math.floor(Date.now() / 1000) + 300;
-                
-                // Try with very low (but not zero) min amounts
-                const minTokenAmount = BigInt(1);  // Accept any non-zero amount of tokens
-                const minETHAmount = BigInt(1);    // Accept any non-zero amount of ETH
-                
-                console.log('Sending router transaction with params:', {
-                    token: selectedToken.address,
-                    amountTokenDesired: formatEther(tokenAmountBN),
-                    amountTokenMin: formatEther(minTokenAmount),
-                    amountETHMin: formatEther(minETHAmount),
-                    to: userAddress,
-                    deadline: deadline,
-                    value: formatEther(ethAmountBN)
-                });
-                
-                const tx = await routerContract.addLiquidityETH(
-                    selectedToken.address,
-                    tokenAmountBN,
-                    minTokenAmount,
-                    minETHAmount,
-                    userAddress,
-                    deadline,
-                    { 
-                        value: ethAmountBN,
-                        gasLimit: 6000000  // Increased gas limit even more for safety
-                    }
-                );
-                
-                console.log('Router transaction sent:', tx.hash);
-                const receipt = await tx.wait();
-                console.log('Router transaction confirmed:', receipt);
-            } catch (routerError: unknown) {
-                console.error('Error using router directly:', routerError);
-                
-                // Get error message safely with type checking
-                let errorMessage = 'unknown error';
-                if (routerError instanceof Error) {
-                    errorMessage = routerError.message;
-                } else if (typeof routerError === 'string') {
-                    errorMessage = routerError;
-                } else if (routerError && typeof routerError === 'object' && 'message' in routerError) {
-                    errorMessage = String((routerError as { message: unknown }).message);
-                }
-                
-                // If both methods fail, throw a more descriptive error
-                throw new Error(`Failed to add liquidity: ${errorMessage}`);
-            }
-        }
-
-        // Show success message
-        toast({
-            title: 'Success',
-            description: 'Liquidity added successfully',
-            variant: 'default'
-        });
-
-        // Reload token data
-        await loadTokens();
-        
-        // Close dialog
-        setIsAddLiquidityDialogOpen(false);
-        setSelectedToken(null);
+      // Refresh token data
+      loadTokens();
+      
     } catch (error: any) {
-        console.error('Error adding liquidity:', error);
-        toast({
-            title: 'Error',
-            description: error.message || 'Failed to add liquidity',
-            variant: 'destructive'
-        });
-        throw error;
+      console.error('Error adding liquidity:', error);
+      
+      // Extract a more user-friendly error message
+      let errorMessage = 'Failed to add liquidity';
+      
+      if (error.reason) {
+        errorMessage = error.reason;
+      } else if (error.message) {
+        // Clean up common error messages
+        if (error.message.includes('user rejected transaction')) {
+          errorMessage = 'Transaction was rejected';
+        } else if (error.message.includes('insufficient funds')) {
+          errorMessage = 'Insufficient ETH to complete the transaction';
+        } else if (error.message.includes('execution reverted')) {
+          errorMessage = 'Transaction reverted: Contract requirements not met';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+      setIsAddLiquidityDialogOpen(false);
     }
   };
 
@@ -2158,18 +2059,14 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
         open={showVestingSchedules} 
         onOpenChange={(open) => setShowVestingSchedules(open)}
       >
-        <DialogContent className="bg-gray-800 p-0">
+        <DialogContent className="bg-gray-800 p-0" aria-describedby="vesting-schedules-description">
+          <div className="p-4 border-b border-gray-700">
+            <DialogTitle className="text-lg font-medium text-white">Vesting Schedules</DialogTitle>
+            <DialogDescription id="vesting-schedules-description" className="text-sm text-gray-400 mt-1">
+              View and manage token vesting schedules for all recipients.
+            </DialogDescription>
+          </div>
           <div className="p-4 max-w-2xl w-full">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-medium text-white">Vesting Schedules</h3>
-              <button
-                onClick={() => setShowVestingSchedules(false)}
-                className="text-gray-400 hover:text-gray-300"
-              >
-                ×
-              </button>
-            </div>
-            
             <div className="space-y-4">
               {vestingSchedules.length > 0 ? (
                 vestingSchedules.map((schedule, index) => (
@@ -2243,6 +2140,8 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
           onConfirm={handleAddLiquidityConfirm}
           tokenSymbol={selectedToken.symbol}
           tokenTotalSupply={selectedToken.totalSupply}
+          selectedToken={selectedToken}
+          externalProvider={externalProvider}
         />
       )}
     </div>

@@ -9,6 +9,10 @@ import { Footer } from '@/components/layouts/Footer';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
+import { ChainId } from '@/types/chain';
+import { TCAP_v4 } from '@/components/features/token/TCAP_v4';
+import { useToast } from '@/components/ui/toast/use-toast';
+import { ethers } from 'ethers';
 
 const ConnectWalletButton = dynamic(
   () => import('@/components/wallet/ConnectWallet').then(mod => mod.ConnectWallet),
@@ -19,7 +23,57 @@ export default function V4Page() {
   const { chainId } = useNetwork();
   const { isConnected } = useAccount();
   const router = useRouter();
-  const [showFeatures, setShowFeatures] = useState(true);
+  const [showFeatures, setShowFeatures] = useState(false);
+  const { toast } = useToast();
+  
+  // Set default network to Polygon Amoy
+  useEffect(() => {
+    const checkNetwork = async () => {
+      if (window.ethereum && chainId !== ChainId.POLYGON_AMOY) {
+        try {
+          await window.ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: '0x13882' }], // 0x13882 is the hex value for 80002 (Polygon Amoy)
+          });
+        } catch (error) {
+          console.error('Failed to switch to Polygon Amoy:', error);
+        }
+      }
+    };
+    
+    checkNetwork();
+  }, [chainId]);
+  
+  // Check if the v4 factory contract exists
+  useEffect(() => {
+    const checkFactoryContract = async () => {
+      if (window.ethereum && chainId === ChainId.POLYGON_AMOY) {
+        try {
+          const provider = new ethers.BrowserProvider(window.ethereum);
+          const v4FactoryAddress = process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V4 || 
+                                  '0xA06cF00fC2B455f92319cc4A6088B5B6Ccd2F10f';
+          
+          console.log('Checking V4 factory contract at:', v4FactoryAddress);
+          const code = await provider.getCode(v4FactoryAddress);
+          const contractExists = code.length > 2; // "0x" means no code
+          
+          console.log('V4 factory contract exists:', contractExists);
+          
+          if (!contractExists) {
+            toast({
+              title: "Warning",
+              description: "The V4 factory contract may not be deployed on Polygon Amoy. Some features might not work.",
+              variant: "destructive"
+            });
+          }
+        } catch (error) {
+          console.error('Error checking V4 factory contract:', error);
+        }
+      }
+    };
+    
+    checkFactoryContract();
+  }, [chainId, toast]);
   
   const features = [
     {
@@ -83,7 +137,7 @@ export default function V4Page() {
               </p>
             </div>
             <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/50">
-              Development
+              Polygon Amoy
             </Badge>
           </div>
 
@@ -115,36 +169,6 @@ export default function V4Page() {
 
           {showFeatures ? (
             <>
-              {/* Coming Soon Message */}
-              <Card className="mb-8 p-6 bg-blue-900/20 border border-blue-500/20">
-                <h2 className="text-xl font-bold text-white mb-4">Join the Beta Program</h2>
-                <p className="text-gray-300 mb-4">
-                  Token Factory V4 is currently in development. Join our Discord community to:
-                </p>
-                <ul className="list-disc list-inside text-gray-300 mb-6 space-y-2">
-                  <li>Get early access to the beta version</li>
-                  <li>Provide feedback and shape the future of the platform</li>
-                  <li>Stay updated on development progress</li>
-                  <li>Connect with other token creators</li>
-                </ul>
-                <div className="flex gap-4">
-                  <a
-                    href="https://discord.gg/tokenhub"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                  >
-                    Join Discord Community
-                  </a>
-                  <Link
-                    href="/v4"
-                    className="inline-flex items-center px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors"
-                  >
-                    View Documentation
-                  </Link>
-                </div>
-              </Card>
-
               {/* Features Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                 {features.map((feature, index) => (
@@ -245,18 +269,25 @@ export default function V4Page() {
               </Card>
             </>
           ) : (
-            <div className="grid gap-6">
-              <TokenForm_V4
-                isConnected={isConnected}
-                onSuccess={() => {
-                  // TODO: Handle success
-                  console.log('Token deployed successfully');
-                }}
-                onError={(error) => {
-                  // TODO: Handle error
-                  console.error('Error deploying token:', error);
-                }}
-              />
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="lg:col-span-2">
+                <TokenForm_V4
+                  isConnected={isConnected}
+                  onSuccess={() => {
+                    // Handle success
+                  }}
+                  onError={(error) => {
+                    console.error('Error creating token:', error);
+                  }}
+                />
+              </div>
+              <div className="lg:col-span-1 space-y-6">
+                <TCAP_v4 
+                  onAnalyze={(address) => {
+                    console.log('Analyzing token:', address);
+                  }}
+                />
+              </div>
             </div>
           )}
         </div>

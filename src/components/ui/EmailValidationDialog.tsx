@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Mailchain } from '@mailchain/sdk';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/Spinner';
@@ -10,11 +10,12 @@ interface EmailValidationDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onValidated: (email: string) => void;
+  isVerifying?: boolean;
 }
 
 const FACTORY_OWNER_ADDRESS = process.env.NEXT_PUBLIC_MAILCHAIN_ADDRESS || 'getantonio.eth';
 
-export function EmailValidationDialog({ isOpen, onClose, onValidated }: EmailValidationDialogProps) {
+export function EmailValidationDialog({ isOpen, onClose, onValidated, isVerifying = false }: EmailValidationDialogProps) {
   const [email, setEmail] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
   const [generatedCode, setGeneratedCode] = useState('');
@@ -122,9 +123,14 @@ Network: ${window.ethereum ? await window.ethereum.networkVersion : 'unknown'}`,
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[425px] bg-gray-900 text-white">
+      <DialogContent className="sm:max-w-[425px] bg-gray-900 text-white" aria-describedby="email-validation-description">
         <DialogHeader>
-          <DialogTitle>Verify Your Email</DialogTitle>
+          <DialogTitle>{isVerifying ? 'Verify Your Email' : 'Subscribe to Our Newsletter'}</DialogTitle>
+          <DialogDescription id="email-validation-description" className="text-gray-400">
+            {isVerifying 
+              ? 'Please enter the verification code sent to your email.' 
+              : 'Stay updated with our latest features and announcements.'}
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 mt-4">
           {step === 'connect' ? (

@@ -18,13 +18,6 @@ interface IV4DistributionModule {
     }
     
     /**
-     * @dev Initialize the distribution module
-     * @param tokenAddress Address of the token this module is attached to
-     * @param owner Address of the initial owner
-     */
-    function initialize(address tokenAddress, address owner) external;
-    
-    /**
      * @dev Add a new allocation
      * @param wallet Recipient wallet address
      * @param amount Amount of tokens to allocate
@@ -56,17 +49,6 @@ interface IV4DistributionModule {
         string[] calldata labels,
         bool[] calldata lockStatus,
         uint256[] calldata unlockTimes
-    ) external returns (bool success);
-    
-    /**
-     * @dev Apply a preset distribution
-     * @param presetId Identifier for the distribution preset
-     * @param totalSupply Total supply to distribute
-     * @return success Whether the preset was successfully applied
-     */
-    function applyPreset(
-        uint256 presetId,
-        uint256 totalSupply
     ) external returns (bool success);
     
     /**
@@ -105,21 +87,6 @@ interface IV4DistributionModule {
      * @return allocation The allocation details
      */
     function getAllocation(address wallet) external view returns (Allocation memory allocation);
-    
-    /**
-     * @dev Get available presets
-     * @return presetIds Array of preset IDs
-     * @return presetNames Array of preset names
-     */
-    function getAvailablePresets() external view returns (uint256[] memory presetIds, string[] memory presetNames);
-    
-    /**
-     * @dev Get preset details
-     * @param presetId Identifier for the preset
-     * @return walletRatios Array of ratios for different wallet types
-     * @return labels Array of labels for the wallet types
-     */
-    function getPresetDetails(uint256 presetId) external view returns (uint256[] memory walletRatios, string[] memory labels);
     
     /**
      * @dev Execute the distribution

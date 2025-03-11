@@ -82,30 +82,6 @@
       "type": "function"
     },
     {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "presetId",
-          "type": "uint256"
-        },
-        {
-          "internalType": "uint256",
-          "name": "totalSupply",
-          "type": "uint256"
-        }
-      ],
-      "name": "applyPreset",
-      "outputs": [
-        {
-          "internalType": "bool",
-          "name": "success",
-          "type": "bool"
-        }
-      ],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
       "inputs": [],
       "name": "executeDistribution",
       "outputs": [
@@ -202,66 +178,6 @@
         }
       ],
       "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "getAvailablePresets",
-      "outputs": [
-        {
-          "internalType": "uint256[]",
-          "name": "presetIds",
-          "type": "uint256[]"
-        },
-        {
-          "internalType": "string[]",
-          "name": "presetNames",
-          "type": "string[]"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "presetId",
-          "type": "uint256"
-        }
-      ],
-      "name": "getPresetDetails",
-      "outputs": [
-        {
-          "internalType": "uint256[]",
-          "name": "walletRatios",
-          "type": "uint256[]"
-        },
-        {
-          "internalType": "string[]",
-          "name": "labels",
-          "type": "string[]"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "tokenAddress",
-          "type": "address"
-        },
-        {
-          "internalType": "address",
-          "name": "owner",
-          "type": "address"
-        }
-      ],
-      "name": "initialize",
-      "outputs": [],
-      "stateMutability": "nonpayable",
       "type": "function"
     },
     {
