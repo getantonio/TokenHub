@@ -475,7 +475,8 @@ const TokenForm_v3: React.FC<TokenFormV3Props> = ({
         'symbol',
         'initialSupply',
         'maxSupply',
-        'liquidityPercentage'
+        'liquidityPercentage',
+        'wallets'  // Add wallets to validation
       ]);
     }
   }, [mounted, form]);
@@ -530,6 +531,55 @@ const TokenForm_v3: React.FC<TokenFormV3Props> = ({
     }
   }, [form.watch('presaleEnabled')]);
 
+  // Add a new validation effect for wallet allocations
+  useEffect(() => {
+    const validateWalletAllocations = () => {
+      const liquidityPercentage = form.getValues('liquidityPercentage');
+      const presaleEnabled = form.getValues('presaleEnabled');
+      const presalePercentage = presaleEnabled ? form.getValues('presalePercentage') : 0;
+      const wallets = form.getValues('wallets');
+      
+      // Check if wallet allocations needed but missing
+      if (liquidityPercentage < 100 && (!wallets || wallets.length === 0)) {
+        const defaultWallet = {
+          name: "Owner",
+          address: form.getValues('owner'),
+          percentage: 100 - liquidityPercentage - presalePercentage,
+          vestingEnabled: false,
+          vestingDuration: 365,
+          cliffDuration: 0,
+          vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+        };
+        
+        console.log('Adding default wallet allocation:', defaultWallet);
+        form.setValue('wallets', [defaultWallet]);
+      }
+    };
+    
+    validateWalletAllocations();
+  }, [form.watch('liquidityPercentage'), form.watch('presaleEnabled'), form.watch('presalePercentage')]);
+
+  // Add special configurations for Polygon Amoy
+  useEffect(() => {
+    // Special config for Polygon Amoy network
+    if (chainId === 80002) {
+      console.log('Configuring form for Polygon Amoy network');
+      
+      // Ensure wallets have proper vesting parameters
+      const wallets = form.getValues('wallets');
+      if (wallets && wallets.length > 0) {
+        const updatedWallets = wallets.map(wallet => ({
+          ...wallet,
+          vestingEnabled: Boolean(wallet.vestingEnabled),
+          vestingDuration: wallet.vestingEnabled ? wallet.vestingDuration : 0,
+          cliffDuration: wallet.vestingEnabled ? wallet.cliffDuration : 0,
+          vestingStartTime: wallet.vestingEnabled ? wallet.vestingStartTime : 0
+        }));
+        form.setValue('wallets', updatedWallets);
+      }
+    }
+  }, [chainId, form]);
+
   const onSubmit = async (data: FormData) => {
     try {
       console.log('Form submission started', { data });
@@ -571,26 +621,90 @@ const TokenForm_v3: React.FC<TokenFormV3Props> = ({
         owner: data.owner as `0x${string}`,
         enableBlacklist: data.enableBlacklist,
         enableTimeLock: data.enableTimeLock,
-        presaleEnabled: false,
-        maxActivePresales: 0,
-        presaleRate: BigInt(0),
-        softCap: BigInt(0),
-        hardCap: BigInt(0),
-        minContribution: BigInt(0),
-        maxContribution: BigInt(0),
-        startTime: BigInt(0),
-        endTime: BigInt(0),
-        presalePercentage: 0,
-        liquidityPercentage: 100,
-        liquidityLockDuration: BigInt(2592000), // 30 days in seconds
-        walletAllocations: []
+        presaleEnabled: data.presaleEnabled,
+        maxActivePresales: data.presaleEnabled ? data.maxActivePresales : 0,
+        presaleRate: data.presaleEnabled ? parseEther(data.presaleRate || "0") : BigInt(0),
+        softCap: data.presaleEnabled ? parseEther(data.softCap || "0") : BigInt(0),
+        hardCap: data.presaleEnabled ? parseEther(data.hardCap || "0") : BigInt(0),
+        minContribution: data.presaleEnabled ? parseEther(data.minContribution || "0") : BigInt(0),
+        maxContribution: data.presaleEnabled ? parseEther(data.maxContribution || "0") : BigInt(0),
+        startTime: data.presaleEnabled ? BigInt(data.startTime || 0) : BigInt(0),
+        endTime: data.presaleEnabled ? BigInt(data.endTime || 0) : BigInt(0),
+        presalePercentage: data.presaleEnabled ? Number(data.presalePercentage) : 0,
+        liquidityPercentage: Number(data.liquidityPercentage),
+        liquidityLockDuration: BigInt(data.liquidityLockDuration * 24 * 60 * 60), // Convert days to seconds
+        walletAllocations: data.wallets.map(wallet => ({
+          wallet: wallet.address as `0x${string}`,
+          percentage: Number(wallet.percentage),
+          vestingEnabled: wallet.vestingEnabled,
+          vestingDuration: wallet.vestingEnabled ? BigInt(wallet.vestingDuration * 24 * 60 * 60) : BigInt(0), // Convert days to seconds
+          cliffDuration: wallet.vestingEnabled ? BigInt(wallet.cliffDuration * 24 * 60 * 60) : BigInt(0), // Convert days to seconds
+          vestingStartTime: wallet.vestingEnabled ? BigInt(wallet.vestingStartTime) : BigInt(0)
+        }))
       };
+
+      // Ensure at least one wallet allocation if none are provided but needed
+      if (tokenParams.walletAllocations.length === 0 && tokenParams.liquidityPercentage < 100) {
+        // Add default allocation to owner if liquidityPercentage < 100%
+        tokenParams.walletAllocations.push({
+          wallet: tokenParams.owner,
+          percentage: 100 - tokenParams.liquidityPercentage - tokenParams.presalePercentage,
+          vestingEnabled: false,
+          vestingDuration: BigInt(0),
+          cliffDuration: BigInt(0),
+          vestingStartTime: BigInt(0)
+        });
+      }
+
+      // Additional validation for single wallet allocations - known edge case on Polygon Amoy
+      if (tokenParams.walletAllocations.length === 1) {
+        console.log('Single wallet allocation detected - applying special handling');
+        
+        // Ensure the single wallet allocation has all required fields explicitly set
+        const wallet = tokenParams.walletAllocations[0];
+        
+        // Explicitly set vesting params
+        wallet.vestingEnabled = Boolean(wallet.vestingEnabled);
+        if (!wallet.vestingEnabled) {
+          wallet.vestingDuration = BigInt(0);
+          wallet.cliffDuration = BigInt(0);
+          wallet.vestingStartTime = BigInt(0);
+        }
+        
+        // Verify percentage and address
+        if (wallet.percentage <= 0 || wallet.percentage > 90) {
+          console.warn('Fixing invalid percentage for single wallet:', wallet.percentage);
+          wallet.percentage = 100 - tokenParams.liquidityPercentage - tokenParams.presalePercentage;
+        }
+        
+        if (!wallet.wallet || wallet.wallet === '0x0000000000000000000000000000000000000000') {
+          console.warn('Invalid wallet address, using owner address instead');
+          wallet.wallet = tokenParams.owner;
+        }
+      }
+
+      // Validate total percentages add up to 100%
+      const totalPercentage = tokenParams.liquidityPercentage + tokenParams.presalePercentage +
+        tokenParams.walletAllocations.reduce((sum, w) => sum + w.percentage, 0);
+      
+      if (totalPercentage !== 100) {
+        toast({
+          title: 'Invalid allocation',
+          description: `Total allocation must be 100%, but got ${totalPercentage}%`,
+          variant: 'destructive',
+        });
+        setLoading(false);
+        return;
+      }
 
       console.log('Creating token with parameters:', tokenParams);
 
-      // Create token with proper parameters
+      // Create token with proper parameters and increased gas for Polygon Amoy
+      // Use much higher gas for single wallet allocations which need special handling
+      const isSingleWallet = tokenParams.walletAllocations.length === 1;
       const tx = await factory.createToken(tokenParams, {
-        value: deploymentFee
+        value: deploymentFee,
+        gasLimit: chainId === 80002 ? (isSingleWallet ? 8000000 : 5000000) : undefined // Higher gas for single wallet
       });
 
       toast({
@@ -630,11 +744,34 @@ const TokenForm_v3: React.FC<TokenFormV3Props> = ({
 
     } catch (error: any) {
       console.error('Error creating token:', error);
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to create token',
-        variant: 'destructive',
-      });
+      
+      // Special error handling for Polygon Amoy
+      if (chainId === 80002) {
+        // Check if it's a gas-related error
+        const errorMessage = error.message || '';
+        if (errorMessage.includes('gas') || errorMessage.includes('Gas') || 
+            errorMessage.includes('execution reverted') || errorMessage.includes('Internal JSON-RPC error')) {
+          
+          toast({
+            title: 'Polygon Amoy Error',
+            description: 'Transaction failed. This might be due to gas issues on Polygon Amoy. Try adding more wallets (2-3) or adjusting the gas limit in your wallet.',
+            variant: 'destructive',
+          });
+        } else {
+          toast({
+            title: 'Error',
+            description: errorMessage || 'Failed to create token',
+            variant: 'destructive',
+          });
+        }
+      } else {
+        // Default error handling for other networks
+        toast({
+          title: 'Error',
+          description: error.message || 'Failed to create token',
+          variant: 'destructive',
+        });
+      }
     } finally {
       setLoading(false);
     }

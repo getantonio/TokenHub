@@ -12,6 +12,7 @@ contract TokenFactory_v3 is Ownable, ReentrancyGuard, Pausable {
     uint256 public totalTokensCreated;
     mapping(address => uint256) public userTokenCount;
     mapping(address => address[]) public userTokens;
+    address public routerAddress;
     
     struct WalletAllocation {
         address wallet;
@@ -67,7 +68,15 @@ contract TokenFactory_v3 is Ownable, ReentrancyGuard, Pausable {
         uint256 timestamp
     );
 
-    constructor() {
+    event VestingSetup(
+        address indexed wallet,
+        uint256 percentage,
+        bool vestingEnabled
+    );
+
+    constructor(address _router) {
+        require(_router != address(0), "Invalid router address");
+        routerAddress = _router;
         _pause(); // Start paused for safety
     }
 
@@ -94,16 +103,69 @@ contract TokenFactory_v3 is Ownable, ReentrancyGuard, Pausable {
             require(params.maxActivePresales == 0, "Max active presales must be 0 when presale is disabled");
         }
 
-        // Validate distribution percentages
-        uint256 totalPercentage = params.presalePercentage + params.liquidityPercentage;
-        for (uint256 i = 0; i < params.walletAllocations.length; i++) {
-            totalPercentage += params.walletAllocations[i].percentage;
+        // Special handling for wallet allocations
+        WalletAllocation[] memory finalAllocations;
+        uint256 walletPercentageTotal = 0;
+        
+        // If no wallet allocations or incomplete percentage, create or adjust with default to owner
+        if (params.walletAllocations.length == 0) {
+            // Create a default allocation to the owner if none provided
+            finalAllocations = new WalletAllocation[](1);
+            finalAllocations[0] = WalletAllocation({
+                wallet: params.owner,
+                percentage: 100 - params.presalePercentage - params.liquidityPercentage,
+                vestingEnabled: false,
+                vestingDuration: 0,
+                cliffDuration: 0,
+                vestingStartTime: 0
+            });
+            walletPercentageTotal = finalAllocations[0].percentage;
             
-            if (params.walletAllocations[i].vestingEnabled) {
-                require(params.walletAllocations[i].vestingDuration > 0, "Invalid vesting duration");
-                require(params.walletAllocations[i].vestingStartTime > block.timestamp, "Invalid vesting start");
+            // Log the default allocation creation
+            emit VestingSetup(
+                params.owner,
+                finalAllocations[0].percentage,
+                false
+            );
+        } else {
+            // Use the provided allocations
+            finalAllocations = new WalletAllocation[](params.walletAllocations.length);
+            
+            for (uint256 i = 0; i < params.walletAllocations.length; i++) {
+                require(params.walletAllocations[i].wallet != address(0), "Invalid wallet address");
+                require(params.walletAllocations[i].percentage > 0, "Wallet percentage must be > 0");
+                
+                // Copy and normalize vesting settings
+                finalAllocations[i] = params.walletAllocations[i];
+                walletPercentageTotal += params.walletAllocations[i].percentage;
+                
+                // Normalize vesting parameters
+                if (params.walletAllocations[i].vestingEnabled) {
+                    require(params.walletAllocations[i].vestingDuration > 0, "Invalid vesting duration");
+                    require(params.walletAllocations[i].vestingStartTime > block.timestamp, "Invalid vesting start");
+                    // Log for debugging
+                    emit VestingSetup(
+                        params.walletAllocations[i].wallet,
+                        params.walletAllocations[i].percentage,
+                        true
+                    );
+                } else {
+                    // For Polygon Amoy/BSC, ensure vesting parameters are explicitly zeroed
+                    finalAllocations[i].vestingDuration = 0;
+                    finalAllocations[i].cliffDuration = 0;
+                    finalAllocations[i].vestingStartTime = 0;
+                    // Log for debugging
+                    emit VestingSetup(
+                        params.walletAllocations[i].wallet,
+                        params.walletAllocations[i].percentage,
+                        false
+                    );
+                }
             }
         }
+
+        // Validate total distribution equals 100%
+        uint256 totalPercentage = params.presalePercentage + params.liquidityPercentage + walletPercentageTotal;
         require(totalPercentage == 100, "Total allocation must be 100%");
 
         // Create token
@@ -132,12 +194,12 @@ contract TokenFactory_v3 is Ownable, ReentrancyGuard, Pausable {
             );
         }
 
-        // Configure distribution
+        // Configure distribution with final allocations
         token.configureDistribution(
             params.presalePercentage,
             params.liquidityPercentage,
             params.liquidityLockDuration,
-            params.walletAllocations
+            finalAllocations
         );
 
         // Update tracking

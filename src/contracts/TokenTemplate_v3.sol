@@ -164,6 +164,7 @@ contract TokenTemplate_v3 is
                 allocatedTokens += walletTokens;
                 
                 require(allocatedTokens <= totalTokensNeeded, "Total allocation exceeds initial supply");
+                require(params.walletAllocations[i].wallet != address(0), "Invalid wallet address");
                 
                 if (params.walletAllocations[i].vestingEnabled) {
                     // Create vesting schedule
@@ -183,7 +184,12 @@ contract TokenTemplate_v3 is
                         params.walletAllocations[i].cliffDuration
                     );
                 } else {
-                    _transfer(address(this), params.walletAllocations[i].wallet, walletTokens);
+                    // Explicitly cast to address to ensure compatibility across networks
+                    address recipient = address(params.walletAllocations[i].wallet);
+                    require(recipient != address(0), "Zero address recipient");
+                    _transfer(address(this), recipient, walletTokens);
+                    // Add redundancy log for debugging
+                    emit TokensClaimed(recipient, walletTokens);
                 }
             }
         }
