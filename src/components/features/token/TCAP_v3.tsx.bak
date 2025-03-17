@@ -699,8 +699,31 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
   // Don't include chainId in the dependency array to prevent automatic reload on network changes
   // which can cause errors if the page doesn't fully reload
 
-  const getTokenContract = (tokenAddress: string, signer: any) => {
-    return new Contract(tokenAddress, TokenV3ABI.abi, signer);
+  const getTokenContract = (address: string, signer: any) => {
+    return new Contract(
+      address,
+      TokenV3ABI.abi,
+      signer
+    );
+  };
+
+  // Add a function to get the fixed token contract
+  const getFixedTokenContract = (address: string, signer: any) => {
+    return new Contract(
+      address,
+      [
+        "function name() view returns (string)",
+        "function symbol() view returns (string)",
+        "function totalSupply() view returns (uint256)",
+        "function balanceOf(address owner) external view returns (uint256)",
+        "function owner() view returns (address)",
+        "function addLiquidityFromContract(uint256 tokenAmount) external payable",
+        "function getRemainingLiquidityAllocation() external view returns (uint256)",
+        "function transfer(address to, uint256 amount) returns (bool)",
+        "function approve(address spender, uint256 amount) returns (bool)"
+      ],
+      signer
+    );
   };
 
   // Add this function to handle blocked tokens
@@ -1248,6 +1271,38 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
 
   const handleAddLiquidity = async (token: TokenInfo) => {
     try {
+      setLoading(true);
+      
+      if (!externalProvider) {
+        throw new Error('Provider not available');
+      }
+      
+      // Get the fixed token template address
+      const fixedTokenTemplateAddress = getNetworkContractAddress(chainId || 0, 'TOKEN_TEMPLATE_V3_FIXED');
+      
+      if (!fixedTokenTemplateAddress) {
+        console.log('Using original token template as fixed template is not available');
+        // Continue with the original flow
+        setSelectedToken(token);
+        setError(null);
+        setIsAddLiquidityDialogOpen(true);
+        return;
+      }
+      
+      console.log('Using fixed token template:', fixedTokenTemplateAddress);
+      
+      // Check if the token was created with the fixed template
+      // If not, we'll use the original flow
+      if (token.address !== fixedTokenTemplateAddress) {
+        console.log('Token was not created with the fixed template, using original flow');
+        setSelectedToken(token);
+        setError(null);
+        setIsAddLiquidityDialogOpen(true);
+        return;
+      }
+      
+      // If we get here, we're using the fixed template
+      console.log('Token was created with the fixed template, using new flow');
       setSelectedToken(token);
       setError(null);
       setIsAddLiquidityDialogOpen(true);
@@ -1260,98 +1315,127 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
         description: errorMessage,
         variant: 'destructive'
       });
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Update the minimal ABI to include the addLiquidityFromContract function
-  const TokenTemplate_v3_Enhanced_MinimalABI = [
-    // ... existing code ...
-    "function addLiquidityFromContract(uint256 tokenAmount) external payable",
-    "function getRemainingLiquidityAllocation() external view returns (uint256)",
-    // ... existing code ...
-  ];
-
-  // Update the handleAddLiquidityConfirm function to use addLiquidityFromContract
   const handleAddLiquidityConfirm = async ({ tokenAmount, ethAmount }: { tokenAmount: string; ethAmount: string }) => {
     try {
       setLoading(true);
       
-      // Check if token and chain are selected
       if (!selectedToken || !chainId) {
-        throw new Error("Please select a token and chain");
+        throw new Error('Token or chain not selected');
       }
       
       const signer = await externalProvider.getSigner();
       const userAddress = await signer.getAddress();
-      const tokenContract = getTokenContract(selectedToken.address, signer);
       
-      // Get the contract address
-      const contractAddress = selectedToken.address;
+      // Get the fixed token template address
+      const fixedTokenTemplateAddress = getNetworkContractAddress(chainId, 'TOKEN_TEMPLATE_V3_FIXED');
       
-      // Check if user is the owner
-      const ownerAddress = await tokenContract.owner();
-      if (ownerAddress.toLowerCase() !== userAddress.toLowerCase()) {
-        throw new Error("Only the token owner can add liquidity");
+      // Determine which contract to use
+      let tokenContract;
+      let useFixedContract = false;
+      
+      if (fixedTokenTemplateAddress && selectedToken.address === fixedTokenTemplateAddress) {
+        console.log('Using fixed token contract for liquidity addition');
+        tokenContract = getFixedTokenContract(selectedToken.address, signer);
+        useFixedContract = true;
+      } else {
+        console.log('Using original token contract for liquidity addition');
+        tokenContract = getTokenContract(selectedToken.address, signer);
       }
       
-      // Check remaining liquidity allocation
-      const remainingLiquidityAllocation = await tokenContract.getRemainingLiquidityAllocation();
-      console.log("Remaining liquidity allocation:", formatEther(remainingLiquidityAllocation));
-      
-      if (remainingLiquidityAllocation.eq(0)) {
-        throw new Error("No remaining liquidity allocation");
-      }
-      
-      // Convert input values to BigNumber
+      // Convert amounts to BigInt with proper decimals
       const tokenAmountBN = parseUnits(tokenAmount, 18);
       const ethAmountBN = parseUnits(ethAmount, 18);
-      
-      // Check if tokenAmount is less than or equal to remainingLiquidityAllocation
-      if (tokenAmountBN > remainingLiquidityAllocation) {
-        throw new Error(`Token amount exceeds remaining liquidity allocation (${formatEther(remainingLiquidityAllocation)} tokens)`);
-      }
-      
-      // Check user ETH balance
-      const ethBalance = await externalProvider.getBalance(userAddress);
-      if (ethBalance < ethAmountBN) {
-        throw new Error("Insufficient ETH balance");
-      }
-      
-      // Check contract token balance
-      const contractBalance = await tokenContract.balanceOf(contractAddress);
-      console.log("Contract token balance:", formatEther(contractBalance));
-      
-      if (contractBalance < tokenAmountBN) {
-        throw new Error("Insufficient token balance in contract");
-      }
-      
-      // Call the addLiquidityFromContract function
-      const tx = await tokenContract.addLiquidityFromContract(tokenAmountBN, {
-        value: ethAmountBN,
-        gasLimit: 3000000 // Increase gas limit to ensure transaction completes
+
+      console.log('Attempting to add liquidity:', {
+        token: selectedToken.address,
+        tokenSymbol: selectedToken.symbol,
+        tokenAmount,
+        ethAmount,
+        tokenAmountBN: tokenAmountBN.toString(),
+        ethAmountBN: ethAmountBN.toString(),
+        useFixedContract
       });
       
-      console.log("Transaction sent:", tx.hash);
+      // Check if user is owner
+      const owner = await tokenContract.owner();
+      const isOwner = owner.toLowerCase() === userAddress.toLowerCase();
+      
+      if (!isOwner) {
+        throw new Error('Only the token owner can add liquidity');
+      }
+      
+      // Check contract token balance - the token contract holds its own tokens
+      const contractAddress = selectedToken.address;
+      const contractBalance = await tokenContract.balanceOf(contractAddress);
+      console.log('Contract token balance:', contractBalance.toString());
+      
+      if (contractBalance < tokenAmountBN) {
+        throw new Error(`Insufficient tokens in contract. Contract has ${formatUnits(contractBalance, 18)} ${selectedToken.symbol}`);
+      }
+      
+      let tx;
+      
+      if (useFixedContract) {
+        // Check remaining liquidity allocation for fixed contract
+        const remainingLiquidityAllocation = await tokenContract.getRemainingLiquidityAllocation();
+        console.log('Remaining liquidity allocation:', formatEther(remainingLiquidityAllocation));
+        
+        if (remainingLiquidityAllocation.eq(0)) {
+          throw new Error('No remaining liquidity allocation');
+        }
+        
+        if (tokenAmountBN > remainingLiquidityAllocation) {
+          throw new Error(`Token amount exceeds remaining liquidity allocation (${formatEther(remainingLiquidityAllocation)} tokens)`);
+        }
+        
+        // Call the addLiquidity function with both parameters
+        console.log('Calling addLiquidity...');
+        tx = await tokenContract.addLiquidity(
+          tokenAmountBN,  // Token amount parameter
+          ethAmountBN,    // ETH amount parameter
+          {
+            value: ethAmountBN,  // ETH sent with transaction
+            gasLimit: 5000000     // Increased gas limit
+          }
+        );
+      } else {
+        // Call the regular addLiquidity function
+        console.log('Calling addLiquidity...');
+        tx = await tokenContract.addLiquidity(
+          tokenAmountBN,  // Token amount parameter
+          ethAmountBN,    // ETH amount parameter
+          {
+            value: ethAmountBN,  // ETH sent with transaction
+            gasLimit: 5000000     // Increased gas limit
+          }
+        );
+      }
+      
+      console.log('Transaction sent:', tx.hash);
       
       // Wait for transaction to be mined
       const receipt = await tx.wait();
-      console.log("Transaction confirmed:", receipt);
+      console.log('Transaction receipt:', receipt);
       
-      // Show success message
+      if (receipt.status === 0) {
+        throw new Error('Transaction failed - The execution was reverted on the blockchain');
+      }
+      
       toast({
-        title: "Success",
-        description: "Liquidity has been added successfully",
-        variant: "default",
+        title: 'Success',
+        description: 'Liquidity added successfully',
       });
-      
-      // Reset form
-      setIsAddLiquidityDialogOpen(false);
-      
+
       // Refresh token data
       loadTokens();
       
     } catch (error: any) {
-      console.error("Error adding liquidity:", error);
+      console.error('Error adding liquidity:', error);
       
       // Extract a more user-friendly error message
       let errorMessage = 'Failed to add liquidity';
@@ -1372,9 +1456,9 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
       }
       
       toast({
-        title: "Error",
+        title: 'Error',
         description: errorMessage,
-        variant: "destructive",
+        variant: 'destructive',
       });
     } finally {
       setLoading(false);
@@ -1656,6 +1740,40 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
     }
   }));
 
+  // Add a function to create a token using the fixed factory
+  const createTokenWithFixedFactory = async () => {
+    try {
+      setLoading(true);
+      
+      if (!externalProvider) {
+        throw new Error('Provider not available');
+      }
+      
+      // Get the fixed factory address
+      const fixedFactoryAddress = getNetworkContractAddress(chainId || 0, 'FACTORY_V3_FIXED');
+      
+      if (!fixedFactoryAddress) {
+        throw new Error('Fixed factory not available on this network');
+      }
+      
+      console.log('Using fixed factory:', fixedFactoryAddress);
+      
+      // Redirect to the token creation page with the fixed factory
+      window.location.href = `/create?factory=${fixedFactoryAddress}&version=v3_fixed`;
+      
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to use fixed factory';
+      console.error('Error using fixed factory:', err);
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (!isConnected) {
     return (
       <div className="p-1 bg-gray-800 rounded-lg shadow-lg">
@@ -1666,145 +1784,172 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
   }
 
   return (
-    <div className="form-card" ref={containerRef}>
-      <div
-        className="flex justify-between items-center cursor-pointer py-2 px-1"
-        onClick={() => setIsExpanded(!isExpanded)}
-      >
-        <div className="flex items-center gap-2">
-          <h2 className="text-sm font-medium text-text-primary">Token Creator Admin Controls (V3)</h2>
-          <span className="text-xs text-text-secondary">
-            {showOnlyRecent ? `${Math.min(tokens.length, 3)}/${tokens.length}` : tokens.length} tokens
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowOnlyRecent(!showOnlyRecent);
-            }}
-            className="text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+    <div className="w-full">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-2xl font-bold">Your Tokens</h2>
+        <div className="flex space-x-2">
+          <Button 
+            onClick={() => window.location.href = '/create'} 
+            variant="default"
           >
-            {showOnlyRecent ? 'Show All' : 'Show Recent'}
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              loadTokens();
-            }}
-            className="text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+            Create Token
+          </Button>
+          <Button 
+            onClick={createTokenWithFixedFactory} 
+            variant="secondary"
+            disabled={loading}
           >
-            Refresh
-          </button>
-          <span className="text-text-accent hover:text-blue-400 text-lg p-2 w-8 h-8 flex items-center justify-center">
-            {isExpanded ? '▼' : '▶'}
-          </span>
+            Create with Fixed Factory
+          </Button>
+          <Button 
+            onClick={loadTokens} 
+            variant="outline" 
+            disabled={loading}
+          >
+            {loading ? <Spinner size="sm" /> : 'Refresh'}
+          </Button>
         </div>
       </div>
+      
+      <div className="form-card" ref={containerRef}>
+        <div
+          className="flex justify-between items-center cursor-pointer py-2 px-1"
+          onClick={() => setIsExpanded(!isExpanded)}
+        >
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-medium text-text-primary">Token Creator Admin Controls (V3)</h2>
+            <span className="text-xs text-text-secondary">
+              {showOnlyRecent ? `${Math.min(tokens.length, 3)}/${tokens.length}` : tokens.length} tokens
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowOnlyRecent(!showOnlyRecent);
+              }}
+              className="text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+            >
+              {showOnlyRecent ? 'Show All' : 'Show Recent'}
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                loadTokens();
+              }}
+              className="text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+            >
+              Refresh
+            </button>
+            <span className="text-text-accent hover:text-blue-400 text-lg p-2 w-8 h-8 flex items-center justify-center">
+              {isExpanded ? '▼' : '▶'}
+            </span>
+          </div>
+        </div>
 
-      {isExpanded && (
-        loading ? (
-            <div className="flex justify-center items-center py-1">
-            <Spinner className="w-3 h-3 text-text-primary" />
-            </div>
-          ) : error ? (
-          <div className="text-center py-1 text-red-400 text-xs">
-              {error}
-            </div>
-        ) : tokens.length === 0 ? (
-          <div className="mt-1">
-            <p className="text-xs text-text-secondary">No V3 tokens found. Deploy a new token to get started.</p>
-            </div>
-          ) : (
-          <div className="space-y-1 mt-1">
-            {displayedTokens.map((token) => (
-              <div key={token.address} className="border border-border rounded p-2 bg-gray-800">
-                  <div className="flex justify-between items-start gap-2">
-                    <div>
-                    <h3 className="text-xs font-medium text-text-primary">{token.name} ({token.symbol})</h3>
-                    <p className="text-xs text-text-secondary">Supply: {Number(token.totalSupply).toLocaleString()} {token.symbol}</p>
-                    <p className="text-xs mt-1">
-                      Status: {" "}
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                        token.paused 
-                        ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' 
-                        : 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                      }`}>
-                        {token.paused ? 'Paused' : 'Active'}
-                      </span>
-                    </p>
-                    {token.presaleInfo && (
-                      <div className="mt-1">
-                      <p className="text-xs text-text-secondary">
-                          Presale: {Number(token.presaleInfo.totalContributed).toLocaleString()} ETH
-                          ({token.presaleInfo.contributorCount} contributors)
+        {isExpanded && (
+          loading ? (
+              <div className="flex justify-center items-center py-1">
+              <Spinner className="w-3 h-3 text-text-primary" />
+              </div>
+            ) : error ? (
+            <div className="text-center py-1 text-red-400 text-xs">
+                {error}
+              </div>
+          ) : tokens.length === 0 ? (
+            <div className="mt-1">
+              <p className="text-xs text-text-secondary">No V3 tokens found. Deploy a new token to get started.</p>
+              </div>
+            ) : (
+            <div className="space-y-1 mt-1">
+              {displayedTokens.map((token) => (
+                <div key={token.address} className="border border-border rounded p-2 bg-gray-800">
+                    <div className="flex justify-between items-start gap-2">
+                      <div>
+                      <h3 className="text-xs font-medium text-text-primary">{token.name} ({token.symbol})</h3>
+                      <p className="text-xs text-text-secondary">Supply: {Number(token.totalSupply).toLocaleString()} {token.symbol}</p>
+                      <p className="text-xs mt-1">
+                        Status: {" "}
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                          token.paused 
+                          ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' 
+                          : 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                        }`}>
+                          {token.paused ? 'Paused' : 'Active'}
+                        </span>
                       </p>
-                      <p className="text-xs text-text-secondary">
-                          Start: {new Date(token.presaleInfo.startTime * 1000).toLocaleString()}
-                      </p>
-                      <p className="text-xs text-text-secondary">
-                          End: {new Date(token.presaleInfo.endTime * 1000).toLocaleString()}
-                      </p>
+                      {token.presaleInfo && (
+                        <div className="mt-1">
+                        <p className="text-xs text-text-secondary">
+                            Presale: {Number(token.presaleInfo.totalContributed).toLocaleString()} ETH
+                            ({token.presaleInfo.contributorCount} contributors)
+                        </p>
+                        <p className="text-xs text-text-secondary">
+                            Start: {new Date(token.presaleInfo.startTime * 1000).toLocaleString()}
+                        </p>
+                        <p className="text-xs text-text-secondary">
+                            End: {new Date(token.presaleInfo.endTime * 1000).toLocaleString()}
+                        </p>
+                      </div>
+                      )}
                     </div>
-                    )}
+                    <div className="flex flex-col gap-1">
+                      <button
+                        onClick={() => setSelectedToken(selectedToken === token ? null : token)}
+                        className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+                      >
+                        {selectedToken === token ? 'Hide' : 'Manage'}
+                      </button>
+                      <button
+                        onClick={() => handleBlockToken(token)}
+                        className="px-1.5 py-0.5 text-xs bg-red-600/20 hover:bg-red-600/40 border border-red-600/40 rounded text-red-400 hover:text-red-300 transition-colors"
+                        title="Permanently remove from management panel"
+                      >
+                        Block
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex flex-col gap-1">
-                    <button
-                      onClick={() => setSelectedToken(selectedToken === token ? null : token)}
-                      className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
-                    >
-                      {selectedToken === token ? 'Hide' : 'Manage'}
-                    </button>
-                    <button
-                      onClick={() => handleBlockToken(token)}
-                      className="px-1.5 py-0.5 text-xs bg-red-600/20 hover:bg-red-600/40 border border-red-600/40 rounded text-red-400 hover:text-red-300 transition-colors"
-                      title="Permanently remove from management panel"
-                    >
-                      Block
-                    </button>
-                  </div>
-                </div>
 
-                {selectedToken === token && (
-                    <div className="mt-2 pt-2 border-t border-border">
-                    <div className="grid grid-cols-2 gap-3">
-                      {/* Token Explorer Section */}
-                        <div className="flex flex-col gap-1">
-                        <h4 className="text-xs font-medium text-text-primary mb-1">Token Explorer</h4>
-                        <div className="flex gap-1">
-                          <a
-                            href={getExplorerUrl(chainId ?? undefined, token.address, 'token')}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
-                          >
-                            View on Explorer
-                          </a>
-                          <button
-                            onClick={() => {
-                              navigator.clipboard.writeText(token.address);
-                              toast({
-                                title: "Address Copied",
-                                description: "Token address copied to clipboard"
-                              });
-                            }}
-                            className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
-                          >
-                            Copy Address
-                          </button>
-                        </div>
-                        </div>
-
-                      {/* Token Controls Section */}
+                  {selectedToken === token && (
+                      <div className="mt-2 pt-2 border-t border-border">
+                      <div className="grid grid-cols-2 gap-3">
+                        {/* Token Explorer Section */}
                           <div className="flex flex-col gap-1">
-                        <h4 className="text-xs font-medium text-text-primary mb-1">Token Controls</h4>
-                        <div className="grid grid-cols-2 gap-1">
-                                  <button
-                            onClick={() => handlePause(token.address)}
-                            className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
-                                  >
-                            {token.paused ? 'Unpause' : 'Pause'}
-                                  </button>
+                          <h4 className="text-xs font-medium text-text-primary mb-1">Token Explorer</h4>
+                          <div className="flex gap-1">
+                            <a
+                              href={getExplorerUrl(chainId ?? undefined, token.address, 'token')}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+                            >
+                              View on Explorer
+                            </a>
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(token.address);
+                                toast({
+                                  title: "Address Copied",
+                                  description: "Token address copied to clipboard"
+                                });
+                              }}
+                              className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+                            >
+                              Copy Address
+                            </button>
+                          </div>
+                          </div>
+
+                        {/* Token Controls Section */}
+                            <div className="flex flex-col gap-1">
+                          <h4 className="text-xs font-medium text-text-primary mb-1">Token Controls</h4>
+                          <div className="grid grid-cols-2 gap-1">
+                                    <button
+                              onClick={() => handlePause(token.address)}
+                              className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+                            >
+                              {token.paused ? 'Unpause' : 'Pause'}
+                            </button>
                           <button
                             onClick={() => handleMintOrTransfer(token.address)}
                             className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
@@ -1832,35 +1977,36 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
                               </div>
                             </div>
 
-                      {/* Vesting Management Section */}
-                          <div className="flex flex-col gap-1">
-                        <h4 className="text-xs font-medium text-text-primary mb-1">Vesting Management</h4>
-                        <div className="space-x-2">
-                          <button
-                            onClick={() => handleCreateVesting(token)}
-                            className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
-                          >
-                            Create Vesting
-                          </button>
-                          <button
-                            onClick={() => handleRevokeVesting(token)}
-                            className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
-                          >
-                            Revoke Vesting
-                          </button>
-                          <button
-                            onClick={() => handleReleaseVested(token)}
-                            className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
-                          >
-                            Release Vested
-                          </button>
-                          <button
-                            onClick={() => handleViewVestingSchedules(token)}
-                            className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
-                          >
-                            Vesting Schedules
-                          </button>
-                            </div>
+                        {/* Vesting Management Section */}
+                            <div className="flex flex-col gap-1">
+                          <h4 className="text-xs font-medium text-text-primary mb-1">Vesting Management</h4>
+                          <div className="space-x-2">
+                            <button
+                              onClick={() => handleCreateVesting(token)}
+                              className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+                            >
+                              Create Vesting
+                            </button>
+                            <button
+                              onClick={() => handleRevokeVesting(token)}
+                              className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+                            >
+                              Revoke Vesting
+                            </button>
+                            <button
+                              onClick={() => handleReleaseVested(token)}
+                              className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+                            >
+                              Release Vested
+                            </button>
+                            <button
+                              onClick={() => handleViewVestingSchedules(token)}
+                              className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
+                            >
+                              Vesting Schedules
+                            </button>
+                          </div>
+                        </div>
                         
                         {token.vestingInfo?.hasVesting && (
                           <div className="mt-2">
@@ -1900,7 +2046,7 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
                               <p className="text-xs text-text-secondary">Contributors: {token.presaleInfo.contributorCount}</p>
                               <p className="text-xs text-text-secondary">Total Raised: {token.presaleInfo.totalContributed} ETH</p>
                             </div>
-                          <div className="flex flex-col gap-1">
+                            <div className="flex flex-col gap-1">
                               <button
                                 onClick={() => handleWhitelist(token.address)}
                                 className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
@@ -1908,14 +2054,14 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
                               >
                                 Manage Whitelist
                               </button>
-                                <button
+                              <button
                                 onClick={() => handleFinalize(token)}
                                 className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
                                 disabled={token.presaleInfo.finalized || 
                                   Number(token.presaleInfo.totalContributed) < Number(token.presaleInfo.softCap)}
                               >
                                 Finalize Presale
-                                </button>
+                              </button>
                               <button
                                 onClick={() => handleEmergencyWithdraw(token.address)}
                                 className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
@@ -1954,8 +2100,8 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
                                 ))}
                               </div>
                             </div>
-                              )}
-                            </div>
+                          )}
+                        </div>
                       )}
 
                       {/* Liquidity Management Section */}
@@ -2027,13 +2173,13 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
                         </div>
                       </div>
                     </div>
-                              </div>
-                            )}
-                          </div>
-            ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-        )
-      )}
+        )}
+      </div>
 
       {/* Add the vesting schedules popup */}
       <Dialog 

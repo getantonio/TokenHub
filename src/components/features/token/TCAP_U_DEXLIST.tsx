@@ -137,6 +137,7 @@ const UNISWAP_V2_FACTORY_ABI = [
 const ROUTER_ADDRESSES: Record<number, string> = {
   [ChainId.SEPOLIA]: '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D', // Uniswap V2 Router on Sepolia
   [ChainId.BSC_TESTNET]: '0xD99D1c33F9fC3444f8101754aBC46c52416550D1', // PancakeSwap Router on BSC Testnet
+  [ChainId.ARBITRUM_SEPOLIA]: '0xD9Aa0Ca55115900908bd649793D9b8dE11Fb7368', // Uniswap V2 Router on Arbitrum Sepolia
   // Add other network router addresses as needed
 } as const;
 

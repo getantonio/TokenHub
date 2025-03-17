@@ -37,8 +37,8 @@ export const contractAddresses: { [key: number]: ContractAddresses } = {
   80002: { // Polygon Amoy
     factoryAddress: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V1 || '',
     factoryAddressV2: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V2 || '',
-    factoryAddressV3: '0xc9dE01F826649bbB1A54d2A00Ce91D046791AdE1', // Hardcoded for reliability
-    factoryAddressV4: '0xA06cF00fC2B455f92319cc4A6088B5B6Ccd2F10f', // Hardcoded for reliability
+    factoryAddressV3: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V3 || '',// Hardcoded for reliability
+    factoryAddressV4: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V4 || '',// Hardcoded for reliability
     dexListingFactory: process.env.NEXT_PUBLIC_POLYGONAMOY_DEX_LISTING_FACTORY_ADDRESS || '',
     dexListingTemplate: process.env.NEXT_PUBLIC_POLYGONAMOY_DEX_LISTING_TEMPLATE_ADDRESS || ''
   },
@@ -105,88 +105,16 @@ export function getNetworkContractAddress(chainId: number, contractType: string)
     }
   }
 
-  switch (contractType.toUpperCase()) {
-    case 'FACTORYADDRESSV3':
-    case 'FACTORY_ADDRESS_V3':
-      // Direct check for Polygon Amoy V3
-      if (chainId === 80002) {
-        return '0xc9dE01F826649bbB1A54d2A00Ce91D046791AdE1';
-      }
-      // Direct check for Sepolia V3
-      if (chainId === 11155111) {
-        const sepoliaV3 = process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V3;
-        console.log('Using Sepolia V3 address:', sepoliaV3);
-        return sepoliaV3 || '0x704d0B1237373D466bc22635c076456f3afD7C11';
-      }
-      // Direct check for BSC Testnet V3
-      if (chainId === 97) {
-        return process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V3 || '0x631B224FeA79e2af00D8A891e9e21E7a9f63CfC7';
-      }
-      // Fallbacks for other networks
-      if (chainId === 421614) { // Arbitrum Sepolia
-        return process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V3 || '0x4768734d10DCdfB8131eF6b942627557bDd754Eb';
-      }
-      if (chainId === 11155420) { // Optimism Sepolia
-        return process.env.NEXT_PUBLIC_OPSEPOLIA_FACTORY_ADDRESS_V3 || '0x4768734d10DCdfB8131eF6b942627557bDd754Eb';
-      }
-      return process.env[`NEXT_PUBLIC_${networkName}_FACTORY_ADDRESS_V3`] || '';
-    case 'FACTORY_ADDRESS_V4':
-      // Direct check for Sepolia V4
-      if (chainId === 11155111) {
-        const sepoliaV4 = process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V4;
-        console.log('Using Sepolia V4 address:', sepoliaV4);
-        // Provide fallback for Sepolia V4
-        return sepoliaV4 || '0x5FbDB2315678afecb367f032d93F642f64180aa3'; // Replace with actual deployed address
-      }
-      // Direct check for BSC Testnet V4
-      if (chainId === 97) {
-        return process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V4 || '0x5FbDB2315678afecb367f032d93F642f64180aa3'; // Replace with actual deployed address
-      }
-      // Fallbacks for other networks
-      if (chainId === 421614) { // Arbitrum Sepolia
-        return process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V4 || '0x5FbDB2315678afecb367f032d93F642f64180aa3';
-      }
-      if (chainId === 11155420) { // Optimism Sepolia
-        return process.env.NEXT_PUBLIC_OPSEPOLIA_FACTORY_ADDRESS_V4 || '0x5FbDB2315678afecb367f032d93F642f64180aa3';
-      }
-      if (chainId === 80002) { // Polygon Amoy
-        return process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V4 || '0x5FbDB2315678afecb367f032d93F642f64180aa3';
-      }
-      return process.env[`NEXT_PUBLIC_${networkName}_FACTORY_ADDRESS_V4`] || '';
-    case 'FACTORY_ADDRESS_V2':
-      return process.env[`NEXT_PUBLIC_${networkName}_FACTORY_ADDRESS_V2`] || '';
-    case 'FACTORY_ADDRESS_V1':
-      return process.env[`NEXT_PUBLIC_${networkName}_FACTORY_ADDRESS_V1`] || '';
-    case 'FACTORY_ADDRESS':
-      return process.env[`NEXT_PUBLIC_${networkName}_FACTORY_ADDRESS_V1`] || '';
-    case 'FACTORY_ADDRESS_V2_DIRECTDEX_MAKE':
-      return process.env[`NEXT_PUBLIC_${networkName}_TOKEN_FACTORY_V2_MAKE_ADDRESS`] || '';
-    case 'FACTORY_ADDRESS_V2_DIRECTDEX_BAKE':
-      return process.env[`NEXT_PUBLIC_${networkName}_TOKEN_FACTORY_V2_BAKE_ADDRESS`] || '';
-    case 'FACTORY_ADDRESS_V2_DIRECTDEX_FIXED':
-      // Use environment variables first, then fall back to hardcoded values
-      if (chainId === 11155111) { // Sepolia
-        const address = process.env.NEXT_PUBLIC_SEPOLIA_V2_DIRECTDEX_FIXED_ADDRESS;
-        console.log(`Switch case - Using Sepolia DirectDEX Fixed address: ${address || '0x16BF74b4A81dd7508BAc7A99245AD90d80b6f4Ce'}`);
-        return address || '0x16BF74b4A81dd7508BAc7A99245AD90d80b6f4Ce';
-      } else if (chainId === 97) { // BSC Testnet
-        return process.env.NEXT_PUBLIC_BSCTESTNET_V2_DIRECTDEX_FIXED_ADDRESS || '0xE1469497243ce0A7f5d26f81c34E9eFA5975569b';
-      }
-      return '';
-    case 'DEX_LISTING_TEMPLATE':
-      return process.env[`NEXT_PUBLIC_${networkName}_DEX_LISTING_TEMPLATE_ADDRESS`] || '';
-    case 'DEX_LISTING_FACTORY':
-      // For BSC Testnet, provide a GUARANTEED fallback address
-      if (chainId === 97) {
-        const bscTestnetDexListingFactory = '0x822406674Abcf53A7814422AA49756fe69383546';
-        console.log(`Using hardcoded BSC Testnet DEX Listing Factory: ${bscTestnetDexListingFactory}`);
-        return bscTestnetDexListingFactory;
-      }
-      return process.env[`NEXT_PUBLIC_${networkName}_DEX_LISTING_FACTORY_ADDRESS`] || '';
-    default:
-      console.warn(`Unknown contract type: ${contractType}`);
-      return '';
+  // If not found in map, try environment variables
+  const envKey = `NEXT_PUBLIC_${networkName}_FACTORY_ADDRESS_V3`;
+  const envAddress = process.env[envKey];
+  if (envAddress) {
+    console.log(`Using ${networkName} V3 address from env:`, envAddress);
+    return envAddress;
   }
+
+  console.warn(`No address found for ${networkName} V3`);
+  return '';
 }
 
 export const FACTORY_ADDRESSES: Record<string, Record<number, string>> = {

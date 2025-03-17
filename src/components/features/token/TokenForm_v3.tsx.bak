@@ -537,28 +537,29 @@ const TokenForm_v3: React.FC<TokenFormV3Props> = ({
     }
   }, [account, form]);
 
-  // Watch for presale toggle changes
+  // Update the useEffect for presale toggle
   useEffect(() => {
     const presaleEnabled = form.watch('presaleEnabled');
     
+    // Set presale percentage to 0 when disabled, but don't force it to 5% when enabled
+    if (!presaleEnabled) {
+      form.setValue('presalePercentage', 0, { 
+        shouldValidate: true,
+        shouldDirty: true,
+        shouldTouch: true 
+      });
+    }
+    
+    // Set other presale defaults
     if (presaleEnabled) {
-      // When presale is enabled, set liquidityPercentage to 0 as required by the contract
-      form.setValue('liquidityPercentage', 0);
-      
-      // If presalePercentage is 0, set a default value
-      const presalePercentage = form.watch('presalePercentage');
-      if (presalePercentage === 0) {
-        form.setValue('presalePercentage', 70);
-      }
-      
-      // Set other presale defaults if not already set
-      const softCap = form.watch('softCap');
-      const hardCap = form.watch('hardCap');
-      const presaleRate = form.watch('presaleRate');
-      
-      if (!softCap) form.setValue('softCap', '1');
-      if (!hardCap) form.setValue('hardCap', '2');
-      if (!presaleRate) form.setValue('presaleRate', '1000');
+      form.setValue('maxActivePresales', 1);
+      form.setValue('presaleRate', '1000');
+      form.setValue('softCap', '1');
+      form.setValue('hardCap', '10');
+      form.setValue('minContribution', '0.1');
+      form.setValue('maxContribution', '2');
+      form.setValue('startTime', defaultTimes.startTime);
+      form.setValue('endTime', defaultTimes.endTime);
     }
   }, [form.watch('presaleEnabled')]);
 
@@ -748,14 +749,14 @@ const TokenForm_v3: React.FC<TokenFormV3Props> = ({
       const isArbitrumSepolia = chainId === 421614;
       
       try {
-      // Get the signer and provider
-      const ethProvider = new BrowserProvider(window.ethereum);
-      const ethSigner = await ethProvider.getSigner();
-      
-      // Create a new contract instance with the signer
+        // Get the signer and provider
+        const ethProvider = new BrowserProvider(window.ethereum);
+        const ethSigner = await ethProvider.getSigner();
+        
+        // Create a new contract instance with the signer
         const factory = new ethers.Contract(tokenFactoryAddress, TokenFactory_v3_ABI, ethSigner);
 
-        // Prepare the token parameters as a struct matching TokenTemplate_v3.InitParams
+        // Prepare the token parameters - ensure we're using the exact structure expected by the contract
         const tokenParamsForContract = {
           name: data.name,
           symbol: data.symbol,
@@ -764,22 +765,22 @@ const TokenForm_v3: React.FC<TokenFormV3Props> = ({
           owner: data.owner as `0x${string}`,
           enableBlacklist: data.enableBlacklist,
           enableTimeLock: data.enableTimeLock,
-          presaleRate: data.presaleEnabled && data.presaleRate ? parseEther(data.presaleRate.toString()) : BigInt(0),
-          softCap: data.presaleEnabled && data.softCap ? parseEther(data.softCap.toString()) : BigInt(0),
-          hardCap: data.presaleEnabled && data.hardCap ? parseEther(data.hardCap.toString()) : BigInt(0),
-          minContribution: data.presaleEnabled && data.minContribution ? parseEther(data.minContribution.toString()) : BigInt(0),
-          maxContribution: data.presaleEnabled && data.maxContribution ? parseEther(data.maxContribution.toString()) : BigInt(0),
-          startTime: data.presaleEnabled && data.startTime ? BigInt(data.startTime) : BigInt(0),
-          endTime: data.presaleEnabled && data.endTime ? BigInt(data.endTime) : BigInt(0),
-          presalePercentage: data.presaleEnabled ? data.presalePercentage : 0,
-          liquidityPercentage: data.presaleEnabled ? 0 : data.liquidityPercentage, // Must be 0 when presale is enabled
-          liquidityLockDuration: BigInt(data.liquidityLockDuration),
+          presaleRate: data.presaleEnabled ? parseEther(data.presaleRate || "0") : BigInt(0),
+          softCap: data.presaleEnabled ? parseEther(data.softCap || "0") : BigInt(0),
+          hardCap: data.presaleEnabled ? parseEther(data.hardCap || "0") : BigInt(0),
+          minContribution: data.presaleEnabled ? parseEther(data.minContribution || "0") : BigInt(0),
+          maxContribution: data.presaleEnabled ? parseEther(data.maxContribution || "0") : BigInt(0),
+          startTime: data.presaleEnabled ? BigInt(data.startTime || 0) : BigInt(0),
+          endTime: data.presaleEnabled ? BigInt(data.endTime || 0) : BigInt(0),
+          presalePercentage: data.presaleEnabled ? Number(data.presalePercentage) : 0,
+          liquidityPercentage: Number(data.liquidityPercentage),
+          liquidityLockDuration: BigInt(data.liquidityLockDuration * 24 * 60 * 60), // Convert days to seconds
           walletAllocations: data.wallets.map(wallet => ({
             wallet: wallet.address as `0x${string}`,
-            percentage: wallet.percentage,
+            percentage: Number(wallet.percentage),
             vestingEnabled: wallet.vestingEnabled,
-            vestingDuration: wallet.vestingEnabled ? BigInt(wallet.vestingDuration) : BigInt(0),
-            cliffDuration: wallet.vestingEnabled ? BigInt(wallet.cliffDuration) : BigInt(0),
+            vestingDuration: wallet.vestingEnabled ? BigInt(wallet.vestingDuration * 24 * 60 * 60) : BigInt(0),
+            cliffDuration: wallet.vestingEnabled ? BigInt(wallet.cliffDuration * 24 * 60 * 60) : BigInt(0),
             vestingStartTime: wallet.vestingEnabled ? BigInt(wallet.vestingStartTime) : BigInt(0)
           })),
           maxActivePresales: data.presaleEnabled ? data.maxActivePresales : 0,
@@ -791,175 +792,88 @@ const TokenForm_v3: React.FC<TokenFormV3Props> = ({
         // Special handling for Arbitrum Sepolia
         const isArbitrumSepolia = chainId === 421614;
         
-        // Ensure we're sending the correct deployment fee
-        // For Arbitrum Sepolia, we'll use a higher value to ensure it's enough
-        const deploymentFeeToUse = isArbitrumSepolia ? parseEther("0.01") : deploymentFee;
+        // Call the contract method directly
+        console.log('Calling createToken with deployment fee:', formatEther(deploymentFee), 'ETH');
         
         // Set gas options for the transaction
         const gasOptions = {
-          value: deploymentFeeToUse,
-          gasLimit: isArbitrumSepolia ? BigInt(10000000) : undefined
+          value: deploymentFee,
+          gasLimit: isArbitrumSepolia ? BigInt(100000000) : undefined
         };
+        
+        // Call the contract method
+        console.log('Sending transaction to contract at:', tokenFactoryAddress);
+        console.log('With parameters:', JSON.stringify(tokenParamsForContract, (_, v) => typeof v === 'bigint' ? v.toString() : v));
+        console.log('And options:', JSON.stringify(gasOptions, (_, v) => typeof v === 'bigint' ? v.toString() : v));
+        
+        const tx = await factory.createToken(tokenParamsForContract, gasOptions);
+        console.log('Transaction sent:', tx);
 
-        console.log('Using factory address:', tokenFactoryAddress);
-        console.log('Sending transaction with deployment fee:', formatEther(deploymentFeeToUse), 'ETH');
-        console.log('Gas options:', gasOptions);
+        // Wait for the transaction to be mined with more confirmations
+        const receipt = await tx.wait(2); // Wait for 2 confirmations
+        if (receipt) {
+          console.log('Transaction receipt:', receipt);
 
-        try {
-          // Call the contract method directly
-          const tx = await factory.createToken(tokenParamsForContract, gasOptions);
-          console.log('Transaction sent:', tx);
-
-          // Wait for the transaction to be mined with more confirmations
-          const receipt = await tx.wait(2); // Wait for 2 confirmations
-          if (receipt) {
-            console.log('Transaction receipt:', receipt);
-
-            // Extract the token address from the event logs
-            const tokenCreatedEvent = receipt.logs.find((log: any) => {
-              try {
-                const parsedLog = factory.interface.parseLog(log);
-                return parsedLog?.name === 'TokenCreated';
-              } catch {
-                return false;
-              }
-            });
-
-            if (tokenCreatedEvent) {
-              const parsedLog = factory.interface.parseLog(tokenCreatedEvent);
-              if (parsedLog) {
-                const tokenAddress = parsedLog.args.tokenAddress;
-                console.log('New token deployed at:', tokenAddress);
-                
-                if (onSuccess) {
-                  onSuccess(tokenAddress);
-                }
-              } else {
-                console.error('Failed to parse log');
-                toast({
-                  title: 'Error',
-                  description: 'Failed to extract token address from transaction logs',
-                  variant: 'destructive',
-                });
-              }
+          // Extract the token address from the event logs
+          const tokenCreatedEvent = receipt.logs.find((log: Log) => {
+            try {
+              const parsedLog = factory.interface.parseLog(log);
+              return parsedLog?.name === 'TokenCreated';
+            } catch {
+              return false;
             }
-          }
-        } catch (error: unknown) {
-          console.error('Error creating token:', error);
-          
-          // Check if it's a revert error
-          const errorMessage = error instanceof Error ? error.message : String(error);
-          
-          if (errorMessage.includes('execution reverted')) {
-            // Try to extract more specific error information
-            console.log('Transaction reverted. Checking for specific error...');
+          });
+
+          if (tokenCreatedEvent) {
+            const parsedLog = factory.interface.parseLog(tokenCreatedEvent) as LogDescription;
+            const tokenAddress = parsedLog.args.tokenAddress as string;
+            console.log('New token deployed at:', tokenAddress);
             
-            if (errorMessage.includes('Insufficient deployment fee')) {
-      toast({
-                title: "Error",
-                description: "Insufficient deployment fee. Please increase the fee.",
-                variant: "destructive",
-              });
-            } else if (errorMessage.includes('Total percentage must be 100')) {
-              toast({
-                title: "Error",
-                description: "Total allocation percentage must equal 100%",
-                variant: "destructive",
-              });
-            } else if (errorMessage.includes('Liquidity percentage must be 0 when presale is enabled')) {
-              toast({
-                title: "Error",
-                description: "Liquidity percentage must be 0 when presale is enabled",
-                variant: "destructive",
-              });
-            } else {
-              toast({
-                title: "Error",
-                description: "Transaction reverted. Please check your parameters and try again.",
-                variant: "destructive",
-              });
+            if (onSuccess) {
+              onSuccess(tokenAddress);
             }
-          } else {
+
             toast({
-              title: "Error",
-              description: errorMessage.substring(0, 100),
-              variant: "destructive",
+              title: "Success!",
+              description: "Token created successfully",
             });
-          }
-          
-          if (onError) {
-            onError(error);
           }
         }
-
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('Error creating token:', error);
         
-        // Special error handling for Polygon Amoy
-        if (chainId === 80002) {
-          // Check if it's a gas-related error
-          const errorMessage = error.message || '';
-          if (errorMessage.includes('gas') || errorMessage.includes('Gas') || 
-              errorMessage.includes('execution reverted') || errorMessage.includes('Internal JSON-RPC error')) {
-            
-            toast({
-              title: 'Polygon Amoy Error',
-              description: 'Transaction failed. This might be due to gas issues on Polygon Amoy. Try adding more wallets (2-3) or adjusting the gas limit in your wallet.',
-              variant: 'destructive',
-            });
-          } else {
-            toast({
-              title: 'Error',
-              description: errorMessage || 'Failed to create token',
-              variant: 'destructive',
-            });
+        // Try to extract more detailed error information
+        if (error instanceof Error) {
+          const errorMessage = error.message;
+          console.error('Error details:', errorMessage);
+          
+          // Check for specific error messages
+          if (errorMessage.includes('execution reverted')) {
+            const revertReason = errorMessage.match(/reason="([^"]+)"/);
+            if (revertReason && revertReason[1]) {
+              console.error('Revert reason:', revertReason[1]);
+              toast({
+                title: "Transaction Reverted",
+                description: revertReason[1],
+                variant: "destructive",
+              });
+              return;
+            }
           }
-        } else {
-          // Default error handling for other networks
-          toast({
-            title: 'Error',
-            description: error.message || 'Failed to create token',
-            variant: 'destructive',
-          });
+        }
+        
+        toast({
+          title: "Error",
+          description: error instanceof Error ? error.message : "Failed to create token",
+          variant: "destructive",
+        });
+        if (onError) {
+          onError(error);
         }
       } finally {
         setLoading(false);
       }
-
-    } catch (error: any) {
-      console.error('Error creating token:', error);
-      
-      // Special error handling for Polygon Amoy
-      if (chainId === 80002) {
-        // Check if it's a gas-related error
-        const errorMessage = error.message || '';
-        if (errorMessage.includes('gas') || errorMessage.includes('Gas') || 
-            errorMessage.includes('execution reverted') || errorMessage.includes('Internal JSON-RPC error')) {
-          
-          toast({
-            title: 'Polygon Amoy Error',
-            description: 'Transaction failed. This might be due to gas issues on Polygon Amoy. Try adding more wallets (2-3) or adjusting the gas limit in your wallet.',
-            variant: 'destructive',
-          });
-        } else {
-          toast({
-            title: 'Error',
-            description: errorMessage || 'Failed to create token',
-            variant: 'destructive',
-          });
-        }
-      } else {
-        // Default error handling for other networks
-        toast({
-          title: 'Error',
-          description: error.message || 'Failed to create token',
-          variant: 'destructive',
-        });
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
 
   const addWallet = () => {
     if (!account) {
@@ -1463,17 +1377,22 @@ const TokenForm_v3: React.FC<TokenFormV3Props> = ({
                 control={form.control}
                 name="presaleEnabled"
                 render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-2 shadow-sm">
                     <div className="space-y-0.5">
-                      <FormLabel>Enable Presale</FormLabel>
-                      <FormDescription>
-                        Allow users to participate in a presale before token launch
+                      <FormLabel className="text-white">Enable Presale</FormLabel>
+                      <FormDescription className="text-gray-400 text-xs">
+                        Enable token presale functionality
                       </FormDescription>
                     </div>
                     <FormControl>
                       <Switch
                         checked={field.value}
-                        onCheckedChange={field.onChange}
+                        onCheckedChange={(checked) => {
+                          field.onChange(checked);
+                          if (!checked) {
+                            form.setValue("presalePercentage", 0);
+                          }
+                        }}
                       />
                     </FormControl>
                   </FormItem>
@@ -1554,14 +1473,8 @@ const TokenForm_v3: React.FC<TokenFormV3Props> = ({
           {/* Presale Configuration */}
           {form.watch("presaleEnabled") && (
             <div className="form-section bg-gray-800/50 rounded-lg p-4">
-              <h3 className="text-lg font-medium mb-2">Presale Configuration</h3>
-              <div className="p-2 mb-3 bg-blue-900/30 rounded-lg">
-                <p className="text-xs text-blue-300">
-                  When presale is enabled, liquidity percentage must be 0. The contract will handle liquidity allocation after the presale ends.
-                </p>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <h3 className="text-lg font-medium text-white mb-2">Presale Configuration</h3>
+              <div className="grid grid-cols-2 gap-3">
                 <FormField
                   control={form.control}
                   name="presalePercentage"

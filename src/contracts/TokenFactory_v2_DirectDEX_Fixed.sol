@@ -84,6 +84,8 @@ contract TokenFactory_v2_DirectDEX_Fixed is Ownable, ReentrancyGuard {
             defaultRouter = 0xeE567Fe1712Faf6149d80dA1E6934E354124CfE3; // Uniswap V2 Router on Sepolia
         } else if (block.chainid == 97) { // BSC Testnet
             defaultRouter = 0xD99D1c33F9fC3444f8101754aBC46c52416550D1; // PancakeSwap Router
+        } else if (block.chainid == 421614) { // Arbitrum Sepolia
+            defaultRouter = 0xD9Aa0Ca55115900908bd649793D9b8dE11Fb7368; // Uniswap V2 Router on Arbitrum Sepolia
         } else {
             defaultRouter = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D; // Default to Uniswap V2 Router
         }
