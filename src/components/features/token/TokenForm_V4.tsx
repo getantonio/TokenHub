@@ -372,6 +372,7 @@ export default function TokenForm_V4({ isConnected, onSuccess, onError }: TokenF
         factoryAddress,
         [
           "function createToken(string,string,uint256,address) returns (address)",
+          "function createTokenForWeb(string,string,uint256,address,bool) returns (address)",
           "function createTokenWithSecurity(string,string,uint256,address,bool,address[],uint256) returns (address)",
           "function getTokenImplementation() view returns (address)",
           "function getSecurityModuleImplementation() view returns (address)",
@@ -408,14 +409,15 @@ export default function TokenForm_V4({ isConnected, onSuccess, onError }: TokenF
 
       // Try an alternative approach by manually creating the transaction
       const iface = new ethers.Interface([
-        "function createToken(string,string,uint256,address) returns (address)"
+        "function createTokenForWeb(string,string,uint256,address,bool) returns (address)"
       ]);
       
-      const encodedData = iface.encodeFunctionData("createToken", [
+      const encodedData = iface.encodeFunctionData("createTokenForWeb", [
         data.name,
         data.symbol,
         initialSupply,
-        ownerAddress
+        ownerAddress,
+        true // includeDistribution parameter
       ]);
       
       console.log('Manual transaction data:', encodedData);

@@ -64,11 +64,20 @@ module.exports = {
       gas: "auto",
       timeout: 1800000,
     },
+    polygonamoy: {
+      url: process.env.POLYGON_AMOY_RPC_URL || "https://polygon-amoy.infura.io/v3/de082d8afc854286a7bdc56f2895fc67",
+      chainId: 80002,
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+      gasPrice: "auto",
+      gas: "auto",
+      timeout: 1800000,
+    },
   },
   etherscan: {
     apiKey: {
       arbitrumSepolia: process.env.ARBISCAN_API_KEY || "",
       sepolia: process.env.ETHERSCAN_API_KEY || "",
+      polygonamoy: process.env.POLYGONSCAN_API_KEY || "Z8FQT28BE7RR34GR5D8RMX6YGQ6AS6JSR2",
     },
     customChains: [
       {
@@ -77,6 +86,14 @@ module.exports = {
         urls: {
           apiURL: "https://api-sepolia.arbiscan.io/api",
           browserURL: "https://sepolia.arbiscan.io",
+        },
+      },
+      {
+        network: "polygonamoy",
+        chainId: 80002,
+        urls: {
+          apiURL: "https://api-amoy.polygonscan.com/api",
+          browserURL: "https://amoy.polygonscan.com",
         },
       },
     ],

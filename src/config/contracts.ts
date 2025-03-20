@@ -96,24 +96,44 @@ export function getNetworkContractAddress(chainId: number, contractType: string)
     switch (contractType.toUpperCase()) {
       case 'FACTORYADDRESSV3':
       case 'FACTORY_ADDRESS_V3':
-        const addressFromMap = contractAddresses[chainId].factoryAddressV3;
-        if (addressFromMap) {
-          console.log(`Using ${networkName} V3 address from map:`, addressFromMap);
-          return addressFromMap;
+        const addressFromMapV3 = contractAddresses[chainId].factoryAddressV3;
+        if (addressFromMapV3) {
+          console.log(`Using ${networkName} V3 address from map:`, addressFromMapV3);
+          return addressFromMapV3;
+        }
+        break;
+      case 'FACTORYADDRESSV4':
+      case 'FACTORY_ADDRESS_V4':
+        const addressFromMapV4 = contractAddresses[chainId].factoryAddressV4;
+        if (addressFromMapV4) {
+          console.log(`Using ${networkName} V4 address from map:`, addressFromMapV4);
+          return addressFromMapV4;
         }
         break;
     }
   }
 
   // If not found in map, try environment variables
-  const envKey = `NEXT_PUBLIC_${networkName}_FACTORY_ADDRESS_V3`;
+  let envKey;
+  if (contractType.toUpperCase() === 'FACTORYADDRESSV3' || contractType.toUpperCase() === 'FACTORY_ADDRESS_V3') {
+    envKey = `NEXT_PUBLIC_${networkName}_FACTORY_ADDRESS_V3`;
+  } else if (contractType.toUpperCase() === 'FACTORYADDRESSV4' || contractType.toUpperCase() === 'FACTORY_ADDRESS_V4') {
+    envKey = `NEXT_PUBLIC_${networkName}_FACTORY_ADDRESS_V4`;
+  } else {
+    envKey = `NEXT_PUBLIC_${networkName}_${contractType.toUpperCase()}`;
+  }
+
   const envAddress = process.env[envKey];
   if (envAddress) {
-    console.log(`Using ${networkName} V3 address from env:`, envAddress);
+    console.log(`Using ${networkName} ${contractType} address from env:`, envAddress);
     return envAddress;
   }
 
-  console.warn(`No address found for ${networkName} V3`);
+  if (contractType.toUpperCase() === 'FACTORYADDRESSV3' || contractType.toUpperCase() === 'FACTORY_ADDRESS_V3') {
+    console.warn(`No address found for ${networkName} V3`);
+  } else if (contractType.toUpperCase() === 'FACTORYADDRESSV4' || contractType.toUpperCase() === 'FACTORY_ADDRESS_V4') {
+    console.warn(`No address found for ${networkName} V4`);
+  }
   return '';
 }
 
