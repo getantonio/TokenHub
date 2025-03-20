@@ -269,8 +269,8 @@ export default function V4Page() {
               </Card>
             </>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              <div className="lg:col-span-2">
+            <div className="grid grid-cols-1 gap-8">
+              <div>
                 <TokenForm_V4
                   isConnected={isConnected}
                   onSuccess={() => {
@@ -281,7 +281,7 @@ export default function V4Page() {
                   }}
                 />
               </div>
-              <div className="lg:col-span-1 space-y-6">
+              <div>
                 <TCAP_v4 
                   onAnalyze={(address) => {
                     console.log('Analyzing token:', address);

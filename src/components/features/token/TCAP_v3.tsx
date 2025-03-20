@@ -1530,9 +1530,10 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
           
           // Perform a proactive check for locked or unavailable tokens
           console.log("Performing proactive token availability check...");
+          let contractBalance = BigInt(0);
           try {
             // Try to get token info to determine if tokens might be locked
-            const contractBalance = await tokenContract.balanceOf(contractAddress);
+            contractBalance = await tokenContract.balanceOf(contractAddress);
             const totalSupply = await tokenContract.totalSupply();
             console.log("Contract balance vs total supply:", {
               contractBalance: formatEther(contractBalance),
@@ -1587,9 +1588,9 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
             if (BigInt(liquidityAllocation) > BigInt(0) && BigInt(contractBalance) >= BigInt(liquidityAllocation)) {
               // Try a test approve to see if the liquidity tokens can be moved
               try {
-                // Use estimateGas on the contract method, not on BaseContractMethod
-                const canApprove = await tokenContract.estimateGas["approve"](userAddress, 1);
-                console.log("Contract can approve tokens:", canApprove);
+                // Use a more generic approach to avoid TypeScript errors
+                const approveEstimate = await (tokenContract as any).estimateGas.approve?.(userAddress, 1);
+                console.log("Contract can approve tokens:", approveEstimate);
               } catch (approveTestError) {
                 console.error("Token cannot approve transfer - critical contract design issue:", approveTestError);
                 toast({

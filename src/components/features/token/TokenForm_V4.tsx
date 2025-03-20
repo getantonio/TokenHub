@@ -1,13 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller, useWatch } from 'react-hook-form';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import TokenPreview from '@/components/features/token/TokenPreview';
 import { useToast } from '@/components/ui/toast/use-toast';
-import { TokenDistributionPreview } from '@/components/features/token/TokenDistributionPreview';
 import { InfoTooltip } from '@/components/ui/InfoTooltip';
 import { ethers, Log, LogDescription } from 'ethers';
 import { getNetworkContractAddress } from '@/config/contracts';
@@ -178,6 +177,87 @@ const VESTING_PRESETS = {
         cliffDuration: 30
       }
     ]
+  },
+  growth: {
+    presalePercentage: 30,
+    liquidityPercentage: 40,
+    wallets: [
+      {
+        name: "Team",
+        percentage: 15,
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 90
+      },
+      {
+        name: "Marketing",
+        percentage: 10,
+        vestingEnabled: true,
+        vestingDuration: 180,
+        cliffDuration: 30
+      },
+      {
+        name: "Development",
+        percentage: 5,
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 60
+      }
+    ]
+  },
+  bootstrap: {
+    presalePercentage: 20,
+    liquidityPercentage: 50,
+    wallets: [
+      {
+        name: "Team",
+        percentage: 15,
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 90
+      },
+      {
+        name: "Marketing",
+        percentage: 10,
+        vestingEnabled: true,
+        vestingDuration: 180,
+        cliffDuration: 30
+      },
+      {
+        name: "Development",
+        percentage: 5,
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 60
+      }
+    ]
+  },
+  governance: {
+    presalePercentage: 20,
+    liquidityPercentage: 40,
+    wallets: [
+      {
+        name: "Governance",
+        percentage: 20,
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 90
+      },
+      {
+        name: "Team",
+        percentage: 10,
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 180
+      },
+      {
+        name: "Treasury",
+        percentage: 10,
+        vestingEnabled: true,
+        vestingDuration: 365,
+        cliffDuration: 60
+      }
+    ]
   }
 };
 
@@ -279,7 +359,7 @@ export default function TokenForm_V4({ isConnected, onSuccess, onError }: TokenF
       buybackEnabled: true,
       buybackThreshold: '1',
       autoBurnPercent: '2',
-      rewardToken: '0xb6083258E7E7B04Bdc72640E1a75E1F40541e83F', // Updated reward token address
+      rewardToken: '0xb6083258E7E7B04Bdc72640E1a75E1F40541e83F',
       rewardPercent: '2',
       antiDumpEnabled: true,
       maxTxAmount: '10000',
@@ -311,13 +391,13 @@ export default function TokenForm_V4({ isConnected, onSuccess, onError }: TokenF
       presaleMinBuy: '0.1',
       presaleMaxBuy: '2',
       presaleStartTime: Math.floor(Date.now() / 1000) + (24 * 3600), // 24h from now
-      presaleEndTime: Math.floor(Date.now() / 1000) + (7 * 24 * 3600), // 7 days from now
+      presaleEndTime: Math.floor(Date.now() / 1000) + (7 * 24 * 3600),
 
-      // Default Wallets (using standard preset)
+      // Default wallets for testing
       wallets: [
         {
-          name: "Team",
-          address: '0x10C8c279c6b381156733ec160A89Abb260bfcf0C', // First wallet address
+          name: 'Team',
+          address: '0xb6083258E7E7B04Bdc72640E1a75E1F40541e83F',
           percentage: 5,
           vestingEnabled: true,
           vestingDuration: 365,
@@ -325,17 +405,62 @@ export default function TokenForm_V4({ isConnected, onSuccess, onError }: TokenF
           vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
         },
         {
-          name: "Marketing",
-          address: '0x991Ed392F033B2228DC55A1dE2b706ef8D9d9DcD', // Second wallet address
+          name: 'Marketing',
+          address: '0x10C8c279c6b381156733ec160A89Abb260bfcf0C',
           percentage: 5,
           vestingEnabled: true,
           vestingDuration: 180,
           cliffDuration: 30,
           vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+        },
+        {
+          name: 'Development',
+          address: '0x991Ed392F033B2228DC55A1dE2b706ef8D9d9DcD',
+          percentage: 0,
+          vestingEnabled: false,
+          vestingDuration: 0,
+          cliffDuration: 0,
+          vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
         }
       ]
     }
   });
+
+  // Watch for presale changes to adjust percentages
+  useEffect(() => {
+    const subscription = form.watch((value, { name, type }) => {
+      // When presale is toggled
+      if (name === 'presaleEnabled') {
+        const presaleEnabled = form.getValues('presaleEnabled');
+        
+        if (!presaleEnabled) {
+          // When disabling presale, redistribute its percentage
+          const presalePercentage = Number(form.getValues('presalePercentage')) || 0;
+          const liquidityPercentage = Number(form.getValues('liquidityPercentage')) || 0;
+          const wallets = form.getValues('wallets') || [];
+          
+          // Get total of current wallet percentages
+          const totalWalletPercentage = wallets.reduce((sum, w) => sum + (Number(w.percentage) || 0), 0);
+          
+          // If wallets exist, distribute presale percentage proportionally
+          if (wallets.length > 0 && totalWalletPercentage > 0) {
+            const updatedWallets = wallets.map(wallet => {
+              const currentPercent = Number(wallet.percentage) || 0;
+              const proportion = currentPercent / totalWalletPercentage;
+              const newPercent = currentPercent + (presalePercentage * proportion);
+              return { ...wallet, percentage: parseFloat(newPercent.toFixed(1)) };
+            });
+            form.setValue('wallets', updatedWallets);
+          } else {
+            // If no wallets with percentages, increase liquidity
+            form.setValue('liquidityPercentage', liquidityPercentage + presalePercentage);
+          }
+        }
+      }
+    });
+    
+    return () => subscription.unsubscribe();
+  }, [form]);
 
   const handleSubmit = async (data: FormData) => {
     if (!isConnected) {
@@ -1055,9 +1180,17 @@ export default function TokenForm_V4({ isConnected, onSuccess, onError }: TokenF
                           form.setValue('presaleEnabled', config.presalePercentage > 0);
                           form.setValue('presalePercentage', config.presalePercentage);
                           form.setValue('liquidityPercentage', config.liquidityPercentage);
-                          form.setValue('wallets', config.wallets.map(w => ({
+                          
+                          // Use predefined wallets with test addresses
+                          const testWallets = [
+                            '0xb6083258E7E7B04Bdc72640E1a75E1F40541e83F',
+                            '0x10C8c279c6b381156733ec160A89Abb260bfcf0C',
+                            '0x991Ed392F033B2228DC55A1dE2b706ef8D9d9DcD'
+                          ];
+                          
+                          form.setValue('wallets', config.wallets.map((w, index) => ({
                             ...w,
-                            address: '',
+                            address: index < testWallets.length ? testWallets[index] : '',
                             vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
                           })));
                         }
@@ -1067,6 +1200,9 @@ export default function TokenForm_V4({ isConnected, onSuccess, onError }: TokenF
                       <option value="standard">Standard Distribution</option>
                       <option value="fair_launch">Fair Launch</option>
                       <option value="community">Community Focused</option>
+                      <option value="growth">Growth</option>
+                      <option value="bootstrap">Bootstrap</option>
+                      <option value="governance">Governance</option>
                     </select>
                   </div>
                 </div>
@@ -1364,16 +1500,11 @@ export default function TokenForm_V4({ isConnected, onSuccess, onError }: TokenF
           symbol={form.watch('symbol')}
           initialSupply={form.watch('initialSupply')}
           maxSupply={form.watch('maxSupply')}
+          presaleEnabled={form.watch('presaleEnabled')}
+          presalePercentage={Number(form.watch('presalePercentage')) || 0}
+          liquidityPercentage={Number(form.watch('liquidityPercentage')) || 0}
+          wallets={form.watch('wallets') || []}
         />
-        
-        {activeTab === 'distribution' && (
-          <TokenDistributionPreview
-            presaleEnabled={form.watch('presaleEnabled')}
-            presalePercentage={Number(form.watch('presalePercentage')) || 0}
-            liquidityPercentage={Number(form.watch('liquidityPercentage')) || 0}
-            wallets={form.watch('wallets') || []}
-          />
-        )}
       </div>
     </div>
   );
