@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import TokenDeploymentTest from './TokenDeploymentTest';
 import { Alert } from "@/components/ui/alert";
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription } from '@/components/ui/dialog';
 import {
   Form,
   FormControl,
@@ -2207,7 +2207,7 @@ const TokenForm_v3: React.FC<TokenFormV3Props> = ({
         <DialogContent className="max-w-2xl" aria-describedby="simulation-results-description">
           <div className="space-y-4">
             <h2 className="text-xl font-semibold text-white">Deployment Simulation Results</h2>
-            <div id="simulation-results-description" className="space-y-2">
+            <DialogDescription id="simulation-results-description" className="space-y-2">
               {simulationResults.map((result, index) => (
                 <div
                   key={index}
@@ -2242,7 +2242,7 @@ const TokenForm_v3: React.FC<TokenFormV3Props> = ({
                   )}
                 </div>
               ))}
-            </div>
+            </DialogDescription>
             <div className="flex justify-end gap-2 mt-4">
               <Button variant="secondary" onClick={() => setShowSimulationDialog(false)}>
                 Close

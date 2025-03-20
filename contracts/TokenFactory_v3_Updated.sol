@@ -4,24 +4,16 @@ pragma solidity ^0.8.19;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/security/Pausable.sol";
-import "./Token_v3.sol";
+import "./Token_v3_Updated.sol";
+import "./ITokenTypes.sol";
 
-contract TokenFactory_v3 is Ownable, ReentrancyGuard, Pausable {
+contract TokenFactory_v3_Updated is Ownable, ReentrancyGuard, Pausable {
     uint256 public constant VERSION = 3;
     uint256 public deploymentFee = 0.001 ether; // Default fee of 0.001 BNB
     uint256 public totalTokensCreated;
     mapping(address => uint256) public userTokenCount;
     mapping(address => address[]) public userTokens;
     address public routerAddress;
-    
-    struct WalletAllocation {
-        address wallet;
-        uint256 percentage;
-        bool vestingEnabled;
-        uint256 vestingDuration;
-        uint256 cliffDuration;
-        uint256 vestingStartTime;
-    }
 
     struct TokenParams {
         string name;
@@ -41,7 +33,7 @@ contract TokenFactory_v3 is Ownable, ReentrancyGuard, Pausable {
         uint256 presalePercentage;
         uint256 liquidityPercentage;
         uint256 liquidityLockDuration;
-        WalletAllocation[] walletAllocations;
+        ITokenTypes.WalletAllocation[] walletAllocations;
         uint256 maxActivePresales;
         bool presaleEnabled;
     }
@@ -104,14 +96,14 @@ contract TokenFactory_v3 is Ownable, ReentrancyGuard, Pausable {
         }
 
         // Special handling for wallet allocations
-        WalletAllocation[] memory finalAllocations;
+        ITokenTypes.WalletAllocation[] memory finalAllocations;
         uint256 walletPercentageTotal = 0;
         
         // If no wallet allocations or incomplete percentage, create or adjust with default to owner
         if (params.walletAllocations.length == 0) {
             // Create a default allocation to the owner if none provided
-            finalAllocations = new WalletAllocation[](1);
-            finalAllocations[0] = WalletAllocation({
+            finalAllocations = new ITokenTypes.WalletAllocation[](1);
+            finalAllocations[0] = ITokenTypes.WalletAllocation({
                 wallet: params.owner,
                 percentage: 100 - params.presalePercentage - params.liquidityPercentage,
                 vestingEnabled: false,
@@ -129,7 +121,7 @@ contract TokenFactory_v3 is Ownable, ReentrancyGuard, Pausable {
             );
         } else {
             // Use the provided allocations
-            finalAllocations = new WalletAllocation[](params.walletAllocations.length);
+            finalAllocations = new ITokenTypes.WalletAllocation[](params.walletAllocations.length);
             
             for (uint256 i = 0; i < params.walletAllocations.length; i++) {
                 require(params.walletAllocations[i].wallet != address(0), "Invalid wallet address");
@@ -169,7 +161,7 @@ contract TokenFactory_v3 is Ownable, ReentrancyGuard, Pausable {
         require(totalPercentage == 100, "Total allocation must be 100%");
 
         // Create token
-        Token_v3 token = new Token_v3(
+        Token_v3_Updated token = new Token_v3_Updated(
             params.name,
             params.symbol,
             params.initialSupply,
@@ -226,7 +218,7 @@ contract TokenFactory_v3 is Ownable, ReentrancyGuard, Pausable {
         require(msg.value > 0, "Must send ETH for liquidity");
         
         // Call the token's addLiquidityFromContractTokens function
-        Token_v3(tokenAddress).addLiquidityFromContractTokens{value: msg.value}();
+        Token_v3_Updated(tokenAddress).addLiquidityFromContractTokens{value: msg.value}();
     }
 
     // Admin functions

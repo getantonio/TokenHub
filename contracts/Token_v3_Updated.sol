@@ -8,13 +8,14 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
+import "./ITokenTypes.sol";
 
 // Import TokenFactory interface
-interface TokenFactory_v3 {
+interface ITokenFactory_v3_Updated {
     function routerAddress() external view returns (address);
 }
 
-contract Token_v3 is 
+contract Token_v3_Updated is 
     ERC20,
     ERC20Burnable,
     ERC20Pausable,
@@ -50,15 +51,6 @@ contract Token_v3 is
     
     // Single mapping for vesting info instead of multiple mappings
     mapping(address => VestingInfo) private vestingInfo;
-    
-    struct WalletAllocation {
-        address wallet;
-        uint256 percentage;
-        bool vestingEnabled;
-        uint256 vestingDuration;
-        uint256 cliffDuration;
-        uint256 vestingStartTime;
-    }
     
     // Blacklist and timelock
     mapping(address => bool) private _blacklist;
@@ -103,7 +95,7 @@ contract Token_v3 is
         _transferOwnership(owner);
         
         // Get router address from TokenFactory for BSC compatibility
-        TokenFactory_v3 factory = TokenFactory_v3(msg.sender);
+        ITokenFactory_v3_Updated factory = ITokenFactory_v3_Updated(msg.sender);
         address routerAddress = factory.routerAddress();
         require(routerAddress != address(0), "Invalid router address");
         
@@ -131,12 +123,50 @@ contract Token_v3 is
         endTime = _endTime;
     }
 
+    function addLiquidity(uint256 tokenAmount, uint256 ethAmount) internal {
+        _approve(address(this), address(uniswapV2Router), tokenAmount);
+        uniswapV2Router.addLiquidityETH{value: ethAmount}(
+            address(this),
+            tokenAmount,
+            0,
+            0,
+            owner(),
+            block.timestamp + 300
+        );
+    }
+    
+    // New function to add liquidity from contract tokens
+    function addLiquidityFromContractTokens() external payable onlyOwner {
+        require(msg.value > 0, "Must send ETH for liquidity");
+        require(balanceOf(address(this)) > 0, "No tokens in contract");
+        
+        // Calculate token amount based on contract balance
+        uint256 tokenAmount = balanceOf(address(this));
+        
+        // Add liquidity with the provided ETH and tokens from contract
+        addLiquidity(tokenAmount, msg.value);
+        
+        // Create pair if it doesn't exist yet
+        if (uniswapV2Pair == address(0)) {
+            uniswapV2Pair = IUniswapV2Factory(uniswapV2Router.factory())
+                .getPair(address(this), uniswapV2Router.WETH());
+        }
+        
+        emit LiquidityAdded(uniswapV2Pair, tokenAmount, msg.value);
+    }
+
+    // Add function to get remaining liquidity allocation
+    function getRemainingLiquidityAllocation() external view returns (uint256) {
+        return balanceOf(address(this));
+    }
+    
+    // Modify configureDistribution to add liquidity if ETH is provided
     function configureDistribution(
         uint256 _presalePercentage,
         uint256 _liquidityPercentage,
         uint256 _liquidityLockDuration,
-        WalletAllocation[] memory walletAllocations
-    ) external onlyOwner {
+        ITokenTypes.WalletAllocation[] memory walletAllocations
+    ) external payable onlyOwner {
         presalePercentage = _presalePercentage;
         liquidityPercentage = _liquidityPercentage;
         liquidityLockDuration = _liquidityLockDuration;
@@ -209,6 +239,19 @@ contract Token_v3 is
         }
         
         require(allocatedTokens == totalSupply, "Total allocation must equal supply");
+        
+        // Add liquidity if ETH is provided
+        if (msg.value > 0 && liquidityTokens > 0) {
+            addLiquidity(liquidityTokens, msg.value);
+            
+            // Create pair if it doesn't exist yet
+            if (uniswapV2Pair == address(0)) {
+                uniswapV2Pair = IUniswapV2Factory(uniswapV2Router.factory())
+                    .getPair(address(this), uniswapV2Router.WETH());
+            }
+            
+            emit LiquidityAdded(uniswapV2Pair, liquidityTokens, msg.value);
+        }
     }
 
     function _beforeTokenTransfer(
@@ -253,7 +296,7 @@ contract Token_v3 is
     function getVestingInfo(address wallet) external view returns (
         uint256 totalAmount,
         uint256 claimedAmount,
-        uint256 startTime,
+        uint256 _startTime,
         uint256 duration,
         uint256 cliff
     ) {
@@ -353,17 +396,5 @@ contract Token_v3 is
                 emit TokensClaimed(recipient, tokenAmount);
             }
         }
-    }
-
-    function addLiquidity(uint256 tokenAmount, uint256 ethAmount) internal {
-        _approve(address(this), address(uniswapV2Router), tokenAmount);
-        uniswapV2Router.addLiquidityETH{value: ethAmount}(
-            address(this),
-            tokenAmount,
-            0,
-            0,
-            owner(),
-            block.timestamp + 300
-        );
     }
 } 

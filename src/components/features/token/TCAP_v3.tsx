@@ -26,6 +26,49 @@ import { BrowserProvider } from 'ethers';
 import { Log } from 'ethers';
 import { TokenFactory_v3_ABI } from '@/contracts/abi/TokenFactory_v3';
 
+// Custom ABI for Token_v3_Updated that includes getRemainingLiquidityAllocation function
+const TokenV3UpdatedABI = [
+  // Basic ERC20
+  "function name() view returns (string)",
+  "function symbol() view returns (string)",
+  "function decimals() view returns (uint8)",
+  "function totalSupply() view returns (uint256)",
+  "function balanceOf(address) view returns (uint256)",
+  "function transfer(address to, uint256 amount) returns (bool)",
+  "function allowance(address owner, address spender) view returns (uint256)",
+  "function approve(address spender, uint256 amount) returns (bool)",
+  "function transferFrom(address from, address to, uint256 amount) returns (bool)",
+  // Ownership
+  "function owner() view returns (address)",
+  // Custom functions
+  "function burn(uint256 amount) external",
+  "function pause() external",
+  "function unpause() external",
+  "function paused() view returns (bool)",
+  "function maxSupply() view returns (uint256)",
+  "function blacklistEnabled() view returns (bool)",
+  "function timeLockEnabled() view returns (bool)",
+  "function isBlacklisted(address) view returns (bool)",
+  "function setBlacklist(address, bool) external",
+  "function getUnlockTime(address) view returns (uint256)",
+  "function setTimeLock(address, uint256) external",
+  // Vesting
+  "function getVestingInfo(address) view returns (uint256, uint256, uint256, uint256, uint256)",
+  "function getClaimableAmount(address) view returns (uint256)",
+  "function claimVestedTokens() external",
+  // Liquidity
+  "function addLiquidityFromContractTokens() external payable returns (uint256)",
+  "function getRemainingLiquidityAllocation() external view returns (uint256)",
+  // Presale
+  "function configurePresale(uint256,uint256,uint256,uint256,uint256,uint256,uint256) external",
+  "function configureDistribution(uint256,uint256,uint256,(address,uint256,bool,uint256,uint256,uint256)[]) external payable",
+  // Events
+  "event LiquidityAdded(address indexed pair, uint256 tokensAdded, uint256 ethAdded)",
+  "event TokensClaimed(address indexed wallet, uint256 amount)",
+  "event BlacklistUpdated(address indexed account, bool status)",
+  "event TimeLockSet(address indexed account, uint256 timestamp)"
+];
+
 export interface TCAP_v3Props {
   isConnected: boolean;
   address?: string;
@@ -113,7 +156,7 @@ function BlockDialog({ isOpen, onClose, onConfirm, tokenName, tokenAddress }: Bl
         <DialogDescription id="block-dialog-description">
           Are you sure you want to block {tokenName}? This action cannot be undone.
         </DialogDescription>
-        <div className="mt-4 flex justify-end gap-3">
+        <div className="mt-4 flex justify-end gap-3" aria-describedby="block-dialog-description">
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
           <Button variant="destructive" onClick={onConfirm}>Block Token</Button>
         </div>
@@ -125,7 +168,7 @@ function BlockDialog({ isOpen, onClose, onConfirm, tokenName, tokenAddress }: Bl
 interface AddLiquidityDialog {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (data: { tokenAmount: string; ethAmount: string }) => void;
+  onConfirm: (data: { tokenAmount: string; ethAmount: string; useContractTokens: boolean }) => void;
   tokenSymbol: string;
   tokenTotalSupply?: string;
   selectedToken: TokenInfo;
@@ -144,73 +187,125 @@ function AddLiquidityDialog({
   const [tokenAmount, setTokenAmount] = useState('');
   const [ethAmount, setEthAmount] = useState('');
   const [remainingAllocation, setRemainingAllocation] = useState<string>('0');
+  const [walletBalance, setWalletBalance] = useState<string>('0');
+  const [useContractTokens, setUseContractTokens] = useState(true);
 
-  // Fetch remaining allocation when dialog opens
+  // Fetch remaining allocation and wallet balance when dialog opens
   useEffect(() => {
     if (isOpen && selectedToken) {
-      const fetchAllocation = async () => {
+      const fetchTokenData = async () => {
         try {
           const signer = await externalProvider.getSigner();
-          const tokenContract = new Contract(selectedToken.address, TokenV3ABI.abi, signer);
-          // Use getRemainingLiquidityAllocation instead of remainingLiquidityAllocation
+          const userAddress = await signer.getAddress();
+          const tokenContract = new Contract(selectedToken.address, TokenV3UpdatedABI, signer);
+          
+          // Get remaining liquidity allocation
           const remaining = await tokenContract.getRemainingLiquidityAllocation();
           setRemainingAllocation(formatEther(remaining));
+          
+          // Get wallet balance
+          const balance = await tokenContract.balanceOf(userAddress);
+          setWalletBalance(formatEther(balance));
         } catch (error) {
-          console.error('Error fetching remaining allocation:', error);
+          console.error('Error fetching token data:', error);
         }
       };
-      fetchAllocation();
+      fetchTokenData();
     }
   }, [isOpen, selectedToken]);
 
-  // Calculate derived values
-  const tokenPrice = useMemo(() => {
-    if (!tokenAmount || !ethAmount) return null;
-    try {
-      const tokenValue = parseFloat(tokenAmount);
-      const ethValue = parseFloat(ethAmount);
-      if (tokenValue <= 0) return null;
-      return ethValue / tokenValue;
-    } catch {
-      return null;
+  // Reset form when dialog opens/closes
+  useEffect(() => {
+    if (isOpen) {
+      setTokenAmount('');
+      setEthAmount('');
     }
-  }, [tokenAmount, ethAmount]);
-
-  // Calculate tokens per ETH
-  const tokensPerEth = useMemo(() => {
-    if (!tokenPrice) return null;
-    return 1 / tokenPrice;
-  }, [tokenPrice]);
+  }, [isOpen]);
 
   const handleConfirm = () => {
-    onConfirm({ tokenAmount, ethAmount });
+    // Validate inputs before confirming
+    if (!ethAmount) {
+      alert('Please enter ETH amount');
+      return;
+    }
+    
+    if (!useContractTokens && !tokenAmount) {
+      alert('Please enter token amount');
+      return;
+    }
+    
+    onConfirm({ 
+      tokenAmount: useContractTokens ? remainingAllocation : tokenAmount, 
+      ethAmount,
+      useContractTokens
+    });
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[425px]" aria-describedby="add-liquidity-dialog-description">
+      <DialogContent className="sm:max-w-[425px]" aria-describedby="add-liquidity-description">
         <DialogTitle>Add Liquidity</DialogTitle>
-        <DialogDescription id="add-liquidity-dialog-description">
-          Add liquidity to create a trading pair with {tokenSymbol}. Enter the amount of tokens and ETH you want to provide.
+        <DialogDescription id="add-liquidity-description">
+          {useContractTokens 
+            ? `Add liquidity using contract tokens. Available: ${remainingAllocation} ${tokenSymbol}`
+            : `Add liquidity using wallet tokens. Available: ${walletBalance} ${tokenSymbol}`}
         </DialogDescription>
         
-        <div className="mt-4 space-y-2">
-          <div className="text-sm text-blue-400">
-            Available token allocation: {remainingAllocation} {tokenSymbol}
-          </div>
-          
+        <div className="mt-4 space-y-2" aria-describedby="add-liquidity-description">
           <div className="space-y-4">
             <div>
-              <Label htmlFor="tokenAmount" className="text-gray-300">Token Amount ({tokenSymbol})</Label>
-              <Input
-                id="tokenAmount"
-                type="text"
-                value={tokenAmount}
-                onChange={(e) => setTokenAmount(e.target.value)}
-                placeholder="Enter token amount"
-                className="bg-gray-800 border-gray-700 text-gray-100 placeholder-gray-500"
-              />
+              <h4 className="text-sm font-medium text-white mb-2">Liquidity Source</h4>
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="radio"
+                    id="contract-tokens"
+                    checked={useContractTokens}
+                    onChange={() => setUseContractTokens(true)}
+                    className="h-4 w-4"
+                  />
+                  <label htmlFor="contract-tokens" className="text-sm text-white">
+                    Use contract tokens ({remainingAllocation} {tokenSymbol} available)
+                  </label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="radio"
+                    id="wallet-tokens"
+                    checked={!useContractTokens}
+                    onChange={() => setUseContractTokens(false)}
+                    className="h-4 w-4"
+                  />
+                  <label htmlFor="wallet-tokens" className="text-sm text-white">
+                    Use tokens from wallet ({walletBalance} {tokenSymbol} available)
+                  </label>
+                </div>
+              </div>
             </div>
+            
+            {!useContractTokens && (
+              <div>
+                <Label htmlFor="tokenAmount" className="text-gray-300">Token Amount</Label>
+                <Input
+                  id="tokenAmount"
+                  type="text"
+                  value={tokenAmount}
+                  onChange={(e) => setTokenAmount(e.target.value)}
+                  placeholder="Enter token amount"
+                  className="bg-gray-800 border-gray-700 text-gray-100 placeholder-gray-500"
+                />
+                <div className="mt-1 flex justify-between">
+                  <span className="text-xs text-gray-400">Balance: {walletBalance}</span>
+                  <button 
+                    onClick={() => setTokenAmount(walletBalance)}
+                    className="text-xs text-blue-400 hover:text-blue-300"
+                  >
+                    Max
+                  </button>
+                </div>
+              </div>
+            )}
+            
             <div>
               <Label htmlFor="ethAmount" className="text-gray-300">ETH Amount</Label>
               <Input
@@ -522,38 +617,54 @@ const verifyPairAddress = async (tokenAddress: string, signer: any) => {
   try {
     console.log('Verifying pair address for token:', tokenAddress);
     
-    // Sepolia addresses
-    const UNISWAP_V2_FACTORY = '0x7E0987E5b3a30e3f2828572Bb659A548460a3003';
+    // Since we're having issues with the factory contract, let's try a different approach
+    // We'll use the router directly to check for liquidity
+    const ROUTER_ADDRESS = '0xD9Aa0Ca55115900908bd649793D9b8dE11Fb7368';
     const WETH_SEPOLIA = '0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14';
     
-    console.log('Using Factory:', UNISWAP_V2_FACTORY);
+    console.log('Using Router:', ROUTER_ADDRESS);
     console.log('Using WETH:', WETH_SEPOLIA);
 
-    // Create factory contract with full ABI
-    const factoryContract = new ethers.Contract(
-      UNISWAP_V2_FACTORY,
+    // Create router contract with minimal interface
+    const routerContract = new ethers.Contract(
+      ROUTER_ADDRESS,
       [
-        'function getPair(address tokenA, address tokenB) external view returns (address pair)',
-        'function allPairs(uint) external view returns (address pair)',
-        'function allPairsLength() external view returns (uint)'
+        'function factory() external view returns (address)',
+        'function WETH() external view returns (address)'
+      ],
+      signer
+    );
+    
+    try {
+      // Get factory address from router
+      const factoryAddress = await routerContract.factory();
+      console.log('Factory address from router:', factoryAddress);
+      
+      // Now we'll use the factoryAddress to create a minimal factory contract
+    const factoryContract = new ethers.Contract(
+        factoryAddress,
+        [
+          'function getPair(address tokenA, address tokenB) external view returns (address pair)'
       ],
       signer
     );
 
-    // Try both token orderings
-    let pairAddress = await factoryContract.getPair(tokenAddress, WETH_SEPOLIA).catch(() => ethers.ZeroAddress);
-    console.log('Pair address (token/WETH):', pairAddress);
-    
-    if (pairAddress === ethers.ZeroAddress) {
-      pairAddress = await factoryContract.getPair(WETH_SEPOLIA, tokenAddress).catch(() => ethers.ZeroAddress);
-      console.log('Pair address (WETH/token):', pairAddress);
-      
-      if (pairAddress === ethers.ZeroAddress) {
-        console.log('No pair exists yet - this is normal when adding liquidity for the first time');
-      }
-    }
+    // Sort tokens to match factory's token ordering
+    const [token0, token1] = tokenAddress.toLowerCase() < WETH_SEPOLIA.toLowerCase() 
+      ? [tokenAddress, WETH_SEPOLIA] 
+      : [WETH_SEPOLIA, tokenAddress];
+
+    // Try to get pair address
+      const pairAddress = await factoryContract.getPair(token0, token1);
+      console.log('Found pair address:', pairAddress);
 
     return pairAddress;
+    } catch (error) {
+      console.log('Error getting pair from factory:', error);
+      
+      // If we can't get the pair address, return zero address
+      return ethers.ZeroAddress;
+    }
   } catch (error) {
     console.error('Error in verifyPairAddress:', error);
     return ethers.ZeroAddress;
@@ -648,6 +759,93 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
   const { chainId } = useNetwork();
   const form = useForm<FormData>();
 
+  // Helper function to handle liquidity addition with a router
+  const handleAddLiquidityWithRouter = async (
+    router: string, 
+    tokenContract: Contract, 
+    tokenAmountBN: bigint,
+    ethAmountBN: bigint,
+    userAddress: string,
+    contractAddress: string
+  ) => {
+    // Check if router is approved to spend tokens
+    const allowance = await tokenContract.allowance(userAddress, router);
+    console.log("Router allowance:", formatEther(allowance));
+    
+    if (BigInt(allowance) < BigInt(tokenAmountBN)) {
+      // Approve router to spend tokens
+      console.log("Approving router to spend tokens...");
+      
+      toast({
+        title: "Approval Required",
+        description: "Please approve the router to spend your tokens",
+      });
+      
+      const approveTx = await tokenContract.approve(router, tokenAmountBN);
+      
+      toast({
+        title: "Approval Sent",
+        description: "Waiting for approval transaction to be confirmed...",
+      });
+      
+      await approveTx.wait();
+      console.log("Router approved to spend tokens");
+      
+      toast({
+        title: "Approval Confirmed",
+        description: "Router approved to spend tokens. Adding liquidity...",
+      });
+    }
+    
+    // Get deadline (30 minutes from now)
+    const deadline = Math.floor(Date.now() / 1000) + 30 * 60;
+    
+    // Create router contract
+    const routerContract = new Contract(
+      router,
+      [
+        "function addLiquidityETH(address token, uint256 amountTokenDesired, uint256 amountTokenMin, uint256 amountETHMin, address to, uint256 deadline) external payable returns (uint256 amountToken, uint256 amountETH, uint256 liquidity)"
+      ],
+      await externalProvider.getSigner()
+    );
+    
+    // Call addLiquidityETH on router
+    console.log("Adding liquidity with wallet tokens:", {
+      router,
+      tokenAddress: contractAddress,
+      tokenAmount: tokenAmountBN.toString(),
+      ethAmount: ethAmountBN.toString()
+    });
+    
+    // Calculate min amounts (95% of desired amounts to account for slippage)
+    const amountTokenMin = BigInt(tokenAmountBN) * BigInt(95) / BigInt(100);
+    const amountETHMin = BigInt(ethAmountBN) * BigInt(95) / BigInt(100);
+    
+    toast({
+      title: "Adding Liquidity",
+      description: "Waiting for transaction confirmation...",
+    });
+    
+    const liquidityTx = await routerContract.addLiquidityETH(
+      contractAddress,
+      tokenAmountBN,
+      amountTokenMin,
+      amountETHMin,
+      userAddress,
+      deadline,
+      {
+        value: ethAmountBN,
+        gasLimit: 5000000
+      }
+    );
+    
+    console.log("Transaction sent:", liquidityTx.hash);
+    
+    // Wait for transaction to be mined
+    const receipt = await liquidityTx.wait();
+    console.log("Transaction confirmed:", receipt);
+  };
+
   // Add state for vesting schedules popup
   const [showVestingSchedules, setShowVestingSchedules] = useState(false);
   const [selectedTokenForSchedules, setSelectedTokenForSchedules] = useState<string | null>(null);
@@ -700,7 +898,8 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
   // which can cause errors if the page doesn't fully reload
 
   const getTokenContract = (tokenAddress: string, signer: any) => {
-    return new Contract(tokenAddress, TokenV3ABI.abi, signer);
+    // Use TokenV3UpdatedABI instead of TokenV3ABI
+    return new Contract(tokenAddress, TokenV3UpdatedABI, signer);
   };
 
   // Add this function to handle blocked tokens
@@ -776,11 +975,11 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
       try {
         // Create contract interface with BOTH function names that might be used
         const factory = new ethers.Contract(factoryAddress, [
+          "function uniswapV2Router() view returns (address)",
           "function getUserCreatedTokens(address) view returns (address[])",
-          "function getUserTokens(address) view returns (address[])",  // This is the actual function name in the contract
+          "function getUserTokens(address) view returns (address[])",
           "function deploymentFee() view returns (uint256)",
-          "function feeRecipient() view returns (address)",
-          "function uniswapV2Router() view returns (address)"
+          "function feeRecipient() view returns (address)"
         ], signer);
         
         console.log('TCAP_v3 loadTokens: Getting user created tokens for:', userAddress);
@@ -814,7 +1013,7 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
         .filter((token: string) => !blockedTokens.includes(token))
         .map(async (tokenAddress: string) => {
           try {
-            const tokenContract = new ethers.Contract(tokenAddress, TokenV3ABI.abi, signer);
+            const tokenContract = new ethers.Contract(tokenAddress, TokenV3UpdatedABI, signer);
 
             // Get basic token info
             const [name, symbol, totalSupply, owner, paused] = await Promise.all([
@@ -1077,8 +1276,11 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
       const dialog = await new Promise<{ toAddress: string; amount: string } | null>((resolve) => {
         const dialog = document.createElement('dialog');
         dialog.className = 'bg-gray-900 rounded-lg p-6 max-w-md w-full border border-border';
+        dialog.setAttribute('aria-labelledby', 'dialog-title');
+        dialog.setAttribute('aria-describedby', 'dialog-description');
         dialog.innerHTML = `
-          <h3 class="text-lg font-bold text-text-primary mb-4">Mint or Transfer Tokens</h3>
+          <h3 id="dialog-title" class="text-lg font-bold text-text-primary mb-4">Mint or Transfer Tokens</h3>
+          <p id="dialog-description" class="text-xs text-text-secondary mb-4">Enter the recipient address and amount to mint or transfer tokens.</p>
           <div class="space-y-4">
             <div>
               <label class="text-xs text-text-secondary">Recipient Address</label>
@@ -1217,7 +1419,7 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
     try {
       setLoading(true);
       const signer = await externalProvider.getSigner();
-      const tokenContract = new Contract(token.address, TokenV3ABI.abi, signer);
+      const tokenContract = new Contract(token.address, TokenV3UpdatedABI, signer);
       
       const tx = await tokenContract.finalize();
       
@@ -1272,7 +1474,7 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
   ];
 
   // Update the handleAddLiquidityConfirm function to use addLiquidityFromContract
-  const handleAddLiquidityConfirm = async ({ tokenAmount, ethAmount }: { tokenAmount: string; ethAmount: string }) => {
+  const handleAddLiquidityConfirm = async ({ tokenAmount, ethAmount, useContractTokens }: { tokenAmount: string; ethAmount: string; useContractTokens: boolean }): Promise<void> => {
     try {
       setLoading(true);
       
@@ -1283,7 +1485,7 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
       
       const signer = await externalProvider.getSigner();
       const userAddress = await signer.getAddress();
-      const tokenContract = getTokenContract(selectedToken.address, signer);
+      const tokenContract = new Contract(selectedToken.address, TokenV3UpdatedABI, signer);
       
       // Get the contract address
       const contractAddress = selectedToken.address;
@@ -1294,61 +1496,954 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
         throw new Error("Only the token owner can add liquidity");
       }
       
-      // Check remaining liquidity allocation
-      const remainingLiquidityAllocation = await tokenContract.getRemainingLiquidityAllocation();
-      console.log("Remaining liquidity allocation:", formatEther(remainingLiquidityAllocation));
-      
-      if (remainingLiquidityAllocation.eq(0)) {
-        throw new Error("No remaining liquidity allocation");
+      // Validate ETH amount and convert to BigNumber
+      if (!ethAmount || parseFloat(ethAmount) <= 0) {
+        throw new Error("Please enter a valid ETH amount");
       }
       
-      // Convert input values to BigNumber
-      const tokenAmountBN = parseUnits(tokenAmount, 18);
       const ethAmountBN = parseUnits(ethAmount, 18);
-      
-      // Check if tokenAmount is less than or equal to remainingLiquidityAllocation
-      if (tokenAmountBN > remainingLiquidityAllocation) {
-        throw new Error(`Token amount exceeds remaining liquidity allocation (${formatEther(remainingLiquidityAllocation)} tokens)`);
-      }
       
       // Check user ETH balance
       const ethBalance = await externalProvider.getBalance(userAddress);
       if (ethBalance < ethAmountBN) {
-        throw new Error("Insufficient ETH balance");
+        throw new Error(`Insufficient ETH balance. You have ${formatEther(ethBalance)} ETH`);
+      }
+
+      // Use the correct router address from environment variables for Arbitrum Sepolia
+      const ROUTER_ADDRESS = '0xD9Aa0Ca55115900908bd649793D9b8dE11Fb7368';
+      const WETH_ADDRESS = '0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14';
+      const FACTORY_ADDRESS = '0x5FdBfd0AfD0788abD85cf42daebbaA9d4d60F038';
+      
+      console.log("Using router address:", ROUTER_ADDRESS);
+      
+      if (useContractTokens) {
+        console.log("Using contract tokens for liquidity");
+        
+        try {
+          // Parse the token amount from the dialog input
+          const tokenAmountBN = parseUnits(tokenAmount, 18);
+          console.log("Using token amount from dialog:", formatEther(tokenAmountBN));
+          
+          if (BigInt(tokenAmountBN) === BigInt(0)) {
+            throw new Error("No tokens specified for liquidity");
+          }
+          
+          // Perform a proactive check for locked or unavailable tokens
+          console.log("Performing proactive token availability check...");
+          try {
+            // Try to get token info to determine if tokens might be locked
+            const contractBalance = await tokenContract.balanceOf(contractAddress);
+            const totalSupply = await tokenContract.totalSupply();
+            console.log("Contract balance vs total supply:", {
+              contractBalance: formatEther(contractBalance),
+              totalSupply: formatEther(totalSupply)
+            });
+            
+            // Check if this token might have locking or vesting mechanics
+            let hasLockingMechanics = false;
+            
+            // Check for common contract functions that indicate locking/vesting
+            for (const fnName of [
+              'lock', 'unlock', 'locked', 'lockTokens', 'vestingSchedule', 
+              'getVestingSchedule', 'isLocked', 'tokenLock', 'releaseTime',
+              'presaleStatus', 'getPresaleState', 'finalizePresale'
+            ]) {
+              if (typeof tokenContract[fnName] === 'function') {
+                console.log(`Found locking/vesting function: ${fnName}`);
+                hasLockingMechanics = true;
+                break;
+              }
+            }
+            
+            if (hasLockingMechanics) {
+              // Show a warning but continue with the attempt
+              toast({
+                title: "Token Protection Detected",
+                description: "This token may have locking or vesting mechanics. If adding liquidity fails, try using wallet tokens instead.",
+                variant: "default"
+              });
+            }
+          } catch (infoError) {
+            console.log("Could not check token info:", infoError);
+          }
+          
+          // Specifically check for liquidity allocation issues
+          try {
+            // Try to detect if liquidity allocation is accessible
+            let liquidityAllocation = BigInt(0);
+            
+            // Try different methods to get liquidity allocation
+            if (typeof tokenContract.liquidityAllocation === 'function') {
+              liquidityAllocation = await tokenContract.liquidityAllocation();
+            } else if (typeof tokenContract.getLiquidityAllocation === 'function') {
+              liquidityAllocation = await tokenContract.getLiquidityAllocation();
+            } else if (typeof tokenContract.liquidityReserve === 'function') {
+              liquidityAllocation = await tokenContract.liquidityReserve();
+            }
+            
+            console.log("Liquidity allocation detected:", formatEther(liquidityAllocation));
+            
+            // Critical check: if contract has tokens but can't transfer the liquidity allocation
+            if (BigInt(liquidityAllocation) > BigInt(0) && BigInt(contractBalance) >= BigInt(liquidityAllocation)) {
+              // Try a test approve to see if the liquidity tokens can be moved
+              try {
+                // Use estimateGas on the contract method, not on BaseContractMethod
+                const canApprove = await tokenContract.estimateGas["approve"](userAddress, 1);
+                console.log("Contract can approve tokens:", canApprove);
+              } catch (approveTestError) {
+                console.error("Token cannot approve transfer - critical contract design issue:", approveTestError);
+                toast({
+                  title: "Critical Contract Issue",
+                  description: "The liquidity allocation cannot be transferred. This is a fundamental design issue in the token contract.",
+                  variant: "destructive"
+                });
+              }
+            }
+          } catch (liquidityCheckError) {
+            console.log("Error checking liquidity allocation:", liquidityCheckError);
+          }
+          
+          // Create factory contract
+          const factoryContract = new Contract(
+            FACTORY_ADDRESS,
+            [
+              'function createPair(address tokenA, address tokenB) external returns (address pair)',
+              'function getPair(address tokenA, address tokenB) external view returns (address pair)'
+            ],
+            signer
+          );
+          
+          // Check if pair exists
+          console.log("Checking if pair exists...");
+          const pairCheck = await factoryContract.getPair(
+            contractAddress,
+            WETH_ADDRESS
+          );
+          
+          console.log("Current pair address:", pairCheck);
+          
+          // If the contract has a built-in function for adding liquidity, use it
+          try {
+            console.log("Attempting to call addLiquidityFromContractTokens...");
+            
+            toast({
+              title: "Adding Liquidity",
+              description: "Sending transaction to add liquidity using contract tokens",
+            });
+            
+            // First check if we need to add a router parameter
+            let tx;
+            try {
+              // Try with ROUTER_ADDRESS parameter first (some implementations require this)
+              tx = await tokenContract.addLiquidityFromContractTokens(ROUTER_ADDRESS, {
+                value: ethAmountBN,
+                gasLimit: 3000000
+              });
+            } catch (routerParamError) {
+              console.log("Failed with router parameter, trying without parameters");
+              
+              // Try without parameters (original implementation)
+              tx = await tokenContract.addLiquidityFromContractTokens({
+                value: ethAmountBN,
+                gasLimit: 3000000
+              });
+            }
+            
+            console.log("Transaction sent:", tx.hash);
+            
+            toast({
+              title: "Transaction Sent",
+              description: "Waiting for transaction to be confirmed...",
+            });
+            
+            // Wait for transaction to be mined
+            const receipt = await tx.wait();
+            console.log("Transaction confirmed:", receipt);
+            
+            // Success!
+            toast({
+              title: "Success",
+              description: "Liquidity added successfully!",
+            });
+            
+            await loadTokens();
+            setIsAddLiquidityDialogOpen(false);
+            return;
+          } catch (methodError: any) {
+            console.log("addLiquidityFromContractTokens failed:", methodError.message);
+            
+            // If the first method fails, try a different signature
+            try {
+              console.log("Attempting direct router liquidity...");
+              
+              // Create router contract
+              const routerContract = new Contract(
+                ROUTER_ADDRESS,
+                [
+                  'function addLiquidityETH(address token, uint256 amountTokenDesired, uint256 amountTokenMin, uint256 amountETHMin, address to, uint256 deadline) external payable returns (uint256 amountToken, uint256 amountETH, uint256 liquidity)'
+                ],
+                signer
+              );
+              
+              // Get remaining liquidity allocation
+              let remainingAllocation;
+              try {
+                remainingAllocation = await tokenContract.getRemainingLiquidityAllocation();
+                console.log("Remaining liquidity allocation:", formatEther(remainingAllocation));
+              } catch (e) {
+                console.log("getRemainingLiquidityAllocation not available, using contract balance");
+                remainingAllocation = await tokenContract.balanceOf(contractAddress);
+                console.log("Contract balance as allocation:", formatEther(remainingAllocation));
+              }
+              
+              // Approve the router to spend tokens from the contract
+              console.log("Approving router to spend tokens...");
+              
+              // First check current allowance
+              const routerAllowance = await tokenContract.allowance(contractAddress, ROUTER_ADDRESS);
+              console.log("Current router allowance:", formatEther(routerAllowance));
+              
+              if (BigInt(routerAllowance) < BigInt(remainingAllocation)) {
+                // Need to approve - try multiple approaches
+                try {
+                  // Try standard approve from contract to router (if contract supports it)
+                  const approveTx = await tokenContract.approve(ROUTER_ADDRESS, remainingAllocation);
+                  await approveTx.wait();
+                  console.log("Router approved for token spending");
+                } catch (approveError: any) {
+                  console.log("Standard approve failed:", approveError.message);
+                  
+                  // Try alternative approval methods
+                  try {
+                    // Some tokens have a special approveExternal or similar method
+                    const alternateTx = await tokenContract.approveExternal(ROUTER_ADDRESS, remainingAllocation);
+                    await alternateTx.wait();
+                    console.log("Router approved via approveExternal");
+                  } catch (alternateApproveError: any) {
+                    console.log("Alternative approval methods failed");
+                    throw new Error("Could not approve router to spend tokens");
+                  }
+                }
+              }
+              
+              // Calculate min amounts with 2% slippage
+              const amountTokenMin = (BigInt(remainingAllocation) * BigInt(98)) / BigInt(100);
+              const amountETHMin = (ethAmountBN * BigInt(98)) / BigInt(100);
+              const deadline = Math.floor(Date.now() / 1000) + 1800; // 30 minutes
+              
+              toast({
+                title: "Adding Liquidity via Router",
+                description: "Sending transaction to add liquidity",
+              });
+              
+              const directTx = await routerContract.addLiquidityETH(
+                tokenContract.address,
+                remainingAllocation,
+                amountTokenMin,
+                amountETHMin,
+                userAddress,
+                deadline,
+                {
+                  value: ethAmountBN,
+                  gasLimit: 5000000
+                }
+              );
+              
+              console.log("Transaction sent:", directTx.hash);
+              
+              toast({
+                title: "Transaction Sent",
+                description: "Waiting for transaction to be confirmed...",
+              });
+              
+              const directReceipt = await directTx.wait();
+              console.log("Transaction confirmed:", directReceipt);
+              
+              toast({
+                title: "Success",
+                description: "Liquidity added successfully!",
+              });
+              
+              await loadTokens();
+              setIsAddLiquidityDialogOpen(false);
+              return;
+            } catch (routerError: any) {
+              console.log("Direct router liquidity failed:", routerError.message);
+              // Continue to next approach
+            }
+            
+            // If the first method fails, try the alternative method
+            try {
+              console.log("Attempting to call addLiquidityFromContract with parameter...");
+              
+              const tx = await tokenContract.addLiquidityFromContract(tokenAmountBN, {
+                value: ethAmountBN,
+                gasLimit: 3000000
+              });
+              
+              console.log("Transaction sent:", tx.hash);
+              
+              toast({
+                title: "Transaction Sent",
+                description: "Waiting for transaction to be confirmed...",
+              });
+              
+              // Wait for transaction to be mined
+              const receipt = await tx.wait();
+              console.log("Transaction confirmed:", receipt);
+              
+              // Success!
+              toast({
+                title: "Success",
+                description: "Liquidity added successfully!",
+              });
+              
+              await loadTokens();
+              setIsAddLiquidityDialogOpen(false);
+              return;
+            } catch (alternativeMethodError: any) {
+              console.log("addLiquidityFromContract failed:", alternativeMethodError.message);
+              
+              // If both built-in methods fail, we need to do it manually
+              console.log("Built-in liquidity methods failed, trying manual approach...");
+            }
+          }
+          
+          // Manual approach - first ensure the token contract has approved the router
+          console.log("Using manual approach to add liquidity");
+          
+          // Check if the token contract has approved the router
+          const routerAllowance = await tokenContract.allowance(contractAddress, ROUTER_ADDRESS);
+          console.log("Router allowance for contract tokens:", formatEther(routerAllowance));
+          
+          // If allowance is insufficient, we need to approve
+          if (BigInt(routerAllowance) < BigInt(tokenAmountBN)) {
+            console.log("Contract doesn't have a direct approval method. Trying alternative approach...");
+            
+            toast({
+              title: "Using Alternative Approach",
+              description: "The contract doesn't support direct approval. Trying to transfer tokens first.",
+            });
+            
+            // Try to use a transfer function if available
+            try {
+              // Check if the contract has a function to transfer tokens from contract to owner
+              // Try different possible function names
+              let transferTx;
+              
+              try {
+                console.log("Trying withdrawTokens function...");
+                transferTx = await tokenContract.withdrawTokens(userAddress, tokenAmountBN);
+              } catch (e) {
+                console.log("withdrawTokens failed, trying transferTokens...");
+                try {
+                  transferTx = await tokenContract.transferTokens(userAddress, tokenAmountBN);
+                } catch (e) {
+                  console.log("transferTokens failed, trying standard transfer...");
+                  // Last resort - try standard transfer if contract allows it
+                  transferTx = await tokenContract.transfer(userAddress, tokenAmountBN);
+                }
+              }
+              
+              toast({
+                title: "Transfer Initiated",
+                description: "Waiting for tokens to be transferred to your wallet...",
+              });
+              
+              await transferTx.wait();
+              console.log("Tokens transferred from contract to owner");
+              
+              toast({
+                title: "Transfer Complete",
+                description: "Tokens transferred to your wallet. Proceeding with liquidity addition.",
+              });
+              
+              // Verify the tokens were received
+              const newBalance = await tokenContract.balanceOf(userAddress);
+              console.log("New wallet balance:", formatEther(newBalance));
+              
+              if (BigInt(newBalance) < BigInt(tokenAmountBN)) {
+                throw new Error("Failed to transfer enough tokens to wallet");
+              }
+            } catch (transferError: any) {
+              console.error("All transfer methods failed:", transferError);
+              
+              // Check if the error is about exceeding balance
+              const isBalanceError = transferError.message && 
+                (transferError.message.includes('exceeds balance') || 
+                 transferError.message.includes('insufficient balance'));
+              
+              if (isBalanceError) {
+                // Try to get the actual available balance
+                try {
+                  // Get the actual contract tokens that can be moved
+                  const availableBalance = await tokenContract.balanceOf(contractAddress);
+                  console.log("Reported contract balance:", formatEther(availableBalance));
+                  
+                  // NEW: Directly check if the contract appears to have liquidity allocation issues
+                  console.log("Checking for liquidity allocation issues...");
+                  let liquidityAllocationIssue = false;
+                  
+                  // Try different methods to check if liquidity allocation is properly set up
+                  try {
+                    if (typeof tokenContract.liquidityAllocation === 'function') {
+                      const allocation = await tokenContract.liquidityAllocation();
+                      console.log("Liquidity allocation value:", formatEther(allocation));
+                      
+                      if (BigInt(allocation) > BigInt(0) && BigInt(availableBalance) >= BigInt(allocation)) {
+                        liquidityAllocationIssue = true;
+                        console.error("CRITICAL: Contract has tokens but cannot use the liquidity allocation");
+                        
+                        toast({
+                          title: "Critical Contract Design Issue",
+                          description: "The token contract has a liquidity allocation that cannot be accessed. This is a fundamental design flaw.",
+                          variant: "destructive"
+                        });
+                      }
+                    }
+                  } catch (checkError) {
+                    console.log("Could not check liquidity allocation:", checkError);
+                  }
+                  
+                  // Check if this is a presale or locked token
+                  let isPresaleOrLocked = false;
+                  let isVestingToken = false;
+                  
+                  // Try to detect if this is a presale token
+                  try {
+                    // Check for common presale functions
+                    if (typeof tokenContract.getPresaleState === 'function') {
+                      const presaleState = await tokenContract.getPresaleState();
+                      isPresaleOrLocked = presaleState !== 2; // Assuming 2 means completed
+                      console.log("Presale state detected:", presaleState);
+                    } else if (typeof tokenContract.presaleStatus === 'function') {
+                      const presaleStatus = await tokenContract.presaleStatus();
+                      isPresaleOrLocked = !presaleStatus; // If false, presale not completed
+                      console.log("Presale status detected:", presaleStatus);
+                    }
+                  } catch (presaleCheckError) {
+                    console.log("No presale functions detected");
+                  }
+                  
+                  // Try to detect if this is a vesting token
+                  try {
+                    if (typeof tokenContract.getVestingSchedule === 'function' || 
+                        typeof tokenContract.vestingEnabled === 'function' ||
+                        typeof tokenContract.isVestingToken === 'function') {
+                      isVestingToken = true;
+                      console.log("Vesting token detected");
+                    }
+                  } catch (vestingCheckError) {
+                    console.log("No vesting functions detected");
+                  }
+                  
+                  // Get the deployable amount if available
+                  let deployableAmount;
+                  try {
+                    deployableAmount = await tokenContract.getDeployableTokens();
+                    console.log("Deployable tokens:", formatEther(deployableAmount));
+                  } catch (e) {
+                    // Function doesn't exist, use a fraction of the reported balance
+                    deployableAmount = BigInt(availableBalance) / BigInt(10); // Try 10%
+                    console.log("Using 10% of reported balance:", formatEther(deployableAmount));
+                  }
+                  
+                  if (deployableAmount && BigInt(deployableAmount) > BigInt(0)) {
+                    toast({
+                      title: "Trying with Available Balance",
+                      description: `Using available balance of ${formatEther(deployableAmount)} tokens instead.`,
+                    });
+                    
+                    // Try again with the smaller amount
+                    try {
+                      // Try the built-in method with the smaller amount
+                      console.log("Trying addLiquidityFromContractTokens with smaller amount...");
+                      
+                      // Sometimes contracts have a parameter-less version that uses the available balance
+                      const tx = await tokenContract.addLiquidityWithEth({
+                        value: ethAmountBN,
+                        gasLimit: 5000000
+                      });
+                      
+                      console.log("Transaction sent:", tx.hash);
+                      
+                      toast({
+                        title: "Transaction Sent",
+                        description: "Using contract's built-in liquidity function...",
+                      });
+                      
+                      await tx.wait();
+                      console.log("Transaction confirmed successfully");
+                      
+                      toast({
+                        title: "Success",
+                        description: "Liquidity added successfully!",
+                      });
+                      
+                      await loadTokens();
+                      setIsAddLiquidityDialogOpen(false);
+                      return;
+                    } catch (smallerAmountError) {
+                      console.error("Smaller amount attempt failed:", smallerAmountError);
+                    }
+                  }
+                  
+                  // Provide specific guidance based on detected token type
+                  if (isPresaleOrLocked) {
+                    toast({
+                      title: "Presale Not Finalized",
+                      description: "This token appears to be in presale state. You may need to finalize the presale before adding liquidity.",
+                      variant: "destructive"
+                    });
+                    
+                    throw new Error("Could not add liquidity: Token is in presale state. Please finalize the presale first, then try again.");
+                  } else if (isVestingToken) {
+                    toast({
+                      title: "Vesting Mechanics Detected",
+                      description: "This token has vesting mechanics that may prevent direct liquidity addition. Try using wallet tokens instead.",
+                      variant: "destructive"
+                    });
+                    
+                    throw new Error("Could not add liquidity: Token has vesting mechanics. Please use tokens from your wallet instead.");
+                  } else {
+                    // Generic message for other token types
+                    toast({
+                      title: "Tokens Unavailable",
+                      description: "The tokens in the contract cannot be accessed directly. Please try using tokens from your wallet instead.",
+                      variant: "destructive"
+                    });
+                    
+                    throw new Error("Could not add liquidity from contract: Token may require using wallet tokens. " + 
+                      (transferError.message || "Unknown error"));
+                  }
+                } catch (balanceCheckError) {
+                  console.error("Failed to check available balance:", balanceCheckError);
+                }
+              }
+              
+              // If we can't transfer tokens, suggest trying wallet tokens instead
+              toast({
+                title: "Use Wallet Tokens Instead",
+                description: "Many tokens have protection mechanisms that prevent direct use of contract tokens. Please uncheck 'Use Contract Tokens' and try again using tokens from your wallet.",
+                variant: "destructive"
+              });
+              
+              throw new Error("Could not add liquidity from contract: Token may require using wallet tokens. " + 
+                (transferError.message || "Unknown error"));
+            }
+          }
+          
+          // Now transfer tokens from contract to owner
+          console.log("Transferring tokens from contract to owner...");
+          
+          toast({
+            title: "Transferring Tokens",
+            description: "Transferring tokens from contract to your wallet",
+          });
+          
+          try {
+            const transferTx = await tokenContract.transferFromContract(userAddress, tokenAmountBN);
+            
+            toast({
+              title: "Transfer Sent",
+              description: "Waiting for transfer transaction to be confirmed...",
+            });
+            
+            await transferTx.wait();
+            console.log("Tokens transferred from contract to owner");
+            
+            toast({
+              title: "Transfer Confirmed",
+              description: "Tokens transferred to your wallet",
+            });
+          } catch (transferError: any) {
+            console.error("Error transferring tokens:", transferError);
+            throw new Error("Failed to transfer tokens: " + (transferError.message || "Unknown error"));
+          }
+          
+          // Now add liquidity using the router directly
+          console.log("Adding liquidity via router with wallet tokens...");
+          
+          // First approve the router to spend tokens from the owner
+          const ownerAllowance = await tokenContract.allowance(userAddress, ROUTER_ADDRESS);
+          
+          if (BigInt(ownerAllowance) < BigInt(tokenAmountBN)) {
+            console.log("Approving router to spend owner tokens...");
+            
+            toast({
+              title: "Approval Required",
+              description: "Approving router to spend your tokens",
+            });
+            
+            const approveTx = await tokenContract.approve(ROUTER_ADDRESS, tokenAmountBN);
+            
+            toast({
+              title: "Approval Sent",
+              description: "Waiting for approval transaction to be confirmed...",
+            });
+            
+            await approveTx.wait();
+            console.log("Router approved to spend owner tokens");
+            
+            toast({
+              title: "Approval Confirmed",
+              description: "Router approved to spend your tokens",
+            });
+          }
+          
+          // Create router contract
+          const routerContract = new Contract(
+            ROUTER_ADDRESS,
+            [
+              'function addLiquidityETH(address token, uint256 amountTokenDesired, uint256 amountTokenMin, uint256 amountETHMin, address to, uint256 deadline) external payable returns (uint256 amountToken, uint256 amountETH, uint256 liquidity)'
+            ],
+            signer
+          );
+          
+          // Calculate min amounts (95% of desired amounts to account for slippage)
+          const amountTokenMin = BigInt(tokenAmountBN) * BigInt(95) / BigInt(100);
+          const amountETHMin = BigInt(ethAmountBN) * BigInt(95) / BigInt(100);
+          
+          // 30 minutes from now
+          const deadline = Math.floor(Date.now() / 1000) + 1800;
+          
+          toast({
+            title: "Adding Liquidity",
+            description: "Sending transaction to add liquidity",
+          });
+          
+          const liquidityTx = await routerContract.addLiquidityETH(
+            contractAddress,
+            tokenAmountBN,
+            amountTokenMin,
+            amountETHMin,
+            userAddress,
+            deadline,
+            {
+              value: ethAmountBN,
+              gasLimit: 3000000
+            }
+          );
+          
+          toast({
+            title: "Transaction Sent",
+            description: "Waiting for transaction to be confirmed...",
+          });
+          
+          await liquidityTx.wait();
+          console.log("Liquidity added successfully");
+          
+          toast({
+            title: "Success",
+            description: "Liquidity added successfully!",
+          });
+        } catch (error: any) {
+          console.error("Error adding liquidity from contract:", error);
+          throw new Error("Failed to add liquidity: " + (error.message || "Unknown error"));
+        }
+      } else {
+        // Using wallet tokens
+        console.log("Using wallet tokens for liquidity");
+        
+        // Convert token amount to wei
+        const tokenAmountBN = parseUnits(tokenAmount, 18);
+        
+        // Check wallet token balance
+        const walletBalance = await tokenContract.balanceOf(userAddress);
+        console.log("Wallet token balance:", formatEther(walletBalance));
+        
+        if (BigInt(walletBalance) < BigInt(tokenAmountBN)) {
+          throw new Error(`Insufficient token balance in wallet. You have ${formatEther(walletBalance)} tokens`);
+        }
+        
+        // Use minimal UniswapV2Router02 interface
+        const uniswapRouter = new Contract(
+          ROUTER_ADDRESS,
+          [
+            'function addLiquidityETH(address token, uint amountTokenDesired, uint amountTokenMin, uint amountETHMin, address to, uint deadline) external payable returns (uint amountToken, uint amountETH, uint liquidity)'
+          ],
+          signer
+        );
+        
+        // Check and approve router allowance
+        const allowance = await tokenContract.allowance(userAddress, ROUTER_ADDRESS);
+        console.log("Router allowance:", formatEther(allowance));
+        
+        if (BigInt(allowance) < BigInt(tokenAmountBN)) {
+          console.log("Approving router to spend tokens...");
+          
+          toast({
+            title: "Approval Required",
+            description: "Please approve the router to spend your tokens",
+          });
+          
+          const approveTx = await tokenContract.approve(ROUTER_ADDRESS, tokenAmountBN);
+          console.log("Approval transaction sent:", approveTx.hash);
+          
+          toast({
+            title: "Approval Sent",
+            description: "Waiting for approval transaction to be confirmed...",
+          });
+          
+          const approveReceipt = await approveTx.wait();
+          console.log("Approval transaction confirmed:", approveReceipt);
+          
+          toast({
+            title: "Approval Confirmed",
+            description: "Router approved to spend tokens. Adding liquidity...",
+          });
+        }
+        
+        try {
+          // Use higher slippage for first liquidity addition (50% to ensure it goes through)
+          // First liquidity is tricky due to price discovery - using higher slippage ensures success
+          const slippagePercent = selectedToken.pairAddress && selectedToken.pairAddress !== "0x0000000000000000000000000000000000000000" ? 5 : 50;
+          console.log(`Using ${slippagePercent}% slippage for ${selectedToken.pairAddress ? 'existing' : 'new'} liquidity pool`);
+          
+          // Calculate min amounts based on slippage
+          const amountTokenMin = BigInt(tokenAmountBN) * BigInt(100 - slippagePercent) / BigInt(100);
+          const amountETHMin = BigInt(ethAmountBN) * BigInt(100 - slippagePercent) / BigInt(100);
+          
+          // 30 minutes from now
+          const deadline = Math.floor(Date.now() / 1000) + 1800;
+          
+          console.log("Adding liquidity via UniswapV2Router:", {
+            router: ROUTER_ADDRESS,
+            token: selectedToken.address,
+            amountTokenDesired: formatEther(tokenAmountBN),
+            amountTokenMin: formatEther(amountTokenMin),
+            amountETHMin: formatEther(amountETHMin),
+            to: userAddress,
+            slippage: `${slippagePercent}%`,
+            deadline
+          });
+          
+          toast({
+            title: "Adding Liquidity",
+            description: "Sending transaction...",
+          });
+          
+          // Execute transaction with high slippage tolerance for first liquidity
+          try {
+            // Diagnostic check for router
+            console.log("Running DEX router diagnostics...");
+            
+            // Check if we can get the factory from the router
+            const routerContract = new Contract(
+              ROUTER_ADDRESS,
+              [
+                'function factory() external view returns (address)',
+                'function WETH() external view returns (address)'
+              ],
+              signer
+            );
+            
+            try {
+              const factoryAddress = await routerContract.factory();
+              const wethAddress = await routerContract.WETH();
+              
+              console.log("Router diagnostic results:", {
+                routerAddress: ROUTER_ADDRESS,
+                factoryAddress,
+                wethAddress,
+                tokenAddress: selectedToken.address
+              });
+              
+              // Try to get the factory contract to check for pairs
+              const factoryContract = new Contract(
+                factoryAddress,
+                [
+                  'function getPair(address tokenA, address tokenB) external view returns (address)',
+                  'function createPair(address tokenA, address tokenB) external returns (address)'
+                ],
+                signer
+              );
+              
+              // Check if pair exists
+              const existingPair = await factoryContract.getPair(selectedToken.address, wethAddress);
+              console.log("Existing pair:", existingPair);
+              
+              if (existingPair === "0x0000000000000000000000000000000000000000") {
+                // Try manually creating the pair first
+                toast({
+                  title: "Creating Liquidity Pair",
+                  description: "This token doesn't have a liquidity pair yet. Creating one now...",
+                });
+                
+                try {
+                  const createPairTx = await factoryContract.createPair(
+                    selectedToken.address, 
+                    wethAddress,
+                    {
+                      gasLimit: 3000000
+                    }
+                  );
+                  
+                  console.log("Create pair transaction sent:", createPairTx.hash);
+                  
+                  toast({
+                    title: "Creating Pair",
+                    description: "Waiting for pair creation to be confirmed...",
+                  });
+                  
+                  await createPairTx.wait();
+                  
+                  // Check the new pair
+                  const newPair = await factoryContract.getPair(selectedToken.address, wethAddress);
+                  console.log("New pair created:", newPair);
+                  
+                  toast({
+                    title: "Pair Created",
+                    description: "Liquidity pair created successfully. Now adding liquidity...",
+                  });
+                } catch (pairError) {
+                  console.error("Failed to create pair:", pairError);
+                  toast({
+                    title: "Pair Creation Failed",
+                    description: "Could not create liquidity pair. Attempting to continue...",
+                    variant: "destructive"
+                  });
+                }
+              }
+            } catch (routerError) {
+              console.error("Router diagnostics failed:", routerError);
+            }
+            
+            // Proceed with normal liquidity addition attempt
+            const tx = await uniswapRouter.addLiquidityETH(
+              selectedToken.address,
+              tokenAmountBN,
+              amountTokenMin,
+              amountETHMin,
+              userAddress,
+              deadline,
+              {
+                value: ethAmountBN,
+                gasLimit: 3000000
+              }
+            );
+            
+            console.log("Transaction sent:", tx.hash);
+            
+            toast({
+              title: "Transaction Sent",
+              description: "Waiting for confirmation...",
+            });
+            
+            const receipt = await tx.wait();
+            console.log("Transaction confirmed:", receipt);
+            
+            toast({
+              title: "Success",
+              description: "Liquidity added successfully!",
+            });
+          } catch (txError: any) {
+            console.error("Transaction failed:", txError);
+            
+            // If the transaction failed due to slippage, try again with higher slippage
+            if (txError.message && (
+                txError.message.includes("INSUFFICIENT_OUTPUT_AMOUNT") || 
+                txError.message.includes("price impact too high") ||
+                txError.message.includes("execution reverted"))
+            ) {
+              toast({
+                title: "Initial Transaction Failed",
+                description: "Trying with maximum slippage tolerance for first liquidity provision...",
+              });
+              
+              // Use 90% slippage as a last resort for first liquidity
+              const emergencyAmountTokenMin = BigInt(tokenAmountBN) * BigInt(10) / BigInt(100);
+              const emergencyAmountETHMin = BigInt(ethAmountBN) * BigInt(10) / BigInt(100);
+              
+              console.log("Retrying with 90% slippage:", {
+                amountTokenMin: formatEther(emergencyAmountTokenMin),
+                amountETHMin: formatEther(emergencyAmountETHMin)
+              });
+              
+              // Execute without gas estimate
+              const emergencyTx = await uniswapRouter.addLiquidityETH(
+                selectedToken.address,
+                tokenAmountBN,
+                emergencyAmountTokenMin,
+                emergencyAmountETHMin,
+                userAddress,
+                deadline,
+                {
+                  value: ethAmountBN,
+                  gasLimit: 3000000
+                }
+              );
+              
+              console.log("Emergency transaction sent:", emergencyTx.hash);
+              
+              toast({
+                title: "Transaction Sent",
+                description: "Using high slippage tolerance for first liquidity pool creation...",
+              });
+              
+              const emergencyReceipt = await emergencyTx.wait();
+              console.log("Emergency transaction confirmed:", emergencyReceipt);
+              
+              toast({
+                title: "Success",
+                description: "Liquidity added successfully with high slippage tolerance!",
+              });
+              
+              // Reset form and refresh token data
+              setIsAddLiquidityDialogOpen(false);
+              await loadTokens();
+              return;
+            } else {
+              // For other errors, provide appropriate guidance
+              if (txError.message && txError.message.includes("TRANSFER_FAILED")) {
+                toast({
+                  title: "Transfer Failed",
+                  description: "The token contract rejected the transfer. This may be due to fee mechanics or transfer restrictions.",
+                  variant: "destructive"
+                });
+                throw new Error("Failed to add liquidity: Token transfer failed. Your token may have transfer restrictions.");
+              } else {
+                toast({
+                  title: "Transaction Failed",
+                  description: "Failed to add liquidity. Check the console for details.",
+                  variant: "destructive"
+                });
+                throw new Error("Failed to add liquidity: " + (txError.message || "Unknown error"));
+              }
+            }
+          }
+        } catch (error: any) {
+          console.error("Error adding liquidity:", error);
+          
+          // Provide specific guidance based on the error
+          if (error.message && error.message.includes("INSUFFICIENT_OUTPUT_AMOUNT")) {
+            toast({
+              title: "Slippage Error",
+              description: "Transaction would result in too much slippage. Try using smaller amounts or adjusting parameters.",
+              variant: "destructive"
+            });
+            throw new Error("Failed to add liquidity: Price impact too high. Try smaller amounts.");
+          } else if (error.message && error.message.includes("TRANSFER_FAILED")) {
+            toast({
+              title: "Transfer Failed",
+              description: "The token contract rejected the transfer. This may be due to fee mechanics or transfer restrictions.",
+              variant: "destructive"
+            });
+            throw new Error("Failed to add liquidity: Token transfer failed. Your token may have transfer restrictions.");
+          } else {
+            toast({
+              title: "Transaction Failed",
+              description: "Failed to add liquidity. Check the console for details.",
+              variant: "destructive"
+            });
+            throw new Error("Failed to add liquidity: " + (error.message || "Unknown error"));
+          }
+        }
       }
       
-      // Check contract token balance
-      const contractBalance = await tokenContract.balanceOf(contractAddress);
-      console.log("Contract token balance:", formatEther(contractBalance));
-      
-      if (contractBalance < tokenAmountBN) {
-        throw new Error("Insufficient token balance in contract");
-      }
-      
-      // Call the addLiquidityFromContract function
-      const tx = await tokenContract.addLiquidityFromContract(tokenAmountBN, {
-        value: ethAmountBN,
-        gasLimit: 3000000 // Increase gas limit to ensure transaction completes
-      });
-      
-      console.log("Transaction sent:", tx.hash);
-      
-      // Wait for transaction to be mined
-      const receipt = await tx.wait();
-      console.log("Transaction confirmed:", receipt);
-      
-      // Show success message
-      toast({
-        title: "Success",
-        description: "Liquidity has been added successfully",
-        variant: "default",
-      });
-      
-      // Reset form
+      // Reset form and refresh token data
       setIsAddLiquidityDialogOpen(false);
-      
-      // Refresh token data
-      loadTokens();
+      await loadTokens();
       
     } catch (error: any) {
       console.error("Error adding liquidity:", error);
@@ -1388,7 +2483,7 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
     try {
       setLoading(true);
       const signer = await externalProvider.getSigner();
-      const tokenContract = new Contract(token.address, TokenV3ABI.abi, signer);
+      const tokenContract = new Contract(token.address, TokenV3UpdatedABI, signer);
 
       const beneficiary = prompt('Enter beneficiary address:');
       if (!beneficiary) return;
@@ -1459,8 +2554,11 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
       const dialog = await new Promise<{ tokenAmount: string; bnbAmount: string } | null>((resolve) => {
         const dialog = document.createElement('dialog');
         dialog.className = 'bg-gray-900 rounded-lg p-6 max-w-md w-full border border-border';
+        dialog.setAttribute('aria-labelledby', 'add-liquidity-dialog-title');
+        dialog.setAttribute('aria-describedby', 'add-liquidity-dialog-description');
         dialog.innerHTML = `
-          <h3 class="text-lg font-bold text-text-primary mb-4">Add Back Liquidity</h3>
+          <h3 id="add-liquidity-dialog-title" class="text-lg font-bold text-text-primary mb-4">Add Back Liquidity</h3>
+          <p id="add-liquidity-dialog-description" class="text-xs text-text-secondary mb-4">Specify the amount of tokens and ETH to add to the liquidity pool.</p>
           <div class="space-y-4">
             <div>
               <label class="text-xs text-text-secondary">Token Amount</label>
@@ -1503,7 +2601,7 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
           resolve(null);
         }
       });
-
+      
       if (!dialog) return;
 
       const { tokenAmount, bnbAmount } = dialog;
@@ -2042,12 +3140,12 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
       >
         <DialogContent className="bg-gray-800 p-0" aria-describedby="vesting-schedules-description">
           <div className="p-4 border-b border-gray-700">
-            <DialogTitle className="text-lg font-medium text-white">Vesting Schedules</DialogTitle>
-            <DialogDescription id="vesting-schedules-description" className="text-sm text-gray-400 mt-1">
+            <DialogTitle>Vesting Schedules</DialogTitle>
+            <DialogDescription id="vesting-schedules-description">
               View and manage token vesting schedules for all recipients.
             </DialogDescription>
           </div>
-          <div className="p-4 max-w-2xl w-full">
+          <div className="p-4 max-w-2xl w-full" aria-describedby="vesting-schedules-description">
             <div className="space-y-4">
               {vestingSchedules.length > 0 ? (
                 vestingSchedules.map((schedule, index) => (

@@ -195,7 +195,7 @@ contract TokenFactory_v3 is Ownable, ReentrancyGuard, Pausable {
         }
 
         // Configure distribution with final allocations
-        token.configureDistribution(
+        token.configureDistribution{value: 0}(
             params.presalePercentage,
             params.liquidityPercentage,
             params.liquidityLockDuration,
@@ -218,6 +218,15 @@ contract TokenFactory_v3 is Ownable, ReentrancyGuard, Pausable {
         );
 
         return address(token);
+    }
+
+    // Add a new function to add liquidity to an existing token
+    function addLiquidityToToken(address tokenAddress) external payable nonReentrant whenNotPaused {
+        require(tokenAddress != address(0), "Invalid token address");
+        require(msg.value > 0, "Must send ETH for liquidity");
+        
+        // Call the token's addLiquidityFromContractTokens function
+        Token_v3(tokenAddress).addLiquidityFromContractTokens{value: msg.value}();
     }
 
     // Admin functions
