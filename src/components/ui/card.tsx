@@ -1,57 +1,80 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
+import { ReactNode } from "react";
 
-const Card = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
->(({ className, ...props }, ref) => (
-  <div
-    ref={ref}
-    className={cn(
-      'rounded-lg border bg-card text-card-foreground shadow-sm',
-      className
-    )}
-    {...props}
-  />
-));
-Card.displayName = 'Card';
-
-export { Card };
-
-interface CardHeaderProps {
+interface CardProps {
+  children: ReactNode;
   className?: string;
-  children: React.ReactNode;
 }
 
-export function CardHeader({ className = "", children }: CardHeaderProps) {
+export function Card({ children, className }: CardProps) {
   return (
-    <div className={`p-4 ${className}`}>
+    <div className={cn("bg-card border rounded-lg shadow-sm", className)}>
+      {children}
+    </div>
+  );
+}
+
+interface CardHeaderProps {
+  children: ReactNode;
+  className?: string;
+}
+
+export function CardHeader({ children, className }: CardHeaderProps) {
+  return (
+    <div className={cn("flex flex-col space-y-1.5 p-6", className)}>
       {children}
     </div>
   );
 }
 
 interface CardTitleProps {
+  children: ReactNode;
   className?: string;
-  children: React.ReactNode;
 }
 
-export function CardTitle({ className = "", children }: CardTitleProps) {
+export function CardTitle({ children, className }: CardTitleProps) {
   return (
-    <h3 className={`text-lg font-semibold ${className}`}>
+    <h3 className={cn("text-lg font-semibold leading-none tracking-tight", className)}>
       {children}
     </h3>
   );
 }
 
-interface CardContentProps {
+interface CardDescriptionProps {
+  children: ReactNode;
   className?: string;
-  children: React.ReactNode;
 }
 
-export function CardContent({ className = "", children }: CardContentProps) {
+export function CardDescription({ children, className }: CardDescriptionProps) {
   return (
-    <div className={`p-4 ${className}`}>
+    <p className={cn("text-sm text-muted-foreground", className)}>
+      {children}
+    </p>
+  );
+}
+
+interface CardContentProps {
+  children: ReactNode;
+  className?: string;
+}
+
+export function CardContent({ children, className }: CardContentProps) {
+  return (
+    <div className={cn("p-6 pt-0", className)}>
+      {children}
+    </div>
+  );
+}
+
+interface CardFooterProps {
+  children: ReactNode;
+  className?: string;
+}
+
+export function CardFooter({ children, className }: CardFooterProps) {
+  return (
+    <div className={cn("flex items-center p-6 pt-0", className)}>
       {children}
     </div>
   );

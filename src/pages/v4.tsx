@@ -10,7 +10,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { ChainId } from '@/types/chain';
-import { TCAP_v4 } from '@/components/features/token/TCAP_v4';
+import TCAP_v4 from '@/components/features/token/TCAP_v4';
 import { useToast } from '@/components/ui/toast/use-toast';
 import { ethers } from 'ethers';
 
@@ -283,9 +283,8 @@ export default function V4Page() {
               </div>
               <div>
                 <TCAP_v4 
-                  onAnalyze={(address) => {
-                    console.log('Analyzing token:', address);
-                  }}
+                  isConnected={isConnected}
+                  provider={typeof window !== 'undefined' ? window.ethereum : undefined}
                 />
               </div>
             </div>

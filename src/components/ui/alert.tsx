@@ -1,4 +1,4 @@
-import { cn } from "@/utils/cn";
+import { cn } from "@/lib/utils";
 import { ReactNode } from "react";
 
 interface AlertProps {
@@ -21,6 +21,32 @@ export function Alert({ children, variant = "info", className }: AlertProps) {
       variantStyles[variant],
       className
     )}>
+      {children}
+    </div>
+  );
+}
+
+interface AlertTitleProps {
+  children: ReactNode;
+  className?: string;
+}
+
+export function AlertTitle({ children, className }: AlertTitleProps) {
+  return (
+    <h5 className={cn("font-medium text-base mb-1", className)}>
+      {children}
+    </h5>
+  );
+}
+
+interface AlertDescriptionProps {
+  children: ReactNode;
+  className?: string;
+}
+
+export function AlertDescription({ children, className }: AlertDescriptionProps) {
+  return (
+    <div className={cn("text-sm", className)}>
       {children}
     </div>
   );
