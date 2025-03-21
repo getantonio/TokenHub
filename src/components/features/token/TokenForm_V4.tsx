@@ -448,7 +448,7 @@ export default function TokenForm_V4({ isConnected, onSuccess, onError }: TokenF
               const currentPercent = Number(wallet.percentage) || 0;
               const proportion = currentPercent / totalWalletPercentage;
               const newPercent = currentPercent + (presalePercentage * proportion);
-              return { ...wallet, percentage: parseFloat(newPercent.toFixed(1)) };
+              return { ...wallet, percentage: parseFloat(newPercent.toFixed(0)) };
             });
             form.setValue('wallets', updatedWallets);
           } else {
