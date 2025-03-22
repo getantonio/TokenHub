@@ -1,10 +1,20 @@
 import { ChainId } from '@/types/chain';
 
-interface ContractAddresses {
+export interface ContractAddresses {
   factoryAddress: string;
   factoryAddressV2: string;
+  factoryAddressV2WithLiquidity: string;
+  factoryAddressV2WithLiquidityFixed: string;
   factoryAddressV3: string;
+  factoryAddressV3Enhanced: string;
   factoryAddressV4: string;
+  factoryAddressV4WithLiquidity: string;
+  factoryAddressV4WithLiquidityFixed: string;
+  factoryAddressV4WithLiquidityFixedV2: string;
+  factoryAddressV4WithLiquidityFixedV3: string;
+  factoryAddressV4WithLiquidityFixedV4: string;
+  factoryAddressV4WithLiquidityFixedV5: string;
+  factoryAddressV4WithLiquidityFixedV6: string;
   dexListingFactory: string;
   dexListingTemplate: string;
 }
@@ -13,48 +23,108 @@ export const contractAddresses: { [key: number]: ContractAddresses } = {
   11155111: { // Sepolia
     factoryAddress: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V1 || '',
     factoryAddressV2: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V2 || '',
+    factoryAddressV2WithLiquidity: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V2_WITH_LIQUIDITY || '',
+    factoryAddressV2WithLiquidityFixed: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V2_WITH_LIQUIDITY_FIXED || '',
     factoryAddressV3: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V3 || '',
+    factoryAddressV3Enhanced: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V3_ENHANCED || '',
     factoryAddressV4: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V4 || '',
+    factoryAddressV4WithLiquidity: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY || '',
+    factoryAddressV4WithLiquidityFixed: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED || '',
+    factoryAddressV4WithLiquidityFixedV2: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V2 || '',
+    factoryAddressV4WithLiquidityFixedV3: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V3 || '',
+    factoryAddressV4WithLiquidityFixedV4: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V4 || '',
+    factoryAddressV4WithLiquidityFixedV5: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V5 || '',
+    factoryAddressV4WithLiquidityFixedV6: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V6 || '',
     dexListingFactory: process.env.NEXT_PUBLIC_SEPOLIA_DEX_LISTING_FACTORY_ADDRESS || '',
     dexListingTemplate: process.env.NEXT_PUBLIC_SEPOLIA_DEX_LISTING_TEMPLATE_ADDRESS || ''
   },
   421614: { // Arbitrum Sepolia
     factoryAddress: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V1 || '',
     factoryAddressV2: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V2 || '',
+    factoryAddressV2WithLiquidity: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V2_WITH_LIQUIDITY || '',
+    factoryAddressV2WithLiquidityFixed: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V2_WITH_LIQUIDITY_FIXED || '',
     factoryAddressV3: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V3 || '',
+    factoryAddressV3Enhanced: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V3_ENHANCED || '',
     factoryAddressV4: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V4 || '',
+    factoryAddressV4WithLiquidity: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY || '',
+    factoryAddressV4WithLiquidityFixed: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED || '',
+    factoryAddressV4WithLiquidityFixedV2: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V2 || '',
+    factoryAddressV4WithLiquidityFixedV3: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V3 || '',
+    factoryAddressV4WithLiquidityFixedV4: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V4 || '',
+    factoryAddressV4WithLiquidityFixedV5: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V5 || '',
+    factoryAddressV4WithLiquidityFixedV6: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V6 || '',
     dexListingFactory: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_DEX_LISTING_FACTORY_ADDRESS || '',
     dexListingTemplate: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_DEX_LISTING_TEMPLATE_ADDRESS || ''
   },
   11155420: { // Optimism Sepolia
     factoryAddress: process.env.NEXT_PUBLIC_OPSEPOLIA_FACTORY_ADDRESS_V1 || '',
     factoryAddressV2: process.env.NEXT_PUBLIC_OPSEPOLIA_FACTORY_ADDRESS_V2 || '',
+    factoryAddressV2WithLiquidity: process.env.NEXT_PUBLIC_OPSEPOLIA_FACTORY_ADDRESS_V2_WITH_LIQUIDITY || '',
+    factoryAddressV2WithLiquidityFixed: process.env.NEXT_PUBLIC_OPSEPOLIA_FACTORY_ADDRESS_V2_WITH_LIQUIDITY_FIXED || '',
     factoryAddressV3: process.env.NEXT_PUBLIC_OPSEPOLIA_FACTORY_ADDRESS_V3 || '',
+    factoryAddressV3Enhanced: process.env.NEXT_PUBLIC_OPSEPOLIA_FACTORY_ADDRESS_V3_ENHANCED || '',
     factoryAddressV4: process.env.NEXT_PUBLIC_OPSEPOLIA_FACTORY_ADDRESS_V4 || '',
+    factoryAddressV4WithLiquidity: process.env.NEXT_PUBLIC_OPSEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY || '',
+    factoryAddressV4WithLiquidityFixed: process.env.NEXT_PUBLIC_OPSEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED || '',
+    factoryAddressV4WithLiquidityFixedV2: process.env.NEXT_PUBLIC_OPSEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V2 || '',
+    factoryAddressV4WithLiquidityFixedV3: process.env.NEXT_PUBLIC_OPSEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V3 || '',
+    factoryAddressV4WithLiquidityFixedV4: process.env.NEXT_PUBLIC_OPSEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V4 || '',
+    factoryAddressV4WithLiquidityFixedV5: process.env.NEXT_PUBLIC_OPSEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V5 || '',
+    factoryAddressV4WithLiquidityFixedV6: process.env.NEXT_PUBLIC_OPSEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V6 || '',
     dexListingFactory: process.env.NEXT_PUBLIC_OPSEPOLIA_DEX_LISTING_FACTORY_ADDRESS || '',
     dexListingTemplate: process.env.NEXT_PUBLIC_OPSEPOLIA_DEX_LISTING_TEMPLATE_ADDRESS || ''
   },
   80002: { // Polygon Amoy
     factoryAddress: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V1 || '',
     factoryAddressV2: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V2 || '',
-    factoryAddressV3: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V3 || '',// Hardcoded for reliability
-    factoryAddressV4: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V4 || '',// Hardcoded for reliability
+    factoryAddressV2WithLiquidity: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V2_WITH_LIQUIDITY || '',
+    factoryAddressV2WithLiquidityFixed: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V2_WITH_LIQUIDITY_FIXED || '',
+    factoryAddressV3: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V3 || '',
+    factoryAddressV3Enhanced: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V3_ENHANCED || '',
+    factoryAddressV4: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V4 || '',
+    factoryAddressV4WithLiquidity: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V4_WITH_LIQUIDITY || '',
+    factoryAddressV4WithLiquidityFixed: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED || '',
+    factoryAddressV4WithLiquidityFixedV2: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V2 || '',
+    factoryAddressV4WithLiquidityFixedV3: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V3 || '',
+    factoryAddressV4WithLiquidityFixedV4: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V4 || '',
+    factoryAddressV4WithLiquidityFixedV5: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V5 || '',
+    factoryAddressV4WithLiquidityFixedV6: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V6 || '',
     dexListingFactory: process.env.NEXT_PUBLIC_POLYGONAMOY_DEX_LISTING_FACTORY_ADDRESS || '',
     dexListingTemplate: process.env.NEXT_PUBLIC_POLYGONAMOY_DEX_LISTING_TEMPLATE_ADDRESS || ''
   },
   97: { // BSC Testnet
     factoryAddress: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V1 || '',
     factoryAddressV2: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V2 || '',
+    factoryAddressV2WithLiquidity: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V2_WITH_LIQUIDITY || '',
+    factoryAddressV2WithLiquidityFixed: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V2_WITH_LIQUIDITY_FIXED || '',
     factoryAddressV3: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V3 || '',
+    factoryAddressV3Enhanced: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V3_ENHANCED || '',
     factoryAddressV4: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V4 || '',
+    factoryAddressV4WithLiquidity: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V4_WITH_LIQUIDITY || '',
+    factoryAddressV4WithLiquidityFixed: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED || '',
+    factoryAddressV4WithLiquidityFixedV2: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V2 || '',
+    factoryAddressV4WithLiquidityFixedV3: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V3 || '',
+    factoryAddressV4WithLiquidityFixedV4: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V4 || '',
+    factoryAddressV4WithLiquidityFixedV5: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V5 || '',
+    factoryAddressV4WithLiquidityFixedV6: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V6 || '',
     dexListingFactory: process.env.NEXT_PUBLIC_BSCTESTNET_DEX_LISTING_FACTORY_ADDRESS || '',
     dexListingTemplate: process.env.NEXT_PUBLIC_BSCTESTNET_DEX_LISTING_TEMPLATE_ADDRESS || ''
   },
   56: { // BSC Mainnet
     factoryAddress: process.env.NEXT_PUBLIC_BSC_FACTORY_ADDRESS_V1 || '',
     factoryAddressV2: process.env.NEXT_PUBLIC_BSC_FACTORY_ADDRESS_V2 || '',
+    factoryAddressV2WithLiquidity: process.env.NEXT_PUBLIC_BSC_FACTORY_ADDRESS_V2_WITH_LIQUIDITY || '',
+    factoryAddressV2WithLiquidityFixed: process.env.NEXT_PUBLIC_BSC_FACTORY_ADDRESS_V2_WITH_LIQUIDITY_FIXED || '',
     factoryAddressV3: process.env.NEXT_PUBLIC_BSC_FACTORY_ADDRESS_V3 || '',
+    factoryAddressV3Enhanced: process.env.NEXT_PUBLIC_BSC_FACTORY_ADDRESS_V3_ENHANCED || '',
     factoryAddressV4: process.env.NEXT_PUBLIC_BSC_FACTORY_ADDRESS_V4 || '',
+    factoryAddressV4WithLiquidity: process.env.NEXT_PUBLIC_BSC_FACTORY_ADDRESS_V4_WITH_LIQUIDITY || '',
+    factoryAddressV4WithLiquidityFixed: process.env.NEXT_PUBLIC_BSC_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED || '',
+    factoryAddressV4WithLiquidityFixedV2: process.env.NEXT_PUBLIC_BSC_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V2 || '',
+    factoryAddressV4WithLiquidityFixedV3: process.env.NEXT_PUBLIC_BSC_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V3 || '',
+    factoryAddressV4WithLiquidityFixedV4: process.env.NEXT_PUBLIC_BSC_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V4 || '',
+    factoryAddressV4WithLiquidityFixedV5: process.env.NEXT_PUBLIC_BSC_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V5 || '',
+    factoryAddressV4WithLiquidityFixedV6: process.env.NEXT_PUBLIC_BSC_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V6 || '',
     dexListingFactory: process.env.NEXT_PUBLIC_BSC_DEX_LISTING_FACTORY_ADDRESS || '',
     dexListingTemplate: process.env.NEXT_PUBLIC_BSC_DEX_LISTING_TEMPLATE_ADDRESS || ''
   }
@@ -110,6 +180,62 @@ export function getNetworkContractAddress(chainId: number, contractType: string)
           return addressFromMapV4;
         }
         break;
+      case 'FACTORYADDRESSV4WITHLIQUIDITY':
+      case 'FACTORY_ADDRESS_V4_WITH_LIQUIDITY':
+        const addressFromMapV4WithLiquidity = contractAddresses[chainId].factoryAddressV4WithLiquidity;
+        if (addressFromMapV4WithLiquidity) {
+          console.log(`Using ${networkName} V4 with liquidity address from map:`, addressFromMapV4WithLiquidity);
+          return addressFromMapV4WithLiquidity;
+        }
+        break;
+      case 'FACTORYADDRESSV4WITHLIQUIDITYFIXED':
+      case 'FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED':
+        const addressFromMapV4WithLiquidityFixed = contractAddresses[chainId].factoryAddressV4WithLiquidityFixed;
+        if (addressFromMapV4WithLiquidityFixed) {
+          console.log(`Using ${networkName} V4 with fixed liquidity address from map:`, addressFromMapV4WithLiquidityFixed);
+          return addressFromMapV4WithLiquidityFixed;
+        }
+        break;
+      case 'FACTORYADDRESSV4WITHLIQUIDITYFIXEDV2':
+      case 'FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V2':
+        const addressFromMapV4WithLiquidityFixedV2 = contractAddresses[chainId].factoryAddressV4WithLiquidityFixedV2;
+        if (addressFromMapV4WithLiquidityFixedV2) {
+          console.log(`Using ${networkName} V4 with liquidity fixed V2 address from map:`, addressFromMapV4WithLiquidityFixedV2);
+          return addressFromMapV4WithLiquidityFixedV2;
+        }
+        break;
+      case 'FACTORYADDRESSV4WITHLIQUIDITYFIXEDV3':
+      case 'FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V3':
+        const addressFromMapV4WithLiquidityFixedV3 = contractAddresses[chainId].factoryAddressV4WithLiquidityFixedV3;
+        if (addressFromMapV4WithLiquidityFixedV3) {
+          console.log(`Using ${networkName} V4 with liquidity fixed V3 (auto-distribution) address from map:`, addressFromMapV4WithLiquidityFixedV3);
+          return addressFromMapV4WithLiquidityFixedV3;
+        }
+        break;
+      case 'FACTORYADDRESSV4WITHLIQUIDITYFIXEDV4':
+      case 'FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V4':
+        const addressFromMapV4WithLiquidityFixedV4 = contractAddresses[chainId].factoryAddressV4WithLiquidityFixedV4;
+        if (addressFromMapV4WithLiquidityFixedV4) {
+          console.log(`Using ${networkName} V4 with liquidity fixed V4 (custom distribution) address from map:`, addressFromMapV4WithLiquidityFixedV4);
+          return addressFromMapV4WithLiquidityFixedV4;
+        }
+        break;
+      case 'FACTORYADDRESSV4WITHLIQUIDITYFIXEDV5':
+      case 'FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V5':
+        const addressFromMapV4WithLiquidityFixedV5 = contractAddresses[chainId].factoryAddressV4WithLiquidityFixedV5;
+        if (addressFromMapV4WithLiquidityFixedV5) {
+          console.log(`Using ${networkName} V4 with liquidity fixed V5 (custom distribution) address from map:`, addressFromMapV4WithLiquidityFixedV5);
+          return addressFromMapV4WithLiquidityFixedV5;
+        }
+        break;
+      case 'FACTORYADDRESSV4WITHLIQUIDITYFIXEDV6':
+      case 'FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V6':
+        const addressFromMapV4WithLiquidityFixedV6 = contractAddresses[chainId].factoryAddressV4WithLiquidityFixedV6;
+        if (addressFromMapV4WithLiquidityFixedV6) {
+          console.log(`Using ${networkName} V4 with liquidity fixed V6 (custom distribution) address from map:`, addressFromMapV4WithLiquidityFixedV6);
+          return addressFromMapV4WithLiquidityFixedV6;
+        }
+        break;
     }
   }
 
@@ -119,6 +245,8 @@ export function getNetworkContractAddress(chainId: number, contractType: string)
     envKey = `NEXT_PUBLIC_${networkName}_FACTORY_ADDRESS_V3`;
   } else if (contractType.toUpperCase() === 'FACTORYADDRESSV4' || contractType.toUpperCase() === 'FACTORY_ADDRESS_V4') {
     envKey = `NEXT_PUBLIC_${networkName}_FACTORY_ADDRESS_V4`;
+  } else if (contractType.toUpperCase() === 'FACTORYADDRESSV4WITHLIQUIDITY' || contractType.toUpperCase() === 'FACTORY_ADDRESS_V4_WITH_LIQUIDITY') {
+    envKey = `NEXT_PUBLIC_${networkName}_FACTORY_ADDRESS_V4_WITH_LIQUIDITY`;
   } else {
     envKey = `NEXT_PUBLIC_${networkName}_${contractType.toUpperCase()}`;
   }
@@ -133,6 +261,8 @@ export function getNetworkContractAddress(chainId: number, contractType: string)
     console.warn(`No address found for ${networkName} V3`);
   } else if (contractType.toUpperCase() === 'FACTORYADDRESSV4' || contractType.toUpperCase() === 'FACTORY_ADDRESS_V4') {
     console.warn(`No address found for ${networkName} V4`);
+  } else if (contractType.toUpperCase() === 'FACTORYADDRESSV4WITHLIQUIDITY' || contractType.toUpperCase() === 'FACTORY_ADDRESS_V4_WITH_LIQUIDITY') {
+    console.warn(`No address found for ${networkName} V4 with liquidity`);
   }
   return '';
 }
@@ -169,6 +299,22 @@ export const FACTORY_ADDRESSES: Record<string, Record<number, string>> = {
     [ChainId.POLYGON_AMOY]: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V4 || '',
     [ChainId.BSC_TESTNET]: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V4 || '',
     [ChainId.BSC_MAINNET]: process.env.NEXT_PUBLIC_BSC_FACTORY_ADDRESS_V4 || '',
+  },
+  v4WithLiquidity: {
+    [ChainId.SEPOLIA]: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY || '',
+    [ChainId.ARBITRUM_SEPOLIA]: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY || '',
+    [ChainId.OPTIMISM_SEPOLIA]: process.env.NEXT_PUBLIC_OPSEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY || '',
+    [ChainId.POLYGON_AMOY]: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V4_WITH_LIQUIDITY || '',
+    [ChainId.BSC_TESTNET]: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V4_WITH_LIQUIDITY || '',
+    [ChainId.BSC_MAINNET]: process.env.NEXT_PUBLIC_BSC_FACTORY_ADDRESS_V4_WITH_LIQUIDITY || '',
+  },
+  v4WithLiquidityFixed: {
+    [ChainId.SEPOLIA]: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED || '',
+    [ChainId.ARBITRUM_SEPOLIA]: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED || '',
+    [ChainId.OPTIMISM_SEPOLIA]: process.env.NEXT_PUBLIC_OPSEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED || '',
+    [ChainId.POLYGON_AMOY]: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED || '',
+    [ChainId.BSC_TESTNET]: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED || '',
+    [ChainId.BSC_MAINNET]: process.env.NEXT_PUBLIC_BSC_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED || '',
   },
   dexListing: {
     [ChainId.SEPOLIA]: process.env.NEXT_PUBLIC_SEPOLIA_DEX_LISTING_FACTORY_ADDRESS || '',

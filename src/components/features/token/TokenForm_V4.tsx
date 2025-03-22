@@ -477,36 +477,82 @@ export default function TokenForm_V4({ isConnected, onSuccess, onError }: TokenF
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       
-      // Get factory address based on network
       const { chainId } = await provider.getNetwork();
-      const factoryAddress = getNetworkContractAddress(Number(chainId), 'FACTORY_ADDRESS_V4');
+      const chainIdNumber = Number(chainId); // Convert BigInt to Number
       
-      if (!factoryAddress || factoryAddress === '0x' || factoryAddress === '0x0000000000000000000000000000000000000000') {
-        throw new Error(`Factory address for network ${Number(chainId)} not found or invalid. Please check your network configuration.`);
+      // Factory address: prioritize the V6 factory with fixed distribution if custom distribution is used
+      let factoryAddress = "";
+      
+      // Determine if we're using custom distribution
+      const useCustomDistribution = (data.wallets && data.wallets.length > 0);
+      
+      if (useCustomDistribution) {
+        // For custom distribution, try to use the latest fixed factory
+        console.log("Using custom distribution, prioritizing V6 factory");
+        
+        // First try V6 factory (best option)
+        factoryAddress = getNetworkContractAddress(chainIdNumber, "FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V6");
+        
+        // Fall back to V5 factory
+        if (!factoryAddress || factoryAddress === "") {
+          console.log("V6 factory not available, trying V5 factory");
+          factoryAddress = getNetworkContractAddress(chainIdNumber, "FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V5");
+        }
+        
+        // Fall back to V4 factory
+        if (!factoryAddress || factoryAddress === "") {
+          console.log("V5 factory not available, trying V4 factory");
+          factoryAddress = getNetworkContractAddress(chainIdNumber, "FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V4");
+        }
+        
+        // Fall back to standard factory if no fixed factories are available
+        if (!factoryAddress || factoryAddress === "") {
+          console.log("No fixed factory available, falling back to standard factory");
+          factoryAddress = getNetworkContractAddress(chainIdNumber, "FACTORY_ADDRESS_V4_WITH_LIQUIDITY");
+        }
+      } else {
+        // No custom distribution, use standard factory
+        factoryAddress = getNetworkContractAddress(chainIdNumber, "FACTORY_ADDRESS_V4_WITH_LIQUIDITY");
       }
       
-      // Validate that we're on Polygon Amoy for V4
-      if (!isPolygonAmoyNetwork(Number(chainId))) {
-        throw new Error(`This token version (V4) is only available on Polygon Amoy network. Please switch to Polygon Amoy in your wallet.`);
+      console.log(`Using factory address: ${factoryAddress}`);
+      
+      // Validate for Polygon Amoy
+      if (isPolygonAmoyNetwork(chainIdNumber) && !factoryAddress) {
+        console.log("Polygon Amoy network detected but no factory address found, using default");
+        factoryAddress = "0xe063C5263243286a8B20159f2C73132A136c354A";
       }
 
-      console.log('Using factory address:', factoryAddress);
+      // Create factory contract instance with correct ABI based on which factory we're using
+      const factoryABI = useCustomDistribution
+        ? [
+            "function createToken(string,string,uint256,address) returns (address)",
+            "function createTokenForWeb(string,string,uint256,address,bool) returns (address)",
+            "function createTokenWithDistribution(string,string,uint256,address,bool,(address,uint256,string,bool,uint256,uint256)[]) returns (address)",
+            "function getTokenImplementation() view returns (address)",
+            "function getSecurityModuleImplementation() view returns (address)",
+            "function getAllTokens() view returns (address[])",
+            "function upgradeTokenImplementation(address) returns (bool)",
+            "function upgradeSecurityModuleImplementation(address) returns (bool)",
+            "event TokenCreated(address indexed tokenAddress, string name, string symbol, address indexed owner)",
+            "event TokenDeployed(address indexed tokenAddress, string name, string symbol, address indexed owner)"
+          ]
+        : [
+            "function createToken(string,string,uint256,address) returns (address)",
+            "function createTokenForWeb(string,string,uint256,address,bool) returns (address)",
+            "function createTokenWithSecurity(string,string,uint256,address,bool,address[],uint256) returns (address)",
+            "function getTokenImplementation() view returns (address)",
+            "function getSecurityModuleImplementation() view returns (address)",
+            "function getAllTokens() view returns (address[])",
+            "function upgradeTokenImplementation(address) returns (bool)",
+            "function upgradeSecurityModuleImplementation(address) returns (bool)",
+            "event TokenCreated(address indexed tokenAddress, string name, string symbol, address indexed owner)",
+            "event TokenDeployed(address indexed tokenAddress, string name, string symbol, address indexed owner)"
+          ];
 
-      // Create factory contract instance
       const factory = new ethers.Contract(
         factoryAddress,
-        [
-          "function createToken(string,string,uint256,address) returns (address)",
-          "function createTokenForWeb(string,string,uint256,address,bool) returns (address)",
-          "function createTokenWithSecurity(string,string,uint256,address,bool,address[],uint256) returns (address)",
-          "function getTokenImplementation() view returns (address)",
-          "function getSecurityModuleImplementation() view returns (address)",
-          "function getAllTokens() view returns (address[])",
-          "function upgradeTokenImplementation(address) returns (bool)",
-          "function upgradeSecurityModuleImplementation(address) returns (bool)",
-          "event TokenCreated(address indexed tokenAddress, string name, string symbol, address indexed owner)",
-          "event TokenDeployed(address indexed tokenAddress, string name, string symbol, address indexed owner)"
-        ],
+        factoryABI,
         signer
       );
 
@@ -533,17 +579,73 @@ export default function TokenForm_V4({ isConnected, onSuccess, onError }: TokenF
       });
 
       // Try an alternative approach by manually creating the transaction
-      const iface = new ethers.Interface([
-        "function createTokenForWeb(string,string,uint256,address,bool) returns (address)"
-      ]);
+      const iface = new ethers.Interface(useCustomDistribution
+        ? [
+            "function createTokenWithDistribution(string,string,uint256,address,bool,(address,uint256,string,bool,uint256,uint256)[]) returns (address)"
+          ]
+        : [
+            "function createTokenForWeb(string,string,uint256,address,bool) returns (address)"
+          ]
+      );
       
-      const encodedData = iface.encodeFunctionData("createTokenForWeb", [
-        data.name,
-        data.symbol,
-        initialSupply,
-        ownerAddress,
-        true // includeDistribution parameter
-      ]);
+      // Prepare encoded transaction data
+      let encodedData;
+      if (useCustomDistribution) {
+        // Process the wallets from the form data
+        const walletData = data.wallets || [];
+        const walletAllocations = walletData.map(wallet => {
+          return [
+            wallet.address, // wallet address
+            wallet.percentage, // percentage
+            wallet.name || "Allocation", // label
+            wallet.vestingEnabled, // vesting enabled
+            wallet.vestingDuration || 365, // vesting duration in days
+            wallet.cliffDuration || 0 // cliff duration in days
+          ];
+        });
+        
+        // Add owner wallet with remaining percentage if wallets don't add up to 100%
+        const totalPercentage = walletData.reduce((sum, wallet) => sum + Number(wallet.percentage || 0), 0);
+        if (totalPercentage < 100 && totalPercentage > 0) {
+          walletAllocations.push([
+            ownerAddress, // owner address
+            100 - totalPercentage, // remaining percentage
+            "Owner", // label
+            false, // no vesting
+            0, // no vesting duration
+            0 // no cliff duration
+          ]);
+        } else if (totalPercentage === 0 || walletAllocations.length === 0) {
+          // If no wallets or 0% total, allocate 100% to owner
+          walletAllocations.push([
+            ownerAddress, // owner address
+            100, // 100% to owner
+            "Owner", // label
+            false, // no vesting
+            0, // no vesting duration
+            0 // no cliff duration
+          ]);
+        }
+        
+        console.log('Using custom distribution with the following allocations:', walletAllocations);
+        
+        encodedData = iface.encodeFunctionData("createTokenWithDistribution", [
+          data.name,
+          data.symbol,
+          initialSupply,
+          ownerAddress,
+          true, // includeDistribution parameter
+          walletAllocations // wallet allocations
+        ]);
+      } else {
+        encodedData = iface.encodeFunctionData("createTokenForWeb", [
+          data.name,
+          data.symbol,
+          initialSupply,
+          ownerAddress,
+          true // includeDistribution parameter
+        ]);
+      }
       
       console.log('Manual transaction data:', encodedData);
       
@@ -573,7 +675,7 @@ export default function TokenForm_V4({ isConnected, onSuccess, onError }: TokenF
       };
       
       // Special handling for Polygon Amoy network which doesn't fully support EIP-1559
-      if (isPolygonAmoyNetwork(Number(chainId))) {
+      if (isPolygonAmoyNetwork(chainIdNumber)) {
         // Force legacy transaction type for Polygon Amoy
         txRequest.type = 0; // Legacy transaction type
         if (feeData.gasPrice) {
@@ -745,7 +847,7 @@ export default function TokenForm_V4({ isConnected, onSuccess, onError }: TokenF
 
       toast({
         title: "Token Deployed Successfully",
-        description: `Your token has been deployed to ${tokenAddress}. Check it on the blockchain explorer: ${getExplorerUrl(Number(chainId), tx.hash)}`,
+        description: `Your token has been deployed to ${tokenAddress}. Check it on the blockchain explorer: ${getExplorerUrl(chainIdNumber, tx.hash)}`,
       });
 
       if (onSuccess) {
