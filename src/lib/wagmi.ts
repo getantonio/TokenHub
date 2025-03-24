@@ -2,7 +2,8 @@ import '@rainbow-me/rainbowkit/styles.css';
 import { mainnet, sepolia, arbitrumSepolia, optimismSepolia } from 'viem/chains';
 import { http } from 'viem';
 import { polygonAmoy, bscMainnet, bscTestnet } from '@/config/chains';
-import { getDefaultConfig } from '@rainbow-me/rainbowkit';
+import { createConfig } from 'wagmi';
+import { getDefaultWallets } from '@rainbow-me/rainbowkit';
 
 const projectId = process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID;
 if (!projectId) {
@@ -66,9 +67,14 @@ const supportedChains = [
   bscMainnet
 ] as const;
 
-export const config = getDefaultConfig({
+// Configure wallets - NOTE: Wallet connectors are set up in the Web3Provider component
+const { wallets } = getDefaultWallets({
   appName: 'Token Factory',
-  projectId,
+  projectId
+});
+
+// Create wagmi config
+export const config = createConfig({
   chains: supportedChains,
   transports: {
     [sepolia.id]: http('https://eth-sepolia.g.alchemy.com/v2/MGnqEI_g1f7R-ozYpSAUpnsivv0lp86t'),
@@ -90,8 +96,7 @@ export const config = getDefaultConfig({
     [optimismSepolia.id]: http(),
     [polygonAmoy.id]: http(polygonAmoy.rpcUrls.default.http[0]),
     [bscMainnet.id]: http(bscMainnet.rpcUrls.default.http[0])
-  },
-  ssr: true
+  }
 });
 
 export const chains = supportedChains; 

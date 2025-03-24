@@ -5,7 +5,9 @@ import { useState, useEffect, useRef } from 'react';
 
 const navigation = [
   { name: 'Presale', href: '/presale' },
+  { name: 'Liquidity', href: '/liquidity' },
   { name: 'Guides', href: '/guides' },
+  { name: 'About', href: '/about' },
   { name: 'Admin', href: '/admin' }
 ];
 

@@ -323,7 +323,7 @@ Leave this field empty if you're not doing an airdrop yet - you can add it later
 • Hard Cap: Maximum ETH that can be raised
 • Min/Max Buy: Limits per wallet
 • Timeline: Start and end times`,
-    liquidity: "Percentage of tokens allocated to initial liquidity.",
+    liquidity: "Percentage of token supply to reserve for liquidity. These tokens remain in the contract and can ONLY be used for adding liquidity to DEX pairs. This ensures liquidity tokens never leave the contract.",
     vesting: {
       enabled: "Enable gradual token unlocking over time.",
       duration: "Total time period for tokens to fully vest.",
@@ -359,7 +359,7 @@ export default function TokenForm_V4({ isConnected, onSuccess, onError }: TokenF
       buybackEnabled: true,
       buybackThreshold: '1',
       autoBurnPercent: '2',
-      rewardToken: '0xb6083258E7E7B04Bdc72640E1a75E1F40541e83F',
+      rewardToken: process.env.NEXT_PUBLIC_DEFAULT_REWARD_TOKEN || '0x0000000000000000000000000000000000000000',
       rewardPercent: '2',
       antiDumpEnabled: true,
       maxTxAmount: '10000',
@@ -397,7 +397,7 @@ export default function TokenForm_V4({ isConnected, onSuccess, onError }: TokenF
       wallets: [
         {
           name: 'Team',
-          address: '0xb6083258E7E7B04Bdc72640E1a75E1F40541e83F',
+          address: process.env.NEXT_PUBLIC_DEFAULT_TEAM_WALLET || '0x0000000000000000000000000000000000000000',
           percentage: 5,
           vestingEnabled: true,
           vestingDuration: 365,
@@ -480,42 +480,36 @@ export default function TokenForm_V4({ isConnected, onSuccess, onError }: TokenF
       const { chainId } = await provider.getNetwork();
       const chainIdNumber = Number(chainId); // Convert BigInt to Number
       
-      // Factory address: prioritize the V6 factory with fixed distribution if custom distribution is used
+      // Factory address: prioritize the V7 factory
       let factoryAddress = "";
       
       // Determine if we're using custom distribution
       const useCustomDistribution = (data.wallets && data.wallets.length > 0);
       
-      if (useCustomDistribution) {
-        // For custom distribution, try to use the latest fixed factory
-        console.log("Using custom distribution, prioritizing V6 factory");
-        
-        // First try V6 factory (best option)
-        factoryAddress = getNetworkContractAddress(chainIdNumber, "FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V6");
-        
-        // Fall back to V5 factory
-        if (!factoryAddress || factoryAddress === "") {
-          console.log("V6 factory not available, trying V5 factory");
-          factoryAddress = getNetworkContractAddress(chainIdNumber, "FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V5");
+      const getFactoryAddress = async () => {
+        try {
+          // Check for custom distribution first
+          if (useCustomDistribution) {
+            console.log('Using custom distribution, prioritizing V7 factory');
+            
+            // Get the V7 factory address directly from environment variable
+            const v7FactoryAddress = '0x5405604aa54824a103380ea5D97a6B6D46773A67'; // Hardcode V7 for now
+            console.log('Using V7 factory address:', v7FactoryAddress);
+            factoryAddress = v7FactoryAddress;
+            return factoryAddress;
+          }
+          
+          // Otherwise use the standard V4 factory
+          factoryAddress = getNetworkContractAddress(chainIdNumber, 'FACTORY_ADDRESS_V4_WITH_LIQUIDITY');
+          console.log('Using factory address:', factoryAddress);
+          return factoryAddress;
+        } catch (error) {
+          console.error('Error getting factory address:', error);
+          throw error;
         }
-        
-        // Fall back to V4 factory
-        if (!factoryAddress || factoryAddress === "") {
-          console.log("V5 factory not available, trying V4 factory");
-          factoryAddress = getNetworkContractAddress(chainIdNumber, "FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V4");
-        }
-        
-        // Fall back to standard factory if no fixed factories are available
-        if (!factoryAddress || factoryAddress === "") {
-          console.log("No fixed factory available, falling back to standard factory");
-          factoryAddress = getNetworkContractAddress(chainIdNumber, "FACTORY_ADDRESS_V4_WITH_LIQUIDITY");
-        }
-      } else {
-        // No custom distribution, use standard factory
-        factoryAddress = getNetworkContractAddress(chainIdNumber, "FACTORY_ADDRESS_V4_WITH_LIQUIDITY");
-      }
-      
-      console.log(`Using factory address: ${factoryAddress}`);
+      };
+
+      await getFactoryAddress();
       
       // Validate for Polygon Amoy
       if (isPolygonAmoyNetwork(chainIdNumber) && !factoryAddress) {
@@ -604,22 +598,43 @@ export default function TokenForm_V4({ isConnected, onSuccess, onError }: TokenF
           ];
         });
         
-        // Add owner wallet with remaining percentage if wallets don't add up to 100%
+        // Calculate total percentage from user wallets
         const totalPercentage = walletData.reduce((sum, wallet) => sum + Number(wallet.percentage || 0), 0);
-        if (totalPercentage < 100 && totalPercentage > 0) {
+
+        // Add a dedicated liquidity allocation - this ensures tokens are reserved in the contract
+        // For liquidity and never leave the contract unless for liquidity addition
+        const liquidityPercentage = data.liquidityPercentage || 5; // Default to 5% if not specified
+        if (liquidityPercentage > 0) {
+          // We'll use a special indicator address for liquidity that will be detected by the contract
+          // The factory will update this to the token address when creating the token
+          const LIQUIDITY_PLACEHOLDER = "0x0000000000000000000000000000000000000001"; // Special address for liquidity
+          
+          walletAllocations.push([
+            LIQUIDITY_PLACEHOLDER, // Placeholder that will be replaced with the token contract address in the factory
+            liquidityPercentage, // liquidity percentage
+            "Liquidity", // label
+            false, // no vesting
+            0, // no vesting duration
+            0 // no cliff duration
+          ]);
+        }
+
+        // Add owner wallet with remaining percentage if wallets don't add up to 100%
+        const totalAllocatedPercentage = totalPercentage + liquidityPercentage;
+        if (totalAllocatedPercentage < 100 && totalAllocatedPercentage > 0) {
           walletAllocations.push([
             ownerAddress, // owner address
-            100 - totalPercentage, // remaining percentage
+            100 - totalAllocatedPercentage, // remaining percentage
             "Owner", // label
             false, // no vesting
             0, // no vesting duration
             0 // no cliff duration
           ]);
-        } else if (totalPercentage === 0 || walletAllocations.length === 0) {
-          // If no wallets or 0% total, allocate 100% to owner
+        } else if (totalAllocatedPercentage === 0 || walletAllocations.length === 0) {
+          // If no wallets or 0% total, allocate 95% to owner and 5% to liquidity
           walletAllocations.push([
             ownerAddress, // owner address
-            100, // 100% to owner
+            100 - liquidityPercentage, // 95% to owner if using default 5% liquidity
             "Owner", // label
             false, // no vesting
             0, // no vesting duration

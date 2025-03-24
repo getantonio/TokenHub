@@ -23,7 +23,12 @@ export const createTokenWithFee = async (params: TokenParams): Promise<string> =
   console.log("🚀 NEW TOKEN CREATOR RUNNING v1.0 🚀");
   
   // Use the BSC Testnet factory address
-  const FACTORY_ADDRESS = "0x822406674Abcf53A7814422AA49756fe69383546";
+  const FACTORY_ADDRESS = process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V4 || '0x0000000000000000000000000000000000000000';
+
+  if (!process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V4) {
+    console.error('Missing required environment variable: NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V4');
+  }
+  
   console.log(`Using BSC Testnet factory at address: ${FACTORY_ADDRESS}`);
   
   // Set hardcoded listing fee

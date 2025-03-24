@@ -135,10 +135,9 @@ const UNISWAP_V2_FACTORY_ABI = [
 
 // Update the router addresses to match the v3 config
 const ROUTER_ADDRESSES: Record<number, string> = {
-  [ChainId.SEPOLIA]: '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D', // Uniswap V2 Router on Sepolia
-  [ChainId.BSC_TESTNET]: '0xD99D1c33F9fC3444f8101754aBC46c52416550D1', // PancakeSwap Router on BSC Testnet
-  [ChainId.ARBITRUM_SEPOLIA]: '0xD9Aa0Ca55115900908bd649793D9b8dE11Fb7368', // Uniswap V2 Router on Arbitrum Sepolia
-  // Add other network router addresses as needed
+  [ChainId.SEPOLIA]: process.env.NEXT_PUBLIC_UNISWAPV2ROUTER02 || '0x0000000000000000000000000000000000000000',
+  [ChainId.BSC_TESTNET]: process.env.NEXT_PUBLIC_BSCTESTNET_ROUTER || '0x0000000000000000000000000000000000000000',
+  [ChainId.ARBITRUM_SEPOLIA]: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_ROUTER || '0x0000000000000000000000000000000000000000',
 } as const;
 
 // Update the factory addresses to match our newly deployed fixed contract
@@ -256,6 +255,41 @@ function getDirectDEXFactoryAddress(chainId: number): string {
   // If not a known network, try to use the address from context or return null
   return FACTORY_ADDRESSES_V2_DIRECT_DEX_FIXED[chainId] || '';
 }
+
+const getDexListingFactoryAddress = (chainId: number): string => {
+  switch (chainId) {
+    case ChainId.SEPOLIA:
+      return process.env.NEXT_PUBLIC_SEPOLIA_DEX_LISTING_FACTORY_ADDRESS || '0x0000000000000000000000000000000000000000';
+    case ChainId.BSC_TESTNET:
+      return process.env.NEXT_PUBLIC_BSCTESTNET_DEX_LISTING_FACTORY_ADDRESS || '0x0000000000000000000000000000000000000000';
+    case ChainId.POLYGON_AMOY:
+      return process.env.NEXT_PUBLIC_POLYGONAMOY_DEX_LISTING_FACTORY_ADDRESS || '0x0000000000000000000000000000000000000000';
+    default:
+      return '0x0000000000000000000000000000000000000000';
+  }
+};
+
+const getV2DirectDexFixedAddress = (chainId: number): string => {
+  switch (chainId) {
+    case ChainId.SEPOLIA:
+      return process.env.NEXT_PUBLIC_SEPOLIA_V2_DIRECTDEX_FIXED_ADDRESS || '0x0000000000000000000000000000000000000000';
+    case ChainId.BSC_TESTNET:
+      return process.env.NEXT_PUBLIC_BSCTESTNET_V2_DIRECTDEX_FIXED_ADDRESS || '0x0000000000000000000000000000000000000000';
+    default:
+      return '0x0000000000000000000000000000000000000000';
+  }
+};
+
+const getWethAddress = (chainId: number): string => {
+  switch (chainId) {
+    case ChainId.SEPOLIA:
+      return process.env.NEXT_PUBLIC_WETH || '0x0000000000000000000000000000000000000000';
+    case ChainId.BSC_TESTNET:
+      return process.env.NEXT_PUBLIC_BSCTESTNET_WETH || '0x0000000000000000000000000000000000000000';
+    default:
+      return '0x0000000000000000000000000000000000000000';
+  }
+};
 
 const TCAP_U_DEXLIST = () => {
   const { isConnected } = useAccount();

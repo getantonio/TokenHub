@@ -57,13 +57,17 @@ export default function TokenCreationForm({ onSuccess, onError }: TokenCreationF
     enableTrading: true,
     tradingStartTime: Math.floor(Date.now() / 1000) + 3600,
     marketingFeePercentage: BigInt(1),
-    marketingWallet: '0x10C8c279c6b381156733ec160A89Abb260bfcf0C',
+    marketingWallet: process.env.NEXT_PUBLIC_DEFAULT_MARKETING_WALLET || '0x0000000000000000000000000000000000000000',
     developmentFeePercentage: BigInt(1),
-    developmentWallet: '0x991Ed392F033B2228DC55A1dE2b706ef8D9d9DcD',
+    developmentWallet: process.env.NEXT_PUBLIC_DEFAULT_DEVELOPMENT_WALLET || '0x0000000000000000000000000000000000000000',
     autoLiquidityFeePercentage: BigInt(1),
     enableBuyFees: true,
     enableSellFees: true
   });
+
+  if (!process.env.NEXT_PUBLIC_DEFAULT_MARKETING_WALLET || !process.env.NEXT_PUBLIC_DEFAULT_DEVELOPMENT_WALLET) {
+    console.error('Missing required environment variables for default wallet addresses');
+  }
 
   useEffect(() => {
     const fetchListingFee = async () => {

@@ -62,4 +62,18 @@ export function getNetworkConfig(chainId: number | null): any | null {
   return SUPPORTED_NETWORKS[chainId] || null;
 }
 
+export const NETWORK_CONFIG = {
+  '80002': { // Polygon Amoy
+    QUICKSWAP_ROUTER: process.env.NEXT_PUBLIC_POLYGONAMOY_QUICKSWAP_ROUTER,
+    QUICKSWAP_FACTORY: process.env.NEXT_PUBLIC_POLYGONAMOY_DEX_FACTORY,
+    QUICKSWAP_WETH: process.env.NEXT_PUBLIC_POLYGONAMOY_WETH,
+    SUPPORTS_ENS: false,
+    // Add other network-specific configurations as needed
+  },
+  // Add other networks as needed
+} as const;
+
+export type NetworkConfig = typeof NETWORK_CONFIG;
+export type NetworkId = keyof NetworkConfig;
+
 export default SUPPORTED_NETWORKS; 

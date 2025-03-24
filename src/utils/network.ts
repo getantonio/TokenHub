@@ -76,4 +76,73 @@ export const switchNetwork = async (chainId: number): Promise<boolean> => {
       return false;
     }
   }
-}; 
+};
+
+// Network utility functions
+
+/**
+ * Check if the network is Polygon Amoy
+ * @param chainId The chain ID to check
+ * @returns Whether the network is Polygon Amoy
+ */
+export function isPolygonAmoyNetwork(chainId: number): boolean {
+  // Polygon Amoy chain ID is 80002
+  return chainId === 80002;
+}
+
+/**
+ * Get the name of a network by chain ID
+ * @param chainId The chain ID to get the name for
+ * @returns The network name
+ */
+export function getNetworkName(chainId: number): string {
+  switch (chainId) {
+    case 1:
+      return 'Ethereum Mainnet';
+    case 5:
+      return 'Goerli Testnet';
+    case 11155111:
+      return 'Sepolia Testnet';
+    case 80001:
+      return 'Polygon Mumbai';
+    case 80002:
+      return 'Polygon Amoy';
+    case 137:
+      return 'Polygon Mainnet';
+    case 56:
+      return 'BSC Mainnet';
+    case 97:
+      return 'BSC Testnet';
+    case 421614:
+      return 'Arbitrum Sepolia';
+    case 11155420:
+      return 'Optimism Sepolia';
+    default:
+      return `Unknown Network (${chainId})`;
+  }
+}
+
+/**
+ * Get the explorer URL for a transaction or address
+ * @param chainId The chain ID
+ * @param hashOrAddress The transaction hash or address
+ * @returns The explorer URL
+ */
+export function getExplorerUrl(chainId: number, hashOrAddress: string): string {
+  switch (chainId) {
+    case 80002:
+      return `https://www.oklink.com/amoy/${hashOrAddress.startsWith('0x') && hashOrAddress.length === 66 ? 'tx/' : 'address/'}${hashOrAddress}`;
+    case 11155111:
+      return `https://sepolia.etherscan.io/${hashOrAddress.startsWith('0x') && hashOrAddress.length === 66 ? 'tx/' : 'address/'}${hashOrAddress}`;
+    case 421614:
+      return `https://sepolia-explorer.arbitrum.io/${hashOrAddress.startsWith('0x') && hashOrAddress.length === 66 ? 'tx/' : 'address/'}${hashOrAddress}`;
+    case 11155420:
+      return `https://sepolia-optimism.etherscan.io/${hashOrAddress.startsWith('0x') && hashOrAddress.length === 66 ? 'tx/' : 'address/'}${hashOrAddress}`;
+    case 97:
+      return `https://testnet.bscscan.com/${hashOrAddress.startsWith('0x') && hashOrAddress.length === 66 ? 'tx/' : 'address/'}${hashOrAddress}`;
+    case 56:
+      return `https://bscscan.com/${hashOrAddress.startsWith('0x') && hashOrAddress.length === 66 ? 'tx/' : 'address/'}${hashOrAddress}`;
+    default:
+      return '#';
+  }
+} 

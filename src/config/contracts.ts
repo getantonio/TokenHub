@@ -1,4 +1,6 @@
 import { ChainId } from '@/types/chain';
+import { BrowserProvider } from 'ethers';
+import { NETWORK_CONFIG, NetworkId } from './networks';
 
 export interface ContractAddresses {
   factoryAddress: string;
@@ -15,6 +17,7 @@ export interface ContractAddresses {
   factoryAddressV4WithLiquidityFixedV4: string;
   factoryAddressV4WithLiquidityFixedV5: string;
   factoryAddressV4WithLiquidityFixedV6: string;
+  factoryAddressV4WithLiquidityFixedV7: string;
   dexListingFactory: string;
   dexListingTemplate: string;
 }
@@ -35,6 +38,7 @@ export const contractAddresses: { [key: number]: ContractAddresses } = {
     factoryAddressV4WithLiquidityFixedV4: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V4 || '',
     factoryAddressV4WithLiquidityFixedV5: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V5 || '',
     factoryAddressV4WithLiquidityFixedV6: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V6 || '',
+    factoryAddressV4WithLiquidityFixedV7: process.env.NEXT_PUBLIC_SEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V7 || '',
     dexListingFactory: process.env.NEXT_PUBLIC_SEPOLIA_DEX_LISTING_FACTORY_ADDRESS || '',
     dexListingTemplate: process.env.NEXT_PUBLIC_SEPOLIA_DEX_LISTING_TEMPLATE_ADDRESS || ''
   },
@@ -53,6 +57,7 @@ export const contractAddresses: { [key: number]: ContractAddresses } = {
     factoryAddressV4WithLiquidityFixedV4: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V4 || '',
     factoryAddressV4WithLiquidityFixedV5: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V5 || '',
     factoryAddressV4WithLiquidityFixedV6: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V6 || '',
+    factoryAddressV4WithLiquidityFixedV7: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V7 || '',
     dexListingFactory: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_DEX_LISTING_FACTORY_ADDRESS || '',
     dexListingTemplate: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_DEX_LISTING_TEMPLATE_ADDRESS || ''
   },
@@ -71,6 +76,7 @@ export const contractAddresses: { [key: number]: ContractAddresses } = {
     factoryAddressV4WithLiquidityFixedV4: process.env.NEXT_PUBLIC_OPSEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V4 || '',
     factoryAddressV4WithLiquidityFixedV5: process.env.NEXT_PUBLIC_OPSEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V5 || '',
     factoryAddressV4WithLiquidityFixedV6: process.env.NEXT_PUBLIC_OPSEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V6 || '',
+    factoryAddressV4WithLiquidityFixedV7: process.env.NEXT_PUBLIC_OPSEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V7 || '',
     dexListingFactory: process.env.NEXT_PUBLIC_OPSEPOLIA_DEX_LISTING_FACTORY_ADDRESS || '',
     dexListingTemplate: process.env.NEXT_PUBLIC_OPSEPOLIA_DEX_LISTING_TEMPLATE_ADDRESS || ''
   },
@@ -81,7 +87,7 @@ export const contractAddresses: { [key: number]: ContractAddresses } = {
     factoryAddressV2WithLiquidityFixed: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V2_WITH_LIQUIDITY_FIXED || '',
     factoryAddressV3: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V3 || '',
     factoryAddressV3Enhanced: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V3_ENHANCED || '',
-    factoryAddressV4: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V4 || '',
+    factoryAddressV4: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V7 || '',
     factoryAddressV4WithLiquidity: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V4_WITH_LIQUIDITY || '',
     factoryAddressV4WithLiquidityFixed: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED || '',
     factoryAddressV4WithLiquidityFixedV2: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V2 || '',
@@ -89,6 +95,7 @@ export const contractAddresses: { [key: number]: ContractAddresses } = {
     factoryAddressV4WithLiquidityFixedV4: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V4 || '',
     factoryAddressV4WithLiquidityFixedV5: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V5 || '',
     factoryAddressV4WithLiquidityFixedV6: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V6 || '',
+    factoryAddressV4WithLiquidityFixedV7: process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V7 || '',
     dexListingFactory: process.env.NEXT_PUBLIC_POLYGONAMOY_DEX_LISTING_FACTORY_ADDRESS || '',
     dexListingTemplate: process.env.NEXT_PUBLIC_POLYGONAMOY_DEX_LISTING_TEMPLATE_ADDRESS || ''
   },
@@ -107,6 +114,7 @@ export const contractAddresses: { [key: number]: ContractAddresses } = {
     factoryAddressV4WithLiquidityFixedV4: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V4 || '',
     factoryAddressV4WithLiquidityFixedV5: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V5 || '',
     factoryAddressV4WithLiquidityFixedV6: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V6 || '',
+    factoryAddressV4WithLiquidityFixedV7: process.env.NEXT_PUBLIC_BSCTESTNET_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V7 || '',
     dexListingFactory: process.env.NEXT_PUBLIC_BSCTESTNET_DEX_LISTING_FACTORY_ADDRESS || '',
     dexListingTemplate: process.env.NEXT_PUBLIC_BSCTESTNET_DEX_LISTING_TEMPLATE_ADDRESS || ''
   },
@@ -125,6 +133,7 @@ export const contractAddresses: { [key: number]: ContractAddresses } = {
     factoryAddressV4WithLiquidityFixedV4: process.env.NEXT_PUBLIC_BSC_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V4 || '',
     factoryAddressV4WithLiquidityFixedV5: process.env.NEXT_PUBLIC_BSC_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V5 || '',
     factoryAddressV4WithLiquidityFixedV6: process.env.NEXT_PUBLIC_BSC_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V6 || '',
+    factoryAddressV4WithLiquidityFixedV7: process.env.NEXT_PUBLIC_BSC_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V7 || '',
     dexListingFactory: process.env.NEXT_PUBLIC_BSC_DEX_LISTING_FACTORY_ADDRESS || '',
     dexListingTemplate: process.env.NEXT_PUBLIC_BSC_DEX_LISTING_TEMPLATE_ADDRESS || ''
   }
@@ -236,6 +245,10 @@ export function getNetworkContractAddress(chainId: number, contractType: string)
           return addressFromMapV4WithLiquidityFixedV6;
         }
         break;
+      case 'FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V7':
+        // V7 factories would need to be added to the map if used consistently
+        // For now rely on env variables
+        break;
     }
   }
 
@@ -264,6 +277,25 @@ export function getNetworkContractAddress(chainId: number, contractType: string)
   } else if (contractType.toUpperCase() === 'FACTORYADDRESSV4WITHLIQUIDITY' || contractType.toUpperCase() === 'FACTORY_ADDRESS_V4_WITH_LIQUIDITY') {
     console.warn(`No address found for ${networkName} V4 with liquidity`);
   }
+
+  if (contractType === 'FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V6') {
+    // Try env var first
+    const envVar = `NEXT_PUBLIC_${networkName}_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V6`;
+    if (process.env[envVar]) {
+      console.log(`Using ${networkName} ${contractType} from env var:`, process.env[envVar]);
+      return process.env[envVar] as string;
+    }
+  }
+
+  if (contractType === 'FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V7') {
+    // Try env var first for V7
+    const envVar = `NEXT_PUBLIC_${networkName}_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V7`;
+    if (process.env[envVar]) {
+      console.log(`Using ${networkName} ${contractType} from env var:`, process.env[envVar]);
+      return process.env[envVar] as string;
+    }
+  }
+
   return '';
 }
 
@@ -358,4 +390,89 @@ export const TOKEN_FACTORY_V2_DIRECTDEX_FIXED_ADDRESS = {
   [ChainId.BSC_TESTNET]: process.env.NEXT_PUBLIC_BSCTESTNET_V2_DIRECTDEX_FIXED_ADDRESS || '0xE1469497243ce0A7f5d26f81c34E9eFA5975569b'
 };
 
-export default contractAddresses; 
+export default contractAddresses;
+
+export class ContractRegistry {
+  private static instance: ContractRegistry;
+  private provider: BrowserProvider | null = null;
+
+  private constructor() {}
+
+  static getInstance(): ContractRegistry {
+    if (!ContractRegistry.instance) {
+      ContractRegistry.instance = new ContractRegistry();
+    }
+    return ContractRegistry.instance;
+  }
+
+  setProvider(provider: BrowserProvider) {
+    this.provider = provider;
+  }
+
+  private getNetworkConfig(chainId: NetworkId) {
+    const config = NETWORK_CONFIG[chainId];
+    if (!config) {
+      throw new Error(`No configuration found for chain ID ${chainId}`);
+    }
+
+    // Validate required environment variables
+    if (!config.QUICKSWAP_ROUTER) {
+      throw new Error(`Missing required environment variable: NEXT_PUBLIC_POLYGONAMOY_QUICKSWAP_ROUTER`);
+    }
+    if (!config.QUICKSWAP_FACTORY) {
+      throw new Error(`Missing required environment variable: NEXT_PUBLIC_POLYGONAMOY_DEX_FACTORY`);
+    }
+    if (!config.QUICKSWAP_WETH) {
+      throw new Error(`Missing required environment variable: NEXT_PUBLIC_POLYGONAMOY_WETH`);
+    }
+
+    return config;
+  }
+
+  async resolveAddress(address: string, chainId: NetworkId): Promise<string> {
+    if (!this.provider) {
+      throw new Error('Provider not set');
+    }
+
+    const config = this.getNetworkConfig(chainId);
+    
+    // If ENS is not supported on this network, return the address as is
+    if (!config.SUPPORTS_ENS) {
+      return address;
+    }
+
+    try {
+      const resolvedAddress = await this.provider.resolveName(address);
+      return resolvedAddress || address;
+    } catch (error) {
+      // If ENS resolution fails, return the original address
+      return address;
+    }
+  }
+
+  getRouterAddress(chainId: NetworkId): string {
+    const config = this.getNetworkConfig(chainId);
+    if (!config.QUICKSWAP_ROUTER) {
+      throw new Error(`Missing required environment variable: NEXT_PUBLIC_POLYGONAMOY_QUICKSWAP_ROUTER`);
+    }
+    return config.QUICKSWAP_ROUTER;
+  }
+
+  getFactoryAddress(chainId: NetworkId): string {
+    const config = this.getNetworkConfig(chainId);
+    if (!config.QUICKSWAP_FACTORY) {
+      throw new Error(`Missing required environment variable: NEXT_PUBLIC_POLYGONAMOY_DEX_FACTORY`);
+    }
+    return config.QUICKSWAP_FACTORY;
+  }
+
+  getWETHAddress(chainId: NetworkId): string {
+    const config = this.getNetworkConfig(chainId);
+    if (!config.QUICKSWAP_WETH) {
+      throw new Error(`Missing required environment variable: NEXT_PUBLIC_POLYGONAMOY_WETH`);
+    }
+    return config.QUICKSWAP_WETH;
+  }
+}
+
+export const contractRegistry = ContractRegistry.getInstance(); 

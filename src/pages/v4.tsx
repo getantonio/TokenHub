@@ -21,10 +21,19 @@ const ConnectWalletButton = dynamic(
 
 export default function V4Page() {
   const { chainId } = useNetwork();
-  const { isConnected } = useAccount();
+  const { isConnected, address } = useAccount();
   const router = useRouter();
   const [showFeatures, setShowFeatures] = useState(false);
   const { toast } = useToast();
+  const [provider, setProvider] = useState<ethers.BrowserProvider | undefined>();
+  
+  // Initialize provider
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.ethereum) {
+      const browserProvider = new ethers.BrowserProvider(window.ethereum);
+      setProvider(browserProvider);
+    }
+  }, []);
   
   // Set default network to Polygon Amoy
   useEffect(() => {
@@ -53,8 +62,11 @@ export default function V4Page() {
           const v4FactoryAddress = process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V4 || 
                                   '0xA06cF00fC2B455f92319cc4A6088B5B6Ccd2F10f';
           
-          console.log('Checking V4 factory contract at:', v4FactoryAddress);
-          const code = await provider.getCode(v4FactoryAddress);
+          // Get checksummed address
+          const checksummedAddress = ethers.getAddress(v4FactoryAddress);
+          console.log('Checking V4 factory contract at:', checksummedAddress);
+          
+          const code = await provider.getCode(checksummedAddress);
           const contractExists = code.length > 2; // "0x" means no code
           
           console.log('V4 factory contract exists:', contractExists);
@@ -68,6 +80,11 @@ export default function V4Page() {
           }
         } catch (error) {
           console.error('Error checking V4 factory contract:', error);
+          toast({
+            title: "Error",
+            description: "Failed to validate the factory contract address. Please check your configuration.",
+            variant: "destructive"
+          });
         }
       }
     };
@@ -284,7 +301,9 @@ export default function V4Page() {
               <div>
                 <TCAP_v4 
                   isConnected={isConnected}
-                  provider={typeof window !== 'undefined' ? window.ethereum : undefined}
+                  provider={provider}
+                  address={address}
+                  chainId={chainId ?? undefined}
                 />
               </div>
             </div>

@@ -116,7 +116,7 @@ contract V4FactoryWithLiquidityFixedV6 is V4FactoryWithLiquidity {
         address owner,
         bool includeDistribution,
         WalletAllocation[] memory walletAllocations
-    ) internal returns (address tokenAddress) {
+    ) internal virtual returns (address tokenAddress) {
         // Create token proxy with factory as initial owner
         bytes memory tokenData = abi.encodeWithSelector(
             bytes4(keccak256("initialize(string,string,uint256,address)")),

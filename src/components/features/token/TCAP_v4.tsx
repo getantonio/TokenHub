@@ -13,6 +13,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { ChevronDown, ChevronUp, ExternalLink, Settings, Eye, EyeOff } from 'lucide-react';
 import { RefreshCw } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 
 // Function to check if a chainId corresponds to Polygon Amoy network
 function isPolygonAmoyNetwork(chainId: number): boolean {
@@ -29,8 +30,11 @@ interface TokenInfo {
   address: string;
   name: string;
   symbol: string;
+  decimals: number;
   totalSupply: string;
   owner: string;
+  balance?: string;
+  modules?: any;
   createdAt?: number;
 }
 
@@ -94,20 +98,20 @@ function TokenManageDialog({ isOpen, onClose, token, chainId }: TokenManageDialo
     const loadTokenData = async () => {
       setLoading(true);
       
-      try {
-        if (!window.ethereum) {
+    try {
+      if (!window.ethereum) {
           throw new Error('No Ethereum provider found. Please install a wallet like MetaMask.');
-        }
+      }
         
-        const provider = new BrowserProvider(window.ethereum);
+      const provider = new BrowserProvider(window.ethereum);
         
         // Basic ERC20 interface with additional V4 token methods
-        const tokenContract = new Contract(
-          token.address,
-          [
+      const tokenContract = new Contract(
+        token.address,
+        [
             'function name() view returns (string)',
             'function symbol() view returns (string)',
-            'function decimals() view returns (uint8)',
+          'function decimals() view returns (uint8)',
             'function totalSupply() view returns (uint256)',
             'function balanceOf(address) view returns (uint256)',
             'function owner() view returns (address)',
@@ -117,7 +121,8 @@ function TokenManageDialog({ isOpen, onClose, token, chainId }: TokenManageDialo
             'function maxWalletAmount() view returns (uint256)',
             'function buyTaxRate() view returns (uint256)',
             'function sellTaxRate() view returns (uint256)',
-            'function dynamicTaxEnabled() view returns (bool)'
+            'function dynamicTaxEnabled() view returns (bool)',
+            'function getModules() view returns (address[] memory)'
           ],
           provider
         );
@@ -156,7 +161,7 @@ function TokenManageDialog({ isOpen, onClose, token, chainId }: TokenManageDialo
           dynamicTaxEnabled
         });
         
-      } catch (error) {
+        } catch (error) {
         console.error('Error loading token data:', error);
         toast({
           title: 'Error',
@@ -317,9 +322,9 @@ function TokenManageDialog({ isOpen, onClose, token, chainId }: TokenManageDialo
                           </span>
                         </div>
                       )}
+                        </div>
+                        </div>
                     </div>
-                  </div>
-                </div>
               </Card>
             )}
             
@@ -438,6 +443,18 @@ function TokenManageDialog({ isOpen, onClose, token, chainId }: TokenManageDialo
   );
 }
 
+// Define TokenABI
+const TokenABI = [
+  "function name() view returns (string)",
+  "function symbol() view returns (string)",
+  "function decimals() view returns (uint8)",
+  "function totalSupply() view returns (uint256)",
+  "function balanceOf(address) view returns (uint256)",
+  "function owner() view returns (address)",
+  "function getModules() view returns (address[] memory)"
+];
+
+// Factory contract address will be determined dynamically based on the network
 const TCAP_v4 = forwardRef<TCAP_v4Ref, TCAP_v4Props>(
   ({ isConnected, address, provider }, ref) => {
     const { toast } = useToast();
@@ -517,17 +534,6 @@ const TCAP_v4 = forwardRef<TCAP_v4Ref, TCAP_v4Props>(
       }
     }, [isConnected, provider]);
 
-    // Token Contract ABI - minimal version for basic token info
-    const TokenABI = [
-      "function name() view returns (string)",
-      "function symbol() view returns (string)",
-      "function decimals() view returns (uint8)",
-      "function totalSupply() view returns (uint256)",
-      "function balanceOf(address) view returns (uint256)",
-      "function transfer(address to, uint256 amount) returns (bool)",
-      "function owner() view returns (address)"
-    ];
-
     // Factory ABI - minimal version just for getting tokens
     const FactoryABI = [
       "function createToken(string,string,uint256,address) returns (address)",
@@ -538,6 +544,8 @@ const TCAP_v4 = forwardRef<TCAP_v4Ref, TCAP_v4Props>(
       "function getAllTokens() view returns (address[])",
       "function getUserCreatedTokens(address) view returns (address[])",
       "function getUserTokens(address) view returns (address[])",
+      "function getTokensByUser(address) view returns (address[])",
+      "function getDeployedTokens(address) view returns (address[])",
       "function upgradeTokenImplementation(address) returns (bool)",
       "function upgradeSecurityModuleImplementation(address) returns (bool)",
       "event TokenCreated(address indexed tokenAddress, string name, string symbol, address indexed owner)",
@@ -557,265 +565,195 @@ const TCAP_v4 = forwardRef<TCAP_v4Ref, TCAP_v4Props>(
     };
 
     const loadTokens = async () => {
-      if (!isConnected || !provider) {
-        toast({
-          title: "Wallet Connection Required",
-          description: "Please connect your wallet to view your tokens",
-          variant: "destructive"
-        });
-        return;
-      }
-
       try {
         setLoading(true);
-        setFactoryError(null);
+        console.log("Loading tokens...");
         
-        // Create ethers provider from raw provider if needed
-        let ethersProvider;
-        let signer;
-        let userAddress;
-        
-        if (provider.getSigner) {
-          // It's already an ethers provider
-          ethersProvider = provider;
-          signer = await provider.getSigner();
-          userAddress = await signer.getAddress();
-        } else if (provider.request) {
-          // It's a raw ethereum provider from the browser
-          ethersProvider = new BrowserProvider(provider);
-          signer = await ethersProvider.getSigner();
-          userAddress = await signer.getAddress();
-        } else {
-          throw new Error("Invalid provider. Please reconnect your wallet.");
-        }
-        
-        // Get network information
-        let chainId: number;
-        if (ethersProvider.getNetwork) {
-          const network = await ethersProvider.getNetwork();
-          chainId = Number(network.chainId);
-        } else {
-          // Fallback for other provider types
-          const chainIdHex = await provider.request({ method: 'eth_chainId' });
-          chainId = Number(parseInt(chainIdHex, 16));
-        }
-        setChainId(chainId);
-        
-        // Get factory address for the current network
-        const factoryAddress = getNetworkContractAddress(chainId, 'FACTORY_ADDRESS_V4');
-        
-        if (!factoryAddress || factoryAddress === '0x' || factoryAddress === '0x0000000000000000000000000000000000000000') {
-          throw new Error(`Factory address for network ${chainId} not found or invalid. Please check your network configuration.`);
-        }
-        
-        // Check if we're on Polygon Amoy for V4
-        if (!isPolygonAmoyNetwork(chainId)) {
-          throw new Error(`Token v4 is only available on Polygon Amoy network. Please switch to Polygon Amoy in your wallet.`);
-        }
-        
-        console.log('Using factory address:', factoryAddress);
-        
-        // Check if contract exists at the address
-        const exists = await contractExists(ethersProvider, factoryAddress);
-        if (!exists) {
-          setFactoryError(`No contract found at address ${factoryAddress}. The factory may not be deployed on this network.`);
-          console.error(`No contract found at address ${factoryAddress}`);
+        if (!isConnected || !provider || !chainId || !address) {
+          console.log("Not connected or missing address");
+          setLoading(false);
           return;
         }
         
-        // Create factory contract instance
-        const factory = new Contract(factoryAddress, FactoryABI, signer);
+        // Initialize empty array to hold all tokens
+        let allTokens: string[] = [];
         
-        // Get tokens created by the user
-        let deployedTokens: string[] = [];
-        try {
-          // Try both function names (some contracts use getUserTokens and others use getUserCreatedTokens)
+        // For all networks including Polygon Amoy, attempt to load from all factory versions
+        console.log(`Loading tokens for network ${chainId}`);
+        
+        // Try all factory versions in order of priority
+        const factoryVersions = [
+          'FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V7',
+          'FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V6',
+          'FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V5', 
+          'FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V4',
+          'FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V3',
+          'FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V2',
+          'FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED',
+          'FACTORY_ADDRESS_V4'
+        ];
+        
+        // Track if we found any factory
+        let foundAnyFactory = false;
+        
+        // Try each factory version
+        for (const version of factoryVersions) {
           try {
-            deployedTokens = await factory.getUserCreatedTokens(userAddress);
-            console.log('Successfully called getUserCreatedTokens');
-          } catch (e) {
-            console.log('getUserCreatedTokens failed, trying getUserTokens instead');
-            deployedTokens = await factory.getUserTokens(userAddress);
-            console.log('Successfully called getUserTokens');
-          }
-          
-          console.log('Deployed tokens:', deployedTokens);
-        } catch (contractError) {
-          console.error('Error calling getUserCreatedTokens/getUserTokens:', contractError);
-          
-          // Try getAllTokens as a fallback - will get all tokens, then filter by owner
-          try {
-            console.log('Trying getAllTokens as a fallback');
-            const allTokens = await factory.getAllTokens();
-            console.log('All tokens from factory:', allTokens);
+            const factoryAddress = getNetworkContractAddress(chainId, version);
+            if (!factoryAddress) {
+              console.log(`No factory address for ${version} on chain ${chainId}`);
+              continue;
+            }
             
-            // We'll check the owner of each token in the next step
-            deployedTokens = allTokens;
-          } catch (fallbackError) {
-            console.error('Error with fallback getAllTokens:', fallbackError);
+            console.log(`Checking factory ${version} at ${factoryAddress}`);
             
-            // Final fallback: Use events to find tokens created by the user
-            try {
-              console.log('Trying to find tokens using events');
-              
-              // Look for token creation events
-              // First try TokenCreated events
-              let filter = factory.filters.TokenCreated(null, null, null, userAddress);
-              let events = await factory.queryFilter(filter);
-              console.log('TokenCreated events:', events);
-              
-              if (events.length === 0) {
-                // Try TokenDeployed events
-                filter = factory.filters.TokenDeployed(null, null, null, userAddress);
-                events = await factory.queryFilter(filter);
-                console.log('TokenDeployed events:', events);
-              }
-              
-              // Extract token addresses from events
-              const eventTokens = events.map(event => {
-                // Check if it's a parsed log with args
-                if ('args' in event && event.args && event.args.length > 0) {
-                  return event.args[0];
-                }
-                // For non-parsed logs, try to extract from the first topic
-                // The first topic is usually the event signature, the second is often the token address
-                if (event.topics && event.topics.length > 1) {
-                  const potentialAddress = '0x' + event.topics[1].slice(26);
-                  if (ethers.isAddress(potentialAddress)) {
-                    return potentialAddress;
-                  }
-                }
-                return null;
-              }).filter(address => !!address);
-              
-              console.log('Tokens found via events:', eventTokens);
-              
-              if (eventTokens.length > 0) {
-                deployedTokens = eventTokens;
-              } else {
-                // If still no tokens, try looking for all events from the factory and analyze them
-                console.log('No tokens found via specific events, checking all events');
-                const allEvents = await ethersProvider.getLogs({
-                  address: factoryAddress,
-                  fromBlock: "earliest",
-                  toBlock: "latest"
-                });
-                
-                console.log('All events from factory:', allEvents);
-                
-                // Look for any events that might contain the user's address
-                // This is a last resort approach
-                const potentialTokenAddresses = new Set<string>();
-                
-                for (const event of allEvents) {
-                  // Check if the event contains the user's address (lowercased for comparison)
-                  const eventData = event.data?.toLowerCase();
-                  if (eventData?.includes(userAddress.slice(2).toLowerCase())) {
-                    // Try to extract an address from the topics
-                    // Typically, the token address is in the first topic
-                    if (event.topics?.length > 1) {
-                      const potentialAddress = '0x' + event.topics[1].slice(26);
-                      if (ethers.isAddress(potentialAddress)) {
-                        potentialTokenAddresses.add(potentialAddress);
+            // Verify factory contract exists
+            const exists = await contractExists(provider, factoryAddress);
+            if (!exists) {
+              console.log(`Factory contract not deployed at ${factoryAddress}`);
+              continue;
+            }
+            
+            console.log(`Factory ${version} exists at ${factoryAddress}, querying tokens...`);
+            foundAnyFactory = true;
+            
+            // Create factory contract
+            const factory = new Contract(factoryAddress, FactoryABI, provider);
+            
+            // Try different function names to get tokens
+            const functionNamesToTry = [
+              'getUserCreatedTokens',
+              'getUserTokens',
+              'getTokensByUser',
+              'getDeployedTokens'
+            ];
+            
+            for (const funcName of functionNamesToTry) {
+              try {
+                console.log(`Trying ${funcName} on ${version}...`);
+                if (typeof factory[funcName] === 'function') {
+                  const userTokens = await factory[funcName](address);
+                  if (userTokens && userTokens.length > 0) {
+                    console.log(`Found ${userTokens.length} tokens via ${funcName} on ${version}`);
+                    
+                    // Add tokens to our list, avoiding duplicates
+                    for (const token of userTokens) {
+                      if (!allTokens.includes(token)) {
+                        allTokens.push(token);
                       }
                     }
                   }
                 }
-                
-                if (potentialTokenAddresses.size > 0) {
-                  deployedTokens = Array.from(potentialTokenAddresses);
-                  console.log('Potential tokens from all events:', deployedTokens);
-                } else {
-                  setFactoryError('Could not find any tokens associated with your address. Try creating a token first.');
-                  return;
-                }
+              } catch (e) {
+                console.log(`${funcName} failed on ${version}:`, e);
               }
-            } catch (eventError) {
-              console.error('Error when trying to use events:', eventError);
-              setFactoryError(`The factory contract does not support the standard token lookup functions or events. This may be a temporary network issue or the contract may not be fully deployed yet.`);
-              return;
             }
+          } catch (e) {
+            console.error(`Error with factory ${version}:`, e);
           }
         }
         
-        // If we got here, we have tokens, so clear any previous error
+        // Also check URL parameters
+        try {
+          const urlParams = new URLSearchParams(window.location.search);
+          const tokenFromUrl = urlParams.get('token');
+          if (tokenFromUrl && !allTokens.includes(tokenFromUrl)) {
+            console.log(`Found token in URL: ${tokenFromUrl}`);
+            allTokens.push(tokenFromUrl);
+          }
+        } catch (e) {
+          console.error("Error checking URL parameters:", e);
+        }
+        
+        // Check if we found any tokens
+        if (allTokens.length === 0) {
+          if (foundAnyFactory) {
+            setFactoryError("No tokens found for your account. Create a new token to get started.");
+          } else {
+            setFactoryError(`No factory contracts found for network ${chainId} or they're not deployed yet.`);
+          }
+          setLoading(false);
+          return;
+        }
+        
+        console.log(`Found ${allTokens.length} total tokens across all factories`);
+        
+        // Filter out blocked tokens
+        const blockedTokens = getBlockedTokens();
+        const filteredTokens = allTokens.filter(token => !blockedTokens.includes(token));
+        
+        // Process each token in parallel
+        const tokenPromises = filteredTokens.map(async (tokenAddress) => {
+          try {
+            const tokenContract = new Contract(tokenAddress, TokenABI, provider);
+            
+            // Get basic token info with error handling for each call
+            let name = "Unknown Token";
+            let symbol = "???";
+            let decimals = 18;
+            let totalSupply = ethers.parseUnits("0", 18);
+            let owner = "Unknown";
+            let balance = ethers.parseUnits("0", 18);
+            
+            try { name = await tokenContract.name(); } catch (e) { console.log(`Failed to get name for ${tokenAddress}`); }
+            try { symbol = await tokenContract.symbol(); } catch (e) { console.log(`Failed to get symbol for ${tokenAddress}`); }
+            try { decimals = await tokenContract.decimals(); } catch (e) { console.log(`Failed to get decimals for ${tokenAddress}`); }
+            try { totalSupply = await tokenContract.totalSupply(); } catch (e) { console.log(`Failed to get totalSupply for ${tokenAddress}`); }
+            try { owner = await tokenContract.owner(); } catch (e) { console.log(`Failed to get owner for ${tokenAddress}`); }
+            
+            // Get user balance if address is available
+            try { balance = await tokenContract.balanceOf(address); } catch (e) { console.log(`Failed to get balance for ${tokenAddress}`); }
+            
+            // Get modules data if available, with better error handling
+            let modules = {};
+            try {
+              const moduleAddresses = await tokenContract.getModules();
+              if (moduleAddresses && moduleAddresses.length > 0) {
+                modules = {
+                  liquidity: moduleAddresses[0],
+                  distribution: moduleAddresses.length > 1 ? moduleAddresses[1] : undefined,
+                  security: moduleAddresses.length > 2 ? moduleAddresses[2] : undefined
+                };
+              }
+            } catch (e) {
+              console.log(`Failed to get modules for ${tokenAddress}`);
+            }
+            
+            return {
+              address: tokenAddress,
+              name,
+              symbol,
+              decimals,
+              totalSupply: ethers.formatUnits(totalSupply, decimals),
+              owner,
+              balance: ethers.formatUnits(balance, decimals),
+              modules,
+              createdAt: Date.now() // Adding creation time for sorting
+            };
+          } catch (error) {
+            console.error(`Error loading token ${tokenAddress}:`, error);
+            return null;
+          }
+        });
+        
+        // Process results and filter out failures
+        const results = await Promise.all(tokenPromises);
+        const validTokens: TokenInfo[] = [];
+        
+        // Process and filter null values
+        for (const token of results) {
+          if (token !== null) {
+            validTokens.push(token as TokenInfo);
+          }
+        }
+        
+        console.log(`Successfully loaded ${validTokens.length} valid tokens`);
+        setTokens(validTokens);
         setFactoryError(null);
         
-        // Get blocked tokens
-        const blockedTokens = getBlockedTokens();
-        
-        // Initialize array to store token info
-        const tokenInfoArray: TokenInfo[] = [];
-        
-        // For each token address, fetch token information
-        for (const tokenAddress of deployedTokens) {
-          try {
-            // Skip blocked tokens if not showing hidden
-            if (!showHiddenTokens && blockedTokens.includes(tokenAddress)) {
-              continue;
-            }
-            
-            // Check if token contract exists
-            const tokenExists = await contractExists(ethersProvider, tokenAddress);
-            if (!tokenExists) {
-              console.warn(`No contract found at token address ${tokenAddress}`);
-              continue;
-            }
-            
-            // Create token contract instance
-            const tokenContract = new Contract(tokenAddress, TokenABI, signer);
-            
-            // Get token basic info
-            const name = await tokenContract.name();
-            const symbol = await tokenContract.symbol();
-            const totalSupply = ethers.formatUnits(await tokenContract.totalSupply(), 18);
-            
-            // Try to get owner - may not be available on all tokens
-            let owner = "";
-            try {
-              owner = await tokenContract.owner();
-            } catch (error) {
-              console.warn(`Could not get owner for token ${tokenAddress}`);
-            }
-            
-            // If we used getAllTokens, check if this token belongs to the current user
-            // If we used getUserCreatedTokens/getUserTokens, all tokens will belong to the user
-            const isUserToken = !owner || owner.toLowerCase() === userAddress.toLowerCase();
-            
-            // Only include tokens owned by the current user
-            if (isUserToken) {
-              tokenInfoArray.push({
-                address: tokenAddress,
-                name,
-                symbol,
-                totalSupply,
-                owner,
-                createdAt: Date.now()
-              });
-            }
-          } catch (error) {
-            console.error(`Error fetching information for token ${tokenAddress}:`, error);
-          }
-        }
-        
-        // Update state with token information
-        setTokens(tokenInfoArray);
-        
-        if (tokenInfoArray.length === 0 && !factoryError) {
-          toast({
-            title: "No Tokens Found",
-            description: "You haven't created any tokens yet. Try creating one!",
-          });
-        }
       } catch (error) {
-        console.error('Error loading tokens:', error);
-        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-        setFactoryError(errorMessage);
-        toast({
-          title: "Failed to Load Tokens",
-          description: errorMessage,
-          variant: "destructive"
-        });
+        console.error("Error in loadTokens:", error);
+        setFactoryError(`Error loading tokens: ${error instanceof Error ? error.message : 'Unknown error'}`);
       } finally {
         setLoading(false);
       }
@@ -826,7 +764,7 @@ const TCAP_v4 = forwardRef<TCAP_v4Ref, TCAP_v4Props>(
       if (isConnected && provider) {
         loadTokens();
       }
-    }, [isConnected, provider, showHiddenTokens]);
+    }, [isConnected, provider]);
 
     // Rerender when showHiddenTokens changes to apply filters
     useEffect(() => {
@@ -888,7 +826,7 @@ const TCAP_v4 = forwardRef<TCAP_v4Ref, TCAP_v4Props>(
               {showHiddenTokens ? 'Hide Blocked Tokens' : 'Show All Tokens'}
             </Button>
             <Button 
-              onClick={loadTokens}
+              onClick={() => loadTokens()}
               variant="secondary"
               className="text-xs"
             >

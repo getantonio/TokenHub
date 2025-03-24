@@ -492,11 +492,15 @@ const TCAP_v2DirectDEX = forwardRef<TCAP_v2DirectDEXRef, Props>(({ isConnected, 
     }
   }> => {
     const zeroAddr = "0x0000000000000000000000000000000000000000";
+
+    const UNISWAP_V2_FACTORY = process.env.NEXT_PUBLIC_UNISWAPV2FACTORY || '0x0000000000000000000000000000000000000000';
+    const WETH_SEPOLIA = process.env.NEXT_PUBLIC_WETH || '0x0000000000000000000000000000000000000000';
+
+    if (!process.env.NEXT_PUBLIC_UNISWAPV2FACTORY || !process.env.NEXT_PUBLIC_WETH) {
+      console.error('Missing required environment variables for DEX configuration');
+    }
+
     try {
-      // Updated Uniswap V2 Factory address for Sepolia
-      const UNISWAP_V2_FACTORY = '0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f';
-      const WETH_SEPOLIA = '0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14';
-      
       console.log('Getting LP details for token:', tokenAddress);
       console.log('Using Factory:', UNISWAP_V2_FACTORY);
       console.log('Using WETH:', WETH_SEPOLIA);

@@ -1,7 +1,5 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
-import { WagmiConfig } from 'wagmi';
-import { config } from '@/lib/wagmi';
 import { Footer } from '@/components/layouts/Footer';
 import { Toaster } from '@/components/ui/toaster';
 import './globals.css';
@@ -13,6 +11,11 @@ export const metadata: Metadata = {
   description: 'Create and manage tokens with ease',
 };
 
+// Client-side only wrapper
+function ClientSideLayout({ children }: { children: React.ReactNode }) {
+  return children;
+}
+
 export default function RootLayout({
   children,
 }: {
@@ -21,13 +24,11 @@ export default function RootLayout({
   return (
     <html lang="en" className="min-h-screen bg-gray-900">
       <body className={`${inter.className} flex flex-col min-h-screen`}>
-        <WagmiConfig config={config}>
-          <main className="flex-grow">
-            {children}
-          </main>
-          <Footer />
-          <Toaster />
-        </WagmiConfig>
+        <main className="flex-grow">
+          {children}
+        </main>
+        <Footer />
+        <Toaster />
       </body>
     </html>
   );
