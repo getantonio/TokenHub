@@ -9,6 +9,10 @@ import Head from 'next/head';
 import { Footer } from '@/components/layouts/Footer';
 import type { MetaMaskInpageProvider } from '@metamask/providers';
 
+// Hardcoded Amoy factory address
+const AMOY_FACTORY_ADDRESS = "0xAC49A5f87D1b1c9df1885B90B911BdfdE40c2c36";
+const ARBITRUM_SEPOLIA_FACTORY_ADDRESS = "0x9209DfFAddB8a8bfe4ffaa2b79537461E478386d";
+
 export default function V1Page() {
   const [isConnected, setIsConnected] = useState(false);
   const { chainId } = useNetwork();
@@ -43,7 +47,22 @@ export default function V1Page() {
     checkConnection();
   }, []);
 
-  const factoryAddress = chainId ? FACTORY_ADDRESSES.v1[chainId] : undefined;
+  // Get the appropriate factory address based on the network
+  const getFactoryAddress = () => {
+    if (chainId === 80002) {
+      console.log("Using Amoy-specific factory address in v1.tsx:", AMOY_FACTORY_ADDRESS);
+      return AMOY_FACTORY_ADDRESS;
+    }
+    
+    if (chainId === 421614) {
+      console.log("Using Arbitrum Sepolia-specific factory address in v1.tsx:", ARBITRUM_SEPOLIA_FACTORY_ADDRESS);
+      return ARBITRUM_SEPOLIA_FACTORY_ADDRESS;
+    }
+    
+    return chainId ? FACTORY_ADDRESSES.v1[chainId] : undefined;
+  };
+
+  const factoryAddress = getFactoryAddress();
 
   return (
     <div className="min-h-screen bg-gray-900">

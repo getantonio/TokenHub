@@ -19,6 +19,7 @@ const nextConfig = {
   },
   // Add source directory configuration
   distDir: '.next',
+  output: 'export',
   webpack: (config, { isServer }) => {
     if (!isServer) {
       // Don't attempt to import 'ethers' on the server side

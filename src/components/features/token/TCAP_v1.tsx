@@ -12,6 +12,28 @@ import { getExplorerUrl } from '@config/networks';
 import { Tooltip } from '@components/ui/tooltip';
 import { InfoIcon } from '@components/ui/InfoIcon';
 
+// Add the ABI for our new AmoyTokenFactory
+const AMOY_FACTORY_ABI = [
+  "function owner() external view returns (address)",
+  "function deploymentFee() external view returns (uint256)",
+  "function getTokensByUser(address) external view returns (address[])",
+  "function createToken(string,string,uint256) external payable returns (address)",
+  "function isTokenFromFactory(address) external view returns (bool)",
+  "event TokenCreated(address indexed tokenAddress, address indexed creator)"
+];
+
+// Add the Arbitrum Sepolia factory address
+const AMOY_FACTORY_ADDRESS = "0xAC49A5f87D1b1c9df1885B90B911BdfdE40c2c36";
+const ARBITRUM_SEPOLIA_FACTORY_ADDRESS = "0x9209DfFAddB8a8bfe4ffaa2b79537461E478386d";
+
+// Function to get appropriate ABI based on network
+const getFactoryABI = (chainId: number | null) => {
+  if (chainId === 80002 || chainId === 421614) {
+    return AMOY_FACTORY_ABI;
+  }
+  return TokenFactory_v1.abi;
+};
+
 interface Props {
   isConnected: boolean;
   address?: string;
@@ -55,23 +77,53 @@ export default function TCAP_v1({ isConnected, address, provider: externalProvid
   const { toast } = useToast();
 
   useEffect(() => {
-    if (isConnected && address && externalProvider) {
+    if (isConnected && externalProvider) {
       loadTokens();
     }
-  }, [isConnected, address, externalProvider]);
+  }, [isConnected, address, externalProvider, chainId]);
 
   useEffect(() => {
     localStorage.setItem('hiddenTokensV1', JSON.stringify(hiddenTokens));
   }, [hiddenTokens]);
 
+  // Function to get the correct factory address based on the network
+  const getFactoryAddress = (): string => {
+    if (chainId === 80002) {
+      console.log("Using Amoy-specific factory address for TCAP:", AMOY_FACTORY_ADDRESS);
+      return AMOY_FACTORY_ADDRESS;
+    }
+    
+    if (chainId === 421614) {
+      console.log("Using Arbitrum Sepolia-specific factory address for TCAP:", ARBITRUM_SEPOLIA_FACTORY_ADDRESS);
+      return ARBITRUM_SEPOLIA_FACTORY_ADDRESS;
+    }
+    
+    if (!address) {
+      console.error("No factory address provided");
+      return "";
+    }
+    
+    return address;
+  };
+
   const loadTokens = async () => {
-    if (!externalProvider || !address) return;
+    if (!externalProvider) return;
 
     try {
       setIsLoading(true);
       setError(null);
-
-      const factory = new Contract(address, TokenFactory_v1.abi, externalProvider);
+      
+      // Get the correct factory address for the current network
+      const factoryAddress = getFactoryAddress();
+      if (!factoryAddress) {
+        setError('Factory address not available for this network');
+        setIsLoading(false);
+        return;
+      }
+      
+      console.log("Loading tokens from factory:", factoryAddress);
+      
+      const factory = new Contract(factoryAddress, getFactoryABI(chainId), externalProvider);
       const signer = await externalProvider.getSigner();
       const userAddress = await signer.getAddress();
       
@@ -146,6 +198,8 @@ export default function TCAP_v1({ isConnected, address, provider: externalProvid
       setIsLoading(true);
       const provider = new BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
+      
+      // Use a consistent ABI for the token regardless of network
       const token = new Contract(tokenAddress, TokenTemplate_v1.abi, signer);
 
       const tx = await token.setBlacklistStatus(
@@ -186,6 +240,8 @@ export default function TCAP_v1({ isConnected, address, provider: externalProvid
       setIsLoading(true);
       const provider = new BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
+      
+      // Use a consistent ABI for the token regardless of network
       const token = new Contract(tokenAddress, TokenTemplate_v1.abi, signer);
 
       const lockUntil = Math.floor(Date.now() / 1000) + (timeLockAction.duration * 24 * 60 * 60);

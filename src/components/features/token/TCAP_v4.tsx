@@ -91,6 +91,7 @@ function TokenManageDialog({ isOpen, onClose, token, chainId }: TokenManageDialo
   const [activeTab, setActiveTab] = useState<'overview' | 'tokenomics' | 'admin'>('overview');
   const [loading, setLoading] = useState(true);
   const [tokenData, setTokenData] = useState<any>(null);
+  const [processing, setProcessing] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -283,7 +284,7 @@ function TokenManageDialog({ isOpen, onClose, token, chainId }: TokenManageDialo
                       </div>
                     </div>
                     
-                    <div className="mt-4">
+                    <div className="mt-4 flex flex-col space-y-2">
                       <Button 
                         className="w-full"
                         onClick={() => {
@@ -322,9 +323,9 @@ function TokenManageDialog({ isOpen, onClose, token, chainId }: TokenManageDialo
                           </span>
                         </div>
                       )}
-                        </div>
-                        </div>
                     </div>
+                  </div>
+                </div>
               </Card>
             )}
             
@@ -408,6 +409,232 @@ function TokenManageDialog({ isOpen, onClose, token, chainId }: TokenManageDialo
                       <Button variant="secondary">Mint Tokens</Button>
                       <Button variant="secondary">Burn Tokens</Button>
                       <Button variant="secondary">Transfer Ownership</Button>
+                      
+                      <Button 
+                        className="bg-green-600 hover:bg-green-700 col-span-2"
+                        onClick={async () => {
+                          try {
+                            setProcessing(true); // Show processing state
+                            onClose(); // Close the dialog
+                            
+                            // Display processing message
+                            toast({
+                              title: "Processing",
+                              description: "Preparing to add liquidity..."
+                            });
+                            
+                            // We need a signer to send transactions
+                            if (!window.ethereum) {
+                              throw new Error("No Ethereum provider found");
+                            }
+                            
+                            const provider = new BrowserProvider(window.ethereum);
+                            const signer = await provider.getSigner();
+                            
+                            // Get token contract with signer
+                            const tokenContract = new Contract(
+                              tokenData.address, 
+                              [
+                                "function approve(address spender, uint256 amount) returns (bool)",
+                                "function balanceOf(address account) view returns (uint256)",
+                                "function decimals() view returns (uint8)",
+                                "function getModules() view returns (address[] memory)",
+                                "function owner() view returns (address)"
+                              ], 
+                              signer
+                            );
+                            
+                            // Get the modules to find the liquidity module
+                            const modules = await tokenContract.getModules().catch(() => null);
+                            
+                            // Enhanced error handling for missing modules
+                            if (!modules || modules.length === 0) {
+                              // Check if the token was created without modules
+                              console.log("No modules found for token:", tokenData.address);
+                              
+                              // Close the toast that shows "Processing"
+                              toast({
+                                title: "Information",
+                                description: "This token doesn't have liquidity modules. It may have been created with an older factory version.",
+                                variant: "default"
+                              });
+                              
+                              // Ask if the user wants to try creating a pair directly on a DEX
+                              if (confirm("This token doesn't have built-in liquidity modules. Would you like to open an external DEX to add liquidity manually?")) {
+                                // Determine appropriate DEX URL based on network
+                                let dexUrl = '';
+                                if (chainId === 80002) {
+                                  // Polygon Amoy - use SushiSwap
+                                  dexUrl = `https://staging.sushi.com/pool/add?chainId=80002&token0=0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE&token1=${tokenData.address}`;
+                                } else if (chainId === 1) {
+                                  // Ethereum - use Uniswap
+                                  dexUrl = `https://app.uniswap.org/#/add/ETH/${tokenData.address}`;
+                                } else if (chainId === 56) {
+                                  // BSC - use PancakeSwap
+                                  dexUrl = `https://pancakeswap.finance/add/BNB/${tokenData.address}`;
+                                } else if (chainId === 137) {
+                                  // Polygon - use QuickSwap
+                                  dexUrl = `https://quickswap.exchange/#/add/${tokenData.address}/ETH`;
+                                } else {
+                                  // Default to Uniswap
+                                  dexUrl = `https://app.uniswap.org/#/add/ETH/${tokenData.address}?chain=${chainId}`;
+                                }
+                                
+                                // Open the DEX in a new tab
+                                window.open(dexUrl, '_blank');
+                              }
+                              
+                              return;
+                            }
+                            
+                            const liquidityModuleAddress = modules[0]; // First module is liquidity
+                            
+                            if (!liquidityModuleAddress || liquidityModuleAddress === "0x0000000000000000000000000000000000000000") {
+                              throw new Error("Liquidity module address is invalid");
+                            }
+                            
+                            console.log(`Using liquidity module at ${liquidityModuleAddress}`);
+                            
+                            // Connect to the liquidity module with V7 compatible functions
+                            const liquidityModule = new Contract(
+                              liquidityModuleAddress,
+                              [
+                                // V7 functions
+                                "function addLiquidityV7(uint256 tokenAmount, uint256 deadline) payable returns (uint256, uint256, uint256)",
+                                "function createLiquidityPoolV7(uint256 tokenAmount, uint256 deadline) payable returns (address pair)",
+                                "function getPairV7() view returns (address)",
+                                "function getAmountForLiquidityV7(uint256 ethAmount) view returns (uint256)",
+                                // Original functions for backward compatibility
+                                "function addLiquidity(uint256 tokenAmount, uint256 deadline) payable returns (uint256, uint256, uint256)",
+                                "function createLiquidityPool(uint256 tokenAmount, uint256 deadline) payable returns (address pair)",
+                                "function getPair() view returns (address)",
+                                "function getAmountForLiquidity(uint256 ethAmount) view returns (uint256)",
+                                // Module info
+                                "function version() view returns (uint256)"
+                              ],
+                              signer
+                            );
+                            
+                            // Check if this is a V7 module
+                            let isV7Module = false;
+                            try {
+                              const moduleVersion = await liquidityModule.version();
+                              console.log(`Liquidity module version: ${moduleVersion}`);
+                              isV7Module = moduleVersion >= 7;
+                            } catch (e) {
+                              console.log("Could not determine module version, assuming standard interface");
+                            }
+                            
+                            // Check if pair already exists - use V7 functions if detected
+                            let pairExists = false;
+                            let pairAddress = null;
+                            
+                            try {
+                              if (isV7Module) {
+                                pairAddress = await liquidityModule.getPairV7().catch(() => null);
+                              } else {
+                                pairAddress = await liquidityModule.getPair().catch(() => null);
+                              }
+                              
+                              pairExists = pairAddress && pairAddress !== "0x0000000000000000000000000000000000000000";
+                              if (pairExists) {
+                                console.log(`Existing pair found at ${pairAddress}`);
+                              }
+                            } catch (e) {
+                              console.log("Error checking for existing pair:", e);
+                            }
+                            
+                            // Get user's token balance
+                            const tokenBalance = await tokenContract.balanceOf(await signer.getAddress());
+                            const decimals = await tokenContract.decimals();
+                            
+                            if (tokenBalance <= 0) {
+                              throw new Error(`You don't have any ${tokenData.symbol} tokens to add liquidity`);
+                            }
+                            
+                            // Calculate how many tokens to use (let's use 10% of their balance for now)
+                            let tokenAmount = tokenBalance / BigInt(10);
+                            
+                            // Set deadline 20 minutes from now
+                            const deadline = Math.floor(Date.now() / 1000) + 1200;
+                            
+                            // Approve the tokens to be used by the liquidity module
+                            console.log(`Approving ${ethers.formatUnits(tokenAmount, decimals)} ${tokenData.symbol} tokens`);
+                            const approveTx = await tokenContract.approve(liquidityModuleAddress, tokenAmount);
+                            
+                            toast({
+                              title: "Approving Tokens",
+                              description: "Please confirm the approval transaction in your wallet"
+                            });
+                            
+                            await approveTx.wait();
+                            
+                            // Determine how much ETH to add
+                            // For simplicity, we'll start with a small amount like 0.01 ETH
+                            let ethAmount = ethers.parseEther("0.01");
+                            
+                            try {
+                              // If possible, get the token amount needed for this ETH amount - use V7 functions if detected
+                              const suggestedTokenAmount = isV7Module 
+                                ? await liquidityModule.getAmountForLiquidityV7(ethAmount).catch(() => null)
+                                : await liquidityModule.getAmountForLiquidity(ethAmount).catch(() => null);
+                                
+                              if (suggestedTokenAmount && suggestedTokenAmount > 0) {
+                                // Use the suggested amount if it's less than what we calculated
+                                if (suggestedTokenAmount < tokenAmount) {
+                                  tokenAmount = suggestedTokenAmount;
+                                }
+                              }
+                            } catch (e) {
+                              console.log("Could not determine optimal token amount:", e);
+                            }
+                            
+                            toast({
+                              title: "Adding Liquidity",
+                              description: "Please confirm the transaction in your wallet"
+                            });
+                            
+                            // Add liquidity or create pool - use V7 functions if detected
+                            let tx;
+                            if (pairExists) {
+                              console.log(`Adding liquidity with ${ethers.formatEther(ethAmount)} ETH and ${ethers.formatUnits(tokenAmount, decimals)} tokens`);
+                              if (isV7Module) {
+                                tx = await liquidityModule.addLiquidityV7(tokenAmount, deadline, { value: ethAmount });
+                              } else {
+                                tx = await liquidityModule.addLiquidity(tokenAmount, deadline, { value: ethAmount });
+                              }
+                            } else {
+                              console.log(`Creating liquidity pool with ${ethers.formatEther(ethAmount)} ETH and ${ethers.formatUnits(tokenAmount, decimals)} tokens`);
+                              if (isV7Module) {
+                                tx = await liquidityModule.createLiquidityPoolV7(tokenAmount, deadline, { value: ethAmount });
+                              } else {
+                                tx = await liquidityModule.createLiquidityPool(tokenAmount, deadline, { value: ethAmount });
+                              }
+                            }
+                            
+                            console.log("Transaction hash:", tx.hash);
+                            
+                            // Wait for the transaction to be confirmed
+                            await tx.wait();
+                            
+                            toast({
+                              title: "Success",
+                              description: pairExists ? "Liquidity added successfully" : "Liquidity pool created successfully",
+                              variant: "default"
+                            });
+                            
+                          } catch (error) {
+                            console.error("Error adding liquidity:", error);
+                            toast({
+                              title: "Error",
+                              description: error instanceof Error ? error.message : "Failed to add liquidity",
+                              variant: "destructive"
+                            });
+                          }
+                        }}
+                      >
+                        Add Liquidity
+                      </Button>
                     </div>
                   </div>
                   

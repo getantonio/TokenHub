@@ -1,0 +1,9 @@
+{
+  "network": "Polygon Amoy",
+  "chainId": "80002",
+  "tokenAddress": "0x82681E77279152aA9dB13587F6FbcCc1AC3F41Bc",
+  "tokenName": "stanthony",
+  "tokenSymbol": "STANT",
+  "deploymentTx": "0x0686e0ecbb1d63df5db3e0799632c0ffd9f2094f331596b4d03bbc42c5a77d7a",
+  "deployDate": "2025-03-25T03:51:30.737Z"
+}

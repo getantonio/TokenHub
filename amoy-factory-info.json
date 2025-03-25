@@ -1,0 +1,8 @@
+{
+  "network": "Polygon Amoy",
+  "chainId": "80002",
+  "factoryAddress": "0xAC49A5f87D1b1c9df1885B90B911BdfdE40c2c36",
+  "deploymentFee": "0.0001",
+  "deploymentTx": "0x634f6ea923809398517d1e9a4abbb698629440e30f804ccb16240f297cbd51d3",
+  "deployDate": "2025-03-25T03:54:38.599Z"
+}

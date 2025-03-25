@@ -10,7 +10,7 @@
     "clean": "rm -rf .next out cache artifacts typechain-types",
     "test": "TS_NODE_PROJECT='./tsconfig.hardhat.json' npx hardhat test",
     "deploy:contracts": "TS_NODE_PROJECT='./tsconfig.hardhat.json' npx hardhat run scripts/deploy.ts --network sepolia",
-    "deploy": "next build && firebase deploy --only hosting"
+    "deploy": "rm -rf out && next build && firebase deploy --only hosting"
   },
   "dependencies": {
     "@headlessui/react": "^2.2.0",
