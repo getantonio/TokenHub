@@ -3,11 +3,20 @@ import Head from 'next/head';
 import { useAccount } from 'wagmi';
 
 import { cn } from '@lib/utils';
-import MainLayout from '@layouts/MainLayout';
-import ConnectWallet from '@components/web3/ConnectWallet';
-import NetworkStats from '@components/web3/NetworkStats';
+import { ConnectWallet } from '@components/wallet/ConnectWallet';
 import { Container } from '@components/ui/container';
 import AmoyTokenForm from '@components/features/token/AmoyTokenForm';
+
+// Basic layout component
+const MainLayout = ({ children }: { children: React.ReactNode }) => {
+  return (
+    <div className="min-h-screen bg-background">
+      <main className="flex-1">
+        {children}
+      </main>
+    </div>
+  );
+};
 
 export default function AmoyPage() {
   const { isConnected } = useAccount();
@@ -38,7 +47,6 @@ export default function AmoyPage() {
               </div>
               
               <div className="flex gap-2 items-center">
-                <NetworkStats />
                 <ConnectWallet />
               </div>
             </div>

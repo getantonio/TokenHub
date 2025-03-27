@@ -28,6 +28,7 @@ interface TokenFormV2Props {
   isConnected: boolean;
   onSuccess?: () => void;
   onError?: (error: Error) => void;
+  onConnect: () => Promise<void>;
 }
 
 interface FormData {
@@ -88,7 +89,7 @@ const defaultValues: FormData = {
   customOwner: ''
 };
 
-export function TokenFormV2({ isConnected, onSuccess, onError }: TokenFormV2Props) {
+export function TokenFormV2({ isConnected, onSuccess, onError, onConnect }: TokenFormV2Props) {
   const { chainId } = useNetwork();
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -141,9 +142,9 @@ export function TokenFormV2({ isConnected, onSuccess, onError }: TokenFormV2Prop
           console.log("Got factory address from FACTORY_ADDRESSES:", factoryAddress);
         }
         
-        // If not found, try getNetworkContractAddress
+        // If not found, try getNetworkContractAddress with correct parameter
         if (!factoryAddress) {
-          factoryAddress = getNetworkContractAddress(Number(chainId), 'factoryV2');
+          factoryAddress = getNetworkContractAddress(Number(chainId), 'FACTORY_ADDRESS_V2');
           console.log("Got factory address from getNetworkContractAddress:", factoryAddress);
         }
 
@@ -153,7 +154,8 @@ export function TokenFormV2({ isConnected, onSuccess, onError }: TokenFormV2Prop
           return;
         }
 
-        if (window.ethereum) {
+        // Only check contract code if user is already connected
+        if (window.ethereum && isConnected) {
           const provider = new BrowserProvider(window.ethereum);
           try {
             // Verify the factory contract exists
@@ -169,6 +171,9 @@ export function TokenFormV2({ isConnected, onSuccess, onError }: TokenFormV2Prop
             console.error("Error verifying factory contract:", error);
             setV2Available(false);
           }
+        } else {
+          // If not connected, assume it's available if we have an address
+          setV2Available(true);
         }
       } catch (error) {
         console.error("Error checking V2 availability:", error);
@@ -177,18 +182,19 @@ export function TokenFormV2({ isConnected, onSuccess, onError }: TokenFormV2Prop
     };
 
     checkV2Availability();
-  }, [chainId]);
+  }, [chainId, isConnected]);
 
   // Fetch deployment fee
   useEffect(() => {
     const fetchDeploymentFee = async () => {
-      if (!window.ethereum || !chainId) {
-        setDeploymentFee('Not available on this network');
+      // Only fetch fee if connected and on a supported chain
+      if (!window.ethereum || !chainId || !isConnected) {
+        setDeploymentFee('Connect wallet to see fee');
         return;
       }
 
       try {
-        const factoryAddress = getNetworkContractAddress(chainId, 'factoryV2');
+        const factoryAddress = getNetworkContractAddress(chainId, 'FACTORY_ADDRESS_V2');
         if (!factoryAddress) {
           setDeploymentFee('Not available on this network');
           return;
@@ -211,7 +217,7 @@ export function TokenFormV2({ isConnected, onSuccess, onError }: TokenFormV2Prop
     };
 
     fetchDeploymentFee();
-  }, [chainId]);
+  }, [chainId, isConnected]);
 
   useEffect(() => {
     if (window.ethereum && isConnected) {
@@ -228,8 +234,7 @@ export function TokenFormV2({ isConnected, onSuccess, onError }: TokenFormV2Prop
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isConnected) {
-      setError("Please connect your wallet first");
-      return;
+      return; // Let the onClick handler handle the connection
     }
     
     setLoading(true);
@@ -257,7 +262,7 @@ export function TokenFormV2({ isConnected, onSuccess, onError }: TokenFormV2Prop
       
       // If not found, try getNetworkContractAddress
       if (!factoryAddress) {
-        factoryAddress = getNetworkContractAddress(Number(chainId), 'factoryV2');
+        factoryAddress = getNetworkContractAddress(Number(chainId), 'FACTORY_ADDRESS_V2');
         console.log("Got factory address from getNetworkContractAddress:", factoryAddress);
       }
 
@@ -594,7 +599,8 @@ export function TokenFormV2({ isConnected, onSuccess, onError }: TokenFormV2Prop
               <Button 
                 type="submit" 
                 className="w-32 bg-blue-600 hover:bg-blue-700 text-white h-9 relative"
-                disabled={!isConnected || loading}
+                disabled={loading}
+                onClick={!isConnected ? onConnect : undefined}
               >
                 {loading ? (
                   <div className="flex items-center justify-center">

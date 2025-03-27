@@ -31,6 +31,7 @@ import { ethers } from 'ethers';
 import { TokenFactory_v3_ABI } from '@/contracts/abi/TokenFactory_v3';
 import { TokenTemplate_v3_ABI } from '@/contracts/abi/TokenTemplate_v3';
 import { Contract, BrowserProvider, Log, BaseContract, ContractTransactionResponse, LogDescription } from 'ethers';
+import TokenFormTabs from './TokenFormTabs';
 
 interface TokenFactoryV3Interface extends BaseContract {
   createToken(params: {
@@ -110,191 +111,233 @@ interface TokenParams {
 
 interface WalletPreset {
   name: string;
-  percentage: number;
+  percentage: string;
   vestingEnabled: boolean;
-  vestingDuration: number;
-  cliffDuration: number;
+  vestingDuration: string;
+  cliffDuration: string;
   vestingStartTime: number;
 }
 
 interface VestingPreset {
-  presalePercentage: number;
-  liquidityPercentage: number;
+  presalePercentage: string;
+  liquidityPercentage: string;
   wallets: WalletPreset[];
 }
 
 const VESTING_PRESETS: Record<string, VestingPreset> = {
   standard: {
-    presalePercentage: 5,
-    liquidityPercentage: 70, // 70% when presale enabled, 75% when disabled
+    presalePercentage: "5",
+    liquidityPercentage: "70", // 70% when presale enabled, 75% when disabled
     wallets: [
       { 
         name: 'Team', 
-        percentage: 15,
+        percentage: "15",
         vestingEnabled: true,
-        vestingDuration: 365,
-        cliffDuration: 90,
+        vestingDuration: "365",
+        cliffDuration: "90",
         vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
       },
       { 
         name: 'Marketing', 
-        percentage: 10,
+        percentage: "10",
         vestingEnabled: true,
-        vestingDuration: 180,
-        cliffDuration: 30,
+        vestingDuration: "180",
+        cliffDuration: "30",
         vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
       }
     ],
   },
   fair_launch: {
-    presalePercentage: 5,
-    liquidityPercentage: 85, // 85% when presale enabled, 90% when disabled
+    presalePercentage: "5",
+    liquidityPercentage: "85", // 85% when presale enabled, 90% when disabled
     wallets: [
       {
         name: 'Team',
-        percentage: 10,
+        percentage: "10",
         vestingEnabled: true,
-        vestingDuration: 365,
-        cliffDuration: 180,
+        vestingDuration: "365",
+        cliffDuration: "180",
         vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
       }
     ]
   },
   community: {
-    presalePercentage: 5,
-    liquidityPercentage: 75, // 75% when presale enabled, 80% when disabled
+    presalePercentage: "5",
+    liquidityPercentage: "75", // 75% when presale enabled, 80% when disabled
     wallets: [
       {
         name: 'Community Rewards',
-        percentage: 10,
+        percentage: "10",
         vestingEnabled: true,
-        vestingDuration: 180,
-        cliffDuration: 30,
+        vestingDuration: "180",
+        cliffDuration: "30",
         vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
       },
       {
         name: 'Team',
-        percentage: 10,
+        percentage: "10",
         vestingEnabled: true,
-        vestingDuration: 365,
-        cliffDuration: 90,
+        vestingDuration: "365",
+        cliffDuration: "90",
         vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
       }
     ]
   },
   growth: {
-    presalePercentage: 5,
-    liquidityPercentage: 60, // Reduced from 65% to 60%
+    presalePercentage: "5",
+    liquidityPercentage: "60", // Reduced from 65% to 60%
     wallets: [
       {
         name: 'Team',
-        percentage: 15,
+        percentage: "15",
         vestingEnabled: true,
-        vestingDuration: 365,
-        cliffDuration: 90,
+        vestingDuration: "365",
+        cliffDuration: "90",
         vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
       },
       {
         name: 'Marketing',
-        percentage: 10,
+        percentage: "10",
         vestingEnabled: true,
-        vestingDuration: 180,
-        cliffDuration: 30,
+        vestingDuration: "180",
+        cliffDuration: "30",
         vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
       },
       {
         name: 'Development',
-        percentage: 10,
+        percentage: "10",
         vestingEnabled: true,
-        vestingDuration: 365,
-        cliffDuration: 60,
+        vestingDuration: "365",
+        cliffDuration: "60",
         vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
       }
     ]
   },
   bootstrap: {
-    presalePercentage: 5,
-    liquidityPercentage: 55, // Reduced from 60% to 55%
+    presalePercentage: "5",
+    liquidityPercentage: "55", // Reduced from 60% to 55%
     wallets: [
       {
         name: 'Team',
-        percentage: 20,
+        percentage: "20",
         vestingEnabled: true,
-        vestingDuration: 365,
-        cliffDuration: 90,
+        vestingDuration: "365",
+        cliffDuration: "90",
         vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
       },
       {
         name: 'Marketing',
-        percentage: 10,
+        percentage: "10",
         vestingEnabled: true,
-        vestingDuration: 180,
-        cliffDuration: 30,
+        vestingDuration: "180",
+        cliffDuration: "30",
         vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
       },
       {
         name: 'Development',
-        percentage: 10,
+        percentage: "10",
         vestingEnabled: true,
-        vestingDuration: 365,
-        cliffDuration: 60,
+        vestingDuration: "365",
+        cliffDuration: "60",
         vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
       }
     ]
   },
   governance: {
-    presalePercentage: 5,
-    liquidityPercentage: 55, // Reduced from 60% to 55%
+    presalePercentage: "5",
+    liquidityPercentage: "55", // Reduced from 60% to 55%
     wallets: [
       {
         name: 'Governance',
-        percentage: 20,
+        percentage: "20",
         vestingEnabled: true,
-        vestingDuration: 365,
-        cliffDuration: 90,
+        vestingDuration: "365",
+        cliffDuration: "90",
         vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
       },
       {
         name: 'Team',
-        percentage: 10,
+        percentage: "10",
         vestingEnabled: true,
-        vestingDuration: 365,
-        cliffDuration: 180,
+        vestingDuration: "365",
+        cliffDuration: "180",
         vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
       },
       {
         name: 'Treasury',
-        percentage: 10,
+        percentage: "10",
         vestingEnabled: true,
-        vestingDuration: 365,
-        cliffDuration: 60,
+        vestingDuration: "365",
+        cliffDuration: "60",
         vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
       }
     ]
   }
 };
 
+// Types
+type Stage = 'Private' | 'Public' | 'Final';
+const stages: Stage[] = ['Private', 'Public', 'Final'];
+
+interface PresaleRound {
+  presaleRate: string;
+  softCap: string;
+  hardCap: string;
+  minContribution: string;
+  maxContribution: string;
+  startDate: string;
+  startTime: string;
+  endDate: string;
+  endTime: string;
+  whitelistEnabled: boolean;
+  isActive: boolean;
+}
+
+interface RecommendedConfig {
+  softCap: string;
+  hardCap: string;
+  rate: string;
+  desc: string;
+  minContribution: string;
+  maxContribution: string;
+  startDate: string;
+  startTime: string;
+  endDate: string;
+  endTime: string;
+}
+
+interface MultiPresaleConfig {
+  presales: PresaleRound[];
+}
+
+// Schema
+const presaleRoundSchema = z.object({
+  presaleRate: z.string(),
+  softCap: z.string(),
+  hardCap: z.string(),
+  minContribution: z.string(),
+  maxContribution: z.string(),
+  startDate: z.string(),
+  startTime: z.string(),
+  endDate: z.string(),
+  endTime: z.string(),
+  whitelistEnabled: z.boolean(),
+  isActive: z.boolean()
+});
+
 const formSchema = z.object({
-  name: z.string()
-    .min(1, "Name is required")
-    .max(50, "Name must be less than 50 characters"),
-  symbol: z.string()
-    .min(1, "Symbol is required")
-    .max(10, "Symbol must be less than 10 characters")
-    .refine(value => /^[A-Z0-9]+$/.test(value), "Symbol must be uppercase letters and numbers only"),
-  initialSupply: z.string()
+  name: z.string().min(1).max(32),
+  symbol: z.string().min(1).max(10),
+  initialSupply: z.string().min(1)
     .refine((val) => !isNaN(Number(val)), "Must be a valid number")
     .refine((val) => Number(val) > 0, "Initial supply must be greater than 0"),
-  maxSupply: z.string()
+  maxSupply: z.string().min(1)
     .refine((val) => !isNaN(Number(val)), "Must be a valid number")
     .refine((val) => Number(val) > 0, "Max supply must be greater than 0"),
-  owner: z.string()
-    .min(1, "Owner address is required")
-    .refine(value => /^0x[a-fA-F0-9]{40}$/.test(value), "Invalid address format"),
-  enableBlacklist: z.boolean(),
-  enableTimeLock: z.boolean(),
-  presaleEnabled: z.boolean(),
-  maxActivePresales: z.number(),
+  enableBlacklist: z.boolean().default(false),
+  enableTimeLock: z.boolean().default(false),
+  presaleEnabled: z.boolean().default(false),
+  maxActivePresales: z.number().min(0).default(1),
   presaleRate: z.string().optional(),
   softCap: z.string().optional(),
   hardCap: z.string().optional(),
@@ -302,38 +345,31 @@ const formSchema = z.object({
   maxContribution: z.string().optional(),
   startTime: z.number().optional(),
   endTime: z.number().optional(),
-  presalePercentage: z.number()
-    .min(0, "Presale percentage must be at least 0%")
-    .max(95, "Presale percentage cannot exceed 95%"),
-  liquidityPercentage: z.number()
-    .min(0, "Liquidity percentage must be at least 0%")
-    .max(100, "Liquidity percentage cannot exceed 100%"),
+  presalePercentage: z.string()
+    .refine((val) => !isNaN(Number(val)), "Must be a valid number")
+    .refine((val) => Number(val) >= 0, "Presale percentage must be at least 0%")
+    .refine((val) => Number(val) <= 95, "Presale percentage cannot exceed 95%"),
+  liquidityPercentage: z.string()
+    .refine((val) => !isNaN(Number(val)), "Must be a valid number")
+    .refine((val) => Number(val) >= 0, "Liquidity percentage must be at least 0%")
+    .refine((val) => Number(val) <= 100, "Liquidity percentage cannot exceed 100%"),
   liquidityLockDuration: z.number(),
   wallets: z.array(z.object({
     name: z.string(),
     address: z.string()
       .min(1, "Wallet address is required")
       .refine(value => /^0x[a-fA-F0-9]{40}$/.test(value), "Invalid address format"),
-    percentage: z.number()
-      .min(1, "Percentage must be at least 1%")
-      .max(60, "Percentage cannot exceed 60%"),
+    percentage: z.string()
+      .refine((val) => !isNaN(Number(val)), "Must be a valid number")
+      .refine((val) => Number(val) >= 1, "Percentage must be at least 1%")
+      .refine((val) => Number(val) <= 60, "Percentage cannot exceed 60%"),
     vestingEnabled: z.boolean(),
-    vestingDuration: z.number(),
-    cliffDuration: z.number(),
+    vestingDuration: z.string(),
+    cliffDuration: z.string(),
     vestingStartTime: z.number()
   })),
   multiPresaleConfig: z.object({
-    presales: z.array(z.object({
-      softCap: z.string(),
-      hardCap: z.string(),
-      minContribution: z.string(),
-      maxContribution: z.string(),
-      presaleRate: z.string(),
-      startTime: z.number(),
-      endTime: z.number(),
-      whitelistEnabled: z.boolean(),
-      isActive: z.boolean()
-    }))
+    presales: z.array(presaleRoundSchema)
   }).optional()
 }).refine((data) => {
   // Validate presale configuration
@@ -342,12 +378,12 @@ const formSchema = z.object({
       return false;
     }
     // Validate presale percentage when enabled
-    if (data.presalePercentage < 1 || data.presalePercentage > 95) {
+    if (Number(data.presalePercentage) < 1 || Number(data.presalePercentage) > 95) {
       return false;
     }
   } else {
     // Validate presale percentage is 0 when disabled
-    if (data.presalePercentage !== 0) {
+    if (Number(data.presalePercentage) !== 0) {
       return false;
     }
   }
@@ -377,7 +413,6 @@ const defaultValues: FormData = {
   symbol: "ANT",
   initialSupply: "1000000",
   maxSupply: "2000000",
-  owner: "",
   enableBlacklist: false,
   enableTimeLock: false,
   presaleEnabled: false,
@@ -389,36 +424,48 @@ const defaultValues: FormData = {
   maxContribution: "2", // Default: 2 network currency
   startTime: defaultTimes.startTime,
   endTime: defaultTimes.endTime,
-  presalePercentage: 5,
-  liquidityPercentage: 65,
+  presalePercentage: "0",
+  liquidityPercentage: "65",
   liquidityLockDuration: 365,
   wallets: [{
     name: "Team",
     address: "",
-    percentage: 10,
+    percentage: "10",
     vestingEnabled: true,
-    vestingDuration: 365,
-    cliffDuration: 90,
+    vestingDuration: "365",
+    cliffDuration: "90",
     vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
   }, {
     name: "Marketing",
     address: "",
-    percentage: 10,
+    percentage: "10",
     vestingEnabled: true,
-    vestingDuration: 180,
-    cliffDuration: 30,
+    vestingDuration: "180",
+    cliffDuration: "30",
     vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
   }, {
     name: "Development",
     address: "",
-    percentage: 10,
+    percentage: "10",
     vestingEnabled: true,
-    vestingDuration: 365,
-    cliffDuration: 60,
+    vestingDuration: "365",
+    cliffDuration: "60",
     vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
   }],
   multiPresaleConfig: {
-    presales: []
+    presales: stages.map((stage: Stage, index: number) => ({
+      presaleRate: '',
+      softCap: '',
+      hardCap: '',
+      minContribution: '',
+      maxContribution: '',
+      startDate: new Date().toISOString().split('T')[0],
+      startTime: '00:00',
+      endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      endTime: '23:59',
+      whitelistEnabled: index === 0,
+      isActive: true
+    }))
   }
 };
 
@@ -442,7 +489,6 @@ const TokenForm_v3: React.FC<TokenFormV3Props> = ({
   const [showSimulationDialog, setShowSimulationDialog] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
-  const tcapRef = useRef<{ loadTokens: () => void } | null>(null);
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -451,48 +497,38 @@ const TokenForm_v3: React.FC<TokenFormV3Props> = ({
       symbol: "ANT",
       initialSupply: "1000000",
       maxSupply: "2000000",
-      owner: account || "",
       enableBlacklist: false,
       enableTimeLock: false,
       presaleEnabled: false,
-      maxActivePresales: 0,
-      presaleRate: "0",
-      softCap: "0",
-      hardCap: "0",
-      minContribution: "0",
-      maxContribution: "0",
-      startTime: 0,
-      endTime: 0,
-      presalePercentage: 0,
-      liquidityPercentage: 60,
+      maxActivePresales: 1,
+      presaleRate: "1000",
+      softCap: "5",
+      hardCap: "10",
+      minContribution: "0.1",
+      maxContribution: "2",
+      startTime: defaultTimes.startTime,
+      endTime: defaultTimes.endTime,
+      presalePercentage: "0",
+      liquidityPercentage: "75",
       liquidityLockDuration: 365,
       wallets: [
         {
-          name: "Wallet 1",
+          name: "Team",
           address: account || "",
-          percentage: 20,
+          percentage: "15",
           vestingEnabled: false,
-          vestingDuration: 365,
-          cliffDuration: 90,
-          vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+          vestingDuration: "365",
+          cliffDuration: "90",
+          vestingStartTime: Number(Math.floor(Date.now() / 1000) + (24 * 3600))
         },
         {
-          name: "Wallet 2",
+          name: "Marketing",
           address: account || "",
-          percentage: 10,
+          percentage: "10",
           vestingEnabled: false,
-          vestingDuration: 365,
-          cliffDuration: 90,
-          vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
-        },
-        {
-          name: "Wallet 3",
-          address: account || "",
-          percentage: 10,
-          vestingEnabled: false,
-          vestingDuration: 365,
-          cliffDuration: 90,
-          vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
+          vestingDuration: "180",
+          cliffDuration: "30",
+          vestingStartTime: Number(Math.floor(Date.now() / 1000) + (24 * 3600))
         }
       ]
     },
@@ -527,8 +563,6 @@ const TokenForm_v3: React.FC<TokenFormV3Props> = ({
 
   useEffect(() => {
     if (account) {
-      console.log('Setting owner address:', account);
-      form.setValue('owner', account);
       const currentWallets = form.getValues('wallets');
       form.setValue('wallets', currentWallets.map(wallet => ({
         ...wallet,
@@ -542,43 +576,172 @@ const TokenForm_v3: React.FC<TokenFormV3Props> = ({
     const presaleEnabled = form.watch('presaleEnabled');
     
     if (presaleEnabled) {
-      // When presale is enabled, set liquidityPercentage to 0 as required by the contract
-      form.setValue('liquidityPercentage', 0);
+      // When presale is enabled, set presalePercentage to 5 as required by the contract
+      form.setValue('presalePercentage', "5");
       
-      // If presalePercentage is 0, set a default value
-      const presalePercentage = form.watch('presalePercentage');
-      if (presalePercentage === 0) {
-        form.setValue('presalePercentage', 70);
+      // Default to 1 sequential presale round
+      const maxActivePresales = form.watch('maxActivePresales');
+      if (!maxActivePresales || maxActivePresales < 1) {
+        form.setValue('maxActivePresales', 1);
       }
       
-      // Set other presale defaults if not already set
-      const softCap = form.watch('softCap');
-      const hardCap = form.watch('hardCap');
-      const presaleRate = form.watch('presaleRate');
+      // Set base presale defaults with valid values
+      form.setValue('softCap', '5');
+      form.setValue('hardCap', '10');
+      form.setValue('minContribution', '0.1');
+      form.setValue('maxContribution', '2');
+      form.setValue('presaleRate', '1000');
       
-      if (!softCap) form.setValue('softCap', '1');
-      if (!hardCap) form.setValue('hardCap', '2');
-      if (!presaleRate) form.setValue('presaleRate', '1000');
+      // Set start and end times to valid values (1 hour from now and 24 hours from now)
+      const now = new Date();
+      const startTime = Math.floor(new Date(now.getTime() + 3600000).getTime() / 1000); // 1 hour from now
+      const endTime = Math.floor(new Date(now.getTime() + 86400000).getTime() / 1000);  // 24 hours from now
+      
+      form.setValue('startTime', startTime);
+      form.setValue('endTime', endTime);
+      
+      // Initialize multi-presale config if needed
+      const maxRounds = form.getValues('maxActivePresales');
+      if (maxRounds > 1) {
+        // Create default presale rounds
+        const stages = ["Private", "Seed", "Public"];
+        const baseRate = Number(form.getValues('presaleRate') || 1000);
+        
+        const defaultPresales = Array.from({ length: Math.min(maxRounds, 3) }).map((_, index) => {
+          const stage = stages[Math.min(index, 2)];
+          
+          // Default values based on stage
+          const presaleConfig = {
+            softCap: "5",
+            hardCap: "10",
+            minContribution: "0.1",
+            maxContribution: "2",
+            presaleRate: baseRate.toString(),
+            startTime: startTime + (index * 86400 * 3), // Each round 3 days apart
+            endTime: endTime + (index * 86400 * 3),
+            whitelistEnabled: index === 0, // Whitelist enabled by default for private round
+            isActive: index === 0 // Only first round active initially
+          };
+          
+          // Adjust values based on stage
+          if (stage === "Private") {
+            presaleConfig.presaleRate = (baseRate * 1.3).toFixed(0); // 30% discount
+            presaleConfig.hardCap = "10";
+          } else if (stage === "Seed") {
+            presaleConfig.presaleRate = (baseRate * 1.15).toFixed(0); // 15% discount
+            presaleConfig.softCap = "10";
+            presaleConfig.hardCap = "25";
+          } else if (stage === "Public") {
+            presaleConfig.presaleRate = baseRate.toString();
+            presaleConfig.softCap = "20";
+            presaleConfig.hardCap = "50";
+            presaleConfig.whitelistEnabled = false;
+          }
+          
+          return presaleConfig;
+        });
+        
+        form.setValue('multiPresaleConfig', { presales: defaultPresales });
+      }
+      
+      // Adjust wallet allocations to not exceed 60% total
+      const wallets = form.getValues('wallets');
+      let totalWalletPercentage = wallets.reduce((sum, w) => sum + (Number(w.percentage) || 0), 0);
+      
+      if (totalWalletPercentage > 60) {
+        // Reduce wallet allocations proportionally to fit within 60%
+        const reductionFactor = 60 / totalWalletPercentage;
+        const updatedWallets = wallets.map(wallet => ({
+          ...wallet,
+          percentage: Math.floor(Number(wallet.percentage) * reductionFactor)
+        }));
+        
+        form.setValue('wallets', updatedWallets);
+      }
+    } else {
+      // When presale is disabled, reset presale values
+      form.setValue('presalePercentage', "0");
+      form.setValue('maxActivePresales', 0);
+      form.setValue('liquidityPercentage', "75"); // Set a reasonable default for liquidity
     }
   }, [form.watch('presaleEnabled')]);
+
+  // Add new effect to watch for changes to maxActivePresales
+  useEffect(() => {
+    const presaleEnabled = form.watch('presaleEnabled');
+    if (!presaleEnabled) return;
+    
+    const maxRounds = form.watch('maxActivePresales');
+    if (maxRounds > 1) {
+      // Update multi-presale config when maxActivePresales changes
+      const currentConfig = form.getValues('multiPresaleConfig')?.presales || [];
+      const baseRate = Number(form.getValues('presaleRate') || 1000);
+      const now = new Date();
+      const startTime = Math.floor(new Date(now.getTime() + 3600000).getTime() / 1000);
+      const endTime = Math.floor(new Date(now.getTime() + 86400000).getTime() / 1000);
+      
+      // Create or update presale rounds
+      const stages = ["Private", "Seed", "Public"];
+      const updatedPresales = Array.from({ length: Math.min(maxRounds, 3) }).map((_, index) => {
+        const stage = stages[Math.min(index, 2)];
+        
+        // Use existing values if available
+        if (currentConfig[index]) {
+          return currentConfig[index];
+        }
+        
+        // Create new defaults
+        const presaleConfig = {
+          softCap: "5",
+          hardCap: "10",
+          minContribution: "0.1",
+          maxContribution: "2",
+          presaleRate: baseRate.toString(),
+          startTime: startTime + (index * 86400 * 3), // Each round 3 days apart
+          endTime: endTime + (index * 86400 * 3),
+          whitelistEnabled: index === 0,
+          isActive: index === 0
+        };
+        
+        // Adjust values based on stage
+        if (stage === "Private") {
+          presaleConfig.presaleRate = (baseRate * 1.3).toFixed(0);
+          presaleConfig.hardCap = "10";
+        } else if (stage === "Seed") {
+          presaleConfig.presaleRate = (baseRate * 1.15).toFixed(0);
+          presaleConfig.softCap = "10";
+          presaleConfig.hardCap = "25";
+        } else if (stage === "Public") {
+          presaleConfig.presaleRate = baseRate.toString();
+          presaleConfig.softCap = "20";
+          presaleConfig.hardCap = "50";
+          presaleConfig.whitelistEnabled = false;
+        }
+        
+        return presaleConfig;
+      });
+      
+      form.setValue('multiPresaleConfig', { presales: updatedPresales });
+    }
+  }, [form.watch('maxActivePresales'), form]);
 
   // Add a new validation effect for wallet allocations
   useEffect(() => {
     const validateWalletAllocations = () => {
-      const liquidityPercentage = form.getValues('liquidityPercentage');
+      const liquidityPercentage = Number(form.getValues('liquidityPercentage'));
       const presaleEnabled = form.getValues('presaleEnabled');
-      const presalePercentage = presaleEnabled ? form.getValues('presalePercentage') : 0;
+      const presalePercentage = presaleEnabled ? Number(form.getValues('presalePercentage')) : 0;
       const wallets = form.getValues('wallets');
       
       // Check if wallet allocations needed but missing
       if (liquidityPercentage < 100 && (!wallets || wallets.length === 0)) {
         const defaultWallet = {
           name: "Owner",
-          address: form.getValues('owner'),
-          percentage: 100 - liquidityPercentage - presalePercentage,
+          address: form.getValues('owner') || account || "",
+          percentage: (100 - liquidityPercentage - presalePercentage).toString(),
           vestingEnabled: false,
-          vestingDuration: 365,
-          cliffDuration: 0,
+          vestingDuration: "365",
+          cliffDuration: "0",
           vestingStartTime: Math.floor(Date.now() / 1000) + (24 * 3600)
         };
         
@@ -588,7 +751,7 @@ const TokenForm_v3: React.FC<TokenFormV3Props> = ({
     };
     
     validateWalletAllocations();
-  }, [form.watch('liquidityPercentage'), form.watch('presaleEnabled'), form.watch('presalePercentage')]);
+  }, [form.watch('liquidityPercentage'), form.watch('presaleEnabled'), form.watch('presalePercentage'), form, account]);
 
   // Add special configurations for Polygon Amoy
   useEffect(() => {
@@ -610,6 +773,35 @@ const TokenForm_v3: React.FC<TokenFormV3Props> = ({
       }
     }
   }, [chainId, form]);
+
+  // Special handling for polygon Amoy testnet - initialize with wallets
+  useEffect(() => {
+    if (chainId === 80002) {
+      console.log('Initializing wallets for Polygon Amoy');
+      const now = Math.floor(Date.now() / 1000);
+      const defaultWallets = [
+        {
+          name: 'Team',
+          address: account || '',
+          percentage: "15",
+          vestingEnabled: false,
+          vestingDuration: "365",
+          cliffDuration: "90",
+          vestingStartTime: now + (24 * 3600)
+        },
+        {
+          name: 'Marketing',
+          address: account || '',
+          percentage: "10",
+          vestingEnabled: false,
+          vestingDuration: "180",
+          cliffDuration: "30",
+          vestingStartTime: now + (24 * 3600)
+        }
+      ];
+      form.setValue('wallets', defaultWallets);
+    }
+  }, [chainId, account, form]);
 
   const onSubmit = async (data: FormData) => {
     try {
@@ -661,9 +853,9 @@ const TokenForm_v3: React.FC<TokenFormV3Props> = ({
       const tokenParams = {
         name: data.name,
         symbol: data.symbol,
-        initialSupply: parseEther(data.initialSupply.toString()),
-        maxSupply: parseEther(data.maxSupply.toString()),
-        owner: data.owner as `0x${string}`,
+        initialSupply: parseEther(data.initialSupply || "0"),
+        maxSupply: parseEther(data.maxSupply || "0"),
+        owner: account as `0x${string}`,
         enableBlacklist: data.enableBlacklist,
         enableTimeLock: data.enableTimeLock,
         presaleEnabled: data.presaleEnabled,
@@ -682,8 +874,8 @@ const TokenForm_v3: React.FC<TokenFormV3Props> = ({
           wallet: wallet.address as `0x${string}`,
           percentage: Number(wallet.percentage),
           vestingEnabled: wallet.vestingEnabled,
-          vestingDuration: wallet.vestingEnabled ? BigInt(wallet.vestingDuration * 24 * 60 * 60) : BigInt(0), // Convert days to seconds
-          cliffDuration: wallet.vestingEnabled ? BigInt(wallet.cliffDuration * 24 * 60 * 60) : BigInt(0), // Convert days to seconds
+          vestingDuration: wallet.vestingEnabled ? BigInt(Number(wallet.vestingDuration) * 24 * 60 * 60) : BigInt(0), // Convert days to seconds
+          cliffDuration: wallet.vestingEnabled ? BigInt(Number(wallet.cliffDuration) * 24 * 60 * 60) : BigInt(0), // Convert days to seconds
           vestingStartTime: wallet.vestingEnabled ? BigInt(wallet.vestingStartTime) : BigInt(0)
         }))
       };
@@ -729,8 +921,9 @@ const TokenForm_v3: React.FC<TokenFormV3Props> = ({
       }
 
       // Validate total percentages add up to 100%
-      const totalPercentage = tokenParams.liquidityPercentage + tokenParams.presalePercentage +
-        tokenParams.walletAllocations.reduce((sum, w) => sum + w.percentage, 0);
+      const totalPercentage = Number(data.liquidityPercentage) + 
+                            (data.presaleEnabled ? Number(data.presalePercentage) : 0) +
+                            data.wallets.reduce((sum, w) => sum + Number(w.percentage), 0);
       
       if (totalPercentage !== 100) {
         toast({
@@ -759,9 +952,9 @@ const TokenForm_v3: React.FC<TokenFormV3Props> = ({
         const tokenParamsForContract = {
           name: data.name,
           symbol: data.symbol,
-          initialSupply: parseEther(data.initialSupply.toString()),
-          maxSupply: parseEther(data.maxSupply.toString()),
-          owner: data.owner as `0x${string}`,
+          initialSupply: parseEther(data.initialSupply || "0"),
+          maxSupply: parseEther(data.maxSupply || "0"),
+          owner: account as `0x${string}`,
           enableBlacklist: data.enableBlacklist,
           enableTimeLock: data.enableTimeLock,
           presaleRate: data.presaleEnabled && data.presaleRate ? parseEther(data.presaleRate.toString()) : BigInt(0),
@@ -771,15 +964,15 @@ const TokenForm_v3: React.FC<TokenFormV3Props> = ({
           maxContribution: data.presaleEnabled && data.maxContribution ? parseEther(data.maxContribution.toString()) : BigInt(0),
           startTime: data.presaleEnabled && data.startTime ? BigInt(data.startTime) : BigInt(0),
           endTime: data.presaleEnabled && data.endTime ? BigInt(data.endTime) : BigInt(0),
-          presalePercentage: data.presaleEnabled ? data.presalePercentage : 0,
-          liquidityPercentage: data.presaleEnabled ? 0 : data.liquidityPercentage, // Must be 0 when presale is enabled
-          liquidityLockDuration: BigInt(data.liquidityLockDuration),
+          presalePercentage: data.presaleEnabled ? Number(data.presalePercentage) : 0,
+          liquidityPercentage: Number(data.liquidityPercentage), // Always send the actual liquidityPercentage
+          liquidityLockDuration: BigInt(Number(data.liquidityLockDuration)),
           walletAllocations: data.wallets.map(wallet => ({
             wallet: wallet.address as `0x${string}`,
-            percentage: wallet.percentage,
+            percentage: Number(wallet.percentage),
             vestingEnabled: wallet.vestingEnabled,
-            vestingDuration: wallet.vestingEnabled ? BigInt(wallet.vestingDuration) : BigInt(0),
-            cliffDuration: wallet.vestingEnabled ? BigInt(wallet.cliffDuration) : BigInt(0),
+            vestingDuration: wallet.vestingEnabled ? BigInt(Number(wallet.vestingDuration)) : BigInt(0),
+            cliffDuration: wallet.vestingEnabled ? BigInt(Number(wallet.cliffDuration)) : BigInt(0),
             vestingStartTime: wallet.vestingEnabled ? BigInt(wallet.vestingStartTime) : BigInt(0)
           })),
           maxActivePresales: data.presaleEnabled ? data.maxActivePresales : 0,
@@ -830,6 +1023,67 @@ const TokenForm_v3: React.FC<TokenFormV3Props> = ({
               if (parsedLog) {
                 const tokenAddress = parsedLog.args.tokenAddress;
                 console.log('New token deployed at:', tokenAddress);
+                
+                // Automatically add liquidity if liquidityPercentage is set
+                if (Number(data.liquidityPercentage) > 0 && !data.presaleEnabled) {
+                  try {
+                    console.log('Automatically adding liquidity for token:', tokenAddress);
+                    
+                    // Create token contract instance
+                    const tokenContract = new Contract(
+                      tokenAddress,
+                      [
+                        'function addLiquidityFromContract(uint256 tokenAmount) external payable',
+                        'function getRemainingLiquidityAllocation() external view returns (uint256)',
+                        'function balanceOf(address) view returns (uint256)'
+                      ],
+                      signer
+                    );
+                    
+                    // Get remaining liquidity allocation
+                    let tokenAmount;
+                    try {
+                      tokenAmount = await tokenContract.getRemainingLiquidityAllocation();
+                      console.log('Remaining liquidity allocation:', formatEther(tokenAmount));
+                    } catch (e) {
+                      console.log('getRemainingLiquidityAllocation not available, using contract balance');
+                      tokenAmount = await tokenContract.balanceOf(tokenAddress);
+                      console.log('Contract balance:', formatEther(tokenAmount));
+                    }
+                    
+                    if (tokenAmount && BigInt(tokenAmount) > BigInt(0)) {
+                      // Calculate ETH amount based on desired ratio (0.5% of token value by default)
+                      // This is a simplified calculation and might need adjustment
+                      const ethAmount = parseEther('0.01'); // Start with 0.01 ETH
+                      
+                      console.log('Adding liquidity with ETH:', formatEther(ethAmount));
+                      
+                      // Add liquidity with contract tokens
+                      const addLiquidityTx = await tokenContract.addLiquidityFromContract(tokenAmount, {
+                        value: ethAmount,
+                        gasLimit: BigInt(3000000)
+                      });
+                      
+                      console.log('Add liquidity transaction sent:', addLiquidityTx.hash);
+                      
+                      // Wait for the transaction to be confirmed
+                      await addLiquidityTx.wait();
+                      console.log('Liquidity added successfully');
+                      
+                      toast({
+                        title: 'Liquidity Added',
+                        description: 'Liquidity has been automatically added for your token',
+                      });
+                    }
+                  } catch (error) {
+                    console.error('Error adding liquidity:', error);
+                    toast({
+                      title: 'Liquidity Addition Failed',
+                      description: 'Automatic liquidity addition failed. You can add liquidity manually later.',
+                      variant: 'destructive',
+                    });
+                  }
+                }
                 
                 if (onSuccess) {
                   onSuccess(tokenAddress);
@@ -975,10 +1229,10 @@ const TokenForm_v3: React.FC<TokenFormV3Props> = ({
     const newWallet = {
       name: '',
       address: account,
-      percentage: 0,
+      percentage: "0",
       vestingEnabled: false,
-      vestingDuration: 365,
-      cliffDuration: 90,
+      vestingDuration: "365",
+      cliffDuration: "90",
       vestingStartTime: now + (24 * 3600)
     };
     
@@ -990,33 +1244,67 @@ const TokenForm_v3: React.FC<TokenFormV3Props> = ({
     form.setValue('wallets', wallets.filter((_, i) => i !== index));
   };
 
-  const applyPreset = (preset: keyof typeof VESTING_PRESETS) => {
-    const presetConfig = VESTING_PRESETS[preset];
-    const presaleEnabled = form.getValues("presaleEnabled");
-    const now = Math.floor(Date.now() / 1000);
+  const applyPreset = (presetKey: string) => {
+    // Get the preset configuration
+    const presetConfig = VESTING_PRESETS[presetKey];
+    if (!presetConfig) return;
+    
+    const presaleEnabled = form.getValues('presaleEnabled');
     
     // Set presale percentage if presale is enabled
     if (presaleEnabled) {
-      form.setValue('presalePercentage', presetConfig.presalePercentage);
+      // Convert number to string if needed
+      const presalePercentageAsString = typeof presetConfig.presalePercentage === 'number' 
+        ? presetConfig.presalePercentage.toString() 
+        : presetConfig.presalePercentage;
+      form.setValue('presalePercentage', presalePercentageAsString);
     }
     
-    // Set liquidity percentage based on presale state
-    const liquidityPercentage = presaleEnabled ? 
-      presetConfig.liquidityPercentage : // Use preset liquidity if presale enabled
-      presetConfig.liquidityPercentage + presetConfig.presalePercentage; // Add presale's percentage to liquidity if disabled
+    // Calculate liquidity percentage based on presale status
+    // Convert to number for calculation
+    let liquidityPercentage = typeof presetConfig.liquidityPercentage === 'number' 
+      ? presetConfig.liquidityPercentage 
+      : Number(presetConfig.liquidityPercentage);
     
-    form.setValue('liquidityPercentage', liquidityPercentage);
+    // If presale is disabled, add the presale percentage to liquidity
+    if (!presaleEnabled) {
+      const presalePercentageValue = typeof presetConfig.presalePercentage === 'number' 
+        ? presetConfig.presalePercentage 
+        : Number(presetConfig.presalePercentage);
+      liquidityPercentage += presalePercentageValue;
+    }
+    
+    // Set as string
+    form.setValue('liquidityPercentage', liquidityPercentage.toString());
     
     // Set wallets with correct percentages and vesting schedules
-    form.setValue('wallets', presetConfig.wallets.map(wallet => ({
-      name: wallet.name,
-      address: account || '0x0000000000000000000000000000000000000000',
-      percentage: wallet.percentage,
-      vestingEnabled: wallet.vestingEnabled,
-      vestingDuration: wallet.vestingDuration,
-      cliffDuration: wallet.cliffDuration,
-      vestingStartTime: now + (24 * 3600) // Start 24 hours from now
-    })));
+    const walletsWithStringValues = presetConfig.wallets.map(wallet => {
+      // Ensure percentage is a string
+      const percentageAsString = typeof wallet.percentage === 'number' 
+        ? wallet.percentage.toString() 
+        : wallet.percentage;
+      
+      // Ensure vesting duration and cliff duration are strings
+      const vestingDurationAsString = typeof wallet.vestingDuration === 'number' 
+        ? wallet.vestingDuration.toString() 
+        : wallet.vestingDuration;
+      
+      const cliffDurationAsString = typeof wallet.cliffDuration === 'number' 
+        ? wallet.cliffDuration.toString() 
+        : wallet.cliffDuration;
+      
+      return {
+        name: wallet.name,
+        address: account || '0x0000000000000000000000000000000000000000',
+        percentage: percentageAsString,
+        vestingEnabled: wallet.vestingEnabled,
+        vestingDuration: vestingDurationAsString,
+        cliffDuration: cliffDurationAsString,
+        vestingStartTime: wallet.vestingStartTime
+      };
+    });
+    
+    form.setValue('wallets', walletsWithStringValues);
   };
 
   const validateTokenName = (name: string) => {
@@ -1376,865 +1664,73 @@ const TokenForm_v3: React.FC<TokenFormV3Props> = ({
     setIsSimulating(false);
   };
 
-  return (
-    <div className="form-container form-compact">
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-2">
-          <div className="form-grid">
-            <div className="form-group">
-              <label htmlFor="name" className="form-label">Token Name</label>
-              <Input
-                {...form.register("name")}
-                placeholder="My Token"
-                className="form-input"
-              />
-              {form.formState.errors.name && (
-                <p className="form-error">{form.formState.errors.name.message}</p>
-              )}
-            </div>
+  const defaultPresaleRound: PresaleRound = {
+    presaleRate: '',
+    softCap: '',
+    hardCap: '',
+    minContribution: '',
+    maxContribution: '',
+    startDate: new Date().toISOString().split('T')[0],
+    startTime: '00:00',
+    endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    endTime: '23:59',
+    whitelistEnabled: false,
+    isActive: true
+  };
 
-            <div className="form-group">
-              <label htmlFor="symbol" className="form-label">Token Symbol</label>
-              <Input
-                {...form.register("symbol")}
-                placeholder="MTK"
-                className="form-input"
-              />
-              {form.formState.errors.symbol && (
-                <p className="form-error">{form.formState.errors.symbol.message}</p>
-              )}
-            </div>
+  const defaultRecommendedConfig: RecommendedConfig = {
+    softCap: '10',
+    hardCap: '50',
+    rate: '1000',
+    desc: '',
+    minContribution: '0.1',
+    maxContribution: '5',
+    startDate: new Date().toISOString().split('T')[0],
+    startTime: '00:00',
+    endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    endTime: '23:59'
+  };
 
-            <div className="form-group">
-              <label htmlFor="initialSupply" className="form-label">Initial Supply</label>
-              <Input
-                {...form.register("initialSupply")}
-                placeholder="1000000"
-                className="form-input"
-              />
-              {form.formState.errors.initialSupply && (
-                <p className="form-error">{form.formState.errors.initialSupply.message}</p>
-              )}
-            </div>
+  const recommendedConfigs: RecommendedConfig[] = stages.map((stage, index) => ({
+    ...defaultRecommendedConfig,
+    desc: `Recommended settings for ${stage} presale round`
+  }));
 
-            <div className="form-group">
-              <label htmlFor="maxSupply" className="form-label">Max Supply</label>
-              <Input
-                {...form.register("maxSupply")}
-                placeholder="2000000"
-                className="form-input"
-              />
-              {form.formState.errors.maxSupply && (
-                <p className="form-error">{form.formState.errors.maxSupply.message}</p>
-              )}
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="liquidityLockPeriod" className="form-label">
-                Liquidity Lock Period (days)
-                <InfoIcon content="Duration the initial liquidity will be locked in the DEX" />
-              </label>
-              <Input
-                type="number"
-                min="30"
-                {...form.register("liquidityLockDuration", {
-                  valueAsNumber: true,
-                  min: {
-                    value: 30,
-                    message: "Minimum lock period is 30 days"
-                  }
-                })}
-                placeholder="180"
-                className="form-input"
-              />
-              {form.formState.errors.liquidityLockDuration && (
-                <p className="form-error">{form.formState.errors.liquidityLockDuration.message}</p>
-              )}
-              <p className="text-xs text-gray-400 mt-1">
-                Recommended: 180+ days for better trust and token stability
-              </p>
-            </div>
-          </div>
-
-          <div className="form-section">
-            <h3 className="text-lg font-medium text-white mb-2">Token Features</h3>
-            <div className="grid grid-cols-2 gap-2">
-              <FormField
-                control={form.control}
-                name="presaleEnabled"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
-                    <div className="space-y-0.5">
-                      <FormLabel>Enable Presale</FormLabel>
-                      <FormDescription>
-                        Allow users to participate in a presale before token launch
-                      </FormDescription>
-                    </div>
-                    <FormControl>
-                      <Switch
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="enableBlacklist"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-2 shadow-sm">
-                    <div className="space-y-0.5">
-                      <FormLabel className="text-white">Enable Blacklist</FormLabel>
-                      <FormDescription className="text-gray-400 text-xs">
-                        Allow blocking malicious addresses
-                      </FormDescription>
-                    </div>
-                    <FormControl>
-                      <Switch
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="enableTimeLock"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-2 shadow-sm">
-                    <div className="space-y-0.5">
-                      <FormLabel className="text-white">Enable Time Lock</FormLabel>
-                      <FormDescription className="text-gray-400 text-xs">
-                        Lock tokens for a specific time period
-                      </FormDescription>
-                    </div>
-                    <FormControl>
-                      <Switch
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            {form.watch("presaleEnabled") && (
-              <div className="mt-2">
-                <FormField
-                  control={form.control}
-                  name="maxActivePresales"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-white">Max Active Presales</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min="1"
-                          placeholder="1"
-                          className="w-full h-8 text-sm bg-gray-700"
-                          {...field}
-                          onChange={(e) => field.onChange(Number(e.target.value))}
-                        />
-                      </FormControl>
-                      <FormDescription className="text-gray-400 text-xs">
-                        Maximum number of concurrent active presales
-                      </FormDescription>
-                    </FormItem>
-                  )}
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Presale Configuration */}
-          {form.watch("presaleEnabled") && (
-            <div className="form-section bg-gray-800/50 rounded-lg p-4">
-              <h3 className="text-lg font-medium mb-2">Presale Configuration</h3>
-              <div className="p-2 mb-3 bg-blue-900/30 rounded-lg">
-                <p className="text-xs text-blue-300">
-                  When presale is enabled, liquidity percentage must be 0. The contract will handle liquidity allocation after the presale ends.
-                </p>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="presalePercentage"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-white">Presale Allocation (%)</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min="1"
-                          max="95"
-                          className="h-8 text-sm bg-gray-700"
-                          {...field}
-                          onChange={(e) => {
-                            const value = Math.min(Math.max(Number(e.target.value) || 0, 1), 95);
-                            field.onChange(value);
-                            
-                            // Recalculate total and adjust liquidity if needed
-                            const liquidityPercentage = form.getValues('liquidityPercentage');
-                            const wallets = form.getValues('wallets');
-                            const walletPercentages = wallets.reduce((sum, w) => sum + (Number(w.percentage) || 0), 0);
-                            const total = value + liquidityPercentage + walletPercentages;
-                            
-                            if (total > 100) {
-                              // Adjust liquidity to maintain valid total
-                              const newLiquidity = Math.max(25, 100 - value - walletPercentages);
-                              form.setValue('liquidityPercentage', newLiquidity);
-                            }
-                          }}
-                        />
-                      </FormControl>
-                      <FormDescription className="text-gray-400 text-xs">
-                        Set presale allocation between 1-95%
-                      </FormDescription>
-                    </FormItem>
-                  )}
-                />
-                
-                <FormField
-                  control={form.control}
-                  name="presaleRate"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-white">Presale Rate (Tokens per {chainId ? getNetworkCurrency(chainId) : 'ETH'})</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          placeholder="1000"
-                          className="h-8 text-sm bg-gray-700"
-                          {...field}
-                          value={field.value || ''}
-                        />
-                      </FormControl>
-                      <FormDescription className="text-gray-400 text-xs">
-                        Number of tokens per {chainId ? getNetworkCurrency(chainId) : 'ETH'} in presale
-                      </FormDescription>
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="softCap"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-white">Soft Cap ({chainId ? getNetworkCurrency(chainId) : 'ETH'})</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          placeholder="1"
-                          className="h-8 text-sm bg-gray-700"
-                          {...field}
-                          value={field.value || ''}
-                        />
-                      </FormControl>
-                      <FormDescription className="text-gray-400 text-xs">
-                        Minimum amount of {chainId ? getNetworkCurrency(chainId) : 'ETH'} to raise
-                      </FormDescription>
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="hardCap"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-white">Hard Cap ({chainId ? getNetworkCurrency(chainId) : 'ETH'})</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          placeholder="10"
-                          className="h-8 text-sm bg-gray-700"
-                          {...field}
-                          value={field.value || ''}
-                        />
-                      </FormControl>
-                      <FormDescription className="text-gray-400 text-xs">
-                        Maximum amount of {chainId ? getNetworkCurrency(chainId) : 'ETH'} to raise
-                      </FormDescription>
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="minContribution"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-white">Min Contribution ({chainId ? getNetworkCurrency(chainId) : 'ETH'})</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          placeholder="0.1"
-                          className="h-8 text-sm bg-gray-700"
-                          {...field}
-                          value={field.value || ''}
-                        />
-                      </FormControl>
-                      <FormDescription className="text-gray-400 text-xs">
-                        Minimum amount of {chainId ? getNetworkCurrency(chainId) : 'ETH'} that can be invested
-                      </FormDescription>
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="maxContribution"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-white">Max Contribution ({chainId ? getNetworkCurrency(chainId) : 'ETH'})</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          placeholder="2"
-                          className="h-8 text-sm bg-gray-700"
-                          {...field}
-                          value={field.value || ''}
-                        />
-                      </FormControl>
-                      <FormDescription className="text-gray-400 text-xs">
-                        Maximum amount of {chainId ? getNetworkCurrency(chainId) : 'ETH'} that can be invested
-                      </FormDescription>
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="startTime"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-white">Start Time</FormLabel>
-                      <FormControl>
-                        <div className="flex gap-2">
-                          <Input
-                            type="date"
-                            className="h-8 text-sm bg-gray-700 flex-1"
-                            value={field.value ? new Date(field.value * 1000).toISOString().split('T')[0] : ''}
-                            onChange={(e) => {
-                              const currentValue = field.value ? new Date(field.value * 1000) : new Date();
-                              const [year, month, day] = e.target.value.split('-').map(Number);
-                              const newDate = new Date(currentValue);
-                              newDate.setFullYear(year, month - 1, day);
-                              const timestamp = Math.floor(newDate.getTime() / 1000);
-                              field.onChange(timestamp);
-                              
-                              // Update end time if necessary
-                              const endTime = form.getValues('endTime');
-                              if (!endTime || timestamp >= endTime) {
-                                form.setValue('endTime', timestamp + 86400);
-                              }
-                            }}
-                            min={new Date(Date.now() + 300000).toISOString().split('T')[0]}
-                          />
-                          <Input
-                            type="time"
-                            className="h-8 text-sm bg-gray-700 w-32"
-                            value={field.value ? new Date(field.value * 1000).toTimeString().slice(0, 5) : ''}
-                            onChange={(e) => {
-                              const currentValue = field.value ? new Date(field.value * 1000) : new Date();
-                              const [hours, minutes] = e.target.value.split(':').map(Number);
-                              const newDate = new Date(currentValue);
-                              newDate.setHours(hours, minutes);
-                              const timestamp = Math.floor(newDate.getTime() / 1000);
-                              
-                              const startTime = form.getValues('startTime');
-                              if (startTime && timestamp <= startTime) {
-                                field.onChange(startTime + 86400);
-                              } else {
-                                field.onChange(timestamp);
-                              }
-                            }}
-                          />
-                        </div>
-                      </FormControl>
-                      <FormDescription className="text-gray-400 text-xs">
-                        When the presale starts (must be at least 5 minutes in the future)
-                      </FormDescription>
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="endTime"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-white">End Time</FormLabel>
-                      <FormControl>
-                        <div className="flex gap-2">
-                          <Input
-                            type="date"
-                            className="h-8 text-sm bg-gray-700 flex-1"
-                            value={field.value ? new Date(field.value * 1000).toISOString().split('T')[0] : ''}
-                            onChange={(e) => {
-                              const currentValue = field.value ? new Date(field.value * 1000) : new Date();
-                              const [year, month, day] = e.target.value.split('-').map(Number);
-                              const newDate = new Date(currentValue);
-                              newDate.setFullYear(year, month - 1, day);
-                              const timestamp = Math.floor(newDate.getTime() / 1000);
-                              
-                              const startTime = form.getValues('startTime');
-                              if (startTime && timestamp <= startTime) {
-                                field.onChange(startTime + 86400);
-                              } else {
-                                field.onChange(timestamp);
-                              }
-                            }}
-                            min={(() => {
-                              const startTime = form.watch('startTime');
-                              return startTime ? new Date((startTime + 3600) * 1000).toISOString().split('T')[0] : '';
-                            })()}
-                          />
-                          <Input
-                            type="time"
-                            className="h-8 text-sm bg-gray-700 w-32"
-                            value={field.value ? new Date(field.value * 1000).toTimeString().slice(0, 5) : ''}
-                            onChange={(e) => {
-                              const currentValue = field.value ? new Date(field.value * 1000) : new Date();
-                              const [hours, minutes] = e.target.value.split(':').map(Number);
-                              const newDate = new Date(currentValue);
-                              newDate.setHours(hours, minutes);
-                              const timestamp = Math.floor(newDate.getTime() / 1000);
-                              
-                              const startTime = form.getValues('startTime');
-                              if (startTime && timestamp <= startTime) {
-                                field.onChange(startTime + 86400);
-                              } else {
-                                field.onChange(timestamp);
-                              }
-                            }}
-                          />
-                        </div>
-                      </FormControl>
-                      <FormDescription className="text-gray-400 text-xs">
-                        When the presale ends (must be at least 1 hour after start time)
-                      </FormDescription>
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Multiple Presale Configuration */}
-          {form.watch("presaleEnabled") && (form.watch("maxActivePresales") || 1) > 1 && (
-            <div className="form-section bg-gray-800/50 rounded-lg p-4">
-              <h3 className="text-lg font-medium text-white mb-2">Multiple Presale Configuration</h3>
-              <div className="space-y-3">
-                {Array.from({ length: Math.max(1, form.watch("maxActivePresales") || 1) }).map((_, index) => (
-                  <div key={index} className="p-3 bg-gray-800 rounded-lg">
-                    <h4 className="text-sm font-medium text-white mb-2">Presale #{index + 1}</h4>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="text-xs text-gray-400">Soft Cap ({chainId ? getNetworkCurrency(chainId) : 'ETH'})</label>
-                          <Input
-                            {...form.register(`multiPresaleConfig.presales.${index}.softCap`)}
-                            type="number"
-                            placeholder="50"
-                            className="h-7 text-sm bg-gray-700"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-xs text-gray-400">Hard Cap ({chainId ? getNetworkCurrency(chainId) : 'ETH'})</label>
-                          <Input
-                            {...form.register(`multiPresaleConfig.presales.${index}.hardCap`)}
-                            type="number"
-                            placeholder="100"
-                            className="h-7 text-sm bg-gray-700"
-                          />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="text-xs text-gray-400">Rate (Tokens per {chainId ? getNetworkCurrency(chainId) : 'ETH'})</label>
-                          <Input
-                            {...form.register(`multiPresaleConfig.presales.${index}.presaleRate`)}
-                            type="number"
-                            step="0.0000000001"
-                            placeholder="0.001"
-                            className="h-7 text-sm bg-gray-700"
-                          />
-                        </div>
-                        <div className="flex items-end">
-                          <FormField
-                            control={form.control}
-                            name={`multiPresaleConfig.presales.${index}.whitelistEnabled`}
-                            render={({ field }) => (
-                              <FormItem className="flex items-center gap-2">
-                                <FormControl>
-                                  <Switch
-                                    checked={field.value}
-                                    onCheckedChange={field.onChange}
-                                  />
-                                </FormControl>
-                                <FormLabel className="text-xs text-gray-400">Whitelist</FormLabel>
-                              </FormItem>
-                            )}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="form-section col-span-2 bg-gray-900/50 rounded-lg p-2">
-            <div className="mb-2">
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div>
-                    <h3 className="text-lg font-medium text-white">Distribution & Vesting</h3>
-                    <p className="text-sm text-gray-400">Configure token allocations and vesting schedules</p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    className="h-8 px-2 text-sm text-blue-400 hover:text-blue-300"
-                    onClick={() => {
-                      setShowTokenomicsInfo(true);
-                    }}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1">
-                      <circle cx="12" cy="12" r="10"></circle>
-                      <path d="M12 16v-4"></path>
-                      <path d="M12 8h.01"></path>
-                    </svg>
-                    Tokenomics Guide
-                  </Button>
-                </div>
-                <select
-                  onChange={(e) => applyPreset(e.target.value as keyof typeof VESTING_PRESETS)}
-                  className="h-8 px-2 text-sm bg-gray-800 border border-gray-700 rounded-md text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-32"
-                  defaultValue=""
-                >
-                  <option value="" disabled>Select Preset</option>
-                  <option value="standard">Standard</option>
-                  <option value="fair_launch">Fair</option>
-                  <option value="community">Community</option>
-                  <option value="growth">Growth</option>
-                  <option value="bootstrap">Bootstrap</option>
-                  <option value="governance">Gov</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-gray-800/50 rounded-lg p-1 mb-2">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between mb-4">
-                <h4 className="text-sm font-medium text-white">Token Distribution</h4>
-                <div className="text-sm font-medium">
-                  {(() => {
-                    const total = Number(form.watch("presalePercentage")) + Number(form.watch("liquidityPercentage")) + form.watch('wallets').reduce((sum, wallet) => sum + Number(wallet.percentage), 0);
                     return (
-                      <span className={total > 100 ? 'text-red-400' : 'text-white'}>
-                        Total: {total}%
-                        {total > 100 && ' (exceeds 100%)'}
-                      </span>
-                    );
-                  })()}
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-3 gap-2 mt-2">
-                {/* Presale - Only show when enabled */}
-                {form.watch("presaleEnabled") && (
-                  <div className="relative">
-                    <div className="absolute -top-4 left-0 text-xs text-gray-400">Presale</div>
-                    <FormField
-                      control={form.control}
-                      name="presalePercentage"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormControl>
-                            <Input
-                              type="number"
-                              min="1"
-                              max="95"
-                              className="form-input h-7 text-sm bg-gray-700 pr-8 w-full"
-                              {...field}
-                              onChange={(e) => field.onChange(Number(e.target.value))}
-                            />
-                          </FormControl>
-                        </FormItem>
-                      )}
-                    />
-                    <div className="absolute inset-y-0 right-0 flex items-center">
-                      <span className="text-sm text-gray-400 mr-3">%</span>
-                    </div>
-                    <div className="text-xs text-gray-400 mt-1">Allocation for presale (1-95%)</div>
-                  </div>
-                )}
-                
-                {/* Liquidity */}
-                <div className="relative">
-                  <div className="absolute -top-4 left-0 text-xs text-gray-400">
-                    Liquidity
-                    <InfoIcon content="Percentage of tokens allocated for DEX liquidity. Must be at least 25% and should make total allocation equal 100%." />
-                  </div>
-                  <Input
-                    {...form.register("liquidityPercentage", {
-                      valueAsNumber: true,
-                      min: { value: 25, message: "Minimum liquidity is 25%" },
-                      max: { value: 95, message: "Maximum liquidity is 95%" },
-                      validate: (value) => {
-                        const presaleEnabled = form.getValues("presaleEnabled");
-                        const presalePercentage = presaleEnabled ? 5 : 0;
-                        const wallets = form.getValues("wallets");
-                        const walletPercentages = wallets.reduce((sum, w) => sum + (Number(w.percentage) || 0), 0);
-                        const total = presalePercentage + value + walletPercentages;
-                        return total === 100 || "Total allocation must equal 100%";
-                      }
-                    })}
-                    type="number"
-                    placeholder="65"
-                    className="form-input h-7 text-sm bg-gray-700 pr-8 w-full"
-                  />
-                  <div className="absolute inset-y-0 right-0 flex items-center">
-                    <span className="text-sm text-gray-400 mr-3">%</span>
-                  </div>
-                  {form.formState.errors.liquidityPercentage && (
-                    <p className="text-xs text-red-400 mt-1">{form.formState.errors.liquidityPercentage.message}</p>
-                  )}
-                  <div className="text-xs text-gray-400 mt-1">
-                    Set to 65% to achieve 100% total allocation with current presale (5%) and wallet (30%) percentages
-                  </div>
-                </div>
-              </div>
-
-              <div className="text-xs text-gray-400 mt-2 p-2 bg-gray-800/50 rounded">
-                <p>Distribution Guide:</p>
-                <ul className="list-disc list-inside mt-1">
-                  {form.watch("presaleEnabled") ? (
-                    <>
-                      <li>Presale allocation can be set between 1-95%</li>
-                      <li>Distribute the remaining tokens between liquidity and wallets</li>
-                      <li>Recommended: 65% liquidity, remaining % for wallets</li>
-                    </>
-                  ) : (
-                    <>
-                      <li>Distribute 100% between liquidity and wallets</li>
-                      <li>At least one wallet is required when liquidity is less than 100%</li>
-                      <li>Recommended: 95% liquidity, 5% owner wallet</li>
-                    </>
-                  )}
-                </ul>
-              </div>
-            </div>
-            
-            <div className="mt-4">
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="text-sm font-medium text-white">Additional Wallets</h4>
-                <Button
-                  type="button"
-                  onClick={addWallet}
-                  variant="secondary"
-                  className="h-6 text-xs px-3"
-                >
-                  Add Wallet
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            {form.watch('wallets').map((_, index) => (
-              <div key={index} className="p-2 bg-gray-800 rounded-lg">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex-1">
-                    <input
-                      {...form.register(`wallets.${index}.name`)}
-                      placeholder="Wallet Name"
-                      className="w-full bg-gray-700 text-text-primary rounded px-2 py-1 text-xs h-7"
-                    />
-                  </div>
-                  <div className="w-20 relative">
-                    <FormField
-                      control={form.control}
-                      name={`wallets.${index}.percentage`}
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormControl>
-                            <Input
-                              type="number"
-                              min={1}
-                              max={60}
-                              placeholder="Enter percentage"
-                              {...field}
-                              onChange={(e) => {
-                                const value = Math.min(Math.max(Number(e.target.value) || 0, 1), 60);
-                                field.onChange(value);
-                                
-                                // Recalculate total and validate
-                                const presaleEnabled = form.getValues('presaleEnabled');
-                                const presalePercentage = presaleEnabled ? 5 : 0;
-                                const liquidityPercentage = form.getValues('liquidityPercentage');
-                                const total = presalePercentage + liquidityPercentage + value;
-                                
-                                if (total > 100) {
-                                  // Adjust liquidity to maintain valid total
-                                  const newLiquidity = Math.max(25, 100 - presalePercentage - value);
-                                  form.setValue('liquidityPercentage', newLiquidity);
-                                }
-                              }}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-1">
-                      <input
-                        type="checkbox"
-                        {...form.register(`wallets.${index}.vestingEnabled`)}
-                        className="w-5 h-5 bg-gray-700 rounded"
-                      />
-                      <span className="text-xs text-gray-400">Vest</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removeWallet(index)}
-                      className="text-xs px-1 py-0.5 bg-red-900/50 hover:bg-red-800 text-red-100 rounded"
-                    >
-                      ×
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex gap-2 mt-2">
-                  <input
-                    {...form.register(`wallets.${index}.address`)}
-                    placeholder="Wallet Address"
-                    className="flex-1 bg-gray-700 text-text-primary rounded px-2 py-1 text-xs h-7"
-                  />
-                  {form.formState.errors.wallets?.[index]?.address && (
-                    <p className="text-xs text-red-400 mt-1">
-                      {form.formState.errors.wallets[index].address?.message}
-                    </p>
-                  )}
-                </div>
-
-                {/* Vesting Configuration - Only show when vesting is enabled */}
-                {form.watch(`wallets.${index}.vestingEnabled`) && (
-                  <div className="grid grid-cols-2 gap-2 mt-2">
-                    <div>
-                      <label className="text-xs text-gray-400">Vesting Duration (days)</label>
-                      <input
-                        type="number"
-                        {...form.register(`wallets.${index}.vestingDuration`, {
-                          valueAsNumber: true,
-                          min: 1
-                        })}
-                        placeholder="365"
-                        className="w-full bg-gray-700 text-text-primary rounded px-2 py-1 text-xs h-7"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-400">Cliff Duration (days)</label>
-                      <input
-                        type="number"
-                        {...form.register(`wallets.${index}.cliffDuration`, {
-                          valueAsNumber: true,
-                          min: 0
-                        })}
-                        placeholder="90"
-                        className="w-full bg-gray-700 text-text-primary rounded px-2 py-1 text-xs h-7"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* Add Create Token Button */}
-          <div className="mt-6 flex justify-end gap-4">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={simulateDeployment}
-              className="w-40"
-              disabled={!isConnected || isSimulating}
-            >
-              {isSimulating ? (
-                <>
-                  <Spinner className="mr-2 h-4 w-4" />
-                  Simulating...
-                </>
-              ) : (
-                'Simulate'
-              )}
-            </Button>
-            
-            <Button
-              type="submit"
-              variant="primary"
-              className="w-40 bg-blue-600 hover:bg-blue-700"
-              disabled={!isConnected || loading}
-            >
-              {loading ? (
-                <>
-                  <Spinner className="mr-2 h-4 w-4" />
-                  Creating...
-                </>
-              ) : (
-                'Create Token'
-              )}
-            </Button>
-          </div>
-        </form>
-      </Form>
-
-      {/* Add Dialog for simulation results */}
+    <div className="w-full">
+      <TokenFormTabs 
+        form={form} 
+        isConnected={isConnected}
+        chainId={chainId}
+        account={account || undefined}
+        loading={loading}
+        onSimulate={simulateDeployment}
+        onSubmit={onSubmit}
+      />
+      
+      {/* Keep existing dialogs */}
+      {showSimulationDialog && (
       <Dialog open={showSimulationDialog} onOpenChange={setShowSimulationDialog}>
-        <DialogContent className="max-w-2xl" aria-describedby="simulation-results-description">
-          <div className="space-y-4">
-            <h2 className="text-xl font-semibold text-white">Deployment Simulation Results</h2>
-            <DialogDescription id="simulation-results-description" className="space-y-2">
+          <DialogContent className="max-w-2xl">
+            <h2 className="text-xl font-bold mb-4">Deployment Simulation Results</h2>
+            <div className="space-y-4 max-h-[60vh] overflow-y-auto">
               {simulationResults.map((result, index) => (
-                <div
-                  key={index}
-                  className={`p-3 rounded-lg ${
-                    result.status === 'success'
-                      ? 'bg-green-900/50'
-                      : result.status === 'warning'
-                      ? 'bg-yellow-900/50'
-                      : 'bg-red-900/50'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium text-white">{result.category}</span>
-                    <span
-                      className={
-                        result.status === 'success'
-                          ? 'text-green-400'
-                          : result.status === 'warning'
-                          ? 'text-yellow-400'
-                          : 'text-red-400'
-                      }
-                    >
-                      {result.message}
-                    </span>
+                <div key={index} className={`p-3 rounded-lg border ${
+                  result.status === 'success' ? 'border-green-600 bg-green-950/20' : 
+                  result.status === 'warning' ? 'border-yellow-600 bg-yellow-950/20' : 
+                  'border-red-600 bg-red-950/20'
+                }`}>
+                  <div className="flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full ${
+                      result.status === 'success' ? 'bg-green-500' : 
+                      result.status === 'warning' ? 'bg-yellow-500' : 
+                      'bg-red-500'
+                    }`}></div>
+                    <h3 className="font-semibold">{result.category}</h3>
                   </div>
-                  {result.details && (
-                    <ul className="mt-1 list-disc list-inside text-sm text-gray-300">
+                  <p className="mt-1 text-sm">{result.message}</p>
+                  {result.details && result.details.length > 0 && (
+                    <ul className="mt-2 space-y-1 text-xs text-gray-400">
                       {result.details.map((detail, i) => (
                         <li key={i}>{detail}</li>
                       ))}
@@ -2242,28 +1738,25 @@ const TokenForm_v3: React.FC<TokenFormV3Props> = ({
                   )}
                 </div>
               ))}
-            </DialogDescription>
-            <div className="flex justify-end gap-2 mt-4">
-              <Button variant="secondary" onClick={() => setShowSimulationDialog(false)}>
-                Close
-              </Button>
-              <Button 
-                variant="primary" 
-                className="bg-blue-600 hover:bg-blue-700"
-                onClick={() => {
-                  setShowSimulationDialog(false);
-                  form.handleSubmit(onSubmit)();
-                }}
-                disabled={simulationResults.some(r => r.status === 'error')}
-              >
-                Deploy Token
-              </Button>
             </div>
+            
+            <div className="flex justify-between mt-4">
+              <div>
+                {simulationResults.some(r => r.status === 'error') ? (
+                  <span className="text-red-400">❌ Issues detected that will prevent deployment</span>
+                ) : simulationResults.some(r => r.status === 'warning') ? (
+                  <span className="text-yellow-400">⚠️ Warnings detected, but deployment is possible</span>
+                ) : (
+                  <span className="text-green-400">✅ All checks passed</span>
+                )}
+              </div>
+              <Button onClick={() => setShowSimulationDialog(false)}>Close</Button>
           </div>
         </DialogContent>
       </Dialog>
+      )}
     </div>
   );
-}
+};
 
 export default TokenForm_v3;

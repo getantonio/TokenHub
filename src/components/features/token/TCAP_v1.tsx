@@ -22,10 +22,6 @@ const AMOY_FACTORY_ABI = [
   "event TokenCreated(address indexed tokenAddress, address indexed creator)"
 ];
 
-// Add the Arbitrum Sepolia factory address
-const AMOY_FACTORY_ADDRESS = "0xAC49A5f87D1b1c9df1885B90B911BdfdE40c2c36";
-const ARBITRUM_SEPOLIA_FACTORY_ADDRESS = "0x9209DfFAddB8a8bfe4ffaa2b79537461E478386d";
-
 // Function to get appropriate ABI based on network
 const getFactoryABI = (chainId: number | null) => {
   if (chainId === 80002 || chainId === 421614) {
@@ -87,15 +83,17 @@ export default function TCAP_v1({ isConnected, address, provider: externalProvid
   }, [hiddenTokens]);
 
   // Function to get the correct factory address based on the network
-  const getFactoryAddress = (): string => {
+  const getFactoryAddress = (chainId: number | null): string => {
     if (chainId === 80002) {
-      console.log("Using Amoy-specific factory address for TCAP:", AMOY_FACTORY_ADDRESS);
-      return AMOY_FACTORY_ADDRESS;
+      const address = process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V1;
+      console.log("Using environment variable for Polygon Amoy:", address);
+      return address || "";
     }
     
     if (chainId === 421614) {
-      console.log("Using Arbitrum Sepolia-specific factory address for TCAP:", ARBITRUM_SEPOLIA_FACTORY_ADDRESS);
-      return ARBITRUM_SEPOLIA_FACTORY_ADDRESS;
+      const address = process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V1;
+      console.log("Using environment variable for Arbitrum Sepolia:", address);
+      return address || "";
     }
     
     if (!address) {
@@ -114,7 +112,7 @@ export default function TCAP_v1({ isConnected, address, provider: externalProvid
       setError(null);
       
       // Get the correct factory address for the current network
-      const factoryAddress = getFactoryAddress();
+      const factoryAddress = getFactoryAddress(chainId);
       if (!factoryAddress) {
         setError('Factory address not available for this network');
         setIsLoading(false);

@@ -187,16 +187,16 @@ export default function TokenForm_v1({ isConnected }: Props) {
 
   useEffect(() => {
     if (chainId) {
-      // Get factory address directly from environment variable for Polygon Amoy
+      // Get factory address from environment variable for Polygon Amoy
       let factoryAddress;
       if (chainId === 80002) {
-        // Directly use our new factory address
-        factoryAddress = "0xAC49A5f87D1b1c9df1885B90B911BdfdE40c2c36";
-        console.log("Using direct hardcoded address for Polygon Amoy:", factoryAddress);
+        // Use environment variable for Polygon Amoy
+        factoryAddress = process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V1;
+        console.log("Using environment variable for Polygon Amoy:", factoryAddress);
       } else if (chainId === 421614) {
-        // Directly use the Arbitrum Sepolia factory address
-        factoryAddress = "0x9209DfFAddB8a8bfe4ffaa2b79537461E478386d";
-        console.log("Using direct hardcoded address for Arbitrum Sepolia:", factoryAddress);
+        // Use environment variable for Arbitrum Sepolia
+        factoryAddress = process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V1;
+        console.log("Using environment variable for Arbitrum Sepolia:", factoryAddress);
       } else {
         factoryAddress = getFactoryAddress(FACTORY_ADDRESSES, 'v1', chainId);
       }
@@ -285,16 +285,16 @@ export default function TokenForm_v1({ isConnected }: Props) {
       const userAddress = await signer.getAddress();
       const chainId = Number(await window.ethereum.request({ method: 'eth_chainId' }));
       
-      // Get factory address for the current network
+      // Get factory address from environment variable for Polygon Amoy
       let factoryAddress;
       if (chainId === 80002) {
-        // Directly use our new factory address
-        factoryAddress = "0xAC49A5f87D1b1c9df1885B90B911BdfdE40c2c36";
-        console.log("Using direct hardcoded address for Polygon Amoy:", factoryAddress);
+        // Use environment variable for Polygon Amoy
+        factoryAddress = process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V1;
+        console.log("Using environment variable for Polygon Amoy:", factoryAddress);
       } else if (chainId === 421614) {
-        // Directly use the Arbitrum Sepolia factory address
-        factoryAddress = "0x9209DfFAddB8a8bfe4ffaa2b79537461E478386d";
-        console.log("Using direct hardcoded address for Arbitrum Sepolia:", factoryAddress);
+        // Use environment variable for Arbitrum Sepolia
+        factoryAddress = process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V1;
+        console.log("Using environment variable for Arbitrum Sepolia:", factoryAddress);
       } else {
         factoryAddress = getFactoryAddress(FACTORY_ADDRESSES, 'v1', chainId);
       }

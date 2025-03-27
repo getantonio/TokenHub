@@ -61,7 +61,25 @@ const TokenV3UpdatedABI = [
   "function getRemainingLiquidityAllocation() external view returns (uint256)",
   // Presale
   "function configurePresale(uint256,uint256,uint256,uint256,uint256,uint256,uint256) external",
+  "function configurePresale(uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256) external",
   "function configureDistribution(uint256,uint256,uint256,(address,uint256,bool,uint256,uint256,uint256)[]) external payable",
+  // Presale state methods
+  "function presaleEnabled() view returns (bool)",
+  "function presaleRate() view returns (uint256)",
+  "function softCap() view returns (uint256)",
+  "function hardCap() view returns (uint256)",
+  "function minContribution() view returns (uint256)",
+  "function maxContribution() view returns (uint256)",
+  "function startTime() view returns (uint256)",
+  "function endTime() view returns (uint256)",
+  "function togglePresale(uint256, bool) external",
+  "function getPresaleState() view returns (uint256)",
+  "function presaleStatus() view returns (bool)",
+  // Whitelist
+  "function updateWhitelist(uint256, address[], bool) external",
+  "function isWhitelisted(uint256, address) view returns (bool)",
+  "function getWhitelistedAddresses(uint256) view returns (address[])",
+  "function enableWhitelist(uint256, bool) external",
   // Events
   "event LiquidityAdded(address indexed pair, uint256 tokensAdded, uint256 ethAdded)",
   "event TokensClaimed(address indexed wallet, uint256 amount)",
@@ -1039,6 +1057,58 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
               }
             }
 
+            // Fetch presale information
+            let presaleInfo = undefined;
+            try {
+              // Check if presale is enabled
+              const presaleEnabled = await tokenContract.presaleEnabled();
+              console.log('TCAP_v3 loadTokens: Presale enabled for token:', { tokenAddress, presaleEnabled });
+              
+              if (presaleEnabled) {
+                // Get presale configuration
+                const [
+                  presaleRate, 
+                  softCap, 
+                  hardCap, 
+                  minContribution, 
+                  maxContribution, 
+                  startTime, 
+                  endTime
+                ] = await Promise.all([
+                  tokenContract.presaleRate(),
+                  tokenContract.softCap(),
+                  tokenContract.hardCap(),
+                  tokenContract.minContribution(),
+                  tokenContract.maxContribution(),
+                  tokenContract.startTime(),
+                  tokenContract.endTime()
+                ]);
+                
+                // Since the presale data structures vary between contract versions, we'll create a standard format
+                presaleInfo = {
+                  softCap: formatEther(softCap),
+                  hardCap: formatEther(hardCap),
+                  minContribution: formatEther(minContribution),
+                  maxContribution: formatEther(maxContribution),
+                  presaleRate: formatEther(presaleRate),
+                  startTime: Number(startTime),
+                  endTime: Number(endTime),
+                  whitelistEnabled: false, // Default value, might need to fetch from contract if available
+                  finalized: false, // Default value, might need to fetch from contract if available
+                  totalContributed: '0', // Default value, might need to fetch from contract if available
+                  totalTokensSold: '0', // Default value, might need to fetch from contract if available
+                  contributorCount: 0, // Default value, might need to fetch from contract if available
+                  contributors: [] // Default value, might need to fetch from contract if available
+                };
+                
+                console.log('TCAP_v3 loadTokens: Presale info loaded successfully:', presaleInfo);
+              } else {
+                console.log('TCAP_v3 loadTokens: Presale not enabled for token:', tokenAddress);
+              }
+            } catch (presaleError) {
+              console.error('Error loading presale info:', presaleError);
+            }
+
             return {
               address: tokenAddress,
               name,
@@ -1048,6 +1118,7 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
               paused,
               pairAddress,
               liquidityInfo,
+              presaleInfo,
               createdAt: Date.now()
             };
           } catch (error) {
@@ -1387,29 +1458,529 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
     }
   };
 
-  const handleWhitelist = async (tokenAddress: string) => {
+  const handleWhitelist = async (token: TokenInfo) => {
     try {
-      const addresses = prompt('Enter addresses to whitelist (comma-separated):');
-      if (!addresses) return;
+      setLoading(true);
       
-      const addressList = addresses.split(',').map(addr => addr.trim());
+      // Create UI for managing whitelist
+      const result = await new Promise<{ addresses: string[]; isWhitelisted: boolean } | null>((resolve) => {
+        const dialog = document.createElement('dialog');
+        dialog.className = 'fixed z-50 overflow-auto bg-gray-900 border border-gray-700 rounded-lg shadow-xl p-4 max-w-lg w-full text-text-primary';
+        dialog.style.top = '50%';
+        dialog.style.left = '50%';
+        dialog.style.transform = 'translate(-50%, -50%)';
+        
+        dialog.innerHTML = `
+          <h3 class="text-lg font-bold text-text-primary mb-2">Manage Whitelist</h3>
+          <p class="text-xs text-text-secondary mb-4">Add or remove addresses from the presale whitelist.</p>
+          
+          <div class="mb-4">
+            <label class="text-xs text-text-secondary">Addresses (one per line)</label>
+            <textarea id="addresses" class="w-full h-32 bg-gray-800 text-text-primary rounded px-2 py-1 text-sm" placeholder="0x..."></textarea>
+            <p class="text-xs text-gray-400 mt-1">Enter one Ethereum address per line</p>
+          </div>
+          
+          <div class="mb-4">
+            <div class="flex items-center">
+              <input type="radio" id="add-to-whitelist" name="whitelist-action" value="add" checked class="mr-2 bg-gray-800" />
+              <label for="add-to-whitelist" class="text-xs text-text-secondary">Add to whitelist</label>
+            </div>
+            <div class="flex items-center mt-2">
+              <input type="radio" id="remove-from-whitelist" name="whitelist-action" value="remove" class="mr-2 bg-gray-800" />
+              <label for="remove-from-whitelist" class="text-xs text-text-secondary">Remove from whitelist</label>
+            </div>
+          </div>
+          
+          <div class="flex justify-end gap-2">
+            <button id="cancel-btn" class="px-3 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-text-primary rounded">
+              Cancel
+            </button>
+            <button id="confirm-btn" class="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded">
+              Update Whitelist
+            </button>
+          </div>
+        `;
+        
+        document.body.appendChild(dialog);
+        dialog.showModal();
+        
+        const cancelBtn = dialog.querySelector('#cancel-btn');
+        cancelBtn?.addEventListener('click', () => {
+          dialog.close();
+          document.body.removeChild(dialog);
+          resolve(null);
+        });
+        
+        const confirmBtn = dialog.querySelector('#confirm-btn');
+        confirmBtn?.addEventListener('click', () => {
+          const addressesText = (dialog.querySelector('#addresses') as HTMLTextAreaElement).value;
+          const isAdd = (dialog.querySelector('#add-to-whitelist') as HTMLInputElement).checked;
+          
+          // Process addresses
+          const addressLines = addressesText.split('\n').map(line => line.trim()).filter(line => line !== '');
+          
+          // Validate addresses
+          const invalidAddresses = addressLines.filter(addr => !ethers.isAddress(addr));
+          if (invalidAddresses.length > 0) {
+            alert(`Invalid addresses:\n${invalidAddresses.join('\n')}`);
+            return;
+          }
+          
+          dialog.close();
+          document.body.removeChild(dialog);
+          
+          resolve({
+            addresses: addressLines,
+            isWhitelisted: isAdd
+          });
+        });
+      });
+      
+      if (!result) {
+        setLoading(false);
+        return;
+      }
+      
+      const { addresses, isWhitelisted } = result;
+      
+      if (addresses.length === 0) {
+        toast({
+          title: 'No Addresses',
+          description: 'No addresses were provided',
+          variant: 'destructive',
+        });
+        setLoading(false);
+        return;
+      }
+      
+      console.log(`${isWhitelisted ? 'Adding' : 'Removing'} ${addresses.length} addresses to/from whitelist`);
+      
+      // Get signer and contract
       const signer = await externalProvider.getSigner();
-      const tokenContract = getTokenContract(tokenAddress, signer);
+      const tokenContract = getTokenContract(token.address, signer);
       
-      const tx = await tokenContract.updateWhitelist(addressList, true);
-      await tx.wait();
+      // Split addresses into chunks of 100 to avoid gas limit issues
+      const chunks = [];
+      for (let i = 0; i < addresses.length; i += 100) {
+        chunks.push(addresses.slice(i, i + 100));
+      }
+      
+      // Process each chunk
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i];
+        
+        try {
+          // Create transaction
+          const tx = await tokenContract.updateWhitelist.populateTransaction(0, chunk, isWhitelisted);
+          
+          // Get nonce
+          const nonce = await signer.provider.getTransactionCount(await signer.getAddress(), 'pending');
+          
+          // Add gas limit and nonce
+          const txWithGas = {
+            ...tx,
+            gasLimit: 5000000, // Large gas limit for whitelist operations
+            nonce: nonce + i, // Increment nonce for each chunk
+          };
+          
+          // Send transaction
+          const response = await signer.sendTransaction(txWithGas);
+          console.log(`Chunk ${i+1}/${chunks.length} transaction sent:`, response);
+          
+          // Wait for transaction
+          const receipt = await response.wait(1);
+          console.log(`Chunk ${i+1}/${chunks.length} transaction receipt:`, receipt);
+          
+          toast({
+            title: 'Success',
+            description: `Processed ${chunk.length} addresses (batch ${i+1}/${chunks.length})`,
+            variant: 'default',
+          });
+        } catch (error) {
+          console.error(`Error processing chunk ${i+1}:`, error);
+          toast({
+            title: 'Error',
+            description: `Failed to process addresses (batch ${i+1}/${chunks.length})`,
+            variant: 'destructive',
+          });
+        }
+      }
       
       toast({
-        title: 'Addresses Whitelisted',
-        description: `Successfully whitelisted ${addressList.length} addresses.`
+        title: 'Whitelist Updated',
+        description: `${isWhitelisted ? 'Added' : 'Removed'} ${addresses.length} addresses ${isWhitelisted ? 'to' : 'from'} whitelist`,
+        variant: 'default',
       });
     } catch (error) {
-      console.error('Error updating whitelist:', error);
+      console.error('Error managing whitelist:', error);
       toast({
         title: 'Error',
-        description: 'Failed to update whitelist.',
-        variant: 'destructive'
+        description: 'Failed to update whitelist',
+        variant: 'destructive',
       });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConfigurePresale = async (token: TokenInfo) => {
+    try {
+      setLoading(true);
+      
+      const result = await new Promise<{ 
+        presaleRate: string; 
+        softCap: string; 
+        hardCap: string; 
+        minContribution: string; 
+        maxContribution: string; 
+        startTime: number; 
+        endTime: number;
+      } | null>((resolve) => {
+        const dialog = document.createElement('dialog');
+        
+        // Style the dialog
+        dialog.className = 'fixed z-50 overflow-auto bg-gray-900 border border-gray-700 rounded-lg shadow-xl p-4 max-w-lg w-full text-text-primary';
+        dialog.style.top = '50%';
+        dialog.style.left = '50%';
+        dialog.style.transform = 'translate(-50%, -50%)';
+        
+        dialog.innerHTML = `
+          <h3 id="dialog-title" class="text-lg font-bold text-text-primary mb-4">Configure Presale</h3>
+          <p id="dialog-description" class="text-xs text-text-secondary mb-4">Update presale parameters. Be careful not to disrupt ongoing presales.</p>
+          
+          <div class="space-y-4">
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="text-xs text-text-secondary">Token Rate</label>
+                <input type="text" id="presaleRate" class="w-full bg-gray-800 text-text-primary rounded px-2 py-1 text-sm" 
+                  value="${token.presaleInfo?.presaleRate || ''}" placeholder="Tokens per ETH" />
+                <p class="text-xs text-gray-400 mt-1">Number of tokens per ETH</p>
+              </div>
+              
+              <div>
+                <label class="text-xs text-text-secondary">Soft Cap (ETH)</label>
+                <input type="text" id="softCap" class="w-full bg-gray-800 text-text-primary rounded px-2 py-1 text-sm" 
+                  value="${token.presaleInfo?.softCap || ''}" placeholder="Minimum ETH to raise" />
+                <p class="text-xs text-gray-400 mt-1">Minimum ETH to consider successful</p>
+              </div>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="text-xs text-text-secondary">Hard Cap (ETH)</label>
+                <input type="text" id="hardCap" class="w-full bg-gray-800 text-text-primary rounded px-2 py-1 text-sm" 
+                  value="${token.presaleInfo?.hardCap || ''}" placeholder="Maximum ETH to raise" />
+                <p class="text-xs text-gray-400 mt-1">Maximum ETH to raise</p>
+              </div>
+              
+              <div>
+                <label class="text-xs text-text-secondary">Min Contribution (ETH)</label>
+                <input type="text" id="minContribution" class="w-full bg-gray-800 text-text-primary rounded px-2 py-1 text-sm" 
+                  value="${token.presaleInfo?.minContribution || ''}" placeholder="Minimum ETH per user" />
+                <p class="text-xs text-gray-400 mt-1">Minimum ETH per user</p>
+              </div>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="text-xs text-text-secondary">Max Contribution (ETH)</label>
+                <input type="text" id="maxContribution" class="w-full bg-gray-800 text-text-primary rounded px-2 py-1 text-sm" 
+                  value="${token.presaleInfo?.maxContribution || ''}" placeholder="Maximum ETH per user" />
+                <p class="text-xs text-gray-400 mt-1">Maximum ETH per user</p>
+              </div>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="text-xs text-text-secondary">Start Time</label>
+                <input type="datetime-local" id="startTime" class="w-full bg-gray-800 text-text-primary rounded px-2 py-1 text-sm" 
+                  value="${token.presaleInfo?.startTime ? new Date(token.presaleInfo.startTime * 1000).toISOString().slice(0, 16) : ''}" />
+                <p class="text-xs text-gray-400 mt-1">When presale begins</p>
+              </div>
+              
+              <div>
+                <label class="text-xs text-text-secondary">End Time</label>
+                <input type="datetime-local" id="endTime" class="w-full bg-gray-800 text-text-primary rounded px-2 py-1 text-sm" 
+                  value="${token.presaleInfo?.endTime ? new Date(token.presaleInfo.endTime * 1000).toISOString().slice(0, 16) : ''}" />
+                <p class="text-xs text-gray-400 mt-1">When presale ends</p>
+              </div>
+            </div>
+            
+            <div class="flex justify-end gap-2 mt-2">
+              <button id="cancel-btn" class="px-3 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-text-primary rounded">
+                Cancel
+              </button>
+              <button id="confirm-btn" class="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded">
+                Configure Presale
+              </button>
+            </div>
+          </div>
+        `;
+        
+        // Append dialog to body and show it
+        document.body.appendChild(dialog);
+        dialog.showModal();
+        
+        // Close button listener
+        const cancelBtn = dialog.querySelector('#cancel-btn');
+        cancelBtn?.addEventListener('click', () => {
+          dialog.close();
+          document.body.removeChild(dialog);
+          resolve(null);
+        });
+        
+        // Confirm button listener
+        const confirmBtn = dialog.querySelector('#confirm-btn');
+        confirmBtn?.addEventListener('click', () => {
+          const presaleRate = (dialog.querySelector('#presaleRate') as HTMLInputElement).value;
+          const softCap = (dialog.querySelector('#softCap') as HTMLInputElement).value;
+          const hardCap = (dialog.querySelector('#hardCap') as HTMLInputElement).value;
+          const minContribution = (dialog.querySelector('#minContribution') as HTMLInputElement).value;
+          const maxContribution = (dialog.querySelector('#maxContribution') as HTMLInputElement).value;
+          const startTimeStr = (dialog.querySelector('#startTime') as HTMLInputElement).value;
+          const endTimeStr = (dialog.querySelector('#endTime') as HTMLInputElement).value;
+          
+          // Validate all fields are filled in
+          if (!presaleRate || !softCap || !hardCap || !minContribution || !maxContribution || !startTimeStr || !endTimeStr) {
+            alert('All fields are required');
+            return;
+          }
+          
+          // Convert date strings to Date objects
+          const startDateTime = new Date(startTimeStr);
+          const endDateTime = new Date(endTimeStr);
+          
+          if (startDateTime >= endDateTime) {
+            alert('End time must be after start time');
+            return;
+          }
+          
+          const startTimeUnix = Math.floor(startDateTime.getTime() / 1000);
+          const endTimeUnix = Math.floor(endDateTime.getTime() / 1000);
+          
+          dialog.close();
+          document.body.removeChild(dialog);
+          
+          resolve({
+            presaleRate,
+            softCap,
+            hardCap,
+            minContribution,
+            maxContribution,
+            startTime: startTimeUnix,
+            endTime: endTimeUnix
+          });
+        });
+      });
+      
+      if (!result) {
+        setLoading(false);
+        return;
+      }
+      
+      // Get signer
+      const signer = await externalProvider.getSigner();
+      const signerAddress = await signer.getAddress();
+      
+      // Convert values to BigInt
+      const presaleRateBN = parseEther(result.presaleRate);
+      const softCapBN = parseEther(result.softCap);
+      const hardCapBN = parseEther(result.hardCap);
+      const minContributionBN = parseEther(result.minContribution);
+      const maxContributionBN = parseEther(result.maxContribution);
+      
+      console.log('Configuring presale with parameters:', {
+        presaleRate: formatEther(presaleRateBN),
+        softCap: formatEther(softCapBN),
+        hardCap: formatEther(hardCapBN),
+        minContribution: formatEther(minContributionBN),
+        maxContribution: formatEther(maxContributionBN),
+        startTime: result.startTime,
+        endTime: result.endTime
+      });
+      
+      // Verify parameters make sense
+      if (Number(formatEther(softCapBN)) >= Number(formatEther(hardCapBN))) {
+        toast({
+          title: 'Validation Error',
+          description: 'Soft cap must be less than hard cap',
+          variant: 'destructive',
+        });
+        setLoading(false);
+        return;
+      }
+      
+      if (Number(formatEther(minContributionBN)) >= Number(formatEther(maxContributionBN))) {
+        toast({
+          title: 'Validation Error',
+          description: 'Minimum contribution must be less than maximum contribution',
+          variant: 'destructive',
+        });
+        setLoading(false);
+        return;
+      }
+      
+      try {
+        // Create direct contract instance for configuration
+        console.log("Creating contract instance with multiple attempts approach");
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        const signer = await provider.getSigner();
+        
+        // Verify the user is the owner
+        const userAddress = await signer.getAddress();
+        const tokenContract = new ethers.Contract(
+          token.address,
+          ["function owner() view returns (address)"],
+          provider
+        );
+        const owner = await tokenContract.owner();
+        
+        if (owner.toLowerCase() !== userAddress.toLowerCase()) {
+          toast({
+            title: 'Error',
+            description: 'Only the token owner can configure presale',
+            variant: 'destructive',
+          });
+          setLoading(false);
+          return;
+        }
+        
+        // Now create the contract with the configuration functions
+        // Full ABI for better contract interaction
+        const fullTokenContract = new ethers.Contract(
+          token.address,
+          [
+            "function owner() view returns (address)",
+            "function configurePresale(uint256,uint256,uint256,uint256,uint256,uint256,uint256) external",
+            "function configurePresale(uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256) external",
+            "function presaleEnabled() view returns (bool)"
+          ],
+          signer
+        );
+        
+        // Check if presale is enabled
+        try {
+          const isPresaleEnabled = await fullTokenContract.presaleEnabled();
+          console.log("Presale enabled:", isPresaleEnabled);
+          
+          if (!isPresaleEnabled) {
+            toast({
+              title: 'Error',
+              description: 'Presale is not enabled for this token',
+              variant: 'destructive',
+            });
+            setLoading(false);
+            return;
+          }
+        } catch (err) {
+          console.warn("Could not check if presale is enabled:", err);
+        }
+        
+        // Try multiple execution paths
+        console.log("Attempting multiple execution paths for presale configuration");
+        
+        const attempts = [
+          // Attempt 1: Using 7 parameters (no presaleId)
+          async () => {
+            console.log("Attempt 1: Using 7 parameters");
+            const tx = await fullTokenContract.configurePresale(
+              presaleRateBN,
+              softCapBN,
+              hardCapBN,
+              minContributionBN,
+              maxContributionBN,
+              BigInt(result.startTime),
+              BigInt(result.endTime),
+              { gasLimit: 1000000 }
+            );
+            return tx;
+          },
+          
+          // Attempt 2: Using 8 parameters (with presaleId = 0)
+          async () => {
+            console.log("Attempt 2: Using 8 parameters with presaleId = 0");
+            const tx = await fullTokenContract.configurePresale(
+              BigInt(0), // presaleId = 0
+              presaleRateBN,
+              softCapBN,
+              hardCapBN,
+              minContributionBN,
+              maxContributionBN,
+              BigInt(result.startTime),
+              BigInt(result.endTime),
+              { gasLimit: 1000000 }
+            );
+            return tx;
+          }
+        ];
+        
+        // Try each attempt
+        let success = false;
+        let lastError = null;
+        let txResponse = null;
+        
+        for (let i = 0; i < attempts.length; i++) {
+          try {
+            console.log(`Executing attempt ${i+1}...`);
+            txResponse = await attempts[i]();
+            console.log(`Attempt ${i+1} succeeded:`, txResponse.hash);
+            success = true;
+            break;
+          } catch (err) {
+            console.error(`Attempt ${i+1} failed:`, err);
+            lastError = err;
+          }
+        }
+        
+        if (!success) {
+          console.error("All attempts failed. Last error:", lastError);
+          throw lastError;
+        }
+        
+        toast({
+          title: 'Transaction Sent',
+          description: 'Presale configuration transaction submitted',
+          variant: 'default',
+        });
+        
+        // Wait for confirmation
+        const receipt = await txResponse.wait();
+        console.log("Transaction confirmed:", receipt);
+        
+        toast({
+          title: 'Success',
+          description: 'Presale configuration updated successfully',
+          variant: 'default',
+        });
+        
+        // Refresh token list
+        loadTokens();
+      } catch (error: any) {
+        console.error('Error configuring presale:', error);
+        
+        let errorMessage = 'Failed to configure presale. Please try again.';
+        
+        if (error.reason) {
+          errorMessage = `Error: ${error.reason}`;
+        } else if (error.message) {
+          errorMessage = `Error: ${error.message}`;
+        }
+        
+        toast({
+          title: 'Error',
+          description: errorMessage,
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Error configuring presale:', error);
+      toast({
+        title: 'Error',
+        description: 'An unexpected error occurred',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -2755,6 +3326,18 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
     }
   }));
 
+  // Log presale info for debugging
+  useEffect(() => {
+    if (tokens.length > 0) {
+      console.log('TCAP_v3: Tokens with presale info:', tokens.map(t => ({ 
+        address: t.address, 
+        name: t.name, 
+        hasPresaleInfo: !!t.presaleInfo, 
+        presaleInfo: t.presaleInfo 
+      })));
+    }
+  }, [tokens]);
+
   if (!isConnected) {
     return (
       <div className="p-1 bg-gray-800 rounded-lg shadow-lg">
@@ -2816,6 +3399,13 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
             </div>
           ) : (
           <div className="space-y-1 mt-1">
+            {/* Log presale info for debugging */}
+            {/* {console.log('TCAP_v3 render: Tokens with presale info:', tokens.map(t => ({ 
+              address: t.address, 
+              name: t.name, 
+              hasPresaleInfo: !!t.presaleInfo, 
+              presaleInfo: t.presaleInfo 
+            })))} */}
             {displayedTokens.map((token) => (
               <div key={token.address} className="border border-border rounded p-2 bg-gray-800">
                   <div className="flex justify-between items-start gap-2">
@@ -2999,15 +3589,22 @@ const TCAP_v3 = forwardRef<TCAP_v3Ref, TCAP_v3Props>(({ isConnected, address: fa
                               <p className="text-xs text-text-secondary">Contributors: {token.presaleInfo.contributorCount}</p>
                               <p className="text-xs text-text-secondary">Total Raised: {token.presaleInfo.totalContributed} ETH</p>
                             </div>
-                          <div className="flex flex-col gap-1">
+                            <div className="flex flex-col gap-1">
                               <button
-                                onClick={() => handleWhitelist(token.address)}
+                                onClick={() => handleConfigurePresale(token)}
+                                className="text-xs px-2 py-0.5 bg-blue-600 hover:bg-blue-700 text-white rounded"
+                                disabled={token.presaleInfo.finalized}
+                              >
+                                Configure Presale
+                              </button>
+                              <button
+                                onClick={() => handleWhitelist(token)}
                                 className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
                                 disabled={token.presaleInfo.finalized}
                               >
                                 Manage Whitelist
                               </button>
-                                <button
+                              <button
                                 onClick={() => handleFinalize(token)}
                                 className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-text-primary rounded"
                                 disabled={token.presaleInfo.finalized || 

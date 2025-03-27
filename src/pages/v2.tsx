@@ -9,34 +9,32 @@ import { Footer } from '@/components/layouts/Footer';
 export default function V2Page() {
   const [isConnected, setIsConnected] = useState(false);
   const { chainId } = useNetwork();
+  const [account, setAccount] = useState<string | null>(null);
 
-  useEffect(() => {
-    const checkConnection = async () => {
-      if (window.ethereum) {
-        try {
-          const accounts = await window.ethereum.request({ 
-            method: 'eth_accounts' 
-          }) as string[];
-          setIsConnected(Array.isArray(accounts) && accounts.length > 0);
+  // Only check connection when explicitly requested
+  const checkConnection = async () => {
+    try {
+      // Only check for existing connections
+      const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+      setIsConnected(accounts.length > 0);
+      setAccount(accounts[0] || null);
 
-          // Listen for account changes
-          const handleAccountsChanged = (accounts: unknown) => {
-            setIsConnected(Array.isArray(accounts) && accounts.length > 0);
-          };
+      // Listen for account changes
+      const handleAccountsChanged = (accounts: string[]) => {
+        setIsConnected(accounts.length > 0);
+        setAccount(accounts[0] || null);
+      };
 
-          window.ethereum.on('accountsChanged', handleAccountsChanged);
+      window.ethereum.on('accountsChanged', handleAccountsChanged);
 
-          return () => {
-            window.ethereum?.removeListener('accountsChanged', handleAccountsChanged);
-          };
-        } catch (error) {
-          console.error('Error checking wallet connection:', error);
-        }
-      }
-    };
-
-    checkConnection();
-  }, []);
+      // Cleanup listener on unmount
+      window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+    } catch (error) {
+      console.error('Error checking connection:', error);
+      setIsConnected(false);
+      setAccount(null);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-900">
@@ -53,7 +51,7 @@ export default function V2Page() {
             <p className="text-white">Create your own token with advanced features like presale and vesting.</p>
           </div>
 
-          <TokenFormV2 isConnected={isConnected} />
+          <TokenFormV2 isConnected={isConnected} onConnect={checkConnection} />
         </div>
       </main>
       <Footer />

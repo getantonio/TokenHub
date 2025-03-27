@@ -50,13 +50,15 @@ export default function V1Page() {
   // Get the appropriate factory address based on the network
   const getFactoryAddress = () => {
     if (chainId === 80002) {
-      console.log("Using Amoy-specific factory address in v1.tsx:", AMOY_FACTORY_ADDRESS);
-      return AMOY_FACTORY_ADDRESS;
+      const address = process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V1;
+      console.log("Using environment variable for Polygon Amoy:", address);
+      return address;
     }
     
     if (chainId === 421614) {
-      console.log("Using Arbitrum Sepolia-specific factory address in v1.tsx:", ARBITRUM_SEPOLIA_FACTORY_ADDRESS);
-      return ARBITRUM_SEPOLIA_FACTORY_ADDRESS;
+      const address = process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V1;
+      console.log("Using environment variable for Arbitrum Sepolia:", address);
+      return address;
     }
     
     return chainId ? FACTORY_ADDRESSES.v1[chainId] : undefined;

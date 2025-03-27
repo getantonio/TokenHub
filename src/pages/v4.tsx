@@ -13,6 +13,7 @@ import { ChainId } from '@/types/chain';
 import TCAP_v4 from '@/components/features/token/TCAP_v4';
 import { useToast } from '@/components/ui/toast/use-toast';
 import { ethers } from 'ethers';
+import { getNetworkContractAddress } from '@/config/contracts';
 
 const ConnectWalletButton = dynamic(
   () => import('@/components/wallet/ConnectWallet').then(mod => mod.ConnectWallet),
@@ -35,46 +36,29 @@ export default function V4Page() {
     }
   }, []);
   
-  // Set default network to Polygon Amoy
-  useEffect(() => {
-    const checkNetwork = async () => {
-      if (window.ethereum && chainId !== ChainId.POLYGON_AMOY) {
-        try {
-          await window.ethereum.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: '0x13882' }], // 0x13882 is the hex value for 80002 (Polygon Amoy)
-          });
-        } catch (error) {
-          console.error('Failed to switch to Polygon Amoy:', error);
-        }
-      }
-    };
-    
-    checkNetwork();
-  }, [chainId]);
-  
   // Check if the v4 factory contract exists
   useEffect(() => {
     const checkFactoryContract = async () => {
-      if (window.ethereum && chainId === ChainId.POLYGON_AMOY) {
+      if (window.ethereum && chainId === 80002) {
         try {
           const provider = new ethers.BrowserProvider(window.ethereum);
+          // For Polygon Amoy, use the V4 factory address directly
           const v4FactoryAddress = process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V4 || 
-                                  '0xA06cF00fC2B455f92319cc4A6088B5B6Ccd2F10f';
+                                  '0x6D5ca5c96A7bC2a1A868EF5D0c7b97DdcB37B7bA';
           
           // Get checksummed address
-          const checksummedAddress = ethers.getAddress(v4FactoryAddress);
+          const checksummedAddress = ethers.getAddress(v4FactoryAddress.toLowerCase());
           console.log('Checking V4 factory contract at:', checksummedAddress);
           
+          // Check if contract exists
           const code = await provider.getCode(checksummedAddress);
-          const contractExists = code.length > 2; // "0x" means no code
-          
+          const contractExists = code !== '0x';
           console.log('V4 factory contract exists:', contractExists);
           
           if (!contractExists) {
             toast({
               title: "Warning",
-              description: "The V4 factory contract may not be deployed on Polygon Amoy. Some features might not work.",
+              description: "V4 factory contract not found on Polygon Amoy network. Please ensure you're using the correct network.",
               variant: "destructive"
             });
           }
@@ -83,6 +67,16 @@ export default function V4Page() {
           toast({
             title: "Error",
             description: "Failed to validate the factory contract address. Please check your configuration.",
+            variant: "destructive"
+          });
+        }
+      } else if (chainId) {
+        // For other networks, use the standard factory address
+        const factoryAddress = getNetworkContractAddress(chainId, 'FACTORY_ADDRESS_V4_WITH_LIQUIDITY');
+        if (!factoryAddress) {
+          toast({
+            title: "Warning",
+            description: "Factory contract not found for this network. Please switch to a supported network.",
             variant: "destructive"
           });
         }
@@ -299,11 +293,10 @@ export default function V4Page() {
                 />
               </div>
               <div>
-                <TCAP_v4 
+                <TCAP_v4
                   isConnected={isConnected}
-                  provider={provider}
                   address={address}
-                  chainId={chainId ?? undefined}
+                  provider={provider}
                 />
               </div>
             </div>

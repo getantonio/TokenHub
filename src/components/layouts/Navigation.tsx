@@ -2,10 +2,11 @@ import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { useState, useEffect, useRef } from 'react';
+import { Badge } from '@/components/ui/badge';
 
 const navigation = [
   { name: 'Presale', href: '/presale' },
-  { name: 'Liquidity', href: '/liquidity' },
+  { name: 'Why Choose Us', href: '/why-choose-us' },
   { name: 'Guides', href: '/guides' },
   { name: 'About', href: '/about' },
   { name: 'Admin', href: '/admin' }
@@ -58,7 +59,21 @@ export function Navigation() {
             </button>
 
             {isDropdownOpen && (
-              <div className="absolute top-full left-0 mt-1 w-48 bg-gray-800 rounded-md shadow-lg py-1 z-50">
+              <div className="absolute top-full left-0 mt-1 w-56 bg-gray-800 rounded-md shadow-lg py-1 z-50">
+                <Link href="/v5" className={cn(
+                  'block px-4 py-2 text-sm',
+                  router.pathname === '/v5'
+                    ? 'text-blue-400'
+                    : 'text-gray-400 hover:text-gray-200'
+                )}>
+                  <div className="flex items-center justify-between">
+                    <span>Token Factory V5</span>
+                    <Badge variant="outline" className="ml-2 text-xs bg-blue-500/10 text-blue-400 border-blue-500/50 whitespace-nowrap">
+                      Coming Soon
+                    </Badge>
+                  </div>
+                </Link>
+                <div className="border-t border-gray-700/50 my-1"></div>
                 <Link href="/v4" className={cn(
                   'block px-4 py-2 text-sm',
                   router.pathname === '/v4'
@@ -66,9 +81,7 @@ export function Navigation() {
                     : 'text-gray-400 hover:text-gray-200'
                 )}>
                   Token Factory V4
-                  <span className="ml-2 text-xs text-blue-400 opacity-75">Coming Soon</span>
                 </Link>
-                <div className="border-t border-gray-700/50 my-1"></div>
                 <Link href="/v3" className={cn(
                   'block px-4 py-2 text-sm',
                   router.pathname === '/v3'
@@ -84,14 +97,6 @@ export function Navigation() {
                     : 'text-gray-400 hover:text-gray-200'
                 )}>
                   Token Factory V2
-                </Link>
-                <Link href="/v2-direct-dex" className={cn(
-                  'block px-4 py-2 text-sm',
-                  router.pathname === '/v2-direct-dex'
-                    ? 'text-blue-400'
-                    : 'text-gray-400 hover:text-gray-200'
-                )}>
-                  DEX Listing Factory
                 </Link>
                 <Link href="/v1" className={cn(
                   'block px-4 py-2 text-sm',

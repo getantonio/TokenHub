@@ -66,9 +66,6 @@ export function TokenFeatureCard_V4({ onLearnMore }: TokenFeatureCardV4Props) {
             <h2 className="text-xl font-bold text-white mb-1">Token Factory V4</h2>
             <p className="text-sm text-gray-400">Next generation token platform with advanced economics and distribution</p>
           </div>
-          <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/50">
-            Coming Soon
-          </Badge>
         </div>
 
         {/* Feature Grid */}

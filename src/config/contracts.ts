@@ -43,23 +43,23 @@ export const contractAddresses: { [key: number]: ContractAddresses } = {
     dexListingTemplate: process.env.NEXT_PUBLIC_SEPOLIA_DEX_LISTING_TEMPLATE_ADDRESS || ''
   },
   421614: { // Arbitrum Sepolia
-    factoryAddress: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V1 || '',
-    factoryAddressV2: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V2 || '',
-    factoryAddressV2WithLiquidity: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V2_WITH_LIQUIDITY || '',
-    factoryAddressV2WithLiquidityFixed: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V2_WITH_LIQUIDITY_FIXED || '',
+    factoryAddress: process.env.NEXT_PUBLIC_FACTORY_ADDRESS_V1_ARBITRUM_SEPOLIA || '',
+    factoryAddressV2: process.env.NEXT_PUBLIC_FACTORY_ADDRESS_V2_ARBITRUM_SEPOLIA || '',
+    factoryAddressV2WithLiquidity: '',
+    factoryAddressV2WithLiquidityFixed: '',
     factoryAddressV3: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V3 || '',
-    factoryAddressV3Enhanced: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V3_ENHANCED || '',
-    factoryAddressV4: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V4 || '',
-    factoryAddressV4WithLiquidity: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY || '',
-    factoryAddressV4WithLiquidityFixed: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED || '',
-    factoryAddressV4WithLiquidityFixedV2: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V2 || '',
-    factoryAddressV4WithLiquidityFixedV3: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V3 || '',
-    factoryAddressV4WithLiquidityFixedV4: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V4 || '',
-    factoryAddressV4WithLiquidityFixedV5: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V5 || '',
-    factoryAddressV4WithLiquidityFixedV6: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V6 || '',
-    factoryAddressV4WithLiquidityFixedV7: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V4_WITH_LIQUIDITY_FIXED_V7 || '',
-    dexListingFactory: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_DEX_LISTING_FACTORY_ADDRESS || '',
-    dexListingTemplate: process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_DEX_LISTING_TEMPLATE_ADDRESS || ''
+    factoryAddressV3Enhanced: '',
+    factoryAddressV4: '',
+    factoryAddressV4WithLiquidity: '',
+    factoryAddressV4WithLiquidityFixed: '',
+    factoryAddressV4WithLiquidityFixedV2: '',
+    factoryAddressV4WithLiquidityFixedV3: '',
+    factoryAddressV4WithLiquidityFixedV4: '',
+    factoryAddressV4WithLiquidityFixedV5: '',
+    factoryAddressV4WithLiquidityFixedV6: '',
+    factoryAddressV4WithLiquidityFixedV7: '',
+    dexListingFactory: '',
+    dexListingTemplate: ''
   },
   11155420: { // Optimism Sepolia
     factoryAddress: process.env.NEXT_PUBLIC_OPSEPOLIA_FACTORY_ADDRESS_V1 || '',
@@ -173,6 +173,14 @@ export function getNetworkContractAddress(chainId: number, contractType: string)
   // First check contractAddresses map
   if (contractAddresses[chainId]) {
     switch (contractType.toUpperCase()) {
+      case 'FACTORYADDRESSV2':
+      case 'FACTORY_ADDRESS_V2':
+        const addressFromMapV2 = contractAddresses[chainId].factoryAddressV2;
+        if (addressFromMapV2) {
+          console.log(`Using ${networkName} V2 address from map:`, addressFromMapV2);
+          return addressFromMapV2;
+        }
+        break;
       case 'FACTORYADDRESSV3':
       case 'FACTORY_ADDRESS_V3':
         const addressFromMapV3 = contractAddresses[chainId].factoryAddressV3;
@@ -254,7 +262,17 @@ export function getNetworkContractAddress(chainId: number, contractType: string)
 
   // If not found in map, try environment variables
   let envKey;
-  if (contractType.toUpperCase() === 'FACTORYADDRESSV3' || contractType.toUpperCase() === 'FACTORY_ADDRESS_V3') {
+  if (contractType.toUpperCase() === 'FACTORYADDRESSV2' || contractType.toUpperCase() === 'FACTORY_ADDRESS_V2') {
+    // Try both formats for V2 factory address
+    envKey = `NEXT_PUBLIC_FACTORY_ADDRESS_V2_${networkName}`;
+    const envAddress = process.env[envKey];
+    if (envAddress) {
+      console.log(`Using ${networkName} V2 address from env:`, envAddress);
+      return envAddress;
+    }
+    // Try alternative format
+    envKey = `NEXT_PUBLIC_${networkName}_FACTORY_ADDRESS_V2`;
+  } else if (contractType.toUpperCase() === 'FACTORYADDRESSV3' || contractType.toUpperCase() === 'FACTORY_ADDRESS_V3') {
     envKey = `NEXT_PUBLIC_${networkName}_FACTORY_ADDRESS_V3`;
   } else if (contractType.toUpperCase() === 'FACTORYADDRESSV4' || contractType.toUpperCase() === 'FACTORY_ADDRESS_V4') {
     envKey = `NEXT_PUBLIC_${networkName}_FACTORY_ADDRESS_V4`;
@@ -270,7 +288,9 @@ export function getNetworkContractAddress(chainId: number, contractType: string)
     return envAddress;
   }
 
-  if (contractType.toUpperCase() === 'FACTORYADDRESSV3' || contractType.toUpperCase() === 'FACTORY_ADDRESS_V3') {
+  if (contractType.toUpperCase() === 'FACTORYADDRESSV2' || contractType.toUpperCase() === 'FACTORY_ADDRESS_V2') {
+    console.warn(`No address found for ${networkName} V2`);
+  } else if (contractType.toUpperCase() === 'FACTORYADDRESSV3' || contractType.toUpperCase() === 'FACTORY_ADDRESS_V3') {
     console.warn(`No address found for ${networkName} V3`);
   } else if (contractType.toUpperCase() === 'FACTORYADDRESSV4' || contractType.toUpperCase() === 'FACTORY_ADDRESS_V4') {
     console.warn(`No address found for ${networkName} V4`);

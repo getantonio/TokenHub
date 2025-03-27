@@ -259,13 +259,22 @@ export default function TokenAdminV2({ address }: TokenAdminV2Props) {
       });
       
       const signer = await provider.getSigner();
-      const factory = new Contract(factoryV2Address, [
-        'function getDeployedTokens() view returns (address[])',
-        'function getUserCreatedTokens(address) view returns (address[])',
-        'function isTokenCreator(address,address) view returns (bool)',
-        'function getTokenCreator(address) view returns (address)'
+      
+      // Try to interact with the contract directly first
+      const factoryContract = new Contract(factoryV2Address, [
+        ...TokenFactory_v2.abi,
+        ...ERC1967_ABI
       ], signer);
       
+      // Verify contract is accessible
+      try {
+        const version = await factoryContract.VERSION();
+        console.log('Factory contract version:', version);
+      } catch (error) {
+        console.error('Error accessing factory contract:', error);
+        throw new Error('Could not access factory contract. Please check your network connection and try again.');
+      }
+
       const userAddress = await signer.getAddress();
       console.log('TCAP_v2: Got user address:', userAddress);
       
@@ -273,24 +282,90 @@ export default function TokenAdminV2({ address }: TokenAdminV2Props) {
       let userTokens = [];
       try {
         console.log('TCAP_v2: Trying getUserCreatedTokens');
-        userTokens = await factory.getUserCreatedTokens(userAddress);
+        userTokens = await factoryContract.getUserCreatedTokens(userAddress);
+        console.log('TCAP_v2: Got user tokens:', userTokens);
       } catch (error) {
-        console.log('TCAP_v2: getUserCreatedTokens failed, trying getDeployedTokens');
+        console.error('TCAP_v2: getUserCreatedTokens failed:', error);
         try {
-          const allTokens = await factory.getDeployedTokens();
-          // Filter tokens created by user
-          const tokenPromises = allTokens.map(async (token: string) => {
-            try {
-              const isCreator = await factory.isTokenCreator(userAddress, token);
-              return isCreator ? token : null;
-            } catch {
-              return null;
-            }
-          });
-          userTokens = (await Promise.all(tokenPromises)).filter(Boolean);
+          console.log('TCAP_v2: Trying getDeployedTokens');
+          const allTokens = await factoryContract.getDeployedTokens();
+          console.log('TCAP_v2: Got all tokens:', allTokens);
+          
+          if (!Array.isArray(allTokens)) {
+            throw new Error('Invalid response from getDeployedTokens');
+          }
+          
+          // For Polygon Amoy, we'll try to get token creators directly from the token contracts
+          if (chainId === 80002) {
+            const tokenPromises = allTokens.map(async (token: string) => {
+              try {
+                const tokenContract = new Contract(token, [
+                  'function owner() view returns (address)',
+                  'function getOwner() view returns (address)'
+                ], provider);
+                
+                // Try all ownership methods
+                const ownershipMethods = [
+                  () => tokenContract.owner(),
+                  () => tokenContract.getOwner(),
+                  () => tokenContract.creator(),
+                  () => tokenContract.getCreator(),
+                  () => tokenContract.tokenCreator(),
+                  () => tokenContract.getTokenCreator()
+                ];
+                
+                for (const method of ownershipMethods) {
+                  try {
+                    const result = await method();
+                    if (result && result.toLowerCase() === userAddress.toLowerCase()) {
+                      return token;
+                    }
+                  } catch (error) {
+                    // Continue to next method if this one fails
+                    continue;
+                  }
+                }
+                
+                return null;
+              } catch (error) {
+                console.error(`TCAP_v2: Error checking token ownership for ${token}:`, error);
+                return null;
+              }
+            });
+            
+            userTokens = (await Promise.all(tokenPromises)).filter(Boolean);
+          } else {
+            // For other networks, use the factory contract methods
+            const tokenPromises = allTokens.map(async (token: string) => {
+              try {
+                // First try to get the token creator directly
+                const creator = await factoryContract.getTokenCreator(token);
+                if (creator.toLowerCase() === userAddress.toLowerCase()) {
+                  return token;
+                }
+                
+                // If that fails, try isTokenCreator
+                const isCreator = await factoryContract.isTokenCreator(userAddress, token);
+                return isCreator ? token : null;
+              } catch (error) {
+                console.error(`TCAP_v2: Error checking token creator for ${token}:`, error);
+                return null;
+              }
+            });
+            
+            userTokens = (await Promise.all(tokenPromises)).filter(Boolean);
+          }
+          
+          console.log('TCAP_v2: Filtered user tokens:', userTokens);
+          
+          if (userTokens.length === 0) {
+            console.log('TCAP_v2: No tokens found for user');
+            showToast('success', 'No tokens found. Create your first token to get started!');
+            return;
+          }
         } catch (error) {
-          console.error('Both token retrieval methods failed:', error);
-          throw new Error('Failed to retrieve tokens');
+          console.error('TCAP_v2: Both token retrieval methods failed:', error);
+          throw new Error('Failed to retrieve tokens. Please try again later.');
         }
       }
 
@@ -312,8 +387,27 @@ export default function TokenAdminV2({ address }: TokenAdminV2Props) {
           const tokenContract = new Contract(tokenAddress, [
             'function blacklistEnabled() view returns (bool)',
             'function timeLockEnabled() view returns (bool)',
-            'function presaleInfo() view returns (tuple(uint256,uint256,uint256,uint256,uint256,uint256,uint256,bool,bool,uint256))',
-            'function platformFee() view returns (tuple(address,uint256,bool,uint256,uint256,uint256,uint256))'
+            'function presaleInfo() view returns (tuple(uint256 softCap, uint256 hardCap, uint256 minContribution, uint256 maxContribution, uint256 startTime, uint256 endTime, uint256 presaleRate, bool whitelistEnabled, bool finalized, uint256 totalContributed))',
+            'function platformFeeRecipient() view returns (address)',
+            'function platformFeeTokens() view returns (uint256)',
+            'function platformFeeVestingEnabled() view returns (bool)',
+            'function platformFeeVestingDuration() view returns (uint256)',
+            'function platformFeeCliffDuration() view returns (uint256)',
+            'function platformFeeVestingStart() view returns (uint256)',
+            'function platformFeeTokensClaimed() view returns (uint256)',
+            'function owner() view returns (address)',
+            'function getOwner() view returns (address)',
+            'function creator() view returns (address)',
+            'function getCreator() view returns (address)',
+            'function tokenCreator() view returns (address)',
+            'function getTokenCreator() view returns (address)',
+            'function maxSupply() view returns (uint256)',
+            'function initialSupply() view returns (uint256)',
+            'function createdAt() view returns (uint256)',
+            'function getBlacklistedAddresses() view returns (address[])',
+            'function getTimeLockedAddresses() view returns (address[])',
+            'function getTimeLockDuration(address) view returns (uint256)',
+            'function getTimeLockExpiry(address) view returns (uint256)'
           ], provider);
 
           // Basic token info with error handling
@@ -328,22 +422,38 @@ export default function TokenAdminV2({ address }: TokenAdminV2Props) {
           const [blacklistEnabled, timeLockEnabled, presaleData] = await Promise.all([
             tokenContract.blacklistEnabled().catch(() => false),
             tokenContract.timeLockEnabled().catch(() => false),
-            tokenContract.presaleInfo().catch(() => [
-              BigInt(0), BigInt(0), BigInt(0), BigInt(0), 
-              BigInt(0), BigInt(0), BigInt(0), false, false, BigInt(0)
-            ])
+            tokenContract.presaleInfo().catch(() => ({
+              softCap: BigInt(0),
+              hardCap: BigInt(0),
+              minContribution: BigInt(0),
+              maxContribution: BigInt(0),
+              startTime: BigInt(0),
+              endTime: BigInt(0),
+              presaleRate: BigInt(0),
+              whitelistEnabled: false,
+              finalized: false,
+              totalContributed: BigInt(0)
+            }))
           ]);
 
           // Get platform fee info with error handling
-          const platformFee = await tokenContract.platformFee().catch(() => ({
-            recipient: '0x0000000000000000000000000000000000000000',
-            totalTokens: BigInt(0),
-            vestingEnabled: false,
-            vestingDuration: BigInt(0),
-            cliffDuration: BigInt(0),
-            vestingStart: BigInt(0),
-            tokensClaimed: BigInt(0)
-          }));
+          const [
+            platformFeeRecipient,
+            platformFeeTokens,
+            platformFeeVestingEnabled,
+            platformFeeVestingDuration,
+            platformFeeCliffDuration,
+            platformFeeVestingStart,
+            platformFeeTokensClaimed
+          ] = await Promise.all([
+            tokenContract.platformFeeRecipient().catch(() => '0x0000000000000000000000000000000000000000'),
+            tokenContract.platformFeeTokens().catch(() => BigInt(0)),
+            tokenContract.platformFeeVestingEnabled().catch(() => false),
+            tokenContract.platformFeeVestingDuration().catch(() => BigInt(0)),
+            tokenContract.platformFeeCliffDuration().catch(() => BigInt(0)),
+            tokenContract.platformFeeVestingStart().catch(() => BigInt(0)),
+            tokenContract.platformFeeTokensClaimed().catch(() => BigInt(0))
+          ]);
 
           return {
             address: tokenAddress,
@@ -356,25 +466,25 @@ export default function TokenAdminV2({ address }: TokenAdminV2Props) {
             blacklistEnabled,
             timeLockEnabled,
             presaleInfo: {
-              softCap: formatUnits(presaleData[0], decimals),
-              hardCap: formatUnits(presaleData[1], decimals),
-              minContribution: formatUnits(presaleData[2], decimals),
-              maxContribution: formatUnits(presaleData[3], decimals),
-              startTime: Number(presaleData[4]),
-              endTime: Number(presaleData[5]),
-              presaleRate: formatUnits(presaleData[6], decimals),
-              whitelistEnabled: presaleData[7],
-              finalized: presaleData[8],
-              totalContributed: formatUnits(presaleData[9], decimals)
+              softCap: formatUnits(presaleData.softCap, decimals),
+              hardCap: formatUnits(presaleData.hardCap, decimals),
+              minContribution: formatUnits(presaleData.minContribution, decimals),
+              maxContribution: formatUnits(presaleData.maxContribution, decimals),
+              startTime: Number(presaleData.startTime),
+              endTime: Number(presaleData.endTime),
+              presaleRate: formatUnits(presaleData.presaleRate, decimals),
+              whitelistEnabled: presaleData.whitelistEnabled,
+              finalized: presaleData.finalized,
+              totalContributed: formatUnits(presaleData.totalContributed, decimals)
             },
             platformFee: {
-              recipient: platformFee.recipient,
-              totalTokens: formatUnits(platformFee.totalTokens || BigInt(0), decimals),
-              vestingEnabled: platformFee.vestingEnabled,
-              vestingDuration: Number(platformFee.vestingDuration),
-              cliffDuration: Number(platformFee.cliffDuration),
-              vestingStart: Number(platformFee.vestingStart),
-              tokensClaimed: formatUnits(platformFee.tokensClaimed || BigInt(0), decimals)
+              recipient: platformFeeRecipient,
+              totalTokens: formatUnits(platformFeeTokens, decimals),
+              vestingEnabled: platformFeeVestingEnabled,
+              vestingDuration: Number(platformFeeVestingDuration),
+              cliffDuration: Number(platformFeeCliffDuration),
+              vestingStart: Number(platformFeeVestingStart),
+              tokensClaimed: formatUnits(platformFeeTokensClaimed, decimals)
             },
             createdAt: Date.now()
           } as TokenInfo;

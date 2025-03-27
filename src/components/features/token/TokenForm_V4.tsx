@@ -338,6 +338,7 @@ Leave this field empty if you're not doing an airdrop yet - you can add it later
 
 export default function TokenForm_V4({ isConnected, onSuccess, onError }: TokenFormV4Props) {
   const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'basic' | 'tax' | 'tokenomics' | 'supply' | 'distribution'>('basic');
   const form = useForm<FormData>({
     defaultValues: {
@@ -1600,12 +1601,13 @@ export default function TokenForm_V4({ isConnected, onSuccess, onError }: TokenF
             </div>
           </div>
 
-          <Button 
-            type="submit" 
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white h-9"
-            disabled={!isConnected}
+          <Button
+            type="submit"
+            disabled={!isConnected || isLoading}
+            className="w-full"
+            suppressHydrationWarning
           >
-            {isConnected ? "Create Token" : "Connect Wallet to Deploy"}
+            {isConnected ? 'Create Token' : 'Connect Wallet to Deploy'}
           </Button>
         </form>
       </Card>

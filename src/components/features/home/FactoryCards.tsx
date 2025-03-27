@@ -8,7 +8,7 @@ interface FactoryConfig {
   description: string;
   features: string[];
   href: string;
-  status?: "new" | "beta" | "stable";
+  status?: "new" | "beta" | "stable" | "coming-soon";
   recommended?: boolean;
 }
 
@@ -71,9 +71,9 @@ const factoryConfigs: FactoryConfig[] = [
       "Auto-Liquidity",
       "Token Listing Management"
     ],
-    href: "/v2-direct-dex",
-    status: "new",
-    recommended: true
+    href: "#",
+    status: "coming-soon",
+    recommended: false
   }
 ];
 
@@ -81,8 +81,8 @@ export default function FactoryCards() {
   return (
     <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2">
       {factoryConfigs.map((config) => (
-        <Link key={config.version} href={config.href}>
-          <Card className="p-6 hover:border-primary transition-colors cursor-pointer h-full">
+        <div key={config.version}>
+          <Card className={`p-6 transition-colors h-full ${config.href === "#" ? 'opacity-50 cursor-not-allowed' : 'hover:border-primary cursor-pointer'}`}>
             <div className="flex items-start justify-between mb-4">
               <div>
                 <h3 className="text-lg font-semibold">{config.title}</h3>
@@ -90,8 +90,8 @@ export default function FactoryCards() {
               </div>
               <div className="flex gap-2">
                 {config.status && (
-                  <Badge variant={config.status === "stable" ? "default" : "secondary"}>
-                    {config.status}
+                  <Badge variant={config.status === "coming-soon" ? "secondary" : config.status === "stable" ? "default" : "secondary"}>
+                    {config.status === "coming-soon" ? "Coming Soon" : config.status}
                   </Badge>
                 )}
                 {config.recommended && (
@@ -108,7 +108,7 @@ export default function FactoryCards() {
               ))}
             </ul>
           </Card>
-        </Link>
+        </div>
       ))}
     </div>
   );

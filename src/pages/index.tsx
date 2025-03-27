@@ -42,13 +42,6 @@ export default function HomePage() {
       icon: '🔒'
     },
     {
-      version: 'v2_DirectDEX',
-      title: 'DEX Listing Factory',
-      description: 'Instantly list your token on a DEX with advanced trading controls',
-      features: ['Instant DEX listing', 'Multi-DEX support', 'Marketing & Dev fees', 'Anti-bot protection'],
-      icon: '🚀'
-    },
-    {
       version: 'v2',
       title: 'Factory v2',
       description: 'Advanced token with built-in presale functionality',
@@ -91,23 +84,25 @@ export default function HomePage() {
                 href={version.version === 'v2_DirectDEX' ? '/v2-direct-dex' : `/${version.version.toLowerCase()}`}
                 className="block"
               >
-                <Card className="h-full bg-gray-800 hover:bg-gray-750 transition-colors border border-gray-700/50 hover:border-gray-600/50">
+                <Card className={`h-full bg-gray-800 hover:bg-gray-750 transition-colors border border-gray-700/50 hover:border-gray-600/50 ${version.disabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
                   <CardContent className="p-4">
-                    <div className="flex items-start justify-between gap-3 mb-3">
+                    <div className="flex flex-col gap-3 mb-3">
                       <div className="flex items-start gap-3">
-                        <span className="text-2xl" role="img" aria-label={version.title}>
+                        <span className="text-2xl flex-shrink-0" role="img" aria-label={version.title}>
                           {version.icon}
                         </span>
-                        <div>
-                          <h2 className="text-lg font-semibold text-white">{version.title}</h2>
+                        <div className="flex-grow">
+                          <div className="flex items-center gap-2">
+                            <h2 className="text-lg font-semibold text-white">{version.title}</h2>
+                            {(version.version === 'v5' || version.version === 'v2_DirectDEX') && (
+                              <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/50 whitespace-nowrap text-xs">
+                                Coming Soon
+                              </Badge>
+                            )}
+                          </div>
                           <p className="text-sm text-gray-400">{version.description}</p>
                         </div>
                       </div>
-                      {(version.version === 'v5' || version.version === 'v4' || version.version === 'v2_DirectDEX') && (
-                        <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/50 whitespace-nowrap">
-                          Coming Soon
-                        </Badge>
-                      )}
                     </div>
                     <ul className="space-y-1">
                       {version.features.map((feature, index) => (
