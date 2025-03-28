@@ -20,6 +20,11 @@ const tokenFactoryLinks = [
     title: "v2 DirectDEX",
     href: "/v2-direct-dex",
     description: "Create and instantly list tokens with advanced DEX features"
+  },
+  {
+    title: "DeFi Loan Factory",
+    href: "/defi-loan",
+    description: "Create customizable lending pools for DeFi assets"
   }
 ];
 

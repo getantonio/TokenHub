@@ -11,6 +11,19 @@ export default function HomePage() {
   const router = useRouter();
   const currentVersions = [
     {
+      version: 'defi-loan',
+      title: 'DeFi Loan Factory',
+      description: 'Create and manage customizable lending pools with advanced DeFi features',
+      features: [
+        'Customizable lending pools',
+        'Dynamic interest rates',
+        'Multi-asset collateral',
+        'Liquidation engine'
+      ],
+      icon: '🏦',
+      disabled: false
+    },
+    {
       version: 'v5',
       title: 'Factory v5',
       description: 'Create synthetic tokens pegged to real-world assets with advanced price tracking',
@@ -20,7 +33,8 @@ export default function HomePage() {
         'Automated rebase system',
         'Collateral management'
       ],
-      icon: '📈'
+      icon: '📈',
+      disabled: false
     },
     {
       version: 'v4',
@@ -32,28 +46,32 @@ export default function HomePage() {
         'Holder rewards',
         'Anti-bot protection'
       ],
-      icon: '⚡'
+      icon: '⚡',
+      disabled: false
     },
     {
       version: 'v3',
       title: 'Factory v3',
       description: 'Complete token solution with vesting schedules and multi-wallet distribution',
       features: ['Vesting schedules', 'Multi-wallet distribution', 'Presale allocation', 'Liquidity management'],
-      icon: '🔒'
+      icon: '🔒',
+      disabled: false
     },
     {
       version: 'v2',
       title: 'Factory v2',
       description: 'Advanced token with built-in presale functionality',
       features: ['Presale system', 'Contribution limits', 'Timeline management', 'Basic vesting'],
-      icon: '💎'
+      icon: '💎',
+      disabled: false
     },
     {
       version: 'v1',
       title: 'Factory v1',
       description: 'Basic ERC20 token with essential features',
       features: ['Blacklist system', 'Time locks', 'Basic transfers', 'Owner controls'],
-      icon: '🔑'
+      icon: '🔑',
+      disabled: false
     }
   ];
 
