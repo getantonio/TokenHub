@@ -60,6 +60,20 @@ export function Navigation() {
 
             {isDropdownOpen && (
               <div className="absolute top-full left-0 mt-1 w-56 bg-gray-800 rounded-md shadow-lg py-1 z-50">
+                <Link href="/defi-loan" className={cn(
+                  'block px-4 py-2 text-sm',
+                  router.pathname === '/defi-loan'
+                    ? 'text-blue-400'
+                    : 'text-gray-400 hover:text-gray-200'
+                )}>
+                  <div className="flex items-center justify-between">
+                    <span>DeFi Loan Factory</span>
+                    <Badge variant="outline" className="ml-2 text-xs bg-green-500/10 text-green-400 border-green-500/50 whitespace-nowrap">
+                      New
+                    </Badge>
+                  </div>
+                </Link>
+                <div className="border-t border-gray-700/50 my-1"></div>
                 <Link href="/v5" className={cn(
                   'block px-4 py-2 text-sm',
                   router.pathname === '/v5'

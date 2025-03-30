@@ -3,12 +3,22 @@ export const LOAN_POOL_FACTORY_ABI = [
     "inputs": [
       {
         "internalType": "address",
+        "name": "_implementation",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
         "name": "_priceOracle",
         "type": "address"
       },
       {
         "internalType": "address",
         "name": "_interestRateModel",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "_feeCollector",
         "type": "address"
       }
     ],
@@ -104,6 +114,51 @@ export const LOAN_POOL_FACTORY_ABI = [
     "type": "function"
   },
   {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "allPools",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "implementation",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "feeCollector",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [],
     "name": "getAllPools",
     "outputs": [
@@ -111,6 +166,19 @@ export const LOAN_POOL_FACTORY_ABI = [
         "internalType": "address[]",
         "name": "",
         "type": "address[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getPoolCount",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
       }
     ],
     "stateMutability": "view",
@@ -178,7 +246,7 @@ export const LOAN_POOL_FACTORY_ABI = [
         "type": "address"
       }
     ],
-    "stateMutability": "nonpayable",
+    "stateMutability": "payable",
     "type": "function"
   },
   {
@@ -250,6 +318,54 @@ export const LENDING_POOL_ABI = [
     ],
     "stateMutability": "nonpayable",
     "type": "constructor"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_asset",
+        "type": "address"
+      },
+      {
+        "internalType": "string",
+        "name": "_name",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "_symbol",
+        "type": "string"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_collateralFactorBps",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_reserveFactorBps",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "_priceOracle",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "_interestRateModel",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "_feeCollector",
+        "type": "address"
+      }
+    ],
+    "name": "initialize",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
   },
   {
     "anonymous": false,
