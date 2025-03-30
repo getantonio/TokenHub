@@ -249,23 +249,52 @@ const DistributionTab = ({ chainId, account }: DistributionTabProps) => {
       form.setValue('presalePercentage', presetConfig.presalePercentage.toString());
     }
     
-    // Set liquidity percentage based on presale state
-    const liquidityPercentage = presaleEnabled ? 
-      presetConfig.liquidityPercentage : // Use preset liquidity if presale enabled
-      presetConfig.liquidityPercentage + presetConfig.presalePercentage; // Add presale's percentage to liquidity if disabled
-    
-    form.setValue('liquidityPercentage', liquidityPercentage.toString());
-    
-    // Set wallets with correct percentages and vesting schedules
-    form.setValue('wallets', presetConfig.wallets.map(wallet => ({
-      name: wallet.name,
-      address: wallet.address || account || '',
-      percentage: wallet.percentage.toString(),
-      vestingEnabled: wallet.vestingEnabled,
-      vestingDuration: wallet.vestingDuration.toString(),
-      cliffDuration: wallet.cliffDuration.toString(),
-      vestingStartTime: Number(now + (24 * 3600)) // Start 24 hours from now, ensure it's a number
-    })));
+    // Adjust liquidityPercentage and wallet percentages based on presale state
+    if (presaleEnabled) {
+      // Use preset liquidity if presale enabled
+      form.setValue('liquidityPercentage', presetConfig.liquidityPercentage.toString());
+      
+      // Set wallets with original percentages
+      form.setValue('wallets', presetConfig.wallets.map(wallet => ({
+        name: wallet.name,
+        address: wallet.address || account || '',
+        percentage: wallet.percentage.toString(),
+        vestingEnabled: wallet.vestingEnabled,
+        vestingDuration: wallet.vestingDuration.toString(),
+        cliffDuration: wallet.cliffDuration.toString(),
+        vestingStartTime: Number(now + (24 * 3600)) // Start 24 hours from now, ensure it's a number
+      })));
+    } else {
+      // When presale is disabled, redistribute the presale percentage
+      const presalePercentage = parseInt(presetConfig.presalePercentage);
+      const liquidityPercentage = parseInt(presetConfig.liquidityPercentage);
+      
+      // Get total wallet percentage as integer
+      let totalWalletPercentage = 0;
+      presetConfig.wallets.forEach(wallet => {
+        totalWalletPercentage += parseInt(wallet.percentage);
+      });
+      
+      // Calculate how to distribute the presale percentage (total must equal 100%)
+      // Priority: always assign extra to liquidity first, then distribute remainder to wallets
+      
+      // Simple approach: add presale percentage to liquidity (whole number)
+      const newLiquidityPercentage = liquidityPercentage + presalePercentage;
+      
+      // Set the new liquidity percentage (as whole number)
+      form.setValue('liquidityPercentage', newLiquidityPercentage.toString());
+      
+      // Set wallets with original percentages (no change)
+      form.setValue('wallets', presetConfig.wallets.map(wallet => ({
+        name: wallet.name,
+        address: wallet.address || account || '',
+        percentage: wallet.percentage.toString(), // Keep original wallet percentages
+        vestingEnabled: wallet.vestingEnabled,
+        vestingDuration: wallet.vestingDuration.toString(),
+        cliffDuration: wallet.cliffDuration.toString(),
+        vestingStartTime: Number(now + (24 * 3600))
+      })));
+    }
   };
 
   return (

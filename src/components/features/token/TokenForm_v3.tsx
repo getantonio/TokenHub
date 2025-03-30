@@ -1711,9 +1711,9 @@ const TokenForm_v3: React.FC<TokenFormV3Props> = ({
       {/* Keep existing dialogs */}
       {showSimulationDialog && (
       <Dialog open={showSimulationDialog} onOpenChange={setShowSimulationDialog}>
-          <DialogContent className="max-w-2xl">
-            <h2 className="text-xl font-bold mb-4">Deployment Simulation Results</h2>
-            <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+          <DialogContent className="max-w-2xl bg-gray-900 text-white border-gray-700">
+            <h2 className="text-xl font-bold mb-4 text-white">Deployment Simulation Results</h2>
+            <div className="space-y-4 max-h-[60vh] overflow-y-auto text-white">
               {simulationResults.map((result, index) => (
                 <div key={index} className={`p-3 rounded-lg border ${
                   result.status === 'success' ? 'border-green-600 bg-green-950/20' : 
@@ -1726,11 +1726,11 @@ const TokenForm_v3: React.FC<TokenFormV3Props> = ({
                       result.status === 'warning' ? 'bg-yellow-500' : 
                       'bg-red-500'
                     }`}></div>
-                    <h3 className="font-semibold">{result.category}</h3>
+                    <h3 className="font-semibold text-white">{result.category}</h3>
                   </div>
-                  <p className="mt-1 text-sm">{result.message}</p>
+                  <p className="mt-1 text-sm text-gray-200">{result.message}</p>
                   {result.details && result.details.length > 0 && (
-                    <ul className="mt-2 space-y-1 text-xs text-gray-400">
+                    <ul className="mt-2 space-y-1 text-xs text-gray-300">
                       {result.details.map((detail, i) => (
                         <li key={i}>{detail}</li>
                       ))}

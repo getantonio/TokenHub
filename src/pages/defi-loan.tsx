@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import Head from 'next/head';
 import { CreatePoolForm } from '@/components/defi/CreatePoolForm';
 import { PoolDashboard } from '@/components/defi/PoolDashboard';
+import { LiquidityMiningDashboard } from '@/components/defi/LiquidityMiningDashboard';
 import { Footer } from '@/components/layouts/Footer';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
@@ -19,6 +20,7 @@ import { QuestionMarkCircledIcon, SpeakerLoudIcon } from "@radix-ui/react-icons"
 export default function DefiLoanPage() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [miningDialogOpen, setMiningDialogOpen] = useState(false);
   const [isReading, setIsReading] = useState(false);
   const speechSynthesisRef = useRef<SpeechSynthesis | null>(null);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
@@ -311,9 +313,152 @@ export default function DefiLoanPage() {
             </DialogContent>
           </Dialog>
 
+          <Dialog open={miningDialogOpen} onOpenChange={setMiningDialogOpen}>
+            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-gray-800 text-white">
+              <DialogHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <DialogTitle className="text-xl font-bold text-white">Understanding Liquidity Mining</DialogTitle>
+                  <DialogDescription className="text-gray-300">
+                    Learn the basics of liquidity mining and how to boost your DeFi protocol
+                  </DialogDescription>
+                </div>
+                <Button 
+                  variant="ghost" 
+                  onClick={handleTextToSpeech}
+                  className={`p-2 rounded-full hover:bg-gray-700 ${isReading ? 'text-blue-400' : 'text-gray-400'}`}
+                  title={isReading ? "Stop reading" : "Read content aloud"}
+                  aria-label={isReading ? "Stop reading" : "Read content aloud"}
+                >
+                  <SpeakerLoudIcon className="h-5 w-5" />
+                </Button>
+              </DialogHeader>
+              
+              <div className="space-y-4 mt-4 text-gray-200 dialog-content">
+                <h3 className="text-lg font-semibold text-white">What is Liquidity Mining?</h3>
+                <p>
+                  Liquidity mining is a DeFi mechanism where users provide liquidity to a protocol and earn token rewards in return.
+                  It's a powerful way to bootstrap liquidity for your lending pools while rewarding early supporters.
+                </p>
+                
+                <h3 className="text-lg font-semibold text-white">Key Benefits</h3>
+                <ul className="list-disc pl-5 space-y-2">
+                  <li><span className="font-medium">Enhanced Liquidity:</span> Attract more assets to your lending pools</li>
+                  <li><span className="font-medium">Competitive APY:</span> Offer attractive yields to liquidity providers</li>
+                  <li><span className="font-medium">Protocol Growth:</span> Accelerate user adoption and ecosystem growth</li>
+                  <li><span className="font-medium">Token Distribution:</span> Distribute tokens to active participants</li>
+                  <li><span className="font-medium">Community Building:</span> Create loyal users with aligned incentives</li>
+                </ul>
+                
+                <h3 className="text-lg font-semibold text-white">How It Works</h3>
+                <div className="bg-gray-700 p-4 rounded-md mt-2 mb-4">
+                  <ol className="list-decimal pl-5 space-y-3">
+                    <li>
+                      <span className="font-medium">Create a Mining Program</span>
+                      <p className="text-sm mt-1">
+                        Set up a new liquidity mining program for your lending pool, creating a custom reward token or using an existing one.
+                      </p>
+                    </li>
+                    <li>
+                      <span className="font-medium">Configure Rewards</span>
+                      <p className="text-sm mt-1">
+                        Define the reward rate (tokens distributed per time period) and other parameters.
+                      </p>
+                    </li>
+                    <li>
+                      <span className="font-medium">Users Stake LP Tokens</span>
+                      <p className="text-sm mt-1">
+                        Liquidity providers stake their LP tokens in the mining program to earn rewards.
+                      </p>
+                    </li>
+                    <li>
+                      <span className="font-medium">Rewards Distribution</span>
+                      <p className="text-sm mt-1">
+                        Rewards are continually accrued based on each user's share of the staked tokens.
+                      </p>
+                    </li>
+                    <li>
+                      <span className="font-medium">Claim Rewards</span>
+                      <p className="text-sm mt-1">
+                        Users can claim their earned rewards at any time.
+                      </p>
+                    </li>
+                  </ol>
+                </div>
+                
+                <h3 className="text-lg font-semibold text-white">Best Practices</h3>
+                <div className="space-y-2">
+                  <h4 className="font-medium text-white">Reward Rate Considerations</h4>
+                  <p>
+                    Setting the right reward rate is crucial for your program's success:
+                  </p>
+                  <ul className="list-disc pl-5 space-y-1 mt-2">
+                    <li><span className="font-medium">Too low:</span> May not attract enough liquidity</li>
+                    <li><span className="font-medium">Too high:</span> Could deplete rewards too quickly</li>
+                  </ul>
+                  <p className="text-green-400 text-sm mt-1">
+                    Aim for a sustainable rate that balances immediate incentives with long-term program viability.
+                  </p>
+                </div>
+                
+                <div className="space-y-2 mt-4">
+                  <h4 className="font-medium text-white">Program Duration</h4>
+                  <p>
+                    Consider how long your mining program should run:
+                  </p>
+                  <ul className="list-disc pl-5 space-y-1 mt-2">
+                    <li><span className="font-medium">Short-term (1-3 months):</span> Quick liquidity boost for new pools</li>
+                    <li><span className="font-medium">Medium-term (3-6 months):</span> Sustainable growth and user retention</li>
+                    <li><span className="font-medium">Long-term (6+ months):</span> Strategic ecosystem development</li>
+                  </ul>
+                </div>
+                
+                <h3 className="text-lg font-semibold text-white">Economic Considerations</h3>
+                <p>
+                  Liquidity mining creates a symbiotic relationship between your protocol and its users:
+                </p>
+                
+                <div className="bg-gray-700 p-4 rounded-md mt-2">
+                  <h4 className="font-medium text-white">For Your Protocol</h4>
+                  <ul className="list-disc pl-5 space-y-1 mt-2">
+                    <li>Increased liquidity means more lending/borrowing activity</li>
+                    <li>Higher protocol revenue from transaction fees</li>
+                    <li>Greater protocol token utility and potential value appreciation</li>
+                  </ul>
+                  
+                  <h4 className="font-medium text-white mt-4">For Users</h4>
+                  <ul className="list-disc pl-5 space-y-1 mt-2">
+                    <li>Enhanced yields from combining interest and mining rewards</li>
+                    <li>Exposure to new token assets with growth potential</li>
+                    <li>Deeper engagement with your protocol's ecosystem</li>
+                  </ul>
+                </div>
+                
+                <h3 className="text-lg font-semibold text-white">Getting Started</h3>
+                <p>
+                  Ready to launch your own liquidity mining program? Follow these steps:
+                </p>
+                <ol className="list-decimal pl-5 space-y-1">
+                  <li>Create a lending pool if you haven't already</li>
+                  <li>Navigate to the Liquidity Mining tab</li>
+                  <li>Click "Create Program" and fill in the required details</li>
+                  <li>Set your reward parameters carefully</li>
+                  <li>Promote your mining program to attract liquidity providers</li>
+                </ol>
+                
+                <div className="p-4 bg-blue-900/20 border border-blue-800/30 rounded-lg mt-4">
+                  <h4 className="font-medium text-blue-300">Pro Tip</h4>
+                  <p className="mt-1">
+                    Consider implementing multiple tiers of rewards or time-based bonuses to incentivize long-term liquidity commitment and reduce the "farm and dump" phenomenon.
+                  </p>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
           <Tabs defaultValue="dashboard" value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-8 bg-gray-800">
+            <TabsList className="grid w-full grid-cols-3 mb-8 bg-gray-800">
               <TabsTrigger value="dashboard" className="data-[state=active]:bg-blue-600">Dashboard</TabsTrigger>
+              <TabsTrigger value="liquidity-mining" className="data-[state=active]:bg-blue-600">Liquidity Mining</TabsTrigger>
               <TabsTrigger value="create" className="data-[state=active]:bg-blue-600">Create New Pool</TabsTrigger>
             </TabsList>
             
@@ -399,6 +544,91 @@ export default function DefiLoanPage() {
                 <div id="poolDashboardSection">
                   <h2 className="text-2xl font-semibold text-white mb-6">Your Lending Pools</h2>
                   <PoolDashboard factoryAddress={factoryAddress as `0x${string}`} />
+                </div>
+              </div>
+            </TabsContent>
+            
+            <TabsContent value="liquidity-mining">
+              <div className="space-y-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
+                  {/* Create New Mining Program Card */}
+                  <Card className="bg-gradient-to-br from-green-600/20 to-teal-600/20 border border-green-500/20 hover:border-green-500/40 transition-all">
+                    <CardContent className="p-6">
+                      <h2 className="text-2xl font-semibold text-white mb-4">Create Mining Program</h2>
+                      <p className="text-gray-400 mb-6">Set up liquidity mining rewards to incentivize users to provide liquidity to your pools.</p>
+                      <Button 
+                        className="w-full bg-green-600 hover:bg-green-700 text-white"
+                        onClick={() => document.getElementById('liquidityMiningSection')?.scrollIntoView({ behavior: 'smooth' })}
+                      >
+                        Create Program
+                      </Button>
+                    </CardContent>
+                  </Card>
+
+                  {/* Stake Tokens Card */}
+                  <Card className="bg-gradient-to-br from-amber-600/20 to-orange-600/20 border border-amber-500/20 hover:border-amber-500/40 transition-all">
+                    <CardContent className="p-6">
+                      <h2 className="text-2xl font-semibold text-white mb-4">Stake & Earn Rewards</h2>
+                      <p className="text-gray-400 mb-6">Stake your LP tokens in active mining programs to earn rewards and boost your returns.</p>
+                      <Button 
+                        className="w-full bg-amber-600 hover:bg-amber-700 text-white"
+                        onClick={() => document.getElementById('liquidityMiningSection')?.scrollIntoView({ behavior: 'smooth' })}
+                      >
+                        View Programs
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Features Section */}
+                <div className="mb-12">
+                  <h2 className="text-2xl font-semibold text-white mb-6">Liquidity Mining Benefits</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <Card className="bg-gray-800 border-gray-700/50">
+                      <CardContent className="p-6">
+                        <div className="text-3xl mb-4">💰</div>
+                        <h3 className="text-lg font-semibold text-white mb-2">Incentivize Liquidity</h3>
+                        <p className="text-gray-400">Attract more liquidity to your lending pools by offering token rewards.</p>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="bg-gray-800 border-gray-700/50">
+                      <CardContent className="p-6">
+                        <div className="text-3xl mb-4">📈</div>
+                        <h3 className="text-lg font-semibold text-white mb-2">Boost APY</h3>
+                        <p className="text-gray-400">Provide additional yield opportunities beyond standard interest rates.</p>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="bg-gray-800 border-gray-700/50">
+                      <CardContent className="p-6">
+                        <div className="text-3xl mb-4">🌱</div>
+                        <h3 className="text-lg font-semibold text-white mb-2">Bootstrap Growth</h3>
+                        <p className="text-gray-400">Accelerate the adoption of your DeFi protocol with token incentives.</p>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </div>
+
+                {/* Add documentation section */}
+                <div className="text-center mb-12">
+                  <h2 className="text-2xl font-semibold text-white mb-4">Ready to Get Started?</h2>
+                  <p className="text-gray-400 mb-6">Learn how liquidity mining can boost your DeFi protocol and increase user engagement.</p>
+                  <div className="flex justify-center">
+                    <Button 
+                      className="bg-white text-gray-900 hover:bg-gray-100 flex items-center gap-2"
+                      onClick={() => setMiningDialogOpen(true)}
+                    >
+                      <QuestionMarkCircledIcon className="h-5 w-5" />
+                      <span>Understanding Liquidity Mining</span>
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Liquidity Mining Dashboard Section */}
+                <div id="liquidityMiningSection">
+                  <h2 className="text-2xl font-semibold text-white mb-6">Liquidity Mining Programs</h2>
+                  <LiquidityMiningDashboard factoryAddress={factoryAddress as `0x${string}`} />
                 </div>
               </div>
             </TabsContent>
