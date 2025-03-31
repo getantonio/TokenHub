@@ -26,13 +26,20 @@ export default function DefiLoanPage() {
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   
   // Factory address should be taken from environment variable or config in a real app
-  const factoryAddress = process.env.NEXT_PUBLIC_LOAN_POOL_FACTORY_ADDRESS || '0x1234567890123456789012345678901234567890';
+  const factoryAddress = process.env.NEXT_PUBLIC_LOAN_POOL_FACTORY_ADDRESS as `0x${string}`;
 
   // Log environment variables and configuration
   useEffect(() => {
     console.log("DeFi Loan page loaded");
+    console.log("ENVIRONMENT CHECK =================");
     console.log("Using factory address:", factoryAddress);
     console.log("NEXT_PUBLIC_LOAN_POOL_FACTORY_ADDRESS:", process.env.NEXT_PUBLIC_LOAN_POOL_FACTORY_ADDRESS);
+    console.log("Expected new factory address: 0x676C3A877b43D2D5D16f84387798D996da06e835");
+    
+    // Alert if wrong address
+    if (factoryAddress?.toLowerCase() !== '0x676c3a877b43d2d5d16f84387798d996da06e835') {
+      console.error("WARNING: Using incorrect factory address! Please check .env.local and restart the dev server.");
+    }
     
     // List all environment variables related to contracts
     const contractEnvVars = Object.keys(process.env)
@@ -43,6 +50,7 @@ export default function DefiLoanPage() {
       }, {} as Record<string, string | undefined>);
     
     console.log("Contract-related environment variables:", contractEnvVars);
+    console.log("END ENVIRONMENT CHECK =================");
   }, [factoryAddress]);
 
   // Load available voices when component mounts
@@ -543,7 +551,7 @@ export default function DefiLoanPage() {
                 {/* Pool Dashboard Section */}
                 <div id="poolDashboardSection">
                   <h2 className="text-2xl font-semibold text-white mb-6">Your Lending Pools</h2>
-                  <PoolDashboard factoryAddress={factoryAddress as `0x${string}`} />
+                  <PoolDashboard factoryAddress={factoryAddress} />
                 </div>
               </div>
             </TabsContent>
@@ -628,7 +636,7 @@ export default function DefiLoanPage() {
                 {/* Liquidity Mining Dashboard Section */}
                 <div id="liquidityMiningSection">
                   <h2 className="text-2xl font-semibold text-white mb-6">Liquidity Mining Programs</h2>
-                  <LiquidityMiningDashboard factoryAddress={factoryAddress as `0x${string}`} />
+                  <LiquidityMiningDashboard factoryAddress={factoryAddress} />
                 </div>
               </div>
             </TabsContent>
@@ -636,7 +644,7 @@ export default function DefiLoanPage() {
             <TabsContent value="create">
               <CreatePoolForm 
                 onPoolCreated={handlePoolCreated} 
-                factoryAddress={factoryAddress as `0x${string}`}
+                factoryAddress={factoryAddress}
               />
             </TabsContent>
           </Tabs>

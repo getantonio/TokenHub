@@ -21,13 +21,8 @@ async function main() {
   
   // Deploy MockInterestRateModel
   console.log("Deploying MockInterestRateModel...");
-  const baseRate = 200; // 2% base rate
-  const multiplier = 1000; // 10% slope 
-  const jumpMultiplier = 2000; // 20% jump multiplier
-  const kink = 8000; // 80% kink
-  
   const MockInterestRateModel = await hre.ethers.getContractFactory("MockInterestRateModel");
-  const interestRateModel = await MockInterestRateModel.deploy(baseRate, multiplier, jumpMultiplier, kink);
+  const interestRateModel = await MockInterestRateModel.deploy();
   console.log(`MockInterestRateModel deployed to: ${await interestRateModel.getAddress()}`);
   
   // Deploy FeeCollector

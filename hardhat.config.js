@@ -1,13 +1,32 @@
 require("@nomicfoundation/hardhat-toolbox");
-require("@nomicfoundation/hardhat-verify");
-require("hardhat-deploy");
-require("@openzeppelin/hardhat-upgrades");
-require("dotenv").config();
+require("dotenv").config({ path: ".env" });
+
+const SEPOLIA_RPC_URL = process.env.SEPOLIA_RPC_URL || "https://sepolia.infura.io/v3/de082d8afc854286a7bdc56f2895fc67";
+const PRIVATE_KEY = process.env.PRIVATE_KEY || "0000000000000000000000000000000000000000000000000000000000000000"; // Default key, will not work
+
+// This is a sample Hardhat task. To learn how to create your own go to
+// https://hardhat.org/guides/create-task.html
+task("accounts", "Prints the list of accounts", async (taskArgs, hre) => {
+  const accounts = await hre.ethers.getSigners();
+
+  for (const account of accounts) {
+    console.log(account.address);
+  }
+});
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
   solidity: {
     compilers: [
+      {
+        version: "0.8.20",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+          },
+        },
+      },
       {
         version: "0.8.22",
         settings: {
@@ -15,28 +34,26 @@ module.exports = {
             enabled: true,
             runs: 200,
           },
-          viaIR: true,
+          viaIR: true
         },
-      },
-      {
-        version: "0.6.6",
-        settings: {
-          optimizer: {
-            enabled: true,
-            runs: 200,
-          },
-        },
-      },
-      {
-        version: "0.5.16",
-        settings: {
-          optimizer: {
-            enabled: true,
-            runs: 200,
-          },
-        },
-      },
-    ],
+      }
+    ]
+  },
+  networks: {
+    hardhat: {
+      chainId: 31337
+    },
+    localhost: {
+      chainId: 31337
+    },
+    sepolia: {
+      url: SEPOLIA_RPC_URL,
+      accounts: PRIVATE_KEY !== "0000000000000000000000000000000000000000000000000000000000000000" ? [PRIVATE_KEY] : [],
+      chainId: 11155111,
+      gas: 12500000,
+      gasPrice: 20000000000, // 20 gwei
+      timeout: 80000, // 80 seconds
+    }
   },
   paths: {
     sources: "./contracts",
@@ -44,58 +61,9 @@ module.exports = {
     cache: "./cache",
     artifacts: "./artifacts"
   },
-  networks: {
-    hardhat: {
-      chainId: 31337,
-    },
-    arbitrumSepolia: {
-      url: process.env.ARBITRUM_SEPOLIA_RPC_URL || "https://sepolia-rollup.arbitrum.io/rpc",
-      chainId: 421614,
-      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
-      gasPrice: "auto",
-      gas: "auto",
-      timeout: 1800000,
-    },
-    sepolia: {
-      url: process.env.SEPOLIA_RPC_URL || "https://sepolia.infura.io/v3/de082d8afc854286a7bdc56f2895fc67",
-      chainId: 11155111,
-      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
-      gasPrice: "auto",
-      gas: "auto",
-      timeout: 1800000,
-    },
-    polygonamoy: {
-      url: process.env.POLYGON_AMOY_RPC_URL || "https://polygon-amoy.infura.io/v3/de082d8afc854286a7bdc56f2895fc67",
-      chainId: 80002,
-      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
-      gasPrice: "auto",
-      gas: "auto",
-      timeout: 1800000,
-    },
-  },
   etherscan: {
     apiKey: {
-      arbitrumSepolia: process.env.ARBISCAN_API_KEY || "",
       sepolia: process.env.ETHERSCAN_API_KEY || "",
-      polygonamoy: process.env.POLYGONSCAN_API_KEY || "Z8FQT28BE7RR34GR5D8RMX6YGQ6AS6JSR2",
-    },
-    customChains: [
-      {
-        network: "arbitrumSepolia",
-        chainId: 421614,
-        urls: {
-          apiURL: "https://api-sepolia.arbiscan.io/api",
-          browserURL: "https://sepolia.arbiscan.io",
-        },
-      },
-      {
-        network: "polygonamoy",
-        chainId: 80002,
-        urls: {
-          apiURL: "https://api-amoy.polygonscan.com/api",
-          browserURL: "https://amoy.polygonscan.com",
-        },
-      },
-    ],
-  },
+    }
+  }
 }; 
