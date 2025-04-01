@@ -64,3 +64,6 @@ functions/node_modules
 functions/.runtimeconfig.json
 functions/lib
 functions/*.log
+
+# Firebase Admin SDK private key
+tokenfactory-f54de-firebase-adminsdk-fbsvc-8f180bea65.json
