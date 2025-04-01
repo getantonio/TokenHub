@@ -1,26 +1,73 @@
 import { ChainId } from '@/types/chain';
 import { BrowserProvider } from 'ethers';
-import { NETWORK_CONFIG, NetworkId } from './networks';
+import { NETWORK_CONFIG, NetworkId, NetworkName, SUPPORTED_NETWORKS } from './networks';
 
+// Lending Pool System Contracts
+export const LENDING_CONTRACTS = {
+  PRICE_ORACLE: "priceOracle",
+  INTEREST_RATE_MODEL: "interestRateModel",
+  FEE_COLLECTOR: "feeCollector",
+  LENDING_POOL_IMPL: "lendingPoolImpl",
+  LOAN_POOL_FACTORY: "loanPoolFactory",
+} as const;
+
+export type LendingContractName = keyof typeof LENDING_CONTRACTS;
+
+export const getLendingContractAddress = (contractName: LendingContractName, network: NetworkName): string => {
+  const networkConfig = SUPPORTED_NETWORKS[network];
+  if (!networkConfig) throw new Error(`Network ${network} not supported`);
+  
+  const contracts = networkConfig.contracts;
+  if (!contracts) throw new Error(`No contracts configured for network ${network}`);
+  
+  const contractAddress = contracts[contractName];
+  if (!contractAddress || typeof contractAddress !== 'string') {
+    throw new Error(`Contract ${contractName} not found or invalid on network ${network}`);
+  }
+  
+  return contractAddress;
+};
+
+// Legacy Contract Registry (for backward compatibility)
 export interface ContractAddresses {
-  factoryAddress: string;
-  factoryAddressV2: string;
-  factoryAddressV2WithLiquidity: string;
-  factoryAddressV2WithLiquidityFixed: string;
-  factoryAddressV3: string;
-  factoryAddressV3Enhanced: string;
-  factoryAddressV4: string;
-  factoryAddressV4WithLiquidity: string;
-  factoryAddressV4WithLiquidityFixed: string;
-  factoryAddressV4WithLiquidityFixedV2: string;
-  factoryAddressV4WithLiquidityFixedV3: string;
-  factoryAddressV4WithLiquidityFixedV4: string;
-  factoryAddressV4WithLiquidityFixedV5: string;
-  factoryAddressV4WithLiquidityFixedV6: string;
-  factoryAddressV4WithLiquidityFixedV7: string;
-  dexListingFactory: string;
-  dexListingTemplate: string;
+  [key: string]: string;
 }
+
+export class LegacyContractRegistry {
+  private static instance: LegacyContractRegistry;
+  private contractAddresses: { [networkId: number]: ContractAddresses };
+
+  private constructor() {
+    this.contractAddresses = {};
+  }
+
+  public static getInstance(): LegacyContractRegistry {
+    if (!LegacyContractRegistry.instance) {
+      LegacyContractRegistry.instance = new LegacyContractRegistry();
+    }
+    return LegacyContractRegistry.instance;
+  }
+
+  public getContractAddress(contractName: string, networkId: number): string {
+    if (!this.contractAddresses[networkId]) {
+      throw new Error(`No contracts registered for network ${networkId}`);
+    }
+    const address = this.contractAddresses[networkId][contractName];
+    if (!address) {
+      throw new Error(`Contract ${contractName} not found for network ${networkId}`);
+    }
+    return address;
+  }
+
+  public registerContract(contractName: string, address: string, networkId: number): void {
+    if (!this.contractAddresses[networkId]) {
+      this.contractAddresses[networkId] = {};
+    }
+    this.contractAddresses[networkId][contractName] = address;
+  }
+}
+
+export const legacyContractRegistry = LegacyContractRegistry.getInstance();
 
 export const contractAddresses: { [key: number]: ContractAddresses } = {
   11155111: { // Sepolia
@@ -495,4 +542,28 @@ export class ContractRegistry {
   }
 }
 
-export const contractRegistry = ContractRegistry.getInstance(); 
+export const contractRegistry = ContractRegistry.getInstance();
+
+export const CONTRACTS = {
+  PRICE_ORACLE: "priceOracle",
+  INTEREST_RATE_MODEL: "interestRateModel",
+  FEE_COLLECTOR: "feeCollector",
+  LENDING_POOL_IMPL: "lendingPoolImpl",
+  LOAN_POOL_FACTORY: "loanPoolFactory",
+} as const;
+
+export type ContractName = keyof typeof CONTRACTS;
+export type SupportedNetwork = keyof typeof SUPPORTED_NETWORKS;
+
+export const getContractAddress = (contractName: string, network: SupportedNetwork): string => {
+  const networkConfig = SUPPORTED_NETWORKS[network];
+  if (!networkConfig) throw new Error(`Network ${network} not supported`);
+  
+  const contracts = networkConfig.contracts;
+  if (!contracts) throw new Error(`No contracts configured for network ${network}`);
+  
+  const contractAddress = contracts[contractName as keyof typeof contracts];
+  if (!contractAddress) throw new Error(`Contract ${contractName} not found on network ${network}`);
+  
+  return contractAddress;
+}; 

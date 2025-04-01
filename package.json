@@ -2,6 +2,7 @@
   "name": "token-factory",
   "version": "3.0.0",
   "private": true,
+  "license": "MIT",
   "scripts": {
     "dev": "next dev",
     "build": "npm run compile && next build",

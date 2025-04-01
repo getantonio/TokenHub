@@ -34,7 +34,7 @@ async function main() {
   // Check fee
   try {
     const fee = await feeCollector.getPoolCreationFee();
-    console.log(`Pool creation fee: ${ethers.utils.formatEther(fee)} ETH`);
+    console.log(`Pool creation fee: ${ethers.formatEther(fee)} ETH`);
   } catch (e) {
     console.error("Error getting pool creation fee:", e.message);
   }
@@ -48,26 +48,21 @@ async function main() {
     console.error("Error getting owner:", e.message);
   }
   
-  // Check if authorizedCallers is present (old version of contract)
+  // Check if factory is authorized
   try {
     const isAuthorized = await feeCollector.authorizedCallers(factoryAddress);
     console.log(`Is factory authorized as caller? ${isAuthorized}`);
   } catch (e) {
-    console.log("Contract doesn't have 'authorizedCallers' function - likely using newer version");
-    
-    // Check treasury (new version of contract)
-    try {
-      const treasury = await feeCollector.treasury();
-      console.log(`Treasury address: ${treasury}`);
-    } catch (treasuryError) {
-      console.error("Error getting treasury:", treasuryError.message);
-    }
+    console.error("Error checking factory authorization:", e.message);
   }
-
+  
   console.log("\nChecking factory contract...");
   const factoryABI = [
     "function feeCollector() external view returns (address)",
-    "function owner() external view returns (address)"
+    "function owner() external view returns (address)",
+    "function implementation() external view returns (address)",
+    "function assetToPools(address) external view returns (address)",
+    "function getPoolCount() external view returns (uint256)"
   ];
   
   const factory = new ethers.Contract(factoryAddress, factoryABI, deployer);
@@ -88,48 +83,31 @@ async function main() {
     console.error("Error getting factory owner:", e.message);
   }
   
-  // Try to check if a pool exists for the asset
-  console.log("\nChecking if a pool already exists for the test asset...");
-  const assetToPoolsABI = [
-    "function assetToPools(address) external view returns (address)"
-  ];
-  
-  const factoryWithAssetCheck = new ethers.Contract(factoryAddress, assetToPoolsABI, deployer);
-  const testTokenAddress = "0xfea6FB7Cfd98cdDb0B79E20f216f524e355B2056"; // DEFLIQ token
-  
   try {
-    const existingPool = await factoryWithAssetCheck.assetToPools(testTokenAddress);
+    const implementation = await factory.implementation();
+    console.log(`Implementation address: ${implementation}`);
+  } catch (e) {
+    console.error("Error getting implementation address:", e.message);
+  }
+  
+  console.log("\nChecking if a pool already exists for the test asset...");
+  const testAsset = "0xdef1aa0fb7b7c09a5fc3e28625d7a1a2b0012d6a"; // DEFLIQ token
+  try {
+    const existingPool = await factory.assetToPools(testAsset);
     console.log(`Existing pool for DEFLIQ: ${existingPool}`);
-    
-    if (existingPool && existingPool !== "0x0000000000000000000000000000000000000000") {
-      console.log("ERROR ANALYSIS: A pool already exists for this asset - this is likely causing the revert");
-    } else {
+    if (existingPool === "0x0000000000000000000000000000000000000000") {
       console.log("No existing pool found for this asset");
     }
   } catch (e) {
     console.error("Error checking existing pool:", e.message);
   }
   
-  // Try to simulate a direct call (we can't easily estimate gas with hardhat in script mode)
   console.log("\nTrying a static call to check for other potential issues...");
-  
-  const factoryFullABI = [
-    "function createLendingPool(address, string, string, uint256, uint256) external payable returns (address)",
-    "function getAllPools() external view returns (address[])"
-  ];
-  
-  const factoryFullContract = new ethers.Contract(factoryAddress, factoryFullABI, deployer);
-  
   try {
-    // Check existing pools
-    const allPools = await factoryFullContract.getAllPools();
-    console.log(`Total pools deployed: ${allPools.length}`);
-    
-    if (allPools.length > 0) {
-      console.log(`Latest pool: ${allPools[allPools.length - 1]}`);
-    }
+    const poolCount = await factory.getPoolCount();
+    console.log(`Total pools deployed: ${poolCount}`);
   } catch (e) {
-    console.error("Error checking all pools:", e.message);
+    console.error("Error getting pool count:", e.message);
   }
 }
 

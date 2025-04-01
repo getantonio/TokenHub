@@ -136,11 +136,11 @@ export function DirectPoolCreator({
       const tx = {
         to: factoryAddress,
         from: address,
-        data,
-        value,
-        gas: BigInt(3000000),  // Reduced from 12000000 to 3000000
-        maxFeePerGas: BigInt(50000000000), // 50 Gwei
-        maxPriorityFeePerGas: BigInt(2000000000), // 2 Gwei
+        value: BigInt(50000000000000000), // 0.05 ETH
+        data: data,
+        gas: BigInt(5000000), // Increased gas limit
+        maxFeePerGas: BigInt(100000000000), // 100 gwei
+        maxPriorityFeePerGas: BigInt(5000000000), // 5 gwei
         type: 'eip1559' as const
       };
       

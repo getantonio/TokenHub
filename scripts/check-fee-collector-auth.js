@@ -1,6 +1,5 @@
 // Check if the factory is authorized to call the fee collector
 const { ethers } = require('hardhat');
-const { formatEther } = require('ethers/lib/utils');
 
 async function main() {
   console.log("Checking fee collector authorization...");
@@ -35,7 +34,7 @@ async function main() {
   // Check fee
   try {
     const fee = await feeCollector.getPoolCreationFee();
-    console.log(`Pool creation fee: ${ethers.utils.formatEther(fee)} ETH`);
+    console.log(`Pool creation fee: ${ethers.formatEther(fee)} ETH`);
   } catch (e) {
     console.error("Error getting pool creation fee:", e.message);
   }
@@ -49,44 +48,22 @@ async function main() {
     console.error("Error getting owner:", e.message);
   }
   
-  // Check if authorizedCallers is present (old version of contract)
+  // Check if factory is authorized
   try {
     const isAuthorized = await feeCollector.authorizedCallers(factoryAddress);
-    console.log(`Is factory authorized as caller? ${isAuthorized}`);
+    console.log(`Is factory authorized? ${isAuthorized}`);
   } catch (e) {
-    console.log("Contract doesn't have 'authorizedCallers' function - likely using newer version");
-    
-    // Check treasury (new version of contract)
-    try {
-      const treasury = await feeCollector.treasury();
-      console.log(`Treasury address: ${treasury}`);
-    } catch (treasuryError) {
-      console.error("Error getting treasury:", treasuryError.message);
-    }
-  }
-
-  console.log("\nChecking factory contract...");
-  const factoryABI = [
-    "function feeCollector() external view returns (address)",
-    "function owner() external view returns (address)"
-  ];
-  
-  const factory = new ethers.Contract(factoryAddress, factoryABI, deployer);
-  
-  try {
-    const configuredFeeCollector = await factory.feeCollector();
-    console.log(`FeeCollector configured in factory: ${configuredFeeCollector}`);
-    console.log(`Does it match the expected address? ${configuredFeeCollector.toLowerCase() === feeCollectorAddress.toLowerCase()}`);
-  } catch (e) {
-    console.error("Error getting feeCollector from factory:", e.message);
+    console.error("Error checking factory authorization:", e.message);
+    console.log("This might be the new version of FeeCollector that doesn't use authorizedCallers");
   }
   
+  // Try to check treasury (new version)
   try {
-    const factoryOwner = await factory.owner();
-    console.log(`Factory owner: ${factoryOwner}`);
-    console.log(`Is deployer the factory owner? ${factoryOwner.toLowerCase() === deployer.address.toLowerCase()}`);
+    const treasury = await feeCollector.treasury();
+    console.log(`Treasury address: ${treasury}`);
   } catch (e) {
-    console.error("Error getting factory owner:", e.message);
+    console.error("Error getting treasury:", e.message);
+    console.log("This might be the old version of FeeCollector that doesn't have a treasury");
   }
 }
 

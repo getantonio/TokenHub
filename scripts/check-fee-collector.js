@@ -5,23 +5,40 @@ const { formatEther } = require("ethers");
 const { ethers } = require('hardhat');
 
 async function main() {
+  const factoryAddress = "0xCe8414c145Fd77CdE67E0b07D33B3e4C5Ee9387e";
+  const feeCollectorAddress = "0x9519C9b492BcD126593B4216e0da052C0b25A216";
+  
   console.log("Checking fee collector setup...");
   
-  // Get signer
-  const [deployer] = await hre.ethers.getSigners();
-  console.log(`Using account: ${deployer.address}`);
+  // Get the contracts
+  const factory = await hre.ethers.getContractAt("LoanPoolFactory", factoryAddress);
+  const feeCollector = await hre.ethers.getContractAt("FeeCollector", feeCollectorAddress);
+  const [signer] = await hre.ethers.getSigners();
   
-  // Define both addresses
-  const oldFactoryAddress = '0xd61a8De6392750AD9FD250a59Cfa4d55f01CE9a2';
-  const newFactoryAddress = '0x676C3A877b43D2D5D16f84387798D996da06e835';
-  const oldFeeCollectorAddress = '0x014146631DDF8EEa259FAF22B25d669425Ffc1A0';
-  const newFeeCollectorAddress = '0xcCe75c81BD26c28Bfb38cD4d4cC51bA2F3DfCb3F';
-  
-  // Check old factory and fee collector
-  await checkFactoryFeeCollector(oldFactoryAddress, oldFeeCollectorAddress, "OLD");
-  
-  // Check new factory and fee collector
-  await checkFactoryFeeCollector(newFactoryAddress, newFeeCollectorAddress, "NEW");
+  try {
+    // Check fee collector in factory
+    const factoryFeeCollector = await factory.feeCollector();
+    console.log("Fee collector in factory:", factoryFeeCollector);
+    console.log("Expected fee collector:", feeCollectorAddress);
+    console.log("Matches:", factoryFeeCollector.toLowerCase() === feeCollectorAddress.toLowerCase());
+    
+    // Check fee collector owner
+    const feeCollectorOwner = await feeCollector.owner();
+    console.log("\nFee collector owner:", feeCollectorOwner);
+    console.log("Signer address:", signer.address);
+    console.log("Is signer owner:", feeCollectorOwner.toLowerCase() === signer.address.toLowerCase());
+    
+    // Check if factory is authorized
+    const isFactoryAuthorized = await feeCollector.authorizedCallers(factoryAddress);
+    console.log("\nIs factory authorized:", isFactoryAuthorized);
+    
+    // Get pool creation fee
+    const poolCreationFee = await feeCollector.getPoolCreationFee();
+    console.log("\nPool creation fee:", ethers.formatEther(poolCreationFee), "ETH");
+    
+  } catch (error) {
+    console.error("Error:", error);
+  }
 }
 
 async function checkFactoryFeeCollector(factoryAddress, feeCollectorAddress, label) {

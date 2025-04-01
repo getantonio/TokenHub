@@ -29,6 +29,7 @@ contract LoanPoolFactory is Ownable {
     event PoolCreated(address indexed asset, address indexed pool, string name, string symbol);
     event PriceOracleUpdated(address indexed oldOracle, address indexed newOracle);
     event InterestRateModelUpdated(address indexed oldModel, address indexed newModel);
+    event DebugLog(string message, address sender, address owner);
     
     constructor(
         address _implementation,
@@ -62,7 +63,10 @@ contract LoanPoolFactory is Ownable {
         string memory _symbol,
         uint256 _collateralFactorBps,
         uint256 _reserveFactorBps
-    ) external payable returns (address) {
+    ) external payable onlyOwner returns (address) {
+        // Log debug info
+        emit DebugLog("Creating pool", msg.sender, owner());
+        
         // Check if pool already exists
         require(assetToPools[_asset] == address(0), "Pool already exists");
         require(_asset != address(0), "Invalid asset address");
@@ -88,6 +92,9 @@ contract LoanPoolFactory is Ownable {
         // Deploy new pool using minimal proxy pattern
         address pool = implementation.clone();
         
+        // Log debug info
+        emit DebugLog("Pool cloned", msg.sender, owner());
+        
         // Initialize the pool
         LendingPool(pool).initialize(
             _asset,
@@ -97,8 +104,17 @@ contract LoanPoolFactory is Ownable {
             _reserveFactorBps,
             priceOracle,
             interestRateModel,
-            feeCollector  // Pass fee collector to the pool
+            feeCollector
         );
+        
+        // Log debug info
+        emit DebugLog("Pool initialized", msg.sender, owner());
+        
+        // Transfer ownership of the pool to the caller (not the factory)
+        LendingPool(pool).transferOwnership(msg.sender);
+        
+        // Log debug info
+        emit DebugLog("Pool ownership transferred", msg.sender, owner());
         
         // Register pool
         assetToPools[_asset] = pool;

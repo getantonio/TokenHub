@@ -5,6 +5,7 @@
   "interestRateModel": "0xc61176F7a0eF8b096F0f64f10B213c666D20979E",
   "feeCollector": "0xcCe75c81BD26c28Bfb38cD4d4cC51bA2F3DfCb3F",
   "lendingPoolImpl": "0x0eadB6f54265407b502b2B9F56fbc4d0f4DCF7bc",
-  "factory": "0x676C3A877b43D2D5D16f84387798D996da06e835",
-  "testToken": ""
+  "factory": "0x5838a6ba91625E41224314d974bB4D2f1ab200F1",
+  "testToken": "",
+  "lendingPoolImplementation": "0xA1a25e874C0374c1DaC6b837a74E105C7FCf2112"
 }

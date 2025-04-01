@@ -40,6 +40,9 @@ contract LendingPool is ERC20, Ownable, ReentrancyGuard {
     mapping(address => mapping(address => bool)) public userCollateralAssets;
     mapping(address => bool) public supportedCollateralAssets;
 
+    // Factory address
+    address public factory;
+
     // Events
     event Deposit(address indexed user, uint256 amount);
     event Withdraw(address indexed user, uint256 amount);
@@ -82,12 +85,16 @@ contract LendingPool is ERC20, Ownable, ReentrancyGuard {
         require(_collateralFactorBps <= BIPS, "Invalid collateral factor");
         require(_reserveFactorBps <= BIPS, "Invalid reserve factor");
         
+        // Set the factory address
+        factory = msg.sender;
+        
         // Since we can't change the name and symbol of ERC20 after deployment,
         // and since we're using a clone proxy pattern, we just set the underlying asset
         asset = IERC20(_asset);
         
-        // Transfer ownership
-        transferOwnership(msg.sender);
+        // Set the name and symbol
+        _name = string(abi.encodePacked(_name, " Lending Pool"));
+        _symbol = string(abi.encodePacked("l", _symbol));
         
         collateralFactorBps = _collateralFactorBps;
         reserveFactorBps = _reserveFactorBps;

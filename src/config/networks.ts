@@ -76,4 +76,53 @@ export const NETWORK_CONFIG = {
 export type NetworkConfig = typeof NETWORK_CONFIG;
 export type NetworkId = keyof NetworkConfig;
 
-export default SUPPORTED_NETWORKS; 
+export default SUPPORTED_NETWORKS;
+
+export interface ContractAddresses {
+  priceOracle?: string;
+  interestRateModel?: string;
+  feeCollector?: string;
+  lendingPoolImpl?: string;
+  loanPoolFactory?: string;
+  factory?: string;
+}
+
+export interface NetworkConfig {
+  chainId: number;
+  name: string;
+  rpcUrl: string | undefined;
+  explorerUrl: string;
+  contracts: ContractAddresses;
+}
+
+export const SUPPORTED_NETWORKS_NEW: Record<string, NetworkConfig> = {
+  sepolia: {
+    chainId: 11155111,
+    name: "Sepolia",
+    rpcUrl: process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL,
+    explorerUrl: "https://sepolia.etherscan.io",
+    contracts: {
+      factory: process.env.NEXT_PUBLIC_FACTORY_ADDRESS,
+      feeCollector: process.env.NEXT_PUBLIC_FEE_COLLECTOR_ADDRESS,
+    },
+  },
+  polygonAmoy: {
+    chainId: 80002,
+    name: "Polygon Amoy",
+    rpcUrl: process.env.NEXT_PUBLIC_POLYGON_AMOY_RPC_URL,
+    explorerUrl: process.env.NEXT_PUBLIC_POLYGON_AMOY_EXPLORER_URL || "https://amoy.polygonscan.com",
+    contracts: {
+      priceOracle: process.env.NEXT_PUBLIC_PRICE_ORACLE_ADDRESS,
+      interestRateModel: process.env.NEXT_PUBLIC_INTEREST_RATE_MODEL_ADDRESS,
+      feeCollector: process.env.NEXT_PUBLIC_FEE_COLLECTOR_ADDRESS,
+      lendingPoolImpl: process.env.NEXT_PUBLIC_LENDING_POOL_IMPL_ADDRESS,
+      loanPoolFactory: process.env.NEXT_PUBLIC_LOAN_POOL_FACTORY_ADDRESS,
+    },
+  },
+} as const;
+
+export type NetworkName = keyof typeof SUPPORTED_NETWORKS_NEW;
+export type NetworkConfigNew = typeof SUPPORTED_NETWORKS_NEW[NetworkName];
+export type NetworkIdNew = NetworkConfigNew["chainId"];
+
+export const DEFAULT_NETWORK: NetworkName = (process.env.NEXT_PUBLIC_DEFAULT_NETWORK as NetworkName) || "polygonAmoy"; 

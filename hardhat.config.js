@@ -47,12 +47,21 @@ module.exports = {
       chainId: 31337
     },
     sepolia: {
-      url: SEPOLIA_RPC_URL,
-      accounts: PRIVATE_KEY !== "0000000000000000000000000000000000000000000000000000000000000000" ? [PRIVATE_KEY] : [],
-      chainId: 11155111,
-      gas: 12500000,
-      gasPrice: 20000000000, // 20 gwei
-      timeout: 80000, // 80 seconds
+      url: process.env.SEPOLIA_RPC_URL || "",
+      accounts: process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
+      gasPrice: 5000000000, // 5 gwei
+      timeout: 120000, // 2 minutes
+      gasMultiplier: 1.5
+    },
+    polygonAmoy: {
+      url: "https://rpc-amoy.polygon.technology",
+      accounts: process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
+      chainId: 80002,
+      gasPrice: 30000000000, // 30 gwei
+      maxPriorityFeePerGas: 30000000000, // 30 gwei
+      maxFeePerGas: 50000000000, // 50 gwei
+      timeout: 120000, // 2 minutes
+      gasMultiplier: 1.5
     }
   },
   paths: {
@@ -64,6 +73,17 @@ module.exports = {
   etherscan: {
     apiKey: {
       sepolia: process.env.ETHERSCAN_API_KEY || "",
-    }
+      polygonAmoy: process.env.POLYGONSCAN_API_KEY || ""
+    },
+    customChains: [
+      {
+        network: "polygonAmoy",
+        chainId: 80002,
+        urls: {
+          apiURL: "https://api-amoy.polygonscan.com/api",
+          browserURL: "https://amoy.polygonscan.com"
+        }
+      }
+    ]
   }
 }; 

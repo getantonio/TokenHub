@@ -2,49 +2,38 @@
 const hre = require("hardhat");
 const fs = require("fs");
 const path = require("path");
+const { ethers } = require("hardhat");
 
 async function main() {
-  console.log("Checking factory owner...");
+  console.log("Checking factory ownership...");
   
-  // Get signer
-  const [deployer] = await hre.ethers.getSigners();
-  console.log(`Checking from account: ${deployer.address}`);
+  // Get the deployer account
+  const [deployer] = await ethers.getSigners();
+  console.log("Using account:", deployer.address);
+
+  // Get the factory contract
+  const factoryAddress = "0x9bAF646fb9fe4c95B51BB78Bb55d06F158b1b779";
+  const LoanPoolFactory = await ethers.getContractFactory("LoanPoolFactory");
+  const factory = LoanPoolFactory.attach(factoryAddress);
   
-  // Load deployment data
-  let deploymentData;
-  try {
-    const filePath = path.join(__dirname, `../deployments/defi-${hre.network.name}.json`);
-    const fileData = fs.readFileSync(filePath, 'utf8');
-    deploymentData = JSON.parse(fileData);
-    console.log("Loaded deployment data from file");
-  } catch (error) {
-    console.error("Error loading deployment data:", error);
-    return;
+  // Get the current owner
+  const owner = await factory.owner();
+  console.log("\nFactory owner:", owner);
+  console.log("Deployer address:", deployer.address);
+  console.log("Is deployer owner?", owner.toLowerCase() === deployer.address.toLowerCase());
+  
+  // If not owner, transfer ownership
+  if (owner.toLowerCase() !== deployer.address.toLowerCase()) {
+    console.log("\nTransferring ownership to deployer...");
+    const tx = await factory.transferOwnership(deployer.address);
+    await tx.wait();
+    console.log("Ownership transferred successfully");
+    
+    // Verify ownership
+    const newOwner = await factory.owner();
+    console.log("\nNew factory owner:", newOwner);
+    console.log("Is deployer owner?", newOwner.toLowerCase() === deployer.address.toLowerCase());
   }
-  
-  // Get deployed factory address
-  const { factory, feeCollector } = deploymentData;
-  console.log(`Factory address: ${factory}`);
-  console.log(`Fee Collector address: ${feeCollector}`);
-  
-  // Connect to factory contract
-  const factoryContract = await hre.ethers.getContractAt("LoanPoolFactory", factory);
-  const feeCollectorContract = await hre.ethers.getContractAt("FeeCollector", feeCollector);
-  
-  // Get factory owner
-  const factoryOwner = await factoryContract.owner();
-  console.log(`Factory owner: ${factoryOwner}`);
-  console.log(`Is deployer the factory owner? ${factoryOwner.toLowerCase() === deployer.address.toLowerCase()}`);
-  
-  // Get fee collector owner
-  const feeCollectorOwner = await feeCollectorContract.owner();
-  console.log(`Fee Collector owner: ${feeCollectorOwner}`);
-  console.log(`Is deployer the fee collector owner? ${feeCollectorOwner.toLowerCase() === deployer.address.toLowerCase()}`);
-  
-  // Check which address is allowed to create pools
-  const canCallFactory = await factoryContract.feeCollector();
-  console.log(`Address allowed to create pools (feeCollector): ${canCallFactory}`);
-  console.log(`Does it match the fee collector contract? ${canCallFactory.toLowerCase() === feeCollector.toLowerCase()}`);
 }
 
 main()
