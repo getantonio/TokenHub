@@ -20,9 +20,9 @@ const FundMePage: NextPage = () => {
   const walletAddresses = {
     eth: '0x37DB73EaeA41B2546549e102520c559919DB30Da',
     btc: 'bc1p9u25p8nch94e6s8ewdst9087g58vxjkz0cudnrysux93lnnf4lrsntpvxy',
-    arbitrum: '0x10C8c279c6b381156733ec160A89Abb260bfcf0C',
-    polygon: '0x10C8c279c6b381156733ec160A89Abb260bfcf0C',
-    optimism: '0x10C8c279c6b381156733ec160A89Abb260bfcf0C'
+    arbitrum: '0x37DB73EaeA41B2546549e102520c559919DB30Da',
+    polygon: '0x37DB73EaeA41B2546549e102520c559919DB30Da',
+    optimism: '0x37DB73EaeA41B2546549e102520c559919DB30Da'
   };
 
   // Affiliate links for exchanges - replace with actual affiliate links
