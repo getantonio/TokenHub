@@ -12,7 +12,7 @@ export default function HomePage() {
   const router = useRouter();
   const [showQRPopup, setShowQRPopup] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
-  const walletAddress = "0x10C8c279c6b381156733ec160A89Abb260bfcf0C";
+  const walletAddress = "0x37DB73EaeA41B2546549e102520c559919DB30Da";
   const currentVersions = [
     {
       version: 'defi-loan',
