@@ -23,6 +23,13 @@ export function Footer() {
         >
           Discord community
         </a>
+        {' '}or{' '}
+        <Link 
+          href="/fund-me" 
+          className="inline-block px-4 py-2 text-white bg-blue-600 hover:bg-blue-500 transition-colors rounded-md font-medium shadow-lg hover:shadow-blue-500/20"
+        >
+          Fund Us
+        </Link>
       </p>
     </footer>
   );

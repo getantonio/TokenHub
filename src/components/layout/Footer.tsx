@@ -31,6 +31,12 @@ export function Footer() {
             >
               Documentation
             </a>
+            <a
+              href="/fundme"
+              className="text-gray-400 hover:text-white transition-colors"
+            >
+              Fund Me
+            </a>
           </div>
         </div>
       </div>

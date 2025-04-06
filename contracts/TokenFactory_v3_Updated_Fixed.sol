@@ -1,0 +1,281 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.19;
+
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
+import "./Token_v3_Updated.sol";
+import "./ITokenTypes.sol";
+
+contract TokenFactory_v3_Updated_Fixed is Ownable, ReentrancyGuard, Pausable {
+    uint256 public constant VERSION = 3;
+    uint256 public deploymentFee = 0.001 ether; // Default fee of 0.001 BNB
+    uint256 public totalTokensCreated;
+    mapping(address => uint256) public userTokenCount;
+    mapping(address => address[]) public userTokens;
+    address public routerAddress;
+    address public feeCollector;
+
+    struct TokenParams {
+        string name;
+        string symbol;
+        uint256 initialSupply;
+        uint256 maxSupply;
+        address owner;
+        bool enableBlacklist;
+        bool enableTimeLock;
+        uint256 presaleRate;
+        uint256 softCap;
+        uint256 hardCap;
+        uint256 minContribution;
+        uint256 maxContribution;
+        uint256 startTime;
+        uint256 endTime;
+        uint256 presalePercentage;
+        uint256 liquidityPercentage;
+        uint256 liquidityLockDuration;
+        ITokenTypes.WalletAllocation[] walletAllocations;
+        uint256 maxActivePresales;
+        bool presaleEnabled;
+    }
+
+    event TokenCreated(
+        address indexed creator,
+        address indexed tokenAddress,
+        string name,
+        string symbol,
+        uint256 initialSupply,
+        uint256 maxSupply,
+        bool presaleEnabled
+    );
+
+    event DeploymentFeeUpdated(
+        uint256 oldFee,
+        uint256 newFee,
+        address indexed admin
+    );
+
+    event FeeCollectorUpdated(
+        address indexed oldCollector,
+        address indexed newCollector,
+        address indexed admin
+    );
+
+    event EmergencyWithdraw(
+        address indexed admin,
+        uint256 amount,
+        uint256 timestamp
+    );
+
+    event VestingSetup(
+        address indexed wallet,
+        uint256 percentage,
+        bool vestingEnabled
+    );
+
+    constructor(address _router, address _feeCollector) {
+        require(_router != address(0), "Invalid router address");
+        require(_feeCollector != address(0), "Invalid fee collector address");
+        routerAddress = _router;
+        feeCollector = _feeCollector;
+        _pause(); // Start paused for safety
+    }
+
+    function createToken(TokenParams calldata params) external payable nonReentrant whenNotPaused returns (address) {
+        require(msg.value >= deploymentFee, "Insufficient deployment fee");
+        
+        // Validate basic parameters
+        require(bytes(params.name).length > 0, "Name required");
+        require(bytes(params.symbol).length > 0, "Symbol required");
+        require(params.initialSupply > 0, "Initial supply must be > 0");
+        require(params.maxSupply >= params.initialSupply, "Max supply must be >= initial supply");
+        require(params.owner != address(0), "Invalid owner address");
+        
+        // Validate presale parameters
+        if (params.presaleEnabled) {
+            require(params.presalePercentage == 5, "Presale must be 5% when enabled");
+            require(params.presaleRate > 0, "Presale rate must be > 0");
+            require(params.softCap > 0 && params.hardCap > params.softCap, "Invalid caps");
+            require(params.minContribution > 0 && params.maxContribution > params.minContribution, "Invalid contribution limits");
+            require(params.startTime > block.timestamp && params.endTime > params.startTime, "Invalid presale times");
+            require(params.maxActivePresales > 0, "Max active presales must be > 0 when presale is enabled");
+        } else {
+            require(params.presalePercentage == 0, "Presale must be 0% when disabled");
+            require(params.maxActivePresales == 0, "Max active presales must be 0 when presale is disabled");
+        }
+
+        // Special handling for wallet allocations
+        ITokenTypes.WalletAllocation[] memory finalAllocations;
+        uint256 walletPercentageTotal = 0;
+        
+        // If no wallet allocations or incomplete percentage, create or adjust with default to owner
+        if (params.walletAllocations.length == 0) {
+            // Create a default allocation to the owner if none provided
+            finalAllocations = new ITokenTypes.WalletAllocation[](1);
+            finalAllocations[0] = ITokenTypes.WalletAllocation({
+                wallet: params.owner,
+                percentage: 100 - params.presalePercentage - params.liquidityPercentage,
+                vestingEnabled: false,
+                vestingDuration: 0,
+                cliffDuration: 0,
+                vestingStartTime: 0
+            });
+            walletPercentageTotal = finalAllocations[0].percentage;
+            
+            // Log the default allocation creation
+            emit VestingSetup(
+                params.owner,
+                finalAllocations[0].percentage,
+                false
+            );
+        } else {
+            // Use the provided allocations
+            finalAllocations = new ITokenTypes.WalletAllocation[](params.walletAllocations.length);
+            
+            for (uint256 i = 0; i < params.walletAllocations.length; i++) {
+                require(params.walletAllocations[i].wallet != address(0), "Invalid wallet address");
+                require(params.walletAllocations[i].percentage > 0, "Wallet percentage must be > 0");
+                
+                // Copy and normalize vesting settings
+                finalAllocations[i] = params.walletAllocations[i];
+                walletPercentageTotal += params.walletAllocations[i].percentage;
+                
+                // Normalize vesting parameters
+                if (params.walletAllocations[i].vestingEnabled) {
+                    require(params.walletAllocations[i].vestingDuration > 0, "Invalid vesting duration");
+                    require(params.walletAllocations[i].vestingStartTime > block.timestamp, "Invalid vesting start");
+                    // Log for debugging
+                    emit VestingSetup(
+                        params.walletAllocations[i].wallet,
+                        params.walletAllocations[i].percentage,
+                        true
+                    );
+                } else {
+                    // For Polygon Amoy/BSC, ensure vesting parameters are explicitly zeroed
+                    finalAllocations[i].vestingDuration = 0;
+                    finalAllocations[i].cliffDuration = 0;
+                    finalAllocations[i].vestingStartTime = 0;
+                    // Log for debugging
+                    emit VestingSetup(
+                        params.walletAllocations[i].wallet,
+                        params.walletAllocations[i].percentage,
+                        false
+                    );
+                }
+            }
+        }
+
+        // Validate total distribution equals 100%
+        uint256 totalPercentage = params.presalePercentage + params.liquidityPercentage + walletPercentageTotal;
+        require(totalPercentage == 100, "Total allocation must be 100%");
+
+        // Create token
+        Token_v3_Updated token = new Token_v3_Updated(
+            params.name,
+            params.symbol,
+            params.initialSupply,
+            params.maxSupply,
+            params.owner,
+            params.enableBlacklist,
+            params.enableTimeLock,
+            params.presaleEnabled,
+            params.maxActivePresales
+        );
+
+        // Configure token
+        if (params.presaleEnabled) {
+            token.configurePresale(
+                params.presaleRate,
+                params.softCap,
+                params.hardCap,
+                params.minContribution,
+                params.maxContribution,
+                params.startTime,
+                params.endTime
+            );
+        }
+
+        // Configure distribution with final allocations
+        token.configureDistribution{value: 0}(
+            params.presalePercentage,
+            params.liquidityPercentage,
+            params.liquidityLockDuration,
+            finalAllocations
+        );
+
+        // Update tracking
+        userTokenCount[msg.sender]++;
+        userTokens[msg.sender].push(address(token));
+        totalTokensCreated++;
+
+        // Transfer deployment fee to fee collector
+        (bool success, ) = feeCollector.call{value: msg.value}("");
+        require(success, "Fee transfer failed");
+
+        emit TokenCreated(
+            msg.sender,
+            address(token),
+            params.name,
+            params.symbol,
+            params.initialSupply,
+            params.maxSupply,
+            params.presaleEnabled
+        );
+
+        return address(token);
+    }
+
+    // Add a new function to add liquidity to an existing token
+    function addLiquidityToToken(address tokenAddress) external payable nonReentrant whenNotPaused {
+        require(tokenAddress != address(0), "Invalid token address");
+        require(msg.value > 0, "Must send ETH for liquidity");
+        
+        // Call the token's addLiquidityFromContractTokens function
+        Token_v3_Updated(tokenAddress).addLiquidityFromContractTokens{value: msg.value}();
+    }
+
+    // Admin functions
+    function setDeploymentFee(uint256 newFee) external onlyOwner {
+        require(newFee > 0, "Fee must be > 0");
+        uint256 oldFee = deploymentFee;
+        deploymentFee = newFee;
+        emit DeploymentFeeUpdated(oldFee, newFee, msg.sender);
+    }
+
+    function setFeeCollector(address newCollector) external onlyOwner {
+        require(newCollector != address(0), "Invalid fee collector address");
+        address oldCollector = feeCollector;
+        feeCollector = newCollector;
+        emit FeeCollectorUpdated(oldCollector, newCollector, msg.sender);
+    }
+
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    function unpause() external onlyOwner {
+        _unpause();
+    }
+
+    function emergencyWithdraw() external onlyOwner {
+        uint256 balance = address(this).balance;
+        require(balance > 0, "No balance to withdraw");
+        
+        (bool success, ) = msg.sender.call{value: balance}("");
+        require(success, "Withdrawal failed");
+        
+        emit EmergencyWithdraw(msg.sender, balance, block.timestamp);
+    }
+
+    // View functions
+    function getUserTokens(address user) external view returns (address[] memory) {
+        return userTokens[user];
+    }
+
+    function getTokenCount(address user) external view returns (uint256) {
+        return userTokenCount[user];
+    }
+
+    // Receive function
+    receive() external payable {}
+} 
