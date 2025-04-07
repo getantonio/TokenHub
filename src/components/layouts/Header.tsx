@@ -1,221 +1,186 @@
 import { useEffect, useState } from 'react';
-import { useNetwork } from '@contexts/NetworkContext';
 import Link from 'next/link';
-import { cn } from '@utils/cn';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { NetworkSwitcher } from '@/components/common/NetworkSwitcher';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
+import { useAccount } from 'wagmi'; // Import wagmi hook
+import { useDisconnect } from 'wagmi'; // Import wagmi hook for EVM disconnect
+import { ConnectButton } from '@rainbow-me/rainbowkit'; // Import RainbowKit button
+import { useStacksWallet } from '@/contexts/StacksWalletContext'; // Import Stacks context
+import { cn } from '@/utils/cn';
+import { Button } from '@/components/ui/button'; // Import your Button component
+import { WalletChoiceModal } from '@/components/wallet/WalletChoiceModal'; // Import the new modal
+import { STACKS_MAINNET_CONFIG, STACKS_TESTNET_CONFIG } from '@/config/stacks-networks'; // Import Stacks configs
 
-// Define an interface for the network data
-interface Network {
-  id: number;
-  name: string;
-  color: string;
-}
-
-// Network color mapping
-const networkColors: Record<number | string, string> = {
-  1: 'bg-blue-500',       // Ethereum Mainnet
-  5: 'bg-yellow-500',     // Goerli
-  11155111: 'bg-purple-500', // Sepolia
-  80001: 'bg-green-500',  // Polygon Mumbai
-  80002: 'bg-green-600',  // Polygon Amoy
-  137: 'bg-purple-600',   // Polygon Mainnet
-  97: 'bg-yellow-600',    // BSC Testnet
-  56: 'bg-yellow-400',    // BSC Mainnet
-  'default': 'bg-gray-500'  // Unknown networks
-};
-
-// Network name mapping
-const networkNames: Record<number, string> = {
-  1: 'Ethereum Mainnet',
-  5: 'Goerli Testnet',
-  11155111: 'Sepolia Testnet',
-  80001: 'Polygon Mumbai',
-  80002: 'Polygon Amoy',
-  137: 'Polygon Mainnet',
-  97: 'BSC Testnet',
-  56: 'BSC Mainnet',
-};
+// Remove unused imports like useNetwork, NetworkSwitcher, Dialog, WalletSelector, etc.
+// Remove network color/name mappings if no longer used directly here
 
 interface HeaderProps {
   className?: string;
 }
 
 export function Header({ className }: HeaderProps) {
-  const [networkSwitchFailed, setNetworkSwitchFailed] = useState(false);
-  const { chainId } = useNetwork();
+  const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
+  const [isMounted, setIsMounted] = useState(false); // <-- Add mounted state
   
-  // Store the active wallet network data for display
-  const [activeWalletNetwork, setActiveWalletNetwork] = useState<Network | null>(null);
+  // EVM Wallet State
+  const { address: evmAddress, isConnected: isEvmConnected } = useAccount();
+  const { disconnect: disconnectEvm } = useDisconnect();
 
-  // When the chainId changes, update the active wallet network
-  useEffect(() => {
-    if (chainId) {
-      setActiveWalletNetwork({
-        id: chainId,
-        name: networkNames[chainId] || `Network ${chainId}`,
-        color: networkColors[chainId] || networkColors['default']
-      });
-    } else {
-      setActiveWalletNetwork(null);
-    }
-  }, [chainId]);
+  // Stacks Wallet State
+  const { 
+    address: stacksAddress, 
+    isConnected: isStacksConnected, 
+    disconnectWallet: disconnectStacks,
+    switchNetwork: switchStacksNetwork, // Get switch function
+    networkConfig: currentStacksNetwork // Get current network config
+  } = useStacksWallet();
 
-  // Add event listener for network switch failures
+  // Set mounted state after initial render
   useEffect(() => {
-    const checkWalletErrors = () => {
-      if (window.ethereum) {
-        const originalRequest = window.ethereum.request;
-        
-        // Override the request method to catch network switching errors
-        window.ethereum.request = async function(...args: any[]) {
-          try {
-            const result = await originalRequest.apply(this, args);
-            
-            // If this was a network switch attempt, reset the failure state
-            if (args[0]?.method === 'wallet_switchEthereumChain') {
-              setNetworkSwitchFailed(false);
-            }
-            
-            return result;
-          } catch (error: any) {
-            // Track network switching failures
-            if (args[0]?.method === 'wallet_switchEthereumChain' || 
-                args[0]?.method === 'wallet_addEthereumChain') {
-              console.error('Network switch error:', error);
-              setNetworkSwitchFailed(true);
-            }
-            throw error;
-          }
-        };
-      }
-    };
-    
-    checkWalletErrors();
+    setIsMounted(true);
   }, []);
 
+  const openConnectModal = () => setIsConnectModalOpen(true);
+  const closeConnectModal = () => setIsConnectModalOpen(false);
+
+  const handleStacksNetworkSwitch = (network: typeof STACKS_MAINNET_CONFIG | typeof STACKS_TESTNET_CONFIG) => {
+    if (currentStacksNetwork?.chainId !== network.chainId) {
+      switchStacksNetwork(network);
+    }
+  };
+
+  // Determine overall connection state (only if mounted)
+  const isAnyWalletConnected = isMounted && (isEvmConnected || isStacksConnected);
+  
+  // Add console log for debugging
+  if (isMounted) {
+    console.log('[Header Debug] Mounted:', isMounted, '| EVM Connected:', isEvmConnected, '| Stacks Connected:', isStacksConnected);
+  }
+
   return (
-    <header className={cn('relative z-50 bg-background-secondary border-b border-border py-1', className)}>
-      <nav className="container mx-auto px-4">
-        <div className="flex items-center justify-between h-12">
-          <div className="flex items-center">
-            <Link href="/" className="flex items-center">
-              <span className="text-3xl font-medium text-white">TokenHub</span>
-              <span className="text-3xl font-bold text-blue-500">.dev</span>
-            </Link>
-          </div>
+    <header className={cn("sticky top-0 z-50 w-full border-b border-gray-800 bg-gray-900/95 backdrop-blur supports-[backdrop-filter]:bg-gray-900/75", className)}>
+      <nav className="container mx-auto flex items-center justify-between px-4 py-3 h-20"> {/* Reduced padding py-4->py-3, increased height h-16->h-20 */} 
+        {/* Left side: Logo */}
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <Link href="/" className="text-5xl font-bold text-white flex items-baseline"> {/* Increased from text-4xl to text-5xl */}
+            TokenHub<span className="text-5xl font-bold text-blue-500">.dev</span> {/* Increased from text-4xl to text-5xl */} 
+          </Link>
+        </div>
 
-          <div className="flex items-center space-x-4">
-            {/* Network troubleshooter dialog */}
-            {networkSwitchFailed && (
-              <Dialog>
-                <DialogTrigger asChild>
-                  <button className="px-3 py-1.5 text-sm font-medium bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-md transition-colors duration-200">
-                    Network Issues?
-                  </button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-[425px] bg-gray-900 text-white border-gray-700" aria-describedby="network-selection-description">
-                  <DialogHeader>
-                    <DialogTitle>Select Network</DialogTitle>
-                  </DialogHeader>
-                  <DialogDescription id="network-selection-description" className="text-gray-400">
-                    Choose the blockchain network you want to connect to.
-                  </DialogDescription>
-                  
-                  {/* Wallet network indicator - shown only when a network is connected */}
-                  {activeWalletNetwork && (
-                    <div className="mb-4 p-3 border border-gray-700 rounded-md bg-gray-800">
-                      <h3 className="text-sm font-medium text-gray-300 mb-1">Current Wallet Network</h3>
-                      <div className="flex items-center">
-                        <div className={`w-2 h-2 rounded-full ${activeWalletNetwork.color} mr-2`}></div>
-                        <span className="text-sm text-white">{activeWalletNetwork.name}</span>
+        {/* Right side: Wallet Connection */}
+        <div className="flex items-center gap-2 min-h-[40px] flex-shrink-0">
+          {/* Placeholder while loading */}
+          {!isMounted && (
+            <div className="h-8 w-28 rounded-md bg-gray-800 animate-pulse"></div> 
+          )}
+
+          {/* Render actual UI only when mounted */}
+          {isMounted && (
+            <>
+              {/* Case 1: No wallet connected - Stricter Check */}
+              {!evmAddress && !stacksAddress && (
+                <Button 
+                  onClick={openConnectModal}
+                  className="px-4 py-2 rounded-md font-medium bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition-colors duration-200"
+                >
+                  Connect Wallet
+                </Button>
+              )}
+
+              {/* Case 2: EVM wallet connected - Check address */}
+              {evmAddress && (
+                <ConnectButton.Custom>
+                  {({
+                    account,
+                    chain,
+                    openAccountModal,
+                    openChainModal,
+                    mounted,
+                  }) => {
+                    // Use address from hook now, account from Render Prop might be slightly delayed
+                    const ready = mounted;
+                    const connected = ready && evmAddress && chain;
+                    if (!connected) return null;
+                    return (
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={openChainModal}
+                          className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 rounded-md transition-colors duration-200"
+                        >
+                          {chain.hasIcon && chain.iconUrl && (
+                            <img alt={chain.name ?? 'Chain icon'} src={chain.iconUrl} className="w-4 h-4" />
+                          )}
+                          {chain.name}
+                        </button>
+                        <button
+                          onClick={openAccountModal}
+                          className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 rounded-md transition-colors duration-200"
+                        >
+                          {account?.displayName}
+                          {account?.displayBalance ? ` (${account.displayBalance})` : ''}
+                        </button>
                       </div>
-                    </div>
-                  )}
+                    );
+                  }}
+                </ConnectButton.Custom>
+              )}
+              
+              {/* Case 3: Stacks wallet connected - Check address */}
+              {stacksAddress && currentStacksNetwork && (
+                <>
+                  {/* Stacks Network Switcher */}
+                  <div className="flex items-center border border-gray-700 rounded-md overflow-hidden">
+                    <Button
+                      variant="secondary"
+                      onClick={() => handleStacksNetworkSwitch(STACKS_MAINNET_CONFIG)}
+                      className={cn(
+                        "text-xs px-3 py-1 h-8 rounded-none transition-colors duration-150", // Slightly larger button
+                        !currentStacksNetwork.isTestnet 
+                          ? "bg-gray-600 text-white font-semibold cursor-default" 
+                          : "bg-transparent text-gray-400 hover:bg-gray-700/50 border-r border-gray-700"
+                      )}
+                      disabled={!currentStacksNetwork.isTestnet}
+                      title={!currentStacksNetwork.isTestnet ? "Stacks Mainnet Active" : "Switch to Stacks Mainnet"}
+                    >
+                      Mainnet
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      onClick={() => handleStacksNetworkSwitch(STACKS_TESTNET_CONFIG)}
+                      className={cn(
+                        "text-xs px-3 py-1 h-8 rounded-none transition-colors duration-150", // Slightly larger button
+                        currentStacksNetwork.isTestnet 
+                          ? "bg-gray-600 text-white font-semibold cursor-default" 
+                          : "bg-transparent text-gray-400 hover:bg-gray-700/50"
+                      )}
+                      disabled={currentStacksNetwork.isTestnet}
+                      title={currentStacksNetwork.isTestnet ? "Stacks Testnet Active" : "Switch to Stacks Testnet"}
+                    >
+                      Testnet
+                    </Button>
+                  </div>
                   
-                  <div className="py-4">
-                    <p className="mb-4 text-sm text-gray-300">
-                      If you're having trouble switching networks with your wallet, you can try using
-                      this alternative network selector.
-                    </p>
-                    <NetworkSwitcher />
-                  </div>
-                </DialogContent>
-              </Dialog>
-            )}
-
-            <ConnectButton.Custom>
-              {({
-                account,
-                chain,
-                openAccountModal,
-                openChainModal,
-                openConnectModal,
-                mounted,
-              }) => {
-                const ready = mounted;
-                const connected = ready && account && chain;
-
-                return (
-                  <div
-                    {...(!ready && {
-                      'aria-hidden': true,
-                      style: {
-                        opacity: 0,
-                        pointerEvents: 'none',
-                        userSelect: 'none',
-                      },
-                    })}
+                  {/* Stacks Address Display */}
+                  <span className="px-3 py-1.5 text-sm font-medium bg-purple-500/20 text-purple-400 rounded-md hidden sm:inline-block">
+                    {stacksAddress.slice(0, 5)}...{stacksAddress.slice(-4)}
+                  </span>
+                  
+                  {/* Stacks Disconnect Button */}
+                  <Button 
+                    variant="secondary" 
+                    onClick={disconnectStacks}
+                    className="bg-gray-800/50 border border-gray-700/50 text-gray-300 hover:bg-red-800/60 hover:border-red-700/60 hover:text-white h-8 text-xs px-3 py-1 transition-colors duration-150" // Changed hover state
+                    title="Disconnect Stacks Wallet"
                   >
-                    {(() => {
-                      if (!connected) {
-                        return (
-                          <button 
-                            onClick={openConnectModal} 
-                            className="px-4 py-2 rounded-md font-medium bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition-colors duration-200"
-                          >
-                            Connect Wallet
-                          </button>
-                        );
-                      }
-
-                      return (
-                        <div className="flex items-center gap-3">
-                          <button
-                            onClick={() => {
-                              console.log('Opening chain modal, current chain:', chain);
-                              openChainModal();
-                            }}
-                            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 rounded-md transition-colors duration-200"
-                          >
-                            {chain.hasIcon && chain.iconUrl && (
-                              <img
-                                alt={chain.name ?? 'Chain icon'}
-                                src={chain.iconUrl}
-                                className="w-4 h-4"
-                              />
-                            )}
-                            {chain.name}
-                          </button>
-
-                          <button
-                            onClick={openAccountModal}
-                            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 rounded-md transition-colors duration-200"
-                          >
-                            {account.displayName}
-                            {account.displayBalance ? ` (${account.displayBalance})` : ''}
-                          </button>
-                        </div>
-                      );
-                    })()}
-                  </div>
-                );
-              }}
-            </ConnectButton.Custom>
-          </div>
+                    Disconnect
+                  </Button>
+                </>
+              )}
+            </>
+          )}
         </div>
       </nav>
+
+      {/* Wallet Choice Modal - Render conditionally based on isMounted to avoid hydration issues? Maybe not necessary for Dialog? Test first. */}
+      <WalletChoiceModal isOpen={isConnectModalOpen} onClose={closeConnectModal} />
     </header>
   );
 }

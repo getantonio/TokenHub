@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 
-const FundMePage: NextPage = () => {
+const FundUsPage: NextPage = () => {
   const [copySuccess, setCopySuccess] = useState<{[key: string]: boolean}>({
     eth: false,
     btc: false,
@@ -48,19 +48,19 @@ const FundMePage: NextPage = () => {
   return (
     <>
       <Head>
-        <title>Support TokenHub.dev | Fund Future Development</title>
+        <title>Support TokenHub.dev | Fund Us</title>
         <meta name="description" content="Support TokenHub.dev by contributing to the future development of useful crypto tools" />
       </Head>
-      <div className="container mx-auto px-4 py-12 max-w-6xl">
-        <div className="text-center mb-12">
-          <h1 className="text-4xl md:text-5xl font-bold text-white mb-6">Support TokenHub.dev</h1>
+      <div className="container mx-auto px-4 py-8 max-w-6xl">
+        <div className="text-center mb-8">
+          <h1 className="text-4xl md:text-5xl font-bold text-white mb-6">Support TokenHub.dev (Fund Us)</h1>
           <p className="text-xl text-gray-300 max-w-3xl mx-auto">
             Your contributions help us continue building innovative tools for the crypto community. Support our mission and be part of shaping the future of blockchain technology.
           </p>
         </div>
 
         {/* Benefits Section */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <Card className="border-blue-500/20 bg-gradient-to-b from-blue-900/20 to-transparent">
             <CardHeader>
               <div className="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center mb-4">
@@ -119,7 +119,7 @@ const FundMePage: NextPage = () => {
         </div>
 
         {/* Main Contribution Section */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
           {/* ETH Contribution */}
           <Card className="border-blue-500/30 bg-gradient-to-b from-blue-900/30 to-transparent">
             <CardHeader className="pb-2">
@@ -132,9 +132,9 @@ const FundMePage: NextPage = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="bg-gray-900/50 p-4 rounded-lg border border-gray-700 mb-2">
-                <div className="font-bold text-lg text-white mb-1">404nf.eth</div>
-                <div className="font-mono text-sm break-all text-gray-400">{walletAddresses.eth}</div>
+              <div className="bg-gray-900/50 p-2 rounded-lg border border-gray-700 mb-2">
+                <div className="font-bold text-lg text-white mb-1 text-center">404nf.eth</div>
+                <div className="font-mono text-xs break-all text-gray-400 text-center">{walletAddresses.eth}</div>
               </div>
               <div className="text-sm text-gray-400 my-2">
                 Scan the QR code or copy the address to donate
@@ -175,7 +175,7 @@ const FundMePage: NextPage = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="bg-gray-900/50 p-4 rounded-lg border border-gray-700 break-all font-mono text-sm mb-2">
+              <div className="bg-gray-900/50 p-2 rounded-lg border border-gray-700 break-all font-mono text-xs mb-2 text-center">
                 {walletAddresses.btc}
               </div>
               <div className="text-sm text-gray-400 my-2">
@@ -207,10 +207,10 @@ const FundMePage: NextPage = () => {
         </div>
 
         {/* Layer 2 and ERC-20 Token Section */}
-        <div className="mb-16">
-          <h2 className="text-3xl font-bold text-white mb-8 text-center">We Accept Many Token Types</h2>
+        <div className="mb-12">
+          <h2 className="text-3xl font-bold text-white mb-6 text-center">We Accept Many Token Types</h2>
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
             {/* Arbitrum Token */}
             <Card className="border-blue-500/20 bg-gradient-to-b from-indigo-900/20 to-transparent">
               <CardHeader className="pb-2">
@@ -223,8 +223,9 @@ const FundMePage: NextPage = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="bg-gray-900/50 p-3 rounded-lg border border-gray-700 break-all font-mono text-xs mb-2">
-                  {walletAddresses.arbitrum}
+                <div className="bg-gray-900/50 p-2 rounded-lg border border-gray-700 mb-2">
+                  <div className="font-bold text-base text-white mb-1 text-center">404nf.eth</div>
+                  <div className="font-mono text-xs break-all text-gray-400 text-center">{walletAddresses.arbitrum}</div>
                 </div>
                 <Button 
                   variant="ghost" 
@@ -269,8 +270,9 @@ const FundMePage: NextPage = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="bg-gray-900/50 p-3 rounded-lg border border-gray-700 break-all font-mono text-xs mb-2">
-                  {walletAddresses.polygon}
+                <div className="bg-gray-900/50 p-2 rounded-lg border border-gray-700 mb-2">
+                  <div className="font-bold text-base text-white mb-1 text-center">404nf.eth</div>
+                  <div className="font-mono text-xs break-all text-gray-400 text-center">{walletAddresses.polygon}</div>
                 </div>
                 <Button 
                   variant="ghost" 
@@ -323,8 +325,9 @@ const FundMePage: NextPage = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="bg-gray-900/50 p-3 rounded-lg border border-gray-700 break-all font-mono text-xs mb-2">
-                  {walletAddresses.optimism}
+                <div className="bg-gray-900/50 p-2 rounded-lg border border-gray-700 mb-2">
+                  <div className="font-bold text-base text-white mb-1 text-center">404nf.eth</div>
+                  <div className="font-mono text-xs break-all text-gray-400 text-center">{walletAddresses.optimism}</div>
                 </div>
                 <Button 
                   variant="ghost" 
@@ -359,33 +362,33 @@ const FundMePage: NextPage = () => {
           </div>
 
           {/* Other ERC-20 Tokens Notice */}
-          <div className="bg-gradient-to-r from-blue-900/30 via-purple-900/30 to-pink-900/30 rounded-xl p-8 border border-blue-500/20">
+          <div className="bg-gradient-to-r from-blue-900/30 via-purple-900/30 to-pink-900/30 rounded-xl p-6 border border-blue-500/20">
             <h3 className="text-2xl font-bold text-white mb-4">We Accept All ERC-20 Tokens</h3>
-            <p className="text-gray-300 mb-6">
+            <p className="text-gray-300 mb-4">
               In addition to the tokens listed above, we accept contributions in any ERC-20 token on Ethereum mainnet, Polygon, Arbitrum, Optimism, and test networks including Sepolia and Goerli.
             </p>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-              <div className="flex items-center bg-gray-800/50 p-3 rounded-lg">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+              <div className="flex items-center bg-gray-800/50 p-2 rounded-lg">
                 <FiLink className="w-5 h-5 text-blue-400 mr-2" />
                 <span className="text-gray-300 text-sm">Chainlink (LINK)</span>
               </div>
-              <div className="flex items-center bg-gray-800/50 p-3 rounded-lg">
+              <div className="flex items-center bg-gray-800/50 p-2 rounded-lg">
                 <span className="text-yellow-400 mr-2 font-bold">DAI</span>
                 <span className="text-gray-300 text-sm">DAI Stablecoin</span>
               </div>
-              <div className="flex items-center bg-gray-800/50 p-3 rounded-lg">
+              <div className="flex items-center bg-gray-800/50 p-2 rounded-lg">
                 <span className="w-5 h-5 text-green-400 mr-2 font-bold">$</span>
                 <span className="text-gray-300 text-sm">USDC</span>
               </div>
-              <div className="flex items-center bg-gray-800/50 p-3 rounded-lg">
+              <div className="flex items-center bg-gray-800/50 p-2 rounded-lg">
                 <span className="w-5 h-5 text-pink-400 mr-2 font-bold">U</span>
                 <span className="text-gray-300 text-sm">Uniswap (UNI)</span>
               </div>
             </div>
             
-            <p className="text-gray-300 mb-4">You can use any of the following exchanges to purchase tokens:</p>
-            <div className="flex flex-wrap gap-3">
+            <p className="text-gray-300 mb-3">You can use any of the following exchanges to purchase tokens:</p>
+            <div className="flex flex-wrap gap-2">
               <a 
                 href={affiliateLinks.coinbase} 
                 target="_blank" 
@@ -420,7 +423,7 @@ const FundMePage: NextPage = () => {
               </a>
             </div>
             
-            <div className="mt-6 bg-yellow-900/20 p-4 rounded-lg border border-yellow-500/30">
+            <div className="mt-4 bg-yellow-900/20 p-3 rounded-lg border border-yellow-500/30">
               <p className="text-yellow-300 text-sm">
                 <strong>Note:</strong> When contributing with tokens other than those specifically listed, please contact us with your transaction details so we can properly recognize your contribution.
               </p>
@@ -429,32 +432,32 @@ const FundMePage: NextPage = () => {
         </div>
 
         {/* FAQ Section */}
-        <div className="max-w-3xl mx-auto mt-16">
-          <h2 className="text-2xl font-bold text-white mb-6 text-center">Frequently Asked Questions</h2>
+        <div className="max-w-3xl mx-auto mt-12">
+          <h2 className="text-2xl font-bold text-white mb-4 text-center">Frequently Asked Questions</h2>
           
-          <div className="space-y-6">
-            <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6">
+          <div className="space-y-4">
+            <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
               <h3 className="text-xl font-medium text-white mb-2">How will the funds be used?</h3>
               <p className="text-gray-300">
                 All contributions go directly toward development costs, server infrastructure, security audits, and expanding our suite of crypto tools.
               </p>
             </div>
 
-            <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6">
+            <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
               <h3 className="text-xl font-medium text-white mb-2">Are contributions tax-deductible?</h3>
               <p className="text-gray-300">
                 Contributions are currently not tax-deductible. Please consult with your tax advisor regarding how to report crypto donations.
               </p>
             </div>
 
-            <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6">
+            <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
               <h3 className="text-xl font-medium text-white mb-2">Can I contribute other cryptocurrencies?</h3>
               <p className="text-gray-300">
                 Yes! We accept all ERC-20 tokens across multiple networks as well as BTC. If you'd like to donate using another cryptocurrency not listed, please contact us directly.
               </p>
             </div>
 
-            <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6">
+            <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
               <h3 className="text-xl font-medium text-white mb-2">How can I get recognized for my contribution?</h3>
               <p className="text-gray-300">
                 For significant contributions, we offer recognition on our supporters page. After donating, send us your transaction hash to verify your contribution.
@@ -464,9 +467,9 @@ const FundMePage: NextPage = () => {
         </div>
 
         {/* Contact Section */}
-        <div className="text-center mt-16">
+        <div className="text-center mt-12">
           <p className="text-gray-300">
-            Have questions about contributing? <a href="#" className="text-blue-400 hover:underline">Contact us</a>
+            Have questions about contributing? <a href="https://t.me/getantonio" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">Contact us</a>
           </p>
         </div>
       </div>
@@ -474,4 +477,4 @@ const FundMePage: NextPage = () => {
   );
 };
 
-export default FundMePage; 
+export default FundUsPage; 
