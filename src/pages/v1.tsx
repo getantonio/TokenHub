@@ -5,6 +5,7 @@ import { NetworkIndicator } from '@components/common/NetworkIndicator';
 import TokenForm_v1_EVM from '@/components/features/token/TokenForm_v1_EVM';
 import TokenForm_v1_Stacks from '@/components/features/token/TokenForm_v1_Stacks';
 import TCAP_v1 from '@/components/features/token/TCAP_v1';
+import TCAP_v1stx from '@/components/features/token/TCAP_v1stx';
 import { BrowserProvider } from 'ethers'; // Keep for TCAP?
 import { FACTORY_ADDRESSES } from '@/config/contracts';
 import Head from 'next/head';
@@ -143,7 +144,12 @@ export default function V1Page() {
                   Please disconnect your EVM wallet to use the Stacks factory.
                 </div>
               ) : (
-                <TokenForm_v1_Stacks />
+                <>
+                  <TokenForm_v1_Stacks />
+                  <div className="mt-8">
+                    <TCAP_v1stx isConnected={isStacksConnected} />
+                  </div>
+                </>
               )}
             </TabsContent>
           </Tabs>

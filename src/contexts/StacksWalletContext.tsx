@@ -20,7 +20,7 @@ const userSession = new UserSession({ appConfig });
 export function StacksWalletProvider({ children }: { children: ReactNode }) {
   const [isConnected, setIsConnected] = useState(false);
   const [address, setAddress] = useState<string | null>(null);
-  const [currentNetworkConfig, setCurrentNetworkConfig] = useState<StacksNetworkConfig>(STACKS_MAINNET_CONFIG);
+  const [currentNetworkConfig, setCurrentNetworkConfig] = useState<StacksNetworkConfig>(STACKS_TESTNET_CONFIG);
   const [session, setSession] = useState<UserSession | null>(null);
 
   // Check connection on mount
@@ -37,6 +37,7 @@ export function StacksWalletProvider({ children }: { children: ReactNode }) {
   }, [currentNetworkConfig.isTestnet]);
 
   const connectWallet = useCallback(async () => {
+    console.log('[Stacks Connect] Attempting connection...');
     showConnect({
       appDetails: {
         name: 'TokenHub',
@@ -44,14 +45,32 @@ export function StacksWalletProvider({ children }: { children: ReactNode }) {
       },
       userSession,
       onFinish: (payload) => {
-        const userData = payload.userSession.loadUserData();
-        setSession(payload.userSession);
-        setAddress(userData.profile.stxAddress[currentNetworkConfig.isTestnet ? 'testnet' : 'mainnet']);
-        setIsConnected(true);
-        console.log("Stacks wallet connected!", userData);
+        console.log('[Stacks Connect] onFinish called. Payload:', payload);
+        try {
+          const userData = payload.userSession.loadUserData();
+          setSession(payload.userSession);
+          const networkKey = currentNetworkConfig.isTestnet ? 'testnet' : 'mainnet';
+          console.log(`[Stacks Connect] Attempting to get address for network: ${networkKey}`);
+          const userAddress = userData.profile.stxAddress[networkKey];
+          if (!userAddress) {
+            console.error(`[Stacks Connect] No address found for network ${networkKey} in user data:`, userData.profile.stxAddress);
+            throw new Error(`Could not find address for ${networkKey}`);
+          }
+          setAddress(userAddress);
+          setIsConnected(true);
+          console.log('[Stacks Connect] Connection successful. State updated.');
+        } catch (error) {
+          console.error('[Stacks Connect] Error processing onFinish payload:', error, payload);
+          setIsConnected(false); // Ensure disconnected state if error occurs
+          setAddress(null);
+          setSession(null);
+        }
       },
       onCancel: () => {
-        console.log('Stacks connection cancelled.');
+        console.log('[Stacks Connect] onCancel called.');
+        // Optional: Reset state if needed, though usually not necessary on cancel
+        // setIsConnected(false);
+        // setAddress(null);
       },
     });
   }, [currentNetworkConfig]);

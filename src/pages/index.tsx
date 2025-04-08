@@ -97,44 +97,42 @@ export default function HomePage() {
         <div className="max-w-6xl mx-auto">
           {/* Updated Welcome Text - Reduced Sizes */}
           <div className="text-center mb-10">
-            <span className="block text-6xl font-bold text-white mb-2"> {/* Reduced size */} 
+            <span className="block text-4xl font-bold text-white mb-2"> {/* Reduced size further to 4xl */} 
               Welcome!
             </span>
-            <span className="block text-2xl text-gray-300"> {/* Reduced size */} 
+            <span className="block text-xl text-gray-300"> {/* Reduced size further to xl */} 
               Choose your Token or DeFi creation tool to start your journey.
             </span>
           </div>
           
           {/* Warning Banner */}
-          <div className="mx-auto bg-red-600 text-white px-3 py-2 rounded-md font-medium w-full h-[75px] flex items-center shadow-lg border-2 border-red-400 mb-8">
-            <div className="flex flex-col flex-grow">
-              <div className="flex items-center justify-center">
-                <p className="font-bold text-sm flex items-center">
-                  <span className="mr-1">⚠️</span> WARNING: getantonio.eth wallet compromised <span className="ml-1">⚠️</span>
-                </p>
-              </div>
-              <div className="flex items-center justify-center mt-0.5">
-                <p className="text-sm">DO NOT contribute to Gitcoin OSS. Donate directly instead:</p>
+          <div className="mx-auto bg-red-600 text-white px-4 py-3 rounded-md font-medium w-full h-auto min-h-[90px] flex items-center shadow-lg border-2 border-red-400 mb-8">
+            <div className="flex flex-col flex-grow pr-3 text-center">
+              <p className="text-sm">
+                <span className="font-bold mr-1">⚠️ WARNING:</span> 
+                getantonio.eth wallet compromised by 0x90210001ffdC5c90645c347a583922c1b9FE8e44, the hacker is stealing contributions from unsuspecting round participants. DO NOT contribute to Gitcoin OSS. Donate directly here:
+              </p>
+              <div className="mt-1 flex justify-center">
                 <button 
-                  className="text-xs font-semibold flex items-center hover:text-gray-200 transition-colors ml-1 cursor-pointer"
+                  className="text-xs font-semibold inline-flex items-center hover:text-gray-200 transition-colors cursor-pointer bg-red-700 px-2 py-1 rounded"
                   onClick={copyToClipboard}
                   aria-label="Copy wallet address to clipboard"
                 >
-                  <span className="mr-1">{copySuccess ? "Copied!" : "Copy Address"}</span>
+                  <span className="mr-1">{copySuccess ? "Copied!" : "404nf.eth"}</span>
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
                   </svg>
                 </button>
               </div>
             </div>
-            <div className="flex items-center justify-center ml-2">
+            <div className="flex items-center justify-center ml-2 flex-shrink-0">
               <div 
-                className="cursor-pointer hover:opacity-80 transition-opacity"
+                className="cursor-pointer hover:opacity-80 transition-opacity bg-red-700/50 p-2 rounded"
                 onClick={() => setShowQRPopup(true)}
               >
                 <QRCodeSVG 
                   value={walletAddress}
-                  size={45} 
+                  size={50} 
                   bgColor="transparent" 
                   fgColor="#FFFFFF" 
                   level="M"
@@ -167,11 +165,32 @@ export default function HomePage() {
                     includeMargin={true}
                   />
                   <p className="mt-4 text-center text-sm text-gray-700 font-medium">
-                    Direct donation address:
+                    Donation Name Service: 404nf.eth
                   </p>
                   <p className="text-xs break-all text-center text-gray-900 font-bold mt-1">
-                    {walletAddress}
+                    or copy the hash directly:
                   </p>
+                  <div className="flex items-center justify-center gap-2 mt-1">
+                    <p className="text-xs break-all text-center text-gray-900 font-bold">
+                      {walletAddress}
+                    </p>
+                    <button
+                      onClick={copyToClipboard}
+                      className="p-1 rounded hover:bg-gray-200 text-gray-600 hover:text-gray-900 transition-colors"
+                      aria-label="Copy wallet address"
+                      title="Copy wallet address"
+                    >
+                      {copySuccess ? (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg> 
+                      ) : (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

@@ -82,6 +82,20 @@ export function Navigation() {
                     </div>
                   </Link>
                   <div className="border-t border-gray-700/50 my-1"></div>
+                  <Link href="/wallet-test" className={cn(
+                    'block px-4 py-2 text-sm',
+                    router.pathname === '/wallet-test'
+                      ? 'text-blue-400'
+                      : 'text-gray-400 hover:text-gray-200'
+                  )}>
+                    <div className="flex items-center justify-between">
+                      <span>Wallet Test</span>
+                      <Badge variant="outline" className="ml-2 text-xs bg-amber-500/10 text-amber-400 border-amber-500/50 whitespace-nowrap">
+                        Debug
+                      </Badge>
+                    </div>
+                  </Link>
+                  <div className="border-t border-gray-700/50 my-1"></div>
                   <Link href="/v5" className={cn(
                     'block px-4 py-2 text-sm',
                     router.pathname === '/v5'

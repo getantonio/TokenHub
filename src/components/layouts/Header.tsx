@@ -57,11 +57,11 @@ export function Header({ className }: HeaderProps) {
 
   return (
     <header className={cn("sticky top-0 z-50 w-full border-b border-gray-800 bg-gray-900/95 backdrop-blur supports-[backdrop-filter]:bg-gray-900/75", className)}>
-      <nav className="container mx-auto flex items-center justify-between px-4 py-3 h-20"> {/* Reduced padding py-4->py-3, increased height h-16->h-20 */} 
+      <nav className="container mx-auto flex items-center justify-between px-4 py-2 h-16"> {/* Reduced py-3 to py-2, h-20 to h-16 */} 
         {/* Left side: Logo */}
         <div className="flex items-center gap-1 flex-shrink-0">
-          <Link href="/" className="text-5xl font-bold text-white flex items-baseline"> {/* Increased from text-4xl to text-5xl */}
-            TokenHub<span className="text-5xl font-bold text-blue-500">.dev</span> {/* Increased from text-4xl to text-5xl */} 
+          <Link href="/" className="text-4xl font-bold text-white flex items-baseline"> {/* Reduced from text-5xl to text-4xl */}
+            TokenHub<span className="text-4xl font-bold text-blue-500">.dev</span> {/* Reduced from text-5xl to text-4xl */} 
           </Link>
         </div>
 
