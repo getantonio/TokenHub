@@ -136,8 +136,13 @@ contract TokenTemplate_v2 is
         __UUPSUpgradeable_init();
 
         require(params.maxSupply >= params.initialSupply, "Max supply must be >= initial supply");
-        require(params.startTime > block.timestamp, "Start time must be in future");
-        require(params.endTime > params.startTime, "End time must be after start time");
+        
+        // Presale validation needs to happen BEFORE setting presaleInfo
+        bool presaleConfigured = params.presaleRate > 0 && params.presaleCap > 0 && params.startTime > 0 && params.endTime > 0;
+        if (presaleConfigured) {
+            require(params.startTime > block.timestamp, "Start time must be in future");
+            require(params.endTime > params.startTime, "End time must be after start time");
+        }
 
         maxSupply = params.maxSupply;
         blacklistEnabled = params.enableBlacklist;
@@ -148,22 +153,36 @@ contract TokenTemplate_v2 is
         platformFeeVestingDuration = params.platformFeeVestingDuration;
         platformFeeCliffDuration = params.platformFeeCliffDuration;
 
-        // Initialize presale info
-        presaleInfo = PresaleInfo({
-            softCap: params.presaleCap / 2,
-            hardCap: params.presaleCap,
-            minContribution: params.minContribution,
-            maxContribution: params.maxContribution,
-            startTime: params.startTime,
-            endTime: params.endTime,
-            presaleRate: params.presaleRate,
-            whitelistEnabled: false,
-            finalized: false,
-            totalContributed: 0
-        });
+        // Initialize presale info ONLY if configured
+        if (presaleConfigured) {
+            presaleInfo = PresaleInfo({
+                softCap: params.presaleCap / 2,
+                hardCap: params.presaleCap,
+                minContribution: params.minContribution,
+                maxContribution: params.maxContribution,
+                startTime: params.startTime,
+                endTime: params.endTime,
+                presaleRate: params.presaleRate,
+                whitelistEnabled: false,
+                finalized: false,
+                totalContributed: 0
+            });
 
-        // Mint initial supply to owner
-        _mint(params.owner, params.initialSupply);
+             emit PresaleStarted(
+                presaleInfo.softCap,
+                presaleInfo.hardCap,
+                params.startTime,
+                params.endTime,
+                params.presaleRate
+            );
+        } // Else, presaleInfo remains default/zeroed
+        
+        // Mint initial supply based on presale status
+        if (presaleConfigured) {
+             _mint(address(this), params.initialSupply); // Mint to contract for presale
+        } else {
+             _mint(params.owner, params.initialSupply); // Mint to owner if no presale
+        }
         
         // Handle platform fee tokens
         if (params.platformFeeTokens > 0 && params.platformFeeRecipient != address(0)) {
@@ -173,14 +192,6 @@ contract TokenTemplate_v2 is
                 platformFeeVestingStart = block.timestamp;
             }
         }
-
-        emit PresaleStarted(
-            presaleInfo.softCap,
-            presaleInfo.hardCap,
-            params.startTime,
-            params.endTime,
-            params.presaleRate
-        );
     }
 
     function contribute() external payable nonReentrant {

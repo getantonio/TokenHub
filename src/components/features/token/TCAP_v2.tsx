@@ -661,8 +661,10 @@ export default function TokenAdminV2({ address }: TokenAdminV2Props) {
       showToast('success', `Transaction submitted: ${blacklist ? 'Blacklisting' : 'Unblacklisting'} address...`);
       
       await tx.wait();
-      const explorerUrl = getExplorerUrl(chainId || 0, tx.hash, 'tx');
-      showToast('success', `Successfully ${blacklist ? 'blacklisted' : 'unblacklisted'} address ${addressToBlacklist.slice(0, 6)}...${addressToBlacklist.slice(-4)}`, explorerUrl);
+      // Construct URL manually if getExplorerUrl only gives base
+      const explorerBaseUrlBl = getExplorerUrl(chainId || 0);
+      const explorerUrlBl = explorerBaseUrlBl ? `${explorerBaseUrlBl}/tx/${tx.hash}` : undefined;
+      showToast('success', `Successfully ${blacklist ? 'blacklisted' : 'unblacklisted'} address ${addressToBlacklist.slice(0, 6)}...${addressToBlacklist.slice(-4)}`, explorerUrlBl);
       setBlacklistAddress('');
     } catch (error: any) {
       console.error('Error managing blacklist:', error);
@@ -691,8 +693,10 @@ export default function TokenAdminV2({ address }: TokenAdminV2Props) {
       showToast('success', 'Transaction submitted: Setting time lock...');
       
       await tx.wait();
-      const explorerUrl = getExplorerUrl(chainId || 0, tx.hash, 'tx');
-      showToast('success', `Successfully locked address ${addressToLock.slice(0, 6)}...${addressToLock.slice(-4)} until ${new Date(lockUntil * 1000).toLocaleString()}`, explorerUrl);
+      // Construct URL manually
+      const explorerBaseUrlTl = getExplorerUrl(chainId || 0);
+      const explorerUrlTl = explorerBaseUrlTl ? `${explorerBaseUrlTl}/tx/${tx.hash}` : undefined;
+      showToast('success', `Successfully locked address ${addressToLock.slice(0, 6)}...${addressToLock.slice(-4)} until ${new Date(lockUntil * 1000).toLocaleString()}`, explorerUrlTl);
       setLockInfo({ address: '', duration: 30 });
     } catch (error: any) {
       console.error('Error setting lock time:', error);
@@ -737,8 +741,10 @@ export default function TokenAdminV2({ address }: TokenAdminV2Props) {
       showToast('success', 'Transaction submitted: Finalizing presale...');
       
       await tx.wait();
-      const explorerUrl = getExplorerUrl(chainId || 0, tx.hash, 'tx');
-      showToast('success', 'Presale finalized successfully! Tokens are now available for trading.', explorerUrl);
+      // Construct URL manually
+      const explorerBaseUrlFin = getExplorerUrl(chainId || 0);
+      const explorerUrlFin = explorerBaseUrlFin ? `${explorerBaseUrlFin}/tx/${tx.hash}` : undefined;
+      showToast('success', 'Presale finalized successfully! Tokens are now available for trading.', explorerUrlFin);
       loadTokens();
     } catch (error: any) {
       console.error('Error finalizing presale:', error);
@@ -908,13 +914,22 @@ export default function TokenAdminV2({ address }: TokenAdminV2Props) {
                 {selectedToken === token.address && (
                   <div className="space-y-2 pt-1 border-t border-border">
                     <div className="flex gap-1">
+                      {/* Conditionally generate the correct explorer URL */}
                       <a
-                        href={getExplorerUrl(chainId || 0, token.address, 'token')}
+                        href={(() => {
+                          if (chainId === 11155420) { // Optimism Sepolia
+                            return `https://optimism-sepolia.blockscout.com/token/${token.address}`;
+                          }
+                          // Fallback: Get base URL and append manually
+                          const baseUrl = getExplorerUrl(chainId || 0);
+                          return baseUrl ? `${baseUrl}/address/${token.address}` : '#'; 
+                        })()}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-xs text-text-accent hover:text-blue-400"
                       >
-                        View on Etherscan ↗
+                        {/* Update link text based on explorer */}
+                        View on {chainId === 11155420 ? 'Blockscout' : 'Explorer'} ↗
                       </a>
                     </div>
 

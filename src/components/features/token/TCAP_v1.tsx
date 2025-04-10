@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserProvider, Contract, formatUnits } from 'ethers';
+import { BrowserProvider, Contract, formatUnits, Interface } from 'ethers';
 import TokenFactory_v1 from '@contracts/abi/TokenFactory_v1.json';
 import TokenTemplate_v1 from '@contracts/abi/TokenTemplate_v1.json';
 import { Button } from '@components/ui/button';
@@ -7,10 +7,12 @@ import { Card } from '@components/ui/card';
 import { Spinner } from '@components/ui/Spinner';
 import { Input } from '@components/ui/input';
 import { useToast } from '@/components/ui/toast/use-toast';
-import { useNetwork } from '@contexts/NetworkContext';
+import { useAccount, useChainId } from 'wagmi';
 import { getExplorerUrl } from '@config/networks';
 import { Tooltip } from '@components/ui/tooltip';
 import { InfoIcon } from '@components/ui/InfoIcon';
+import { FACTORY_ADDRESSES } from '@config/contracts';
+import { ChainId } from '@/types/network';
 
 // Add the ABI for our new AmoyTokenFactory
 const AMOY_FACTORY_ABI = [
@@ -30,10 +32,21 @@ const getFactoryABI = (chainId: number | null) => {
   return TokenFactory_v1.abi;
 };
 
+// Define the TokenTemplate ABI separately if needed for actions
+const TOKEN_TEMPLATE_ABI = TokenTemplate_v1.abi;
+
+// Define the helper function LOCALLY within this component
+const getExplorerUrlWithType = (chainId: number | null | undefined, addressOrHash: string, type: 'token' | 'tx' | 'address' = 'address'): string => {
+  if (!chainId) return '#';
+  // getExplorerUrl only accepts chainId and returns the base URL
+  const baseUrl = getExplorerUrl(chainId as ChainId);
+  if (!baseUrl) return '#'; // Handle case where base URL isn't found
+  // We then append the type and address ourselves
+  return `${baseUrl}/${type === 'tx' ? 'tx' : 'address'}/${addressOrHash}`;
+};
+
 interface Props {
   isConnected: boolean;
-  address?: string;
-  provider: BrowserProvider | null;
 }
 
 interface TokenInfo {
@@ -54,7 +67,10 @@ interface TimeLockAction {
   duration: number;
 }
 
-export default function TCAP_v1({ isConnected, address, provider: externalProvider }: Props) {
+export default function TCAP_v1({ isConnected }: Props) {
+  const { address } = useAccount();
+  const chainId = useChainId();
+  const [provider, setProvider] = useState<BrowserProvider | null>(null);
   const [tokens, setTokens] = useState<TokenInfo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,63 +85,92 @@ export default function TCAP_v1({ isConnected, address, provider: externalProvid
   const [isExpanded, setIsExpanded] = useState(false);
   const [blacklistAction, setBlacklistAction] = useState<BlacklistAction>({ address: '', action: 'add' });
   const [timeLockAction, setTimeLockAction] = useState<TimeLockAction>({ address: '', duration: 30 });
-  const { chainId } = useNetwork();
   const { toast } = useToast();
 
   useEffect(() => {
-    if (isConnected && externalProvider) {
-      loadTokens();
+    if (typeof window !== 'undefined' && window.ethereum) {
+      const currentProvider = new BrowserProvider(window.ethereum);
+      setProvider(currentProvider);
+
+      const handleChainChanged = () => {
+        console.log("Network changed, re-initializing provider...");
+        setProvider(new BrowserProvider(window.ethereum));
+      };
+
+      window.ethereum.on('chainChanged', handleChainChanged);
+
+      return () => {
+        if (window.ethereum.removeListener) {
+          window.ethereum.removeListener('chainChanged', handleChainChanged);
+        }
+      };
     }
-  }, [isConnected, address, externalProvider, chainId]);
+  }, []);
 
   useEffect(() => {
-    localStorage.setItem('hiddenTokensV1', JSON.stringify(hiddenTokens));
+    if (isConnected && address && provider && chainId) {
+      console.log(`Dependencies updated. isConnected: ${isConnected}, address: ${address}, provider set: ${!!provider}, chainId: ${chainId}. Reloading tokens.`);
+      loadTokens();
+    } else {
+      console.log(`Dependencies not met. isConnected: ${isConnected}, address: ${address}, provider set: ${!!provider}, chainId: ${chainId}. Clearing tokens.`);
+      setTokens([]);
+    }
+  }, [isConnected, address, provider, chainId]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('hiddenTokensV1', JSON.stringify(hiddenTokens));
+    }
   }, [hiddenTokens]);
 
-  // Function to get the correct factory address based on the network
-  const getFactoryAddress = (chainId: number | null): string => {
-    if (chainId === 80002) {
-      const address = process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V1;
-      console.log("Using environment variable for Polygon Amoy:", address);
-      return address || "";
-    }
-    
-    if (chainId === 421614) {
-      const address = process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V1;
-      console.log("Using environment variable for Arbitrum Sepolia:", address);
-      return address || "";
-    }
-    
-    if (!address) {
-      console.error("No factory address provided");
-      return "";
-    }
-    
-    return address;
-  };
-
   const loadTokens = async () => {
-    if (!externalProvider) return;
+    if (!provider) {
+      console.warn("loadTokens called without provider.");
+      setError("Provider not initialized.");
+      setIsLoading(false);
+      setTokens([]);
+      return;
+    }
+    if (!address) {
+      console.warn("loadTokens called without address.");
+      setError("Wallet address not available.");
+      setIsLoading(false);
+      setTokens([]);
+      return;
+    }
+    if (!chainId) {
+      console.warn("loadTokens called without chainId.");
+      setError("Network chain ID not available.");
+      setIsLoading(false);
+      setTokens([]);
+      return;
+    }
 
     try {
       setIsLoading(true);
       setError(null);
       
-      // Get the correct factory address for the current network
-      const factoryAddress = getFactoryAddress(chainId);
+      let factoryAddress;
+      if (chainId === 80002) {
+        factoryAddress = process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V1;
+      } else if (chainId === 421614) {
+        factoryAddress = process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V1;
+      } else {
+        factoryAddress = FACTORY_ADDRESSES.v1[chainId];
+      }
+
       if (!factoryAddress) {
         setError('Factory address not available for this network');
+        setTokens([]);
         setIsLoading(false);
         return;
       }
       
       console.log("Loading tokens from factory:", factoryAddress);
       
-      const factory = new Contract(factoryAddress, getFactoryABI(chainId), externalProvider);
-      const signer = await externalProvider.getSigner();
-      const userAddress = await signer.getAddress();
+      const factory = new Contract(factoryAddress, getFactoryABI(chainId), provider);
+      const userAddress = address;
       
-      // Get tokens deployed by the connected user
       const deployedTokens = await factory.getTokensByUser(userAddress);
 
       const tokenPromises = deployedTokens.map(async (tokenAddress: string) => {
@@ -133,7 +178,7 @@ export default function TCAP_v1({ isConnected, address, provider: externalProvid
           const tokenContract = new Contract(
             tokenAddress,
             TokenTemplate_v1.abi,
-            externalProvider
+            provider
           );
 
           const [name, symbol, totalSupply, decimals] = await Promise.all([
@@ -161,9 +206,14 @@ export default function TCAP_v1({ isConnected, address, provider: externalProvid
         .sort((a, b) => a.name.localeCompare(b.name));
 
       setTokens(loadedTokens);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading tokens:', error);
-      setError('Failed to load tokens. Please try again.');
+      if (error.code === 'NETWORK_ERROR') {
+        setError('Network changed. Please refresh tokens or reconnect wallet.');
+        setTokens([]);
+      } else {
+        setError('Failed to load tokens. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -190,81 +240,81 @@ export default function TCAP_v1({ isConnected, address, provider: externalProvid
   };
 
   const handleBlacklist = async (tokenAddress: string) => {
-    if (!externalProvider || !window.ethereum) return;
+    if (!provider || !address) {
+      toast({ variant: 'destructive', title: 'Error', description: 'Wallet not connected'});
+      return;
+    }
 
     try {
       setIsLoading(true);
-      const provider = new BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
+      const signer = await provider.getSigner(address);
       
-      // Use a consistent ABI for the token regardless of network
-      const token = new Contract(tokenAddress, TokenTemplate_v1.abi, signer);
-
-      const tx = await token.setBlacklistStatus(
+      // Create an Interface instance for the token contract
+      const tokenInterface = new Interface(TOKEN_TEMPLATE_ABI);
+      // Encode the function call data
+      const data = tokenInterface.encodeFunctionData('setBlacklistStatus', [
         blacklistAction.address,
         blacklistAction.action === 'add'
-      );
-      
-      toast({
-        title: 'Transaction Submitted',
-        description: 'Please wait for confirmation...',
+      ]);
+
+      // Send the transaction
+      const tx = await signer.sendTransaction({
+        to: tokenAddress,
+        data: data,
       });
+      
+      toast({ title: 'Transaction Submitted', description: 'Please wait for confirmation...' });
       
       await tx.wait();
       
-      toast({
-        title: 'Success',
-        description: `Address ${blacklistAction.action === 'add' ? 'blacklisted' : 'unblacklisted'} successfully`,
-      });
+      toast({ title: 'Success', description: `Address ${blacklistAction.action === 'add' ? 'blacklisted' : 'unblacklisted'} successfully` });
       
       setBlacklistAction({ address: '', action: 'add' });
-      await loadTokens();
+      await loadTokens(); // Refresh tokens after action
     } catch (error: any) {
       console.error('Error managing blacklist:', error);
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: error.message || 'Failed to manage blacklist',
-      });
+      toast({ variant: 'destructive', title: 'Error', description: error.message || 'Failed to manage blacklist' });
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleTimeLock = async (tokenAddress: string) => {
-    if (!externalProvider || !window.ethereum) return;
+    if (!provider || !address) {
+      toast({ variant: 'destructive', title: 'Error', description: 'Wallet not connected'});
+      return;
+    }
 
     try {
       setIsLoading(true);
-      const provider = new BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
+      const signer = await provider.getSigner(address);
       
-      // Use a consistent ABI for the token regardless of network
-      const token = new Contract(tokenAddress, TokenTemplate_v1.abi, signer);
-
+      // Create an Interface instance for the token contract
+      const tokenInterface = new Interface(TOKEN_TEMPLATE_ABI);
+      // Calculate lock time
       const lockUntil = Math.floor(Date.now() / 1000) + (timeLockAction.duration * 24 * 60 * 60);
-      const tx = await token.setLockTime(timeLockAction.address, lockUntil);
-      
-      toast({
-        title: 'Transaction Submitted',
-        description: 'Please wait for confirmation...',
+      // Encode the function call data
+      const data = tokenInterface.encodeFunctionData('setLockTime', [
+        timeLockAction.address, 
+        lockUntil
+      ]);
+
+      // Send the transaction
+      const tx = await signer.sendTransaction({
+        to: tokenAddress,
+        data: data,
       });
+      
+      toast({ title: 'Transaction Submitted', description: 'Please wait for confirmation...' });
       
       await tx.wait();
       
-      toast({
-        title: 'Success',
-        description: `Address locked until ${new Date(lockUntil * 1000).toLocaleString()}`,
-      });
+      toast({ title: 'Success', description: `Address locked until ${new Date(lockUntil * 1000).toLocaleString()}` });
       
       setTimeLockAction({ address: '', duration: 30 });
     } catch (error: any) {
-      console.error('Error setting time lock:', error);
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: error.message || 'Failed to set time lock',
-      });
+       console.error('Error setting time lock:', error);
+       toast({ variant: 'destructive', title: 'Error', description: error.message || 'Failed to set time lock' });
     } finally {
       setIsLoading(false);
     }
@@ -364,7 +414,7 @@ export default function TCAP_v1({ isConnected, address, provider: externalProvid
                       <div className="flex flex-col gap-1">
                         <h4 className="text-xs font-medium text-text-primary">Token Explorer</h4>
                         <a
-                          href={getExplorerUrl(chainId ?? undefined, token.address, 'token')}
+                          href={getExplorerUrlWithType(chainId, token.address, 'token')}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="btn-blue btn-small w-fit"

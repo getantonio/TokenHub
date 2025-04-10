@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useStacksWallet } from '@/contexts/StacksWalletContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -36,26 +36,21 @@ interface FormData {
   contractName: string;
 }
 
+interface FeeStats {
+  totalCollected: number;
+  locked: number;
+  available: number;
+}
+
 interface Props {}
 
-// Define the deposit address (this would be your project's wallet)
-const DEPLOYMENT_FEE_ADDRESS = process.env.NEXT_PUBLIC_STX_FEE_ADDRESS || "ST3RTWXDRNMMTPJQYXM74CYNPBK9T5A1XXHMAEWY3"; // Replace with your wallet address
+// Define the deposit address from env
+const DEPLOYMENT_FEE_ADDRESS = process.env.NEXT_PUBLIC_STX_FEE_ADDRESS || "ST1M4XB0KP2FPT1NFQQWV0MR3CE5SP2B3P4ZK9ZSR";
 
-// Calculate adjusted fee amount to ensure the desired amount arrives after network fees
-// Target amount you want to receive
-const TARGET_AMOUNT = parseInt(process.env.NEXT_PUBLIC_STX_TARGET_AMOUNT || "5000000"); // 5 STX in microstacks
-// Estimated network fee as a percentage (45% based on your observations)
-const NETWORK_FEE_PERCENT = parseInt(process.env.NEXT_PUBLIC_STX_NETWORK_FEE_PERCENT || "45");
-// Calculate the adjusted amount
-const ADJUSTED_AMOUNT = Math.ceil(TARGET_AMOUNT / (1 - NETWORK_FEE_PERCENT / 100));
-// Use the adjusted amount for the fee
-const DEPLOYMENT_FEE_AMOUNT = ADJUSTED_AMOUNT.toString();
-
-// Display values
-const TARGET_AMOUNT_DISPLAY = (TARGET_AMOUNT / 1000000).toString(); // 5 STX
-const ADJUSTED_AMOUNT_DISPLAY = (ADJUSTED_AMOUNT / 1000000).toFixed(1); // ~9.1 STX
-// Text to display to the user (formatted for clarity)
-const estimatedFeeText = `${ADJUSTED_AMOUNT_DISPLAY} STX (includes ~${NETWORK_FEE_PERCENT}% network fee)`;
+// Set fixed deployment fee of 1 STX
+const DEPLOYMENT_FEE_AMOUNT = "1000000"; // 1 STX in microstacks
+const DEPLOYMENT_FEE_DISPLAY = "1"; // 1 STX
+const estimatedFeeText = `${DEPLOYMENT_FEE_DISPLAY} STX`;
 
 export default function TokenForm_v1_Stacks({}: Props) {
   const [formData, setFormData] = useState<FormData>({
@@ -71,10 +66,8 @@ export default function TokenForm_v1_Stacks({}: Props) {
   const { isConnected: isStacksConnected, address: stacksAddress, networkConfig } = useStacksWallet();
   const { toast } = useToast();
   const [isWalletRetry, setIsWalletRetry] = useState(false);
-  const [estimatedFee] = useState<string>(estimatedFeeText);
-  const [feeStatus, setFeeStatus] = useState<'pending' | 'paid' | 'failed'>('pending');
-  const [feeTxId, setFeeTxId] = useState<string | null>(null);
   const deployOptionsRef = useRef<any>(null);
+  const [feeStats, setFeeStats] = useState<FeeStats | null>(null);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -100,59 +93,6 @@ export default function TokenForm_v1_Stacks({}: Props) {
     }
   };
   
-  // New function to handle the fee payment
-  const handlePayDeploymentFee = async () => {
-    if (!isStacksConnected || !stacksAddress) {
-      toast({ 
-        variant: "destructive", 
-        title: "Wallet Error", 
-        description: "Please connect your Stacks wallet first." 
-      });
-      return;
-    }
-    
-    try {
-      setIsLoading(true);
-      console.log("[Fee] Initiating fee payment...");
-      
-      // Use the stx_transferStx method from @stacks/connect request function
-      const response = await request('stx_transferStx', {
-        recipient: DEPLOYMENT_FEE_ADDRESS,
-        amount: DEPLOYMENT_FEE_AMOUNT,
-        memo: "TokenHub deployment fee",
-      });
-      
-      console.log("[Fee] Payment response:", response);
-      
-      if (response && response.txid) {
-        setFeeTxId(response.txid);
-        setFeeStatus('paid');
-        toast({ 
-          title: "Fee Payment Successful", 
-          description: `Payment transaction submitted. Note that network fees apply. You can now deploy your token.` 
-        });
-      } else {
-        setFeeStatus('failed');
-        toast({ 
-          variant: "destructive", 
-          title: "Fee Payment Failed", 
-          description: "Failed to process fee payment. Please try again." 
-        });
-      }
-    } catch (err) {
-      console.error("[Fee] Payment error:", err);
-      setFeeStatus('failed');
-      toast({ 
-        variant: "destructive", 
-        title: "Fee Payment Error", 
-        description: err instanceof Error ? err.message : "An unknown error occurred" 
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-  
-  // Modified handleSubmit function to check for payment first
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isStacksConnected || !stacksAddress) {
@@ -163,23 +103,28 @@ export default function TokenForm_v1_Stacks({}: Props) {
       });
       return;
     }
-    
-    // Check if fee has been paid
-    if (feeStatus !== 'paid') {
-      toast({ 
-        variant: "destructive", 
-        title: "Deployment Fee Required", 
-        description: "Please pay the deployment fee before deploying your token." 
-      });
-      return;
-    }
-    
+
     setIsLoading(true);
     setError(null);
     setSuccessInfo(null);
     setIsWalletRetry(false);
 
     try {
+      // Simple direct fee transfer
+      console.log("[Fee] Initiating direct fee transfer...");
+      const feeResponse = await request('stx_transferStx', {
+        recipient: DEPLOYMENT_FEE_ADDRESS,
+        amount: DEPLOYMENT_FEE_AMOUNT,
+        memo: "TokenHub deployment fee",
+      });
+
+      if (!feeResponse || !feeResponse.txid) {
+        throw new Error("Fee transfer failed");
+      }
+
+      console.log("[Fee] Transfer successful:", feeResponse.txid);
+
+      // Continue with token deployment
       // 1. Fetch Clarity Code
       let clarityCode = await fetchClarityTemplate();
       console.log("[Deploy] Fetched template:", clarityCode.substring(0, 100) + "...");
@@ -311,18 +256,47 @@ export default function TokenForm_v1_Stacks({}: Props) {
   // Helper to construct explorer URL
   const getStacksExplorerTxUrl = (txId: string): string | null => {
     if (!networkConfig) return null;
-    const baseUrl = networkConfig.explorerUrl;
+    const baseUrl = 'https://explorer.hiro.so';
     const chainParam = networkConfig.isTestnet ? '?chain=testnet' : '';
     
-    // Correctly format the URL by checking if txId contains a .
+    // Correctly format the URL
     if (txId.includes('.')) {
       // This is a contract address
-      return `${baseUrl}/txid/${txId}${chainParam}`;
+      return `${baseUrl}/address/${txId}${chainParam}`;
     } else {
       // This is a transaction ID
       return `${baseUrl}/txid/${txId}${chainParam}`;
     }
   };
+
+  // Add function to fetch fee stats
+  const fetchFeeStats = async () => {
+    try {
+      const response = await callReadOnlyFunction({
+        contractAddress: DEPLOYMENT_FEE_ADDRESS,
+        contractName: 'batch-token-factory',
+        functionName: 'get-fee-stats',
+        network: networkConfig?.network
+      });
+
+      if (response.success) {
+        setFeeStats({
+          totalCollected: Number(response.value.totalCollected) / 1000000,
+          locked: Number(response.value.locked) / 1000000,
+          available: Number(response.value.available) / 1000000
+        });
+      }
+    } catch (err) {
+      console.error('Failed to fetch fee stats:', err);
+    }
+  };
+
+  // Fetch stats on mount and after transactions
+  useEffect(() => {
+    if (isStacksConnected) {
+      fetchFeeStats();
+    }
+  }, [isStacksConnected, successInfo]);
 
   return (
     <Card className="bg-gradient-to-br from-purple-900/20 via-gray-900 to-gray-900 border border-purple-600/30 p-6 shadow-lg">
@@ -414,59 +388,38 @@ export default function TokenForm_v1_Stacks({}: Props) {
           </div>
         </div>
 
+        {/* Fee Status Display */}
+        {feeStats && (
+          <div className="mt-4 p-4 bg-gray-800/50 rounded-lg border border-gray-700">
+            <h3 className="text-sm font-medium text-gray-300 mb-2">Fee Status</h3>
+            <div className="space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span>Total Collected:</span>
+                <span>{feeStats.totalCollected.toFixed(2)} STX</span>
+              </div>
+              <div className="flex justify-between text-amber-400">
+                <span>Locked (Network Ops):</span>
+                <span>{feeStats.locked.toFixed(2)} STX</span>
+              </div>
+              <div className="flex justify-between text-green-400">
+                <span>Available:</span>
+                <span>{feeStats.available.toFixed(2)} STX</span>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Deployment Fee & Submit Button */} 
-        <div className="border-t border-gray-700 pt-6">
+        <div>
           <div className="flex justify-between items-center mb-4">
             <span className="text-sm font-medium text-gray-300">Deployment Fee:</span>
             <span className="text-sm font-semibold text-white">{estimatedFeeText}</span>
           </div>
           
-          {feeStatus === 'pending' ? (
-            <>
-              <p className="text-xs text-gray-400 mb-2">
-                The fee includes {TARGET_AMOUNT_DISPLAY} STX service charge plus approximately {((ADJUSTED_AMOUNT - TARGET_AMOUNT) / 1000000).toFixed(1)} STX for network transaction fees. We charge {ADJUSTED_AMOUNT_DISPLAY} STX total to ensure our service receives the proper amount after network fees.
-              </p>
-              <Button 
-                type="button" 
-                className="w-full bg-orange-600 hover:bg-orange-700 disabled:opacity-50 mb-4"
-                disabled={isLoading || !isStacksConnected}
-                onClick={handlePayDeploymentFee}
-              >
-                {isLoading ? <Spinner /> : 'Pay Deployment Fee'}
-              </Button>
-            </>
-          ) : feeStatus === 'paid' ? (
-            <div className="mb-4 text-center text-green-400 border border-green-400/50 bg-green-900/20 p-2 rounded-md">
-              <p className="text-sm">✓ Deployment Fee Paid</p>
-              {feeTxId && (
-                <a 
-                  href={getStacksExplorerTxUrl(feeTxId) || '#'} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-xs text-blue-400 hover:underline block"
-                >
-                  View Payment on Explorer
-                </a>
-              )}
-            </div>
-          ) : (
-            <div className="mb-4 text-center text-red-400 border border-red-400/50 bg-red-900/20 p-2 rounded-md">
-              <p className="text-sm">Payment Failed - Please Try Again</p>
-              <Button 
-                type="button" 
-                className="mt-2 text-xs bg-red-600 hover:bg-red-700 disabled:opacity-50"
-                disabled={isLoading}
-                onClick={handlePayDeploymentFee}
-              >
-                Retry Payment
-              </Button>
-            </div>
-          )}
-          
           <Button 
             type="submit" 
             className="w-full bg-purple-600 hover:bg-purple-700 disabled:opacity-50"
-            disabled={isLoading || !isStacksConnected || feeStatus !== 'paid'}
+            disabled={isLoading || !isStacksConnected}
           >
             {isLoading ? <Spinner /> : 'Deploy Stacks Token'}
           </Button>

@@ -1,5 +1,10 @@
 import { Chain } from 'viem';
 
+// Log the environment variable value *before* using it
+const amoyRpcUrl = process.env.NEXT_PUBLIC_POLYGON_AMOY_RPC_URL || 'https://rpc-amoy.polygon.technology'; // Added fallback
+console.log(`[config/chains.ts] NEXT_PUBLIC_POLYGON_AMOY_RPC_URL: ${process.env.NEXT_PUBLIC_POLYGON_AMOY_RPC_URL}`);
+console.log(`[config/chains.ts] Using Amoy RPC URL: ${amoyRpcUrl}`);
+
 export const polygonAmoy = {
   id: 80002,
   name: 'Polygon Amoy',
@@ -10,10 +15,16 @@ export const polygonAmoy = {
   },
   rpcUrls: {
     default: {
-      http: ['https://polygon-amoy.infura.io/v3/de082d8afc854286a7bdc56f2895fc67'],
+      http: [
+        amoyRpcUrl, // Use the variable we logged
+        'https://rpc-amoy.polygon.technology', // Keep public fallback
+      ],
     },
     public: {
-      http: ['https://polygon-amoy.infura.io/v3/de082d8afc854286a7bdc56f2895fc67'],
+      http: [
+        amoyRpcUrl, // Use the variable we logged
+        'https://rpc-amoy.polygon.technology',
+      ],
     },
   },
   blockExplorers: {
@@ -35,10 +46,20 @@ export const bscMainnet = {
   },
   rpcUrls: {
     default: {
-      http: ['https://bsc-dataseed1.binance.org'],
+      http: [
+        process.env.NEXT_PUBLIC_BSC_MAINNET_RPC_URL || 'https://bsc-dataseed1.binance.org',
+        'https://bsc-dataseed2.binance.org',
+        'https://bsc-dataseed3.binance.org',
+        'https://bsc-dataseed4.binance.org',
+      ],
     },
     public: {
-      http: ['https://bsc-dataseed1.binance.org'],
+      http: [
+        process.env.NEXT_PUBLIC_BSC_MAINNET_RPC_URL || 'https://bsc-dataseed1.binance.org',
+        'https://bsc-dataseed2.binance.org',
+        'https://bsc-dataseed3.binance.org',
+        'https://bsc-dataseed4.binance.org',
+      ],
     },
   },
   blockExplorers: {
@@ -60,10 +81,20 @@ export const bscTestnet = {
   },
   rpcUrls: {
     default: {
-      http: ['https://data-seed-prebsc-1-s1.binance.org:8545'],
+      http: [
+        process.env.NEXT_PUBLIC_BSC_TESTNET_RPC_URL || 'https://data-seed-prebsc-1-s1.binance.org:8545',
+        'https://data-seed-prebsc-2-s1.binance.org:8545',
+        'https://data-seed-prebsc-1-s2.binance.org:8545',
+        'https://data-seed-prebsc-2-s2.binance.org:8545',
+      ],
     },
     public: {
-      http: ['https://data-seed-prebsc-1-s1.binance.org:8545'],
+      http: [
+        process.env.NEXT_PUBLIC_BSC_TESTNET_RPC_URL || 'https://data-seed-prebsc-1-s1.binance.org:8545',
+        'https://data-seed-prebsc-2-s1.binance.org:8545',
+        'https://data-seed-prebsc-1-s2.binance.org:8545',
+        'https://data-seed-prebsc-2-s2.binance.org:8545',
+      ],
     },
   },
   blockExplorers: {

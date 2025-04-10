@@ -1,128 +1,166 @@
-import { mainnet, sepolia, arbitrumSepolia, optimismSepolia } from 'viem/chains';
-import { polygonAmoy, bscTestnet, bscMainnet } from './chains';
 import { Chain } from 'viem';
+import { polygonAmoy, bscMainnet, bscTestnet } from './chains';
+import { ChainId, NetworkConfig, NetworkDex, SUPPORTED_NETWORKS as BASE_NETWORKS } from '../types/network';
 
-type SupportedNetworks = {
-  [key: number]: Chain;
+const getFactoryAddressFromEnv = (chainId: ChainId): string => {
+  const envKey = `NEXT_PUBLIC_FACTORY_ADDRESS_${chainId}`;
+  return process.env[envKey] || '0x0000000000000000000000000000000000000000';
 };
 
-export const SUPPORTED_NETWORKS: SupportedNetworks = {
-  1: mainnet,
-  11155111: sepolia,
-  421614: arbitrumSepolia,
-  11155420: optimismSepolia,
-  80002: polygonAmoy,
-  97: bscTestnet,
-  56: bscMainnet,
+// Define DEX configurations
+const BSC_MAINNET_DEX: NetworkDex = {
+  QUICKSWAP_ROUTER: process.env.NEXT_PUBLIC_BSC_PANCAKESWAP_ROUTER || '',
+  QUICKSWAP_FACTORY: process.env.NEXT_PUBLIC_BSC_PANCAKESWAP_FACTORY || '',
+  QUICKSWAP_WETH: process.env.NEXT_PUBLIC_BSC_WBNB || '',
+  SUPPORTS_ENS: false
+};
+
+const BSC_TESTNET_DEX: NetworkDex = {
+  QUICKSWAP_ROUTER: process.env.NEXT_PUBLIC_BSCTESTNET_PANCAKESWAP_ROUTER || '',
+  QUICKSWAP_FACTORY: process.env.NEXT_PUBLIC_BSCTESTNET_PANCAKESWAP_FACTORY || '',
+  QUICKSWAP_WETH: process.env.NEXT_PUBLIC_BSCTESTNET_WBNB || '',
+  SUPPORTS_ENS: false
+};
+
+// Re-export the base network configurations with updated DEX settings
+export const SUPPORTED_NETWORKS = {
+  ...BASE_NETWORKS,
+  [ChainId.BSC_MAINNET]: {
+    ...BASE_NETWORKS[ChainId.BSC_MAINNET],
+    dex: BSC_MAINNET_DEX
+  },
+  [ChainId.BSC_TESTNET]: {
+    ...BASE_NETWORKS[ChainId.BSC_TESTNET],
+    dex: BSC_TESTNET_DEX
+  },
+  [ChainId.ETHEREUM]: {
+    id: ChainId.ETHEREUM,
+    name: 'Ethereum',
+    factoryAddress: getFactoryAddressFromEnv(ChainId.ETHEREUM),
+    explorerUrl: 'https://etherscan.io',
+    rpcUrl: 'https://mainnet.infura.io/v3/',
+    testnet: false,
+    nativeCurrency: {
+      name: 'Ether',
+      symbol: 'ETH',
+      decimals: 18,
+    },
+    blockExplorers: {
+      default: { name: 'Etherscan', url: 'https://etherscan.io' },
+    },
+    UNISWAP_ROUTER: '0x...',
+    UNISWAP_FACTORY: '0x...',
+    UNISWAP_WETH: '0x...',
+  },
+  [ChainId.SEPOLIA]: {
+    id: ChainId.SEPOLIA,
+    name: 'Sepolia',
+    factoryAddress: getFactoryAddressFromEnv(ChainId.SEPOLIA),
+    explorerUrl: 'https://sepolia.etherscan.io',
+    rpcUrl: 'https://sepolia.infura.io/v3/',
+    testnet: true,
+    nativeCurrency: {
+      name: 'Sepolia Ether',
+      symbol: 'ETH',
+      decimals: 18,
+    },
+    blockExplorers: {
+      default: { name: 'Etherscan', url: 'https://sepolia.etherscan.io' },
+    },
+    UNISWAP_ROUTER: '0x...',
+    UNISWAP_FACTORY: '0x...',
+    UNISWAP_WETH: '0x...',
+  },
+  [ChainId.ARBITRUM_SEPOLIA]: {
+    id: ChainId.ARBITRUM_SEPOLIA,
+    name: 'Arbitrum Sepolia',
+    factoryAddress: getFactoryAddressFromEnv(ChainId.ARBITRUM_SEPOLIA),
+    explorerUrl: 'https://sepolia.arbiscan.io',
+    rpcUrl: 'https://arbitrum-sepolia.infura.io/v3/',
+    testnet: true,
+    nativeCurrency: {
+      name: 'Arbitrum Sepolia Ether',
+      symbol: 'ETH',
+      decimals: 18,
+    },
+    blockExplorers: {
+      default: { name: 'Arbiscan', url: 'https://sepolia.arbiscan.io' },
+    },
+    UNISWAP_ROUTER: '0x...',
+    UNISWAP_FACTORY: '0x...',
+    UNISWAP_WETH: '0x...',
+  },
+  [ChainId.OPTIMISM_SEPOLIA]: {
+    id: ChainId.OPTIMISM_SEPOLIA,
+    name: 'Optimism Sepolia',
+    factoryAddress: getFactoryAddressFromEnv(ChainId.OPTIMISM_SEPOLIA),
+    explorerUrl: 'https://sepolia-optimism.etherscan.io',
+    rpcUrl: 'https://optimism-sepolia.infura.io/v3/',
+    testnet: true,
+    nativeCurrency: {
+      name: 'Optimism Sepolia Ether',
+      symbol: 'ETH',
+      decimals: 18,
+    },
+    blockExplorers: {
+      default: { name: 'Etherscan', url: 'https://sepolia-optimism.etherscan.io' },
+    },
+    UNISWAP_ROUTER: '0x...',
+    UNISWAP_FACTORY: '0x...',
+    UNISWAP_WETH: '0x...',
+  },
 } as const;
 
-export const getExplorerUrl = (chainId: number | undefined, address: string, type: 'token' | 'address' | 'tx' = 'address') => {
-  if (!chainId || !(chainId in SUPPORTED_NETWORKS)) return '#';
-  
-  const network = SUPPORTED_NETWORKS[chainId];
-  const baseUrl = network?.blockExplorers?.default?.url;
-  if (!baseUrl) return '#';
-
-  switch (type) {
-    case 'token':
-      return `${baseUrl}/token/${address}`;
-    case 'tx':
-      return `${baseUrl}/tx/${address}`;
-    default:
-      return `${baseUrl}/address/${address}`;
+// Network utility functions
+export const getNetworkConfig = (chainId: ChainId | null): NetworkConfig => {
+  if (!chainId) {
+    // Return default network config when chainId is null
+    return SUPPORTED_NETWORKS[ChainId.POLYGON_AMOY];
   }
-};
-
-export const getExplorerName = (chainId: number | undefined) => {
-  if (!chainId || !(chainId in SUPPORTED_NETWORKS)) return 'Explorer';
-  
   const network = SUPPORTED_NETWORKS[chainId];
-  return network?.blockExplorers?.default?.name || 'Explorer';
+  if (!network) {
+    console.warn(`Network config not found for chainId: ${chainId}`);
+    return SUPPORTED_NETWORKS[ChainId.POLYGON_AMOY];
+  }
+  return network;
 };
 
-export const getRpcUrl = (chainId: number | undefined) => {
-  if (!chainId || !(chainId in SUPPORTED_NETWORKS)) return undefined;
-  
-  const network = SUPPORTED_NETWORKS[chainId];
-  return network?.rpcUrls?.default?.http[0];
+export const getExplorerUrl = (chainId: ChainId | null): string => {
+  const network = getNetworkConfig(chainId);
+  return network.explorerUrl;
 };
 
-export function getNetworkName(chainId: number | null): string {
-  if (!chainId) return 'Unknown Network';
-  return SUPPORTED_NETWORKS[chainId]?.name || 'Unknown Network';
-}
+export const getNetworkName = (chainId: ChainId | null): string => {
+  const network = getNetworkConfig(chainId);
+  return network.name;
+};
 
-export function isTestnet(chainId: number | null): boolean {
-  if (!chainId) return false;
-  return SUPPORTED_NETWORKS[chainId]?.testnet || false;
-}
+export const getRpcUrl = (chainId: ChainId | null): string => {
+  const network = getNetworkConfig(chainId);
+  return network.rpcUrl;
+};
 
-export function getNetworkConfig(chainId: number | null): any | null {
-  if (!chainId) return null;
-  return SUPPORTED_NETWORKS[chainId] || null;
-}
+export const getFactoryAddress = (chainId: ChainId | null): string => {
+  const network = getNetworkConfig(chainId);
+  return network.factoryAddress;
+};
 
-export const NETWORK_CONFIG = {
-  '80002': { // Polygon Amoy
-    QUICKSWAP_ROUTER: process.env.NEXT_PUBLIC_POLYGONAMOY_QUICKSWAP_ROUTER,
-    QUICKSWAP_FACTORY: process.env.NEXT_PUBLIC_POLYGONAMOY_DEX_FACTORY,
-    QUICKSWAP_WETH: process.env.NEXT_PUBLIC_POLYGONAMOY_WETH,
-    SUPPORTS_ENS: false,
-    // Add other network-specific configurations as needed
-  },
-  // Add other networks as needed
-} as const;
+export const isTestnet = (chainId: ChainId | null): boolean => {
+  const network = getNetworkConfig(chainId);
+  return network.testnet;
+};
 
-export type NetworkConfig = typeof NETWORK_CONFIG;
-export type NetworkId = keyof NetworkConfig;
+export const getNativeCurrency = (chainId: ChainId | null) => {
+  const network = getNetworkConfig(chainId);
+  return network.nativeCurrency;
+};
 
-export default SUPPORTED_NETWORKS;
+export const getExplorerName = (chainId: ChainId | undefined | null): string => {
+  if (!chainId) return 'Explorer';
+  const network = getNetworkConfig(chainId);
+  return network.blockExplorers.default.name;
+};
 
-export interface ContractAddresses {
-  priceOracle?: string;
-  interestRateModel?: string;
-  feeCollector?: string;
-  lendingPoolImpl?: string;
-  loanPoolFactory?: string;
-  factory?: string;
-}
-
-export interface NetworkConfig {
-  chainId: number;
-  name: string;
-  rpcUrl: string | undefined;
-  explorerUrl: string;
-  contracts: ContractAddresses;
-}
-
-export const SUPPORTED_NETWORKS_NEW: Record<string, NetworkConfig> = {
-  sepolia: {
-    chainId: 11155111,
-    name: "Sepolia",
-    rpcUrl: process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL,
-    explorerUrl: "https://sepolia.etherscan.io",
-    contracts: {
-      factory: process.env.NEXT_PUBLIC_FACTORY_ADDRESS,
-      feeCollector: process.env.NEXT_PUBLIC_FEE_COLLECTOR_ADDRESS,
-    },
-  },
-  polygonAmoy: {
-    chainId: 80002,
-    name: "Polygon Amoy",
-    rpcUrl: process.env.NEXT_PUBLIC_POLYGON_AMOY_RPC_URL,
-    explorerUrl: process.env.NEXT_PUBLIC_POLYGON_AMOY_EXPLORER_URL || "https://amoy.polygonscan.com",
-    contracts: {
-      priceOracle: process.env.NEXT_PUBLIC_PRICE_ORACLE_ADDRESS,
-      interestRateModel: process.env.NEXT_PUBLIC_INTEREST_RATE_MODEL_ADDRESS,
-      feeCollector: process.env.NEXT_PUBLIC_FEE_COLLECTOR_ADDRESS,
-      lendingPoolImpl: process.env.NEXT_PUBLIC_LENDING_POOL_IMPL_ADDRESS,
-      loanPoolFactory: process.env.NEXT_PUBLIC_LOAN_POOL_FACTORY_ADDRESS,
-    },
-  },
-} as const;
-
-export type NetworkName = keyof typeof SUPPORTED_NETWORKS_NEW;
-export type NetworkConfigNew = typeof SUPPORTED_NETWORKS_NEW[NetworkName];
-export type NetworkIdNew = NetworkConfigNew["chainId"];
-
-export const DEFAULT_NETWORK: NetworkName = (process.env.NEXT_PUBLIC_DEFAULT_NETWORK as NetworkName) || "polygonAmoy"; 
+// Type exports
+export type SupportedNetworkId = ChainId;
+export type SupportedNetworkName = keyof typeof SUPPORTED_NETWORKS;

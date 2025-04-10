@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { BrowserProvider, Contract, parseUnits, formatUnits } from 'ethers';
+import { BrowserProvider, Contract, parseUnits, formatUnits, JsonRpcProvider, parseEther, TransactionReceipt } from 'ethers';
 import { getNetworkContractAddress } from '@config/contracts';
-import { useNetwork } from '@contexts/NetworkContext';
+import { useChainId } from 'wagmi';
 import TokenFactory_v1 from '@contracts/abi/TokenFactory_v1.json';
 import TokenTemplate_v1 from '@contracts/abi/TokenTemplate_v1.json';
-import { getExplorerUrl, getNetworkName } from '@config/networks';
+import { getExplorerUrl, getNetworkName } from '@/config/networks';
 import TokenPreview from '@components/features/token/TokenPreview';
 import { InfoIcon } from '@components/ui/InfoIcon';
 import type { TokenConfig } from '../../../types/token-config';
@@ -20,7 +20,9 @@ import { Label } from '@components/ui/label';
 import { Switch } from '@components/ui/switch';
 import { FACTORY_ADDRESSES } from '@config/contracts';
 import TokenFactoryV1 from '@contracts/abi/TokenFactory_v1.json';
-import { safeNormalizeAddress, getFactoryAddress } from '@/utils/address';
+import { safeNormalizeAddress } from '@/utils/address';
+import { useAccount } from 'wagmi';
+import { ChainId } from '@/types/network';
 
 // Define styling constants - enhanced to ensure inputs remain gray-900 with important flag
 const inputClasses = "mt-2 block w-full rounded-md border-gray-800 !bg-gray-900 text-white placeholder-gray-500 focus:!bg-gray-900 focus:ring-0 focus:border-gray-700 hover:!bg-gray-900 active:!bg-gray-900";
@@ -104,6 +106,16 @@ interface NetworkStatus {
   message: string;
 }
 
+// Add a helper function to handle explorer URL construction with address and type
+const getExplorerUrlWithType = (chainId: number | null | undefined, addressOrHash: string, type: 'token' | 'tx' | 'address' = 'address'): string => {
+  if (!chainId) return '#';
+  // Cast to ChainId type before calling getExplorerUrl
+  const chainIdAsEnum = chainId as ChainId;
+  const baseUrl = getExplorerUrl(chainIdAsEnum);
+  // We then append the type and address ourselves
+  return `${baseUrl}/${type === 'tx' ? 'tx' : 'address'}/${addressOrHash}`;
+};
+
 export default function TokenForm_v1({ isConnected }: Props) {
   const [formData, setFormData] = useState<FormData>({
     name: '',
@@ -117,7 +129,8 @@ export default function TokenForm_v1({ isConnected }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [successInfo, setSuccessInfo] = useState<SuccessInfo | null>(null);
   const [deploymentFee, setDeploymentFee] = useState<string>('Loading...');
-  const { chainId } = useNetwork();
+  const chainId = useChainId();
+  const { address } = useAccount();
   const [provider, setProvider] = useState<BrowserProvider | null>(null);
   const [networkStatus, setNetworkStatus] = useState<NetworkStatus>({
     isSupported: true,
@@ -127,353 +140,353 @@ export default function TokenForm_v1({ isConnected }: Props) {
   const [isFactoryDeployed, setIsFactoryDeployed] = useState<boolean | null>(null);
   const { toast } = useToast();
 
-  // Function to check if the factory contract is deployed at the given address
-  const checkFactoryDeployment = async (factoryAddress: string) => {
-    if (!window.ethereum || !factoryAddress) return;
+  // Function to check factory deployment (remains mostly the same, uses the provider state)
+  const checkFactoryDeployment = async (factoryAddress: string, currentProvider: BrowserProvider | null) => {
+    if (!currentProvider || !factoryAddress) return;
     
     try {
-      const provider = new BrowserProvider(window.ethereum);
-      
       // Check if there's code at the address
-      const code = await provider.getCode(factoryAddress);
+      const code = await currentProvider.getCode(factoryAddress);
       if (code === '0x') {
-        console.log(`No contract deployed at address ${factoryAddress}`);
-        setNetworkStatus({
-          isSupported: true,
-          hasDeployedFactory: false,
-          message: `No contract deployed at address ${factoryAddress}`
-        });
+        console.log(`[checkFactory] No contract deployed at address ${factoryAddress}`);
+        setNetworkStatus({ isSupported: true, hasDeployedFactory: false, message: `No factory contract deployed at ${factoryAddress}` });
         setIsFactoryDeployed(false);
         return;
       }
       
-      // Try to instantiate the contract and call a view function
+      // Try to instantiate and call
       try {
-        const contract = new Contract(factoryAddress, getFactoryABI(chainId), provider);
-        const fee = await contract.deploymentFee();
-        console.log(`Factory contract verified at ${factoryAddress}, deployment fee: ${formatUnits(fee, 'ether')} ETH`);
-        setNetworkStatus({
-          isSupported: true,
-          hasDeployedFactory: true,
-          message: 'Factory contract verified'
-        });
+        const contract = new Contract(factoryAddress, getFactoryABI(chainId), currentProvider);
+        const fee = await contract.deploymentFee(); // Example call
+        console.log(`[checkFactory] Factory verified at ${factoryAddress}, fee: ${formatUnits(fee, 'ether')} ETH`);
+        setNetworkStatus({ isSupported: true, hasDeployedFactory: true, message: 'Factory contract verified' });
         setIsFactoryDeployed(true);
         setDeploymentFee(formatUnits(fee, 'ether'));
       } catch (error) {
-        console.error('Error calling factory contract:', error);
-        setNetworkStatus({
-          isSupported: true,
-          hasDeployedFactory: false,
-          message: 'Contract exists but does not appear to be a TokenFactory'
-        });
+        console.error('[checkFactory] Error calling factory contract:', error);
+        setNetworkStatus({ isSupported: true, hasDeployedFactory: false, message: 'Contract exists but is not a V1 factory' });
         setIsFactoryDeployed(false);
       }
     } catch (error) {
-      console.error('Error checking factory deployment:', error);
-      setNetworkStatus({
-        isSupported: true,
-        hasDeployedFactory: false,
-        message: 'Error checking factory deployment'
-      });
+      console.error('[checkFactory] Error checking factory deployment:', error);
+      setNetworkStatus({ isSupported: true, hasDeployedFactory: false, message: 'Error checking factory deployment' });
       setIsFactoryDeployed(false);
     }
   };
 
+  // Effect to initialize provider and handle network changes
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.ethereum) {
-      setProvider(new BrowserProvider(window.ethereum));
-    }
-  }, []);
+    let providerInstance: BrowserProvider | null = null;
+    let chainChangedHandler: (() => void) | null = null;
 
+    if (typeof window !== 'undefined' && window.ethereum) {
+      // Standard provider from wallet
+      providerInstance = new BrowserProvider(window.ethereum);
+      setProvider(providerInstance);
+
+      chainChangedHandler = () => {
+        console.log("Network changed, re-initializing provider for TokenForm_v1_EVM...");
+        setProvider(new BrowserProvider(window.ethereum));
+      };
+
+      window.ethereum.on('chainChanged', chainChangedHandler);
+
+    } else {
+      // Fallback for SSR or if window.ethereum isn't available initially
+      // Attempt to create a JsonRpcProvider if on Arbitrum Sepolia and env var is set
+      const arbitrumSepoliaRpc = process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_RPC_URL;
+      if (chainId === 421614 && arbitrumSepoliaRpc) {
+         console.warn("[TokenForm_v1_EVM] window.ethereum not found, attempting JsonRpcProvider fallback for Arbitrum Sepolia.")
+         try {
+            // Use JsonRpcProvider directly - NOTE: This won't use the connected wallet's signer
+            // It's mainly for read operations or if the signer is handled differently.
+            // This is a diagnostic step.
+            const staticProvider = new JsonRpcProvider(arbitrumSepoliaRpc);
+            // We can't set this as the main 'provider' state easily as it's not a BrowserProvider
+            // But we can use it for specific checks if needed.
+            console.log("[TokenForm_v1_EVM] Fallback JsonRpcProvider created.")
+         } catch (e) {
+            console.error("[TokenForm_v1_EVM] Failed to create fallback JsonRpcProvider:", e)
+         }
+      }
+    }
+
+    // Cleanup listener
+    return () => {
+      if (window.ethereum && chainChangedHandler && window.ethereum.removeListener) {
+        window.ethereum.removeListener('chainChanged', chainChangedHandler);
+      }
+    };
+  }, [chainId]); // Rerun if chainId changes, maybe to init fallback provider
+
+  // Effect to check factory deployment when chainId or provider changes
   useEffect(() => {
-    if (chainId) {
-      // Get factory address from environment variable for Polygon Amoy
+    if (chainId && provider) {
+      console.log(`[FactoryCheckEffect] chainId: ${chainId}, provider set: ${!!provider}`);
       let factoryAddress;
       if (chainId === 80002) {
-        // Use environment variable for Polygon Amoy
         factoryAddress = process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V1;
-        console.log("Using environment variable for Polygon Amoy:", factoryAddress);
       } else if (chainId === 421614) {
-        // Use environment variable for Arbitrum Sepolia
         factoryAddress = process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V1;
-        console.log("Using environment variable for Arbitrum Sepolia:", factoryAddress);
       } else {
-        factoryAddress = getFactoryAddress(FACTORY_ADDRESSES, 'v1', chainId);
+        factoryAddress = FACTORY_ADDRESSES.v1[chainId];
       }
-      
-      console.log("Environment variable value:", process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V1);
-      console.log("Factory address after resolution:", factoryAddress);
-      
-      // Always assume network is supported, just check the factory
-      if (!factoryAddress) {
-        setNetworkStatus({
-          isSupported: true,
-          hasDeployedFactory: false, 
-          message: 'No factory address configured for this network'
-        });
-        return;
-      }
-      
-      // At this point we have a configured address, check if factory is deployed
-      setIsFactoryDeployed(null);
-      checkFactoryDeployment(factoryAddress);
-    }
-  }, [chainId]);
 
-  // Fetch deployment fee when component mounts
+      if (!factoryAddress) {
+         console.log("[FactoryCheckEffect] No factory address configured.");
+         setNetworkStatus({ isSupported: true, hasDeployedFactory: false, message: 'No factory address configured for this network' });
+         setIsFactoryDeployed(false);
+         setDeploymentFee('N/A');
+      } else {
+         console.log(`[FactoryCheckEffect] Checking deployment for factory: ${factoryAddress}`);
+         setIsFactoryDeployed(null); // Reset while checking
+         setDeploymentFee('Loading...'); // Reset fee while checking
+         checkFactoryDeployment(factoryAddress, provider); // Pass the current provider
+      }
+    } else {
+      console.log(`[FactoryCheckEffect] chainId or provider not available. chainId: ${chainId}, provider set: ${!!provider}`);
+      // Reset status if chainId or provider is missing
+      setNetworkStatus({ isSupported: true, hasDeployedFactory: null, message: 'Connecting...' });
+      setIsFactoryDeployed(null);
+      setDeploymentFee('...');
+    }
+  }, [chainId, provider]); // Add provider as a dependency
+
+  // Fetch deployment fee (this might be redundant now if checkFactoryDeployment sets it)
+  // Consider removing or adapting this if checkFactoryDeployment reliably sets the fee.
+  /*
   useEffect(() => {
     async function fetchDeploymentFee() {
-      if (!window.ethereum || !isConnected) return;
-      
-      try {
-        const provider = new BrowserProvider(window.ethereum);
-        const signer = await provider.getSigner();
-        const userAddress = await signer.getAddress();
-        const chainId = Number(await window.ethereum.request({ method: 'eth_chainId' }));
-        const factoryAddress = FACTORY_ADDRESSES.v1[chainId];
-        if (!factoryAddress) {
-          setDeploymentFee('Not available on this network');
-          return;
-        }
-        
-        const factory = new Contract(factoryAddress, getFactoryABI(chainId), signer);
-        const fee = await factory.deploymentFee();
-        setDeploymentFee(formatUnits(fee, 'ether'));
-      } catch (error) {
-        console.error('Error fetching deployment fee:', error);
-      }
+      // ... (needs provider from state)
     }
-
     fetchDeploymentFee();
-  }, [isConnected]);
-
-  const showToast = (type: 'success' | 'error', message: string, link?: string) => {
-    toast({
-      variant: type === 'error' ? 'destructive' : 'default',
-      title: type === 'error' ? 'Error' : 'Success',
-      description: (
-        <div className="space-y-2">
-          <p>{message}</p>
-          {link && (
-            <a href={link} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline">
-              View on Explorer
-            </a>
-          )}
-        </div>
-      )
-    });
-  };
+  }, [chainId, provider, isConnected]); // Add provider
+  */
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isConnected) {
-      setError("Please connect your wallet first");
+    const currentProvider = provider;
+
+    if (isFactoryDeployed === false) {
+         toast({ variant: 'destructive', title: 'Error', description: 'Factory contract not found or invalid on this network. Cannot deploy.' });
+         return;
+    }
+     if (isFactoryDeployed === null) {
+         toast({ variant: 'destructive', title: 'Error', description: 'Still verifying factory contract. Please wait a moment and try again.' });
+         return;
+    }
+
+    if (!isConnected || !currentProvider || !address || !chainId) {
+      toast({ variant: 'destructive', title: 'Error', description: 'Please ensure your wallet is connected.' });
       return;
     }
     
-    setIsLoading(true);
-    setError(null);
-    setSuccessInfo(null);
+    // --- Create checkProvider (potentially JsonRpcProvider) for reads ---
+    let rpcUrlToCheck: string | undefined;
+    let isArbitrumSepolia = false;
+    if (chainId === 421614) { // Arbitrum Sepolia
+       rpcUrlToCheck = process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_RPC_URL;
+       isArbitrumSepolia = true;
+       console.log(`[handleSubmit] Using specific RPC check for Arbitrum Sepolia: ${rpcUrlToCheck}`);
+    } 
+    // Add else if for other chains needing specific RPC if necessary
+    
+    let checkProvider: BrowserProvider | JsonRpcProvider = currentProvider; // Default to wallet provider
+    if (rpcUrlToCheck) {
+        try {
+            // Create JsonRpcProvider specifically for read operations on this chain
+            checkProvider = new JsonRpcProvider(rpcUrlToCheck);
+            console.log(`[handleSubmit] Created temporary JsonRpcProvider for read checks.`);
+        } catch (err) {
+            console.error(`[handleSubmit] Failed to create JsonRpcProvider for checks, falling back to BrowserProvider. Error:`, err);
+            // If creating JsonRpcProvider fails, we fallback to the wallet provider for reads too
+            checkProvider = currentProvider; 
+        }
+    }
+    // --- End checkProvider setup ---
+
+    let txResponse: ethers.TransactionResponse | null = null;
 
     try {
-      if (!window.ethereum) {
-        throw new Error("Please install MetaMask");
-      }
+      setIsLoading(true);
+      setError(null);
+      setSuccessInfo(null);
 
-      const provider = new BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      const userAddress = await signer.getAddress();
-      const chainId = Number(await window.ethereum.request({ method: 'eth_chainId' }));
-      
-      // Get factory address from environment variable for Polygon Amoy
+      // Signer MUST come from the wallet provider
+      const signer = await currentProvider.getSigner(); 
+
       let factoryAddress;
       if (chainId === 80002) {
-        // Use environment variable for Polygon Amoy
         factoryAddress = process.env.NEXT_PUBLIC_POLYGONAMOY_FACTORY_ADDRESS_V1;
-        console.log("Using environment variable for Polygon Amoy:", factoryAddress);
       } else if (chainId === 421614) {
-        // Use environment variable for Arbitrum Sepolia
         factoryAddress = process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_FACTORY_ADDRESS_V1;
-        console.log("Using environment variable for Arbitrum Sepolia:", factoryAddress);
       } else {
-        factoryAddress = getFactoryAddress(FACTORY_ADDRESSES, 'v1', chainId);
+        factoryAddress = FACTORY_ADDRESSES.v1[chainId];
       }
-      
+      if (!factoryAddress) throw new Error('Factory address configuration missing for this network');
       console.log("Using factory address:", factoryAddress);
-      
-      if (!factoryAddress) {
-        console.error("Factory address not found for this network");
-        showToast('error', 'TokenFactory V1 is not deployed on this network');
-        setIsLoading(false);
-        return;
-      }
 
-      // Check if the contract exists at this address
-      try {
-        const code = await provider.getCode(factoryAddress);
-        if (code === '0x') {
-          console.error(`No contract deployed at address ${factoryAddress}`);
-          showToast('error', `No contract deployed at address ${factoryAddress}`);
-          setIsLoading(false);
-          return;
-        }
-        console.log("Contract code exists at address:", factoryAddress);
-      } catch (error) {
-        console.error("Error checking contract code:", error);
-        showToast('error', `Error verifying contract at ${factoryAddress}`);
-        setIsLoading(false);
-        return;
+      // Use checkProvider for the getCode read operation
+      console.log("Checking contract code at factory address using checkProvider...");
+      const code = await checkProvider.getCode(factoryAddress);
+      if (code === '0x') {
+        throw new Error(`Factory contract not found at ${factoryAddress}. Check network or configuration.`);
       }
-
-      const factory = new Contract(factoryAddress, getFactoryABI(chainId), signer);
+      console.log("Contract code found. Proceeding with deployment...");
       
-      // Get deployment fee - skip for Polygon Amoy
-      let fee;
-      if (chainId === 80002) {
-        console.log("Skipping deployment fee check for Polygon Amoy");
-        fee = BigInt(0); // Use zero fee for Polygon Amoy
-      } else {
-        try {
-          fee = await factory.deploymentFee();
-          console.log("Successfully retrieved deployment fee:", formatUnits(fee, 'ether'), "ETH");
-        } catch (error) {
-          console.error("Error calling deploymentFee function:", error);
-          showToast('error', 'The factory contract exists but is not responding correctly');
-          setIsLoading(false);
-          return;
-        }
+      // Instantiate contract with the SIGNER for the actual transaction
+      const factory = safeCreateContract(factoryAddress, getFactoryABI(chainId), signer);
+
+      // --- Deployment Fee Logic (using checkProvider for reads) --- 
+      let fee = parseEther('0');
+      let txValue = parseEther('0');
+
+      if (isArbitrumSepolia || (chainId !== 80002)) { // Check fee unless it's Amoy
+          console.log(`Attempting to retrieve deployment fee for chain ${chainId} using checkProvider...`);
+          try {
+              // Use checkProvider for read-only fee check
+              const factoryReader = safeCreateContract(factoryAddress, getFactoryABI(chainId), checkProvider);
+              fee = await factoryReader.deploymentFee();
+              txValue = fee;
+              console.log(`Successfully retrieved deployment fee: ${formatUnits(fee, 'ether')} ETH`);
+          } catch (feeError) {
+              console.error(`Error fetching deployment fee for chain ${chainId}:`, feeError);
+              console.warn("Proceeding with 0 fee due to error.");
+              txValue = parseEther('0'); // Proceed with 0 if fee check fails
+          }
+      } else { // Polygon Amoy
+          console.log("Skipping deployment fee check for Polygon Amoy");
+          txValue = parseEther('0'); 
       }
-      
-      const initialSupplyWei = parseUnits(formData.initialSupply, TOKEN_DECIMALS);
-      const maxSupplyWei = parseUnits(formData.maxSupply, TOKEN_DECIMALS);
+      console.log(`Deployment fee to send: ${formatUnits(txValue, 'ether')} ETH`);
 
-      try {
-        let tx;
-        
-        if (chainId === 80002) {
-          console.log("Using direct token creation for Polygon Amoy");
-          
-          const { name, symbol, initialSupply } = formData;
-          
-          console.log("Creating token with parameters:", {
-            name,
-            symbol,
-            initialSupply
-          });
-          
-          // Get fee
-          const fee = await factory.deploymentFee();
-          console.log("Deployment fee:", formatUnits(fee, "ether"), "ETH");
-          
-          // AmoyTokenFactory has a simpler interface - just name, symbol, initialSupply
-          tx = await factory.createToken(
-            name,
-            symbol,
-            initialSupply,
-            { value: fee, gasLimit: 3000000 }
-          );
-        } else {
-          // Normal flow for other networks
-          tx = await factory.createToken(
+      // --- Token Creation Logic (using factory instance with signer) --- 
+      if (chainId === 80002) { // Polygon Amoy
+         console.log("Using direct token creation for Polygon Amoy");
+         const tokenParams = { name: formData.name, symbol: formData.symbol, initialSupply: parseUnits(formData.initialSupply, TOKEN_DECIMALS).toString() };
+         console.log("Creating token with parameters:", tokenParams);
+         txResponse = await factory.createToken(
+             tokenParams.name,
+             tokenParams.symbol,
+             tokenParams.initialSupply
+         );
+      } else { // Standard creation 
+         console.log("Using standard token creation method");
+         txResponse = await factory.createToken(
             formData.name,
             formData.symbol,
-            initialSupplyWei,
-            maxSupplyWei,
+            parseUnits(formData.initialSupply, TOKEN_DECIMALS).toString(),
+            parseUnits(formData.maxSupply || formData.initialSupply, TOKEN_DECIMALS).toString(),
             formData.blacklistEnabled,
             formData.timeLockEnabled,
-            { value: fee }
-          );
-        }
-
-        showToast('success', 'Transaction submitted. Waiting for confirmation...');
-        
-        const receipt = await tx.wait();
-        let tokenAddress = null;
-        
-        for (const log of receipt.logs) {
-          try {
-            const parsed = factory.interface.parseLog(log as unknown as { topics: string[], data: string });
-            if (parsed?.name === "TokenCreated") {
-              tokenAddress = parsed.args[0];
-              break;
-            }
-          } catch (e) {
-            continue;
-          }
-        }
-
-        if (!tokenAddress) {
-          for (const log of receipt.logs) {
-            if (log.address !== factoryAddress) {
-              tokenAddress = log.address;
-              break;
-            }
-          }
-        }
-
-        if (!tokenAddress) {
-          throw new Error("Could not find token address in transaction logs");
-        }
-
-        const explorerUrl = getExplorerUrl(chainId, tokenAddress, 'token');
-        const txExplorerUrl = getExplorerUrl(chainId, tx.hash, 'tx');
-
-        setSuccessInfo({
-          tokenAddress,
-          tokenName: formData.name,
-          tokenSymbol: formData.symbol,
-        });
-
-        showToast('success', 'Token created successfully!', txExplorerUrl);
-      } catch (error: any) {
-        console.error('Error in createToken transaction:', error);
-
-        // Log comprehensive debug information
-        if (error.receipt) {
-          console.log('Transaction receipt found in error:', error.receipt);
-          console.log('Transaction status:', error.receipt.status);
-          console.log('Gas used:', error.receipt.gasUsed.toString());
-          
-          if (error.receipt.logs && error.receipt.logs.length > 0) {
-            console.log('Transaction logs:', error.receipt.logs);
-          }
-        }
-        
-        // More detailed transaction data inspection
-        if (error.transaction) {
-          console.log('Transaction details:', {
-            to: error.transaction.to,
-            from: error.transaction.from,
-            value: error.transaction.value,
-            gasLimit: error.transaction.gasLimit,
-            dataPresent: !!error.transaction.data,
-            dataEmpty: error.transaction.data === '' || error.transaction.data === '0x',
-            dataLength: error.transaction.data ? error.transaction.data.length : 0,
-            dataPrefix: error.transaction.data ? error.transaction.data.substring(0, 10) : ''
-          });
-        }
-        
-        // Check for specific error types
-        if (error.message && error.message.includes("user rejected transaction")) {
-          showToast('error', 'Transaction was rejected by the user');
-        } else if (error.message && error.message.includes("insufficient funds")) {
-          showToast('error', 'Insufficient funds to create token');
-        } else if (chainId === 80002) {
-          // Specific Polygon Amoy error handling
-          if (error.transaction && (!error.transaction.data || error.transaction.data === '0x' || error.transaction.data === '')) {
-            showToast('error', 'Transaction failed: Empty function data. This appears to be a MetaMask issue with Polygon Amoy. Please try using Sepolia or another network.');
-          } else if (error.message.includes("execution reverted")) {
-            showToast('error', 'Transaction execution reverted on Polygon Amoy. Please try on Ethereum Sepolia or another network, as Polygon Amoy is having issues.');
-          } else {
-            showToast('error', 'Error creating token on Polygon Amoy. The network is experimental and may have issues. Try Ethereum Sepolia instead.');
-          }
-        } else {
-          showToast('error', `Error creating token: ${error.message || 'Unknown error'}`);
-        }
+            { value: txValue } // Send the determined fee
+         );
       }
+
+      console.log("Transaction submitted:", txResponse.hash);
+      toast({ title: 'Transaction Submitted', description: 'Waiting for confirmation...' });
+
+      // Wait for confirmation using the wallet provider
+      const receipt: TransactionReceipt | null = await currentProvider.waitForTransaction(txResponse.hash, 1);
+      
+      if (!receipt) {
+          throw new Error("Transaction failed: No receipt received after waiting.");
+      }
+      
+      if (receipt.status === 0) {
+           console.error("Transaction failed on-chain. Receipt:", receipt);
+           throw new Error(`Transaction failed on-chain (status 0). TxHash: ${receipt.hash}`);
+      }
+      
+      console.log("Transaction confirmed! Receipt status:", receipt.status);
+      console.log("Raw Receipt Logs:", JSON.stringify(receipt.logs, null, 2)); // Log the raw logs
+
+      let tokenAddress = null;
+      
+      const tokenFactoryInterface = new ethers.Interface(getFactoryABI(chainId));
+      console.log("Using ABI events for parsing:", JSON.stringify(tokenFactoryInterface.fragments.filter(f => f.type === 'event'), null, 2)); // Log the events in the ABI being used
+
+      // --- More Robust Event Parsing ---
+      const tokenCreatedEventFragment = "event TokenCreated(address indexed tokenAddress, address indexed creator)";
+      const tokenCreatedTopic = ethers.id(tokenCreatedEventFragment);
+      console.log("Looking for TokenCreated event with topic:", tokenCreatedTopic);
+
+      for (const log of receipt.logs) {
+         // console.log("Processing log:", JSON.stringify(log)); // Optional: Log individual raw log
+         if (log.topics && log.topics.length > 0 && log.topics[0] === tokenCreatedTopic) {
+            console.log("Found log with matching TokenCreated topic:", log);
+            try {
+               const iface = new ethers.Interface([tokenCreatedEventFragment]); // Interface with only the event we want
+               const decodedLog = iface.decodeEventLog("TokenCreated", log.data, log.topics);
+               console.log("Decoded TokenCreated event args:", decodedLog);
+
+               // Extract tokenAddress (usually the first argument for this event)
+               if (decodedLog && decodedLog.length > 0 && typeof decodedLog[0] === 'string') {
+                 tokenAddress = decodedLog[0];
+                 console.log('Successfully decoded TokenCreated event, token address:', tokenAddress);
+                 break; // Found it, exit loop
+               } else {
+                 console.error('Decoded TokenCreated event, but args structure is unexpected or invalid:', decodedLog);
+               }
+            } catch (decodeError) {
+               console.error('Error decoding log with matching topic:', decodeError, 'Raw log:', log);
+            }
+         } 
+         // Optional: Fallback or logging for other events if needed
+         // else { console.log("Log topic doesn't match TokenCreated:", log.topics[0]); }
+      }
+      // --- End Robust Event Parsing ---
+
+      if (!tokenAddress) {
+        console.error('Could not find TokenCreated event in transaction logs.', receipt.logs);
+        throw new Error('Token creation transaction confirmed, but failed to extract token address from logs.');
+      }
+
+      tokenAddress = ethers.getAddress(tokenAddress);
+      console.log('Successfully extracted and validated token address:', tokenAddress);
+      
+      const explorerUrl = getExplorerUrlWithType(chainId, tokenAddress, 'token');
+      const txExplorerUrl = getExplorerUrlWithType(chainId, txResponse.hash, 'tx');
+
+      setSuccessInfo({
+        tokenAddress,
+        tokenName: formData.name,
+        tokenSymbol: formData.symbol,
+      });
+      
+      toast({
+        title: "Token Created Successfully!",
+        description: (
+          <>
+            <span>{`Token Address: ${tokenAddress.slice(0, 6)}...${tokenAddress.slice(-4)}`}</span>
+            {explorerUrl && (
+              <a 
+                href={explorerUrl} 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="ml-2 text-blue-400 hover:text-blue-300 underline"
+              >
+                View on Explorer
+              </a>
+            )}
+          </>
+        ),
+      });
+
     } catch (error: any) {
-      console.error('Error creating token:', error);
-      showToast('error', error.message || 'Failed to create token');
+      console.error('Error during handleSubmit or confirmation:', error);
+       if (error.code === 'NETWORK_ERROR') {
+             setError(`Network changed during operation. Please try again. Detected Chain ID: ${chainId}`);
+        } else if (error.message?.includes('Factory contract not found')) {
+            setError(error.message); 
+        } else if (error.code === 'ACTION_REJECTED') {
+            setError('Transaction rejected in wallet.');
+        } else if (error.message?.includes('429')) {
+             setError('RPC Error: Too Many Requests. The network node is overloaded. Please wait a moment and try again, or switch to a different RPC if the problem persists.');
+        } else {
+             setError(error.message || 'An unexpected error occurred during deployment.');
+        }
+      toast({ variant: 'destructive', title: 'Deployment Failed', description: error.message || 'Unknown error' });
     } finally {
       setIsLoading(false);
     }
@@ -507,7 +520,7 @@ export default function TokenForm_v1({ isConnected }: Props) {
                 </div>
                 <div className="flex space-x-2 mt-2">
                   <a
-                    href={`${getExplorerUrl(chainId ?? undefined, successInfo.tokenAddress, 'token')}`}
+                    href={getExplorerUrlWithType(chainId, successInfo.tokenAddress, 'token')}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-blue-400 hover:text-blue-300 text-sm"
