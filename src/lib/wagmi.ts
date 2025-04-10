@@ -73,6 +73,21 @@ const { wallets } = getDefaultWallets({
   projectId
 });
 
+// Determine the RPC URL for Amoy
+const amoyTransportUrl = polygonAmoy.rpcUrls.default.http[0];
+console.log(`[lib/wagmi.ts] Configuring transport for Polygon Amoy (${polygonAmoy.id}) with URL: ${amoyTransportUrl}`);
+
+// Determine the RPC URL for Arbitrum Sepolia from env var
+const arbitrumSepoliaRpcUrlFromEnv = process.env.NEXT_PUBLIC_ARBITRUMSEPOLIA_RPC_URL;
+
+// **Critical Check:** Ensure the environment variable is loaded
+if (!arbitrumSepoliaRpcUrlFromEnv) {
+  console.error("CRITICAL ERROR: NEXT_PUBLIC_ARBITRUMSEPOLIA_RPC_URL environment variable is not set or not loaded! Check .env.local and ensure the server was restarted.");
+  throw new Error("Missing NEXT_PUBLIC_ARBITRUMSEPOLIA_RPC_URL");
+}
+
+console.log(`[lib/wagmi.ts] Attempting to configure transport for Arbitrum Sepolia (${arbitrumSepolia.id}) with URL: ${arbitrumSepoliaRpcUrlFromEnv}`);
+
 // Create wagmi config
 export const config = createConfig({
   chains: supportedChains,
@@ -80,21 +95,21 @@ export const config = createConfig({
     [sepolia.id]: http('https://eth-sepolia.g.alchemy.com/v2/MGnqEI_g1f7R-ozYpSAUpnsivv0lp86t'),
     [bscTestnet.id]: http(bscTestnet.rpcUrls.default.http[0]),
     [arbitrumSepolia.id]: http(
-      'https://sepolia-rollup.arbitrum.io/rpc',
+      arbitrumSepoliaRpcUrlFromEnv,
       {
         batch: true,
-        timeout: 30_000,
+        timeout: 60_000,
+        retryCount: 5,
+        retryDelay: 5000,
         fetchOptions: {
           headers: {
-            'Arbitrum-Gas-Price': '100000000', // 0.1 gwei
-            'Arbitrum-Max-Fee': '200000000',   // 0.2 gwei
-            'Arbitrum-Max-Priority-Fee': '100000000', // 0.1 gwei
+            'Content-Type': 'application/json'
           }
         }
       }
     ),
     [optimismSepolia.id]: http(),
-    [polygonAmoy.id]: http(polygonAmoy.rpcUrls.default.http[0]),
+    [polygonAmoy.id]: http(amoyTransportUrl),
     [bscMainnet.id]: http(bscMainnet.rpcUrls.default.http[0])
   }
 });

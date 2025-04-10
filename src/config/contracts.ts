@@ -1,28 +1,29 @@
 import { ChainId } from '@/types/chain';
 import { BrowserProvider } from 'ethers';
-import { NETWORK_CONFIG, NetworkId, NetworkName, SUPPORTED_NETWORKS } from './networks';
+import { SUPPORTED_NETWORKS } from './networks';
+import type { NetworkConfig, NetworkDex } from '../types/network';
 
 // Lending Pool System Contracts
 export const LENDING_CONTRACTS = {
-  PRICE_ORACLE: "priceOracle",
-  INTEREST_RATE_MODEL: "interestRateModel",
-  FEE_COLLECTOR: "feeCollector",
-  LENDING_POOL_IMPL: "lendingPoolImpl",
-  LOAN_POOL_FACTORY: "loanPoolFactory",
+  priceOracle: "priceOracle",
+  interestRateModel: "interestRateModel",
+  feeCollector: "feeCollector",
+  lendingPoolImpl: "lendingPoolImpl",
+  loanPoolFactory: "loanPoolFactory",
 } as const;
 
 export type LendingContractName = keyof typeof LENDING_CONTRACTS;
 
-export const getLendingContractAddress = (contractName: LendingContractName, network: NetworkName): string => {
-  const networkConfig = SUPPORTED_NETWORKS[network];
-  if (!networkConfig) throw new Error(`Network ${network} not supported`);
+export const getLendingContractAddress = (contractName: LendingContractName, chainId: ChainId): string => {
+  const networkConfig = SUPPORTED_NETWORKS[chainId];
+  if (!networkConfig) throw new Error(`Network ${chainId} not supported`);
   
   const contracts = networkConfig.contracts;
-  if (!contracts) throw new Error(`No contracts configured for network ${network}`);
+  if (!contracts) throw new Error(`No contracts configured for network ${chainId}`);
   
   const contractAddress = contracts[contractName];
   if (!contractAddress || typeof contractAddress !== 'string') {
-    throw new Error(`Contract ${contractName} not found or invalid on network ${network}`);
+    throw new Error(`Contract ${contractName} not found or invalid on network ${chainId}`);
   }
   
   return contractAddress;
@@ -36,6 +37,7 @@ export interface ContractAddresses {
 export class LegacyContractRegistry {
   private static instance: LegacyContractRegistry;
   private contractAddresses: { [networkId: number]: ContractAddresses };
+  private provider: BrowserProvider | null = null;
 
   private constructor() {
     this.contractAddresses = {};
@@ -64,6 +66,61 @@ export class LegacyContractRegistry {
       this.contractAddresses[networkId] = {};
     }
     this.contractAddresses[networkId][contractName] = address;
+  }
+
+  private getNetworkConfig(chainId: ChainId) {
+    const config = SUPPORTED_NETWORKS[chainId];
+    if (!config) {
+      throw new Error(`No configuration found for chain ID ${chainId}`);
+    }
+    return config;
+  }
+
+  public setProvider(provider: BrowserProvider) {
+    this.provider = provider;
+  }
+
+  async resolveAddress(address: string, chainId: ChainId): Promise<string> {
+    if (!this.provider) {
+      throw new Error('Provider not set');
+    }
+
+    const config = this.getNetworkConfig(chainId);
+    // Return early if no DEX config or ENS support
+    if (!config.dex?.SUPPORTS_ENS) {
+      return address;
+    }
+
+    try {
+      return await this.provider.resolveName(address) || address;
+    } catch (error) {
+      console.error('Error resolving ENS name:', error);
+      return address;
+    }
+  }
+
+  getRouterAddress(chainId: ChainId): string {
+    const config = this.getNetworkConfig(chainId);
+    if (!config.dex?.QUICKSWAP_ROUTER) {
+      throw new Error(`Router address not configured for network ${config.name}`);
+    }
+    return config.dex.QUICKSWAP_ROUTER;
+  }
+
+  getFactoryAddress(chainId: ChainId): string {
+    const config = this.getNetworkConfig(chainId);
+    if (!config.dex?.QUICKSWAP_FACTORY) {
+      throw new Error(`DEX factory address not configured for network ${config.name}`);
+    }
+    return config.dex.QUICKSWAP_FACTORY;
+  }
+
+  getWETHAddress(chainId: ChainId): string {
+    const config = this.getNetworkConfig(chainId);
+    if (!config.dex?.QUICKSWAP_WETH) {
+      throw new Error(`WETH address not configured for network ${config.name}`);
+    }
+    return config.dex.QUICKSWAP_WETH;
   }
 }
 
@@ -476,8 +533,8 @@ export class ContractRegistry {
     this.provider = provider;
   }
 
-  private getNetworkConfig(chainId: NetworkId) {
-    const config = NETWORK_CONFIG[chainId];
+  private getNetworkConfig(chainId: ChainId) {
+    const config = SUPPORTED_NETWORKS[chainId];
     if (!config) {
       throw new Error(`No configuration found for chain ID ${chainId}`);
     }
@@ -496,7 +553,7 @@ export class ContractRegistry {
     return config;
   }
 
-  async resolveAddress(address: string, chainId: NetworkId): Promise<string> {
+  async resolveAddress(address: string, chainId: ChainId): Promise<string> {
     if (!this.provider) {
       throw new Error('Provider not set');
     }
@@ -517,26 +574,26 @@ export class ContractRegistry {
     }
   }
 
-  getRouterAddress(chainId: NetworkId): string {
+  getRouterAddress(chainId: ChainId): string {
     const config = this.getNetworkConfig(chainId);
     if (!config.QUICKSWAP_ROUTER) {
-      throw new Error(`Missing required environment variable: NEXT_PUBLIC_POLYGONAMOY_QUICKSWAP_ROUTER`);
+      throw new Error(`Router address not configured for network ${config.name}`);
     }
     return config.QUICKSWAP_ROUTER;
   }
 
-  getFactoryAddress(chainId: NetworkId): string {
+  getFactoryAddress(chainId: ChainId): string {
     const config = this.getNetworkConfig(chainId);
     if (!config.QUICKSWAP_FACTORY) {
-      throw new Error(`Missing required environment variable: NEXT_PUBLIC_POLYGONAMOY_DEX_FACTORY`);
+      throw new Error(`DEX factory address not configured for network ${config.name}`);
     }
     return config.QUICKSWAP_FACTORY;
   }
 
-  getWETHAddress(chainId: NetworkId): string {
+  getWETHAddress(chainId: ChainId): string {
     const config = this.getNetworkConfig(chainId);
     if (!config.QUICKSWAP_WETH) {
-      throw new Error(`Missing required environment variable: NEXT_PUBLIC_POLYGONAMOY_WETH`);
+      throw new Error(`WETH address not configured for network ${config.name}`);
     }
     return config.QUICKSWAP_WETH;
   }
@@ -545,11 +602,11 @@ export class ContractRegistry {
 export const contractRegistry = ContractRegistry.getInstance();
 
 export const CONTRACTS = {
-  PRICE_ORACLE: "priceOracle",
-  INTEREST_RATE_MODEL: "interestRateModel",
-  FEE_COLLECTOR: "feeCollector",
-  LENDING_POOL_IMPL: "lendingPoolImpl",
-  LOAN_POOL_FACTORY: "loanPoolFactory",
+  priceOracle: "priceOracle",
+  interestRateModel: "interestRateModel",
+  feeCollector: "feeCollector",
+  lendingPoolImpl: "lendingPoolImpl",
+  loanPoolFactory: "loanPoolFactory",
 } as const;
 
 export type ContractName = keyof typeof CONTRACTS;
@@ -566,4 +623,82 @@ export const getContractAddress = (contractName: string, network: SupportedNetwo
   if (!contractAddress) throw new Error(`Contract ${contractName} not found on network ${network}`);
   
   return contractAddress;
-}; 
+};
+
+export const resolveAddress = async (address: string, config: NetworkConfig): Promise<string> => {
+  if (!config.dex?.SUPPORTS_ENS) {
+    return address;
+  }
+
+  try {
+    const provider = getProvider(config);
+    return await provider.resolveName(address) || address;
+  } catch (error) {
+    console.error('Error resolving ENS name:', error);
+    return address;
+  }
+};
+
+export const getRouterAddress = (config: NetworkConfig): string => {
+  if (!config.dex?.QUICKSWAP_ROUTER) {
+    throw new Error(`Router address not configured for network ${config.name}`);
+  }
+  return config.dex.QUICKSWAP_ROUTER;
+};
+
+export const getFactoryAddress = (config: NetworkConfig): string => {
+  if (!config.dex?.QUICKSWAP_FACTORY) {
+    throw new Error(`DEX factory address not configured for network ${config.name}`);
+  }
+  return config.dex.QUICKSWAP_FACTORY;
+};
+
+export const getWETHAddress = (config: NetworkConfig): string => {
+  if (!config.dex?.QUICKSWAP_WETH) {
+    throw new Error(`WETH address not configured for network ${config.name}`);
+  }
+  return config.dex.QUICKSWAP_WETH;
+};
+
+export class ContractService {
+  // ... existing code ...
+
+  private getNetworkConfig(chainId: ChainId): NetworkConfig {
+    const config = SUPPORTED_NETWORKS[chainId];
+    if (!config) {
+      throw new Error(`Network config not found for chain ID ${chainId}`);
+    }
+    return config;
+  }
+
+  getRouterAddress(chainId: ChainId): string {
+    const config = this.getNetworkConfig(chainId);
+    if (!config.dex?.router) {
+      throw new Error(`Router address not configured for network ${config.name}`);
+    }
+    return config.dex.router;
+  }
+
+  getFactoryAddress(chainId: ChainId): string {
+    const config = this.getNetworkConfig(chainId);
+    if (!config.dex?.factory) {
+      throw new Error(`DEX factory address not configured for network ${config.name}`);
+    }
+    return config.dex.factory;
+  }
+
+  getWETHAddress(chainId: ChainId): string {
+    const config = this.getNetworkConfig(chainId);
+    if (!config.dex?.weth) {
+      throw new Error(`WETH address not configured for network ${config.name}`);
+    }
+    return config.dex.weth;
+  }
+
+  supportsENS(chainId: ChainId): boolean {
+    const config = this.getNetworkConfig(chainId);
+    return config.dex?.supportsENS ?? false;
+  }
+
+  // ... existing code ...
+} 

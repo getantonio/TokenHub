@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Card, CardContent } from '@components/ui/card';
 import Head from 'next/head';
@@ -95,79 +95,17 @@ export default function HomePage() {
 
       <main className="container mx-auto px-4 py-8">
         <div className="max-w-6xl mx-auto">
-          <h1 className="text-3xl font-bold text-white">Welcome to TokenHub.dev</h1>
-          <p className="text-gray-400 mb-4">Choose your token factory version to get started.</p>
-          
-          <div className="mx-auto bg-red-600 text-white px-3 py-2 rounded-md font-medium w-full h-[75px] flex items-center shadow-lg border-2 border-red-400 mb-8">
-            <div className="flex flex-col flex-grow">
-              <div className="flex items-center justify-center">
-                <p className="font-bold text-sm flex items-center">
-                  <span className="mr-1">⚠️</span> WARNING: getantonio.eth wallet compromised <span className="ml-1">⚠️</span>
-                </p>
-              </div>
-              <div className="flex items-center justify-center mt-0.5">
-                <p className="text-sm">DO NOT contribute to Gitcoin OSS. Donate directly instead:</p>
-                <button 
-                  className="text-xs font-semibold flex items-center hover:text-gray-200 transition-colors ml-1 cursor-pointer"
-                  onClick={copyToClipboard}
-                  aria-label="Copy wallet address to clipboard"
-                >
-                  <span className="mr-1">{copySuccess ? "Copied!" : "Copy Address"}</span>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-            <div className="flex items-center justify-center ml-2">
-              <div 
-                className="cursor-pointer hover:opacity-80 transition-opacity"
-                onClick={() => setShowQRPopup(true)}
-              >
-                <QRCodeSVG 
-                  value={walletAddress}
-                  size={45} 
-                  bgColor="transparent" 
-                  fgColor="#FFFFFF" 
-                  level="M"
-                  includeMargin={false}
-                />
-              </div>
-            </div>
+          {/* Updated Welcome Text - Reduced Sizes */}
+          <div className="text-center mb-10">
+            <span className="block text-4xl font-bold text-white mb-2"> {/* Reduced size further to 4xl */} 
+              Welcome!
+            </span>
+            <span className="block text-xl text-gray-300"> {/* Reduced size further to xl */} 
+              Choose your Token or DeFi creation tool to start your journey.
+            </span>
           </div>
-
-          {/* QR Code Popup */}
-          {showQRPopup && (
-            <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50" onClick={() => setShowQRPopup(false)}>
-              <div className="bg-white p-6 rounded-lg shadow-lg max-w-sm" onClick={(e) => e.stopPropagation()}>
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-bold text-gray-900">Direct Donation QR Code</h3>
-                  <button 
-                    className="text-gray-500 hover:text-gray-700" 
-                    onClick={() => setShowQRPopup(false)}
-                  >
-                    ✕
-                  </button>
-                </div>
-                <div className="flex flex-col items-center">
-                  <QRCodeSVG 
-                    value={walletAddress}
-                    size={200} 
-                    bgColor="#FFFFFF" 
-                    fgColor="#000000" 
-                    level="H"
-                    includeMargin={true}
-                  />
-                  <p className="mt-4 text-center text-sm text-gray-700 font-medium">
-                    Direct donation address:
-                  </p>
-                  <p className="text-xs break-all text-center text-gray-900 font-bold mt-1">
-                    {walletAddress}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
+          
+          
 
           {/* V4 Feature Card */}
           <div className="mb-8">
